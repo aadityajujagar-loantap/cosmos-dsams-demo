@@ -22,6 +22,7 @@ import {
   VerificationCheck,
   VerificationStatus,
 } from "@/lib/types";
+import { DEMO_USERS, demoActor } from "@/lib/demo-identities";
 
 const states = [
   ["Mumbai", "Maharashtra", "400001"],
@@ -74,7 +75,7 @@ const lastNames = [
   "Menon",
   "Joshi",
   "Chopra",
-  "Rao",
+  "Desai",
 ];
 
 const products: Product[] = [
@@ -120,19 +121,13 @@ const verificationStatuses: VerificationStatus[] = [
 
 const roles: UserRole[] = [
   "Admin",
-  "Operations",
-  "Credit Analyst",
-  "Risk Manager",
-  "DSA Manager",
+  "DSA Partner",
+  "Customer",
 ];
 
 const managers = [
-  "Nisha Verma",
-  "Raghav Sethi",
-  "Kunal Shah",
-  "Priya Nair",
-  "Arman Khan",
-  "Leena Bose",
+  DEMO_USERS.admin.name,
+  DEMO_USERS.dsa.name,
 ];
 
 const months = [
@@ -223,18 +218,35 @@ function timeline(seed: number) {
 }
 
 export function createMockStore(): MockStore {
-  const users: User[] = Array.from({ length: 24 }, (_, index) => {
-    const name = person(index + 8);
-    return {
-      email: `${name.toLowerCase().replace(" ", ".")}@cosmosbank.example`,
-      id: `usr-${index + 1}`,
-      lastLogin: isoDay(index % 13),
-      name,
-      region: pick(["West", "South", "North", "East", "Central"], index),
-      role: pick(roles, index),
-      status: pick(["Active", "Active", "Invited", "Disabled"], index),
-    };
-  });
+  const users: User[] = [
+    {
+      email: DEMO_USERS.admin.email,
+      id: "usr-admin",
+      lastLogin: isoDay(0),
+      name: DEMO_USERS.admin.name,
+      region: "West",
+      role: "Admin",
+      status: "Active",
+    },
+    {
+      email: DEMO_USERS.dsa.email,
+      id: "usr-dsa",
+      lastLogin: isoDay(1),
+      name: DEMO_USERS.dsa.name,
+      region: "West",
+      role: "DSA Partner",
+      status: "Active",
+    },
+    {
+      email: DEMO_USERS.user.email,
+      id: "usr-user",
+      lastLogin: isoDay(2),
+      name: DEMO_USERS.user.name,
+      region: "West",
+      role: "Customer",
+      status: "Active",
+    },
+  ];
 
   const dsas: Dsa[] = Array.from({ length: 56 }, (_, index) => {
     const city = pick(states, index);
@@ -265,7 +277,7 @@ export function createMockStore(): MockStore {
       email: `partner${index + 1}@${name.toLowerCase().replaceAll(" ", "")}.example`,
       gst: `27${pan(index).slice(0, 10)}1Z${index % 9}`,
       id: `dsa-${index + 1}`,
-      manager: index % 8 === 0 ? "TCP Estate Co." : pick(managers, index),
+      manager: index % 8 === 0 ? DEMO_USERS.dsa.name : DEMO_USERS.admin.name,
       mobile: mobile(index),
       monthlyLeads: 12 + ((index * 5) % 62),
       name,
@@ -284,10 +296,10 @@ export function createMockStore(): MockStore {
     const dsa = pick(dsas, index);
     const city = pick(states, index + 4);
     
-    const isCustomerAmit = index === 4 || index === 10;
-    const finalCustomer = isCustomerAmit ? "Amit Kumar" : customer;
-    const finalMobile = isCustomerAmit ? "7777777777" : mobile(index + 100);
-    const finalEmail = isCustomerAmit ? "amit.kumar@example.com" : `${customer.toLowerCase().replace(" ", ".")}@example.com`;
+    const isDemoCustomer = index === 4 || index === 10;
+    const finalCustomer = isDemoCustomer ? DEMO_USERS.user.name : customer;
+    const finalMobile = isDemoCustomer ? DEMO_USERS.user.mobile : mobile(index + 100);
+    const finalEmail = isDemoCustomer ? DEMO_USERS.user.email : `${customer.toLowerCase().replace(" ", ".")}@example.com`;
 
     return {
       amount: 250000 + ((index * 137000) % 4200000),
@@ -462,11 +474,11 @@ export function createMockStore(): MockStore {
         id: `role-${roleIndex}-${moduleIndex}`,
         module,
         permissions: {
-          Approve: role === "Admin" || role === "Risk Manager" || module === "Applications",
-          Create: role !== "Risk Manager" || moduleIndex % 2 === 0,
+          Approve: role === "Admin" || (role === "DSA Partner" && module === "DSA"),
+          Create: role !== "Customer" || module === "Leads" || module === "Applications",
           Delete: role === "Admin",
-          Edit: role !== "Credit Analyst" || moduleIndex < 5,
-          View: true,
+          Edit: role !== "Customer",
+          View: role === "Admin" || module !== "Admin",
         },
         role,
       }),
@@ -484,7 +496,7 @@ export function createMockStore(): MockStore {
       ],
       index,
     ),
-    actor: pick(users, index).name,
+    actor: demoActor(index),
     at: isoDay(index),
     entity: pick(["DSA", "Lead", "Application", "BRE Rule", "Commission"], index),
     id: `audit-${index + 1}`,
@@ -517,7 +529,7 @@ export function createMockStore(): MockStore {
     ["General", "Default region", "West", true],
     ["General", "DSA code prefix", "DSA", true],
     ["Workflow", "Auto-assign verification", "Enabled", true],
-    ["Workflow", "Final approval threshold", "₹25,00,000", true],
+    ["Workflow", "Final approval threshold", "INR 25,00,000", true],
     ["Notifications", "Risk alerts", "Instant", true],
     ["Notifications", "Daily digest", "08:30", true],
     ["Security", "Session timeout", "30 minutes", true],

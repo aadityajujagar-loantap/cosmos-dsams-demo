@@ -8,80 +8,41 @@ import {
   ChevronDown,
   ClipboardCheck,
   FileSearch,
-  Gauge,
   Landmark,
   LayoutDashboard,
   LineChart,
   Menu,
-  Network,
   PanelLeftClose,
   Search,
   Settings,
   ShieldCheck,
   Users,
   Wallet,
-  Workflow,
+  type LucideIcon,
 } from "lucide-react";
-import { ReactNode, useMemo, useState, useEffect } from "react";
+import { ReactNode, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { Button, Input, Modal } from "@/components/ui/primitives";
 import { useMockStore } from "@/lib/store";
 import { cn, initials } from "@/lib/utils";
 
-const navGroups = [
-  {
-    items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
-    label: "Overview",
-  },
-  {
-    items: [
-      { href: "/dsa/onboarding", icon: Building2, label: "Onboarding" },
-      { href: "/dsa/management", icon: Users, label: "DSA Management" },
-    ],
-    label: "DSA",
-  },
-  {
-    items: [{ href: "/leads", icon: FileSearch, label: "Lead Management" }],
-    label: "Pipeline",
-  },
-  {
-    items: [
-      { href: "/applications", icon: ClipboardCheck, label: "Applications" },
-      { href: "/applications/dedupe", icon: Network, label: "DSA & Dedupe" },
-    ],
-    label: "Applications",
-  },
-  {
-    items: [{ href: "/bre/rules", icon: ShieldCheck, label: "Rule Configuration" }],
-    label: "BRE",
-  },
-  {
-    items: [
-      { href: "/operations/verification", icon: Gauge, label: "Verification" },
-      { href: "/operations/documents", icon: FileSearch, label: "Documents" },
-      { href: "/operations/approval", icon: Workflow, label: "Approval Workflow" },
-    ],
-    label: "Operations",
-  },
-  {
-    items: [{ href: "/finance/commissions", icon: Wallet, label: "Commission Management" }],
-    label: "Finance",
-  },
-  {
-    items: [{ href: "/analytics/reports", icon: LineChart, label: "Reports" }],
-    label: "Analytics",
-  },
-  {
-    items: [
-      { href: "/administration/users", icon: Users, label: "Users" },
-      { href: "/administration/roles", icon: ShieldCheck, label: "Roles" },
-      { href: "/administration/audit-logs", icon: FileSearch, label: "Audit Logs" },
-      { href: "/administration/notifications", icon: Bell, label: "Notifications" },
-      { href: "/administration/settings", icon: Settings, label: "Settings" },
-    ],
-    label: "Administration",
-  },
-];
+interface NavItem {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+  badge?: string;
+}
+
+interface NavGroup {
+  items: NavItem[];
+  label: string;
+}
+
+const subscribeToClient = () => () => {};
+
+function useIsClient() {
+  return useSyncExternalStore(subscribeToClient, () => true, () => false);
+}
 
 function isActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
@@ -98,10 +59,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const { store, currentUser, logout } = useMockStore();
 
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useIsClient();
 
   useEffect(() => {
     if (mounted && !currentUser) {
@@ -109,7 +67,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
   }, [currentUser, router, mounted]);
 
-  const navGroups = useMemo(() => {
+  const navGroups = useMemo<NavGroup[]>(() => {
     if (!currentUser) return [];
 
     if (currentUser.role === "DSA Manager") {
@@ -246,7 +204,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </p>
           ) : null}
           <div className="space-y-1">
-            {group.items.map((item: any) => {
+            {group.items.map((item) => {
               const Icon = item.icon;
               const active = isActive(pathname, item.href);
               return (

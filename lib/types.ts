@@ -76,10 +76,8 @@ export type ApprovalStatus =
 
 export type UserRole =
   | "Admin"
-  | "Operations"
-  | "Credit Analyst"
-  | "Risk Manager"
-  | "DSA Manager";
+  | "DSA Partner"
+  | "Customer";
 
 export type PermissionAction = "View" | "Create" | "Edit" | "Delete" | "Approve";
 export type NotificationStatus = "Unread" | "Read" | "Archived";

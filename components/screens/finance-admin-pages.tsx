@@ -50,10 +50,8 @@ const products: Product[] = [
 
 const userRoles: UserRole[] = [
   "Admin",
-  "Operations",
-  "Credit Analyst",
-  "Risk Manager",
-  "DSA Manager",
+  "DSA Partner",
+  "Customer",
 ];
 
 const permissionActions: PermissionAction[] = ["View", "Create", "Edit", "Delete", "Approve"];
@@ -286,8 +284,7 @@ function ReportList({ rows }: { rows: string[][] }) {
 }
 
 export function UsersPage() {
-  const { createItem, deleteItem, store, updateItem } = useMockStore();
-  const [creating, setCreating] = useState(false);
+  const { store, updateItem } = useMockStore();
   const [editing, setEditing] = useState<User | null>(null);
   const columns: Column<User>[] = [
     { cell: (item) => <span className="font-semibold text-slate-950">{item.name}</span>, header: "User", key: "name", sortable: true, sortValue: (item) => item.name },
@@ -301,37 +298,16 @@ export function UsersPage() {
   return (
     <div>
       <PageHeader
-        action={<Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" />New User</Button>}
-        description="Create users, assign operational roles, control access status, and maintain regional ownership."
+        description="Maintain the three fixed demo accounts, their roles, access status, and regional ownership."
         eyebrow="Administration"
         title="User Management"
       />
       <DataTable
-        actions={(item) => <ActionPair onDelete={() => deleteItem("users", item.id)} onEdit={() => setEditing(item)} />}
+        actions={(item) => <ActionPair onEdit={() => setEditing(item)} />}
         columns={columns}
         items={store.users}
         searchKeys={["name", "email", "role", "region", "status"]}
       />
-      <Modal onClose={() => setCreating(false)} open={creating} title="Create user">
-        <RecordForm<User>
-          fields={userFields}
-          initialValue={{ role: "Operations", status: "Invited" }}
-          onCancel={() => setCreating(false)}
-          onSubmit={(value) => {
-            createItem("users", {
-              email: String(value.email ?? ""),
-              id: makeId("usr"),
-              lastLogin: new Date().toISOString(),
-              name: String(value.name ?? "New User"),
-              region: String(value.region ?? "West"),
-              role: (value.role as UserRole) || "Operations",
-              status: (value.status as User["status"]) || "Invited",
-            });
-            setCreating(false);
-          }}
-          submitLabel="Create user"
-        />
-      </Modal>
       <Modal onClose={() => setEditing(null)} open={Boolean(editing)} title="Edit user">
         {editing ? (
           <RecordForm<User>
@@ -339,7 +315,11 @@ export function UsersPage() {
             initialValue={editing}
             onCancel={() => setEditing(null)}
             onSubmit={(value) => {
-              updateItem("users", editing.id, value);
+              updateItem("users", editing.id, {
+                ...value,
+                email: editing.email,
+                name: editing.name,
+              });
               setEditing(null);
             }}
             submitLabel="Save user"

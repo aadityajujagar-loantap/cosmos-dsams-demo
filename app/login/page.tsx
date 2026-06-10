@@ -28,11 +28,11 @@ export default function LoginPage() {
     }
     const val = identifier.toLowerCase();
     if (val === "9999999999" || val === "admin") {
-      login("DSA Manager", identifier);
+      login("DSA Manager");
     } else if (val === "8888888888" || val === "dsa") {
-      login("DSA Partner", identifier);
+      login("DSA Partner");
     } else if (val === "7777777777" || val === "user") {
-      login("Customer", identifier);
+      login("Customer");
     } else {
       setError("Invalid credentials. Use registered demo credentials.");
     }

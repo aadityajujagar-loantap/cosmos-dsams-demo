@@ -13,9 +13,7 @@ import {
   UploadCloud,
   CheckCircle2,
   Briefcase,
-  TrendingUp,
   Coins,
-  FileText,
   Clock,
   Sparkles,
   ChevronRight,
@@ -108,27 +106,20 @@ export function DashboardPage() {
   const partnerStats = useMemo(() => {
     if (!currentUser) return { leadsCount: 0, appsCount: 0, commissionTotal: 0, agentsCount: 0 };
     
-    const isPartnerMock = currentUser.name === "dsa" || currentUser.name === "8888888888" || currentUser.name === "TCP Estate Co.";
     const partnerLeads = store.leads.filter((item) => 
       item.dsaId === currentUser.id || 
-      item.dsaName === currentUser.name ||
-      (isPartnerMock && (item.dsaName === "TCP Estate Co." || item.dsaId === "DSA-10001"))
+      item.dsaName === currentUser.name
     );
     const partnerApps = store.applications.filter((item) => 
       item.dsaId === currentUser.id || 
-      item.dsaName === currentUser.name ||
-      (isPartnerMock && (item.dsaName === "TCP Estate Co." || item.dsaId === "DSA-10001"))
+      item.dsaName === currentUser.name
     );
     const partnerCommissions = store.commissions.filter((item) => 
       item.dsaId === currentUser.id || 
-      item.dsaName === currentUser.name ||
-      (isPartnerMock && (item.dsaName === "TCP Estate Co." || item.dsaId === "DSA-10001"))
+      item.dsaName === currentUser.name
     );
     const commissionTotal = partnerCommissions.reduce((sum, item) => sum + item.payout, 0);
-    const agentsCount = store.dsas.filter((item) => 
-      item.manager === currentUser.name || 
-      (isPartnerMock && item.manager === "TCP Estate Co.")
-    ).length;
+    const agentsCount = store.dsas.filter((item) => item.manager === currentUser.name).length;
 
     return {
       leadsCount: partnerLeads.length,
@@ -140,11 +131,7 @@ export function DashboardPage() {
 
   const partnerAgents = useMemo(() => {
     if (!currentUser) return [];
-    const isPartnerMock = currentUser.name === "dsa" || currentUser.name === "8888888888" || currentUser.name === "TCP Estate Co.";
-    return store.dsas.filter((item) => 
-      item.manager === currentUser.name || 
-      (isPartnerMock && item.manager === "TCP Estate Co.")
-    );
+    return store.dsas.filter((item) => item.manager === currentUser.name);
   }, [store.dsas, currentUser]);
 
   const partnerLeadTrend = [
@@ -161,11 +148,7 @@ export function DashboardPage() {
   // ----------------------------------------------------
   const customerApps = useMemo(() => {
     if (!currentUser) return [];
-    const isCustomerMock = currentUser.name === "user" || currentUser.name === "7777777777" || currentUser.name === "Amit Kumar";
-    return store.applications.filter((item) => 
-      item.customer === currentUser.name || 
-      (isCustomerMock && item.customer === "Amit Kumar")
-    );
+    return store.applications.filter((item) => item.customer === currentUser.name);
   }, [store.applications, currentUser]);
 
   const customerStats = useMemo(() => {

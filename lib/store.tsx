@@ -10,6 +10,13 @@ import {
 } from "react";
 
 import { ToastProvider, useToast } from "@/components/ui/toast";
+import {
+  DemoSessionUser,
+  DEMO_USERS,
+  getDemoUserByRole,
+  isDemoSessionUser,
+  SessionRole,
+} from "@/lib/demo-identities";
 import { createMockStore } from "@/lib/mock-data";
 import {
   AuditLog,
@@ -29,15 +36,8 @@ interface StoreContextValue {
     id: string,
     patch: Partial<EntityMap[K]>,
   ) => void;
-  currentUser: {
-    name: string;
-    role: "DSA Manager" | "DSA Partner" | "Customer";
-    code?: string;
-    id?: string;
-    email?: string;
-    mobile?: string;
-  } | null;
-  login: (role: "DSA Manager" | "DSA Partner" | "Customer", identifier: string) => void;
+  currentUser: DemoSessionUser | null;
+  login: (role: SessionRole) => void;
   logout: () => void;
 }
 
@@ -62,10 +62,10 @@ function displayName(item: unknown): string {
   );
 }
 
-function audit(action: string, collection: CollectionName): AuditLog {
+function audit(action: string, collection: CollectionName, actor: string): AuditLog {
   return {
     action,
-    actor: "Aditi Rao",
+    actor,
     at: new Date().toISOString(),
     entity: titleCase(collection),
     id: makeId("audit"),
@@ -78,25 +78,17 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
   const [store, setStore] = useState<MockStore>(() => createMockStore());
   const { toast } = useToast();
 
-  const [currentUser, setCurrentUser] = useState<{
-    name: string;
-    role: "DSA Manager" | "DSA Partner" | "Customer";
-    code?: string;
-    id?: string;
-    email?: string;
-    mobile?: string;
-  } | null>(() => {
+  const [currentUser, setCurrentUser] = useState<DemoSessionUser | null>(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("cosmos_dsa_user");
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
-          if (parsed && (parsed.name === "Deepak Prakash" || parsed.name === "TCP Estate Co." || parsed.name === "Amit Kumar")) {
-            localStorage.removeItem("cosmos_dsa_user");
-            return null;
-          }
-          return parsed;
-        } catch (e) {
+          if (isDemoSessionUser(parsed)) return parsed;
+          localStorage.removeItem("cosmos_dsa_user");
+          return null;
+        } catch {
+          localStorage.removeItem("cosmos_dsa_user");
           return null;
         }
       }
@@ -104,34 +96,8 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     return null;
   });
 
-  const login = useCallback((role: "DSA Manager" | "DSA Partner" | "Customer", identifier: string) => {
-    let user = null;
-    if (role === "DSA Manager") {
-      user = {
-        name: identifier,
-        role: "DSA Manager" as const,
-        id: "P09997767",
-        email: "admin@cosmosbank.example",
-        mobile: "9999999999",
-      };
-    } else if (role === "DSA Partner") {
-      user = {
-        name: identifier,
-        role: "DSA Partner" as const,
-        code: "DSA-10001",
-        id: "DSA-10001",
-        email: "partner@tcpestate.example",
-        mobile: "8888888888",
-      };
-    } else {
-      user = {
-        name: identifier,
-        role: "Customer" as const,
-        id: "CUST-88001",
-        email: "customer@example.com",
-        mobile: "7777777777",
-      };
-    }
+  const login = useCallback((role: SessionRole) => {
+    const user = getDemoUserByRole(role);
     setCurrentUser(user);
     if (typeof window !== "undefined") {
       localStorage.setItem("cosmos_dsa_user", JSON.stringify(user));
@@ -164,12 +130,13 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
   const createItem = useCallback(
     <K extends CollectionName>(collection: K, item: EntityMap[K]) => {
       setStore((current) => {
+        const actor = currentUser?.name ?? DEMO_USERS.admin.name;
         const next = {
           ...current,
           [collection]: [item, ...current[collection]],
         };
         if (collection !== "auditLogs") {
-          next.auditLogs = [audit("Created", collection), ...current.auditLogs];
+          next.auditLogs = [audit("Created", collection, actor), ...current.auditLogs];
         }
         return next;
       });
@@ -179,13 +146,14 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
         variant: "success",
       });
     },
-    [toast],
+    [currentUser?.name, toast],
   );
 
   const updateItem = useCallback(
     <K extends CollectionName>(collection: K, id: string, patch: Partial<EntityMap[K]>) => {
       let updatedName = "record";
       setStore((current) => {
+        const actor = currentUser?.name ?? DEMO_USERS.admin.name;
         const nextRows = current[collection].map((item) => {
           if (item.id !== id) return item;
           const updated = { ...item, ...patch };
@@ -197,7 +165,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
           [collection]: nextRows,
         };
         if (collection !== "auditLogs") {
-          next.auditLogs = [audit("Updated", collection), ...current.auditLogs];
+          next.auditLogs = [audit("Updated", collection, actor), ...current.auditLogs];
         }
         return next;
       });
@@ -207,13 +175,14 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
         variant: "success",
       });
     },
-    [toast],
+    [currentUser?.name, toast],
   );
 
   const deleteItem = useCallback(
     <K extends CollectionName>(collection: K, id: string) => {
       let deletedName = "record";
       setStore((current) => {
+        const actor = currentUser?.name ?? DEMO_USERS.admin.name;
         const existing = current[collection].find((item) => item.id === id);
         deletedName = displayName(existing);
         const next = {
@@ -221,7 +190,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
           [collection]: current[collection].filter((item) => item.id !== id),
         };
         if (collection !== "auditLogs") {
-          next.auditLogs = [audit("Deleted", collection), ...current.auditLogs];
+          next.auditLogs = [audit("Deleted", collection, actor), ...current.auditLogs];
         }
         return next;
       });
@@ -231,7 +200,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
         variant: "warning",
       });
     },
-    [toast],
+    [currentUser?.name, toast],
   );
 
   const value = useMemo(

@@ -17,6 +17,7 @@ import {
   StatusBadge,
 } from "@/components/ui/primitives";
 import { FieldConfig, RecordForm } from "@/components/ui/record-form";
+import { DEMO_USERS } from "@/lib/demo-identities";
 import { useMockStore } from "@/lib/store";
 import {
   ApprovalItem,
@@ -246,7 +247,7 @@ export function BreRulesPage() {
 }
 
 export function VerificationPage() {
-  const { createItem, deleteItem, store, updateItem } = useMockStore();
+  const { createItem, deleteItem, store, updateItem, currentUser } = useMockStore();
   const [status, setStatus] = useState("");
   const [editing, setEditing] = useState<VerificationCheck | null>(null);
   const [creating, setCreating] = useState(false);
@@ -285,7 +286,7 @@ export function VerificationPage() {
           onSubmit={(value) => {
             createItem("verificationChecks", {
               applicationId: String(value.applicationId ?? ""),
-              assignedTo: String(value.assignedTo ?? "Aditi Rao"),
+              assignedTo: String(value.assignedTo ?? currentUser?.name ?? DEMO_USERS.admin.name),
               checkId: `VER-${Date.now().toString().slice(-5)}`,
               customer: String(value.customer ?? "Customer"),
               dueDate: String(value.dueDate ?? new Date().toISOString()),
@@ -412,7 +413,7 @@ export function DocumentsPage() {
 }
 
 export function ApprovalWorkflowPage() {
-  const { createItem, deleteItem, store, updateItem } = useMockStore();
+  const { createItem, deleteItem, store, updateItem, currentUser } = useMockStore();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<ApprovalItem | null>(null);
   const [selected, setSelected] = useState<ApprovalItem | null>(null);
@@ -437,7 +438,7 @@ export function ApprovalWorkflowPage() {
     const updatedAt = new Date().toISOString();
     const history = [
       {
-        actor: "Aditi Rao",
+        actor: currentUser?.name ?? DEMO_USERS.admin.name,
         at: updatedAt,
         id: makeId("tl"),
         note:
@@ -561,11 +562,11 @@ export function ApprovalWorkflowPage() {
           onSubmit={(value) => {
             createItem("approvals", {
               applicationId: String(value.applicationId ?? ""),
-              approver: String(value.approver ?? "Aditi Rao"),
+              approver: String(value.approver ?? currentUser?.name ?? DEMO_USERS.admin.name),
               customer: String(value.customer ?? "Customer"),
               history: [
                 {
-                  actor: "Aditi Rao",
+                  actor: currentUser?.name ?? DEMO_USERS.admin.name,
                   at: new Date().toISOString(),
                   id: makeId("tl"),
                   note: "Workflow created.",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useMockStore } from "@/lib/store";
 import { useToast } from "@/components/ui/toast";
 import { PageHeader } from "@/components/module";
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/primitives";
 import { Plus, Trash2, UploadCloud, Check, Landmark, Image as ImageIcon } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { DEMO_USERS } from "@/lib/demo-identities";
 
 interface CommissionRange {
   id: string;
@@ -26,8 +27,16 @@ interface CommissionRange {
   rate: number;
 }
 
+function productDefaults(product: string) {
+  if (product === "Personal Loan") return { code: "PL", url: "personalloan" };
+  if (product === "Loan Against Property") return { code: "LAP", url: "lap" };
+  if (product === "Business Loan") return { code: "BL", url: "businessloan" };
+  if (product === "Auto Loan") return { code: "AL", url: "autoloan" };
+  return { code: "HL", url: "homeloan" };
+}
+
 export function ProductSettingPage() {
-  const { store, createItem } = useMockStore();
+  const { store, createItem, currentUser } = useMockStore();
   const { toast } = useToast();
 
   const [product, setProduct] = useState<string>("Home Loan");
@@ -65,35 +74,20 @@ export function ProductSettingPage() {
   const [bannerName, setBannerName] = useState<string>("home_loan_banner.png");
   const [hasBanner, setHasBanner] = useState<boolean>(true);
 
-  // Update defaults when product changes
-  useEffect(() => {
-    let code = "HL";
-    let url = "homeloan";
-    if (product === "Personal Loan") {
-      code = "PL";
-      url = "personalloan";
-    } else if (product === "Loan Against Property") {
-      code = "LAP";
-      url = "lap";
-    } else if (product === "Business Loan") {
-      code = "BL";
-      url = "businessloan";
-    } else if (product === "Auto Loan") {
-      code = "AL";
-      url = "autoloan";
-    }
-
+  const handleProductChange = (nextProduct: string) => {
+    const { code, url } = productDefaults(nextProduct);
+    setProduct(nextProduct);
     setRangeId(`${code}_Commission_${(ranges.length + 1).toString().padStart(2, "0")}`);
     setLoanUrl(`https://digiloans.bankofmaharashtra.in/apply/${url}?bom`);
     setBannerName(`${url}_banner.png`);
-  }, [product, ranges.length]);
+  };
 
   const handleAddRange = () => {
     if (!rangeId.trim()) {
       toast({
         title: "Validation Error",
         description: "Commission ID is required",
-        variant: "destructive",
+        variant: "warning",
       });
       return;
     }
@@ -106,7 +100,7 @@ export function ProductSettingPage() {
       toast({
         title: "Validation Error",
         description: "Please enter valid minimum and maximum disbursement ranges.",
-        variant: "destructive",
+        variant: "warning",
       });
       return;
     }
@@ -115,7 +109,7 @@ export function ProductSettingPage() {
       toast({
         title: "Validation Error",
         description: "Please enter a valid commission rate.",
-        variant: "destructive",
+        variant: "warning",
       });
       return;
     }
@@ -138,7 +132,7 @@ export function ProductSettingPage() {
     });
 
     // Reset range ID for next one
-    const code = product === "Personal Loan" ? "PL" : product === "Home Loan" ? "HL" : product === "Loan Against Property" ? "LAP" : product === "Business Loan" ? "BL" : "AL";
+    const { code } = productDefaults(product);
     setRangeId(`${code}_Commission_${(ranges.length + 2).toString().padStart(2, "0")}`);
   };
 
@@ -160,7 +154,7 @@ export function ProductSettingPage() {
     createItem("auditLogs", {
       id: `audit-${Date.now()}`,
       at: new Date().toISOString(),
-      actor: "DSA Manager",
+      actor: currentUser?.name ?? DEMO_USERS.admin.name,
       action: `Configured commission for ${product} (${partnerName})`,
       entity: "Settings",
       severity: "Info",
@@ -277,7 +271,7 @@ export function ProductSettingPage() {
                   <Select
                     id="loanProductSelect"
                     value={product}
-                    onChange={(e) => setProduct(e.target.value)}
+                    onChange={(e) => handleProductChange(e.target.value)}
                   >
                     {["Home Loan", "Personal Loan", "Loan Against Property", "Business Loan", "Auto Loan"].map((p) => (
                       <option key={p} value={p}>{p}</option>

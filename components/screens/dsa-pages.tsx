@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   BadgeIndianRupee,
   Check,
-  CheckCircle2,
   ClipboardList,
   Download,
   FileText,
@@ -13,8 +12,6 @@ import {
   ShieldCheck,
   TrendingUp,
   UploadCloud,
-  AlertTriangle,
-  Eye,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -26,7 +23,6 @@ import {
   Button,
   Card,
   CardContent,
-  CardHeader,
   Drawer,
   Field,
   Input,
@@ -38,9 +34,12 @@ import {
 } from "@/components/ui/primitives";
 import { FieldConfig, RecordForm } from "@/components/ui/record-form";
 import { useToast } from "@/components/ui/toast";
+import { DEMO_USERS } from "@/lib/demo-identities";
 import { useMockStore } from "@/lib/store";
-import { BusinessType, DocumentType, Dsa, DsaStatus, DocumentRecord } from "@/lib/types";
+import { BusinessType, DocumentType, Dsa, DsaStatus } from "@/lib/types";
 import { formatCurrency, formatDate, makeId, percent } from "@/lib/utils";
+
+type DsaType = "Independent DSA" | "Exclusive DSA" | "Corporate DSA";
 
 const businessTypes: BusinessType[] = [
   "Sole Proprietor",
@@ -114,7 +113,7 @@ function newDsaFromForm(form: Partial<Dsa>): Dsa {
     email: String(form.email ?? ""),
     gst: String(form.gst ?? ""),
     id,
-    manager: String(form.manager ?? "Aditi Rao"),
+    manager: String(form.manager ?? DEMO_USERS.admin.name),
     mobile: String(form.mobile ?? ""),
     monthlyLeads: 0,
     name: String(form.name ?? "New DSA"),
@@ -131,13 +130,10 @@ function newDsaFromForm(form: Partial<Dsa>): Dsa {
 export function DsaOnboardingPage() {
   const { createItem, currentUser } = useMockStore();
   const [step, setStep] = useState(0);
-  const [dsaType, setDsaType] = useState<"Independent DSA" | "Exclusive DSA" | "Corporate DSA">("Independent DSA");
+  const [dsaType, setDsaType] = useState<DsaType>("Independent DSA");
   const [form, setForm] = useState({ ...initialOnboardingForm });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [submitted, setSubmitted] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<Record<string, { name: string; size: string }>>({});
-
-  const steps = ["Select Type", "Business Profile", "KYC Details", "Bank Details", "Upload Documents", "Complete"];
 
   function update(key: keyof typeof form, value: string) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -228,8 +224,8 @@ export function DsaOnboardingPage() {
     }
 
     const isSuperAdmin = currentUser?.role === "DSA Manager";
-    const newStatus = isSuperAdmin ? "Active" : "Submitted";
-    const managerName = currentUser?.role === "DSA Partner" ? currentUser.name : "Aditi Rao";
+    const newStatus: DsaStatus = isSuperAdmin ? "Active" : "Submitted";
+    const managerName = currentUser?.role === "DSA Partner" ? currentUser.name : DEMO_USERS.admin.name;
 
     createItem("dsas", {
       address: form.address,
@@ -258,10 +254,9 @@ export function DsaOnboardingPage() {
       pincode: form.pincode,
       riskRating: "Low",
       state: form.state,
-      status: newStatus as any,
+      status: newStatus,
       tier: "Bronze",
     });
-    setSubmitted(true);
     setStep(5);
   }
 
@@ -271,7 +266,6 @@ export function DsaOnboardingPage() {
     setDsaType("Independent DSA");
     setUploadedFiles({});
     setStep(0);
-    setSubmitted(false);
   }
 
   const renderField = (
@@ -447,7 +441,7 @@ export function DsaOnboardingPage() {
                     <button
                       key={type.id}
                       type="button"
-                      onClick={() => setDsaType(type.id as any)}
+                      onClick={() => setDsaType(type.id as DsaType)}
                       className={`flex flex-col items-center justify-center p-8 rounded-2xl border-2 transition cursor-pointer text-center bg-slate-50/50 ${
                         dsaType === type.id
                           ? "border-blue-600 bg-blue-50/20 shadow-md ring-1 ring-blue-100"
@@ -671,11 +665,7 @@ export function DsaManagementPage() {
 
   let rows = status ? store.dsas.filter((item) => item.status === status) : store.dsas;
   if (currentUser?.role === "DSA Partner") {
-    const isPartnerMock = currentUser.name === "dsa" || currentUser.name === "8888888888" || currentUser.name === "TCP Estate Co.";
-    rows = rows.filter((item) => 
-      item.manager === currentUser.name || 
-      (isPartnerMock && item.manager === "TCP Estate Co.")
-    );
+    rows = rows.filter((item) => item.manager === currentUser.name);
   }
 
   const columns: Column<Dsa>[] = [
@@ -786,7 +776,11 @@ export function DsaManagementPage() {
       <Modal onClose={() => setCreating(false)} open={creating} title="Create DSA">
         <RecordForm<Dsa>
           fields={dsaFields}
-          initialValue={{ businessType: "Private Limited", manager: "Aditi Rao", status: "Submitted" }}
+          initialValue={{
+            businessType: "Private Limited",
+            manager: currentUser?.role === "DSA Partner" ? currentUser.name : DEMO_USERS.admin.name,
+            status: "Submitted",
+          }}
           onCancel={() => setCreating(false)}
           onSubmit={(value) => {
             createItem("dsas", newDsaFromForm(value));
@@ -871,9 +865,6 @@ export function DsaProfilePage({ id }: { id: string }) {
   const { store, updateItem, currentUser } = useMockStore();
   const { toast } = useToast();
   const [tab, setTab] = useState("overview");
-
-  // View document modal state
-  const [viewingDoc, setViewingDoc] = useState<DocumentRecord | null>(null);
 
   // Rejection modal state
   const [rejectingDsa, setRejectingDsa] = useState<Dsa | null>(null);
@@ -1068,6 +1059,57 @@ export function DsaProfilePage({ id }: { id: string }) {
           ) : null}
         </CardContent>
       </Card>
+      <Modal onClose={() => {
+        setRejectingDsa(null);
+        setRejectionReason("");
+      }} open={Boolean(rejectingDsa)} title="Specify Rejection Reason">
+        <div className="space-y-4">
+          <Field>
+            <Label htmlFor="profileRejectionReason">Please provide the reason for rejecting this DSA partner:</Label>
+            <textarea
+              id="profileRejectionReason"
+              rows={3}
+              className="w-full rounded-md border border-slate-200 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              value={rejectionReason}
+              onChange={(event) => setRejectionReason(event.target.value)}
+              placeholder="Enter reason (e.g. KYC mismatch, business documentation incomplete)"
+            />
+          </Field>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={() => {
+                setRejectingDsa(null);
+                setRejectionReason("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-rose-600 hover:bg-rose-700 text-white font-semibold"
+              type="button"
+              onClick={() => {
+                if (rejectingDsa) {
+                  updateItem("dsas", rejectingDsa.id, {
+                    status: "Rejected",
+                    rejectionReason: rejectionReason || "Documentation verification failed.",
+                  });
+                  toast({
+                    title: "Partner Rejected",
+                    description: `${rejectingDsa.name} has been rejected with reason.`,
+                    variant: "success",
+                  });
+                  setRejectingDsa(null);
+                  setRejectionReason("");
+                }
+              }}
+            >
+              Reject Partner
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -34,6 +34,7 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { FieldConfig, RecordForm } from "@/components/ui/record-form";
+import { DEMO_USERS } from "@/lib/demo-identities";
 import { useMockStore } from "@/lib/store";
 import {
   Application,
@@ -122,14 +123,19 @@ function newLead(value: Partial<Lead>, dsaId: string, dsaName: string): Lead {
     leadId: `LD-${Date.now().toString().slice(-5)}`,
     mobile: String(value.mobile ?? ""),
     nextAction: String(value.nextAction ?? "Call back"),
-    owner: String(value.owner ?? "Aditi Rao"),
+    owner: String(value.owner ?? DEMO_USERS.admin.name),
     product: (value.product as Product) || "Personal Loan",
     source: (value.source as Lead["source"]) || "DSA Campaign",
     status: (value.status as LeadStatus) || "New",
   };
 }
 
-function newApplication(value: Partial<Application>, dsaId: string, dsaName: string): Application {
+function newApplication(
+  value: Partial<Application>,
+  dsaId: string,
+  dsaName: string,
+  actor: string = DEMO_USERS.admin.name,
+): Application {
   return {
     aadhaar: String(value.aadhaar ?? ""),
     applicationId: `APP-${Date.now().toString().slice(-5)}`,
@@ -153,7 +159,7 @@ function newApplication(value: Partial<Application>, dsaId: string, dsaName: str
     status: (value.status as ApplicationStatus) || "Draft",
     timeline: [
       {
-        actor: "Aditi Rao",
+        actor,
         at: new Date().toISOString(),
         id: makeId("tl"),
         note: "Application initiated through frontend CRUD.",
@@ -174,17 +180,11 @@ export function LeadsPage() {
 
   let rows = status ? store.leads.filter((item) => item.status === status) : store.leads;
   if (currentUser?.role === "Customer") {
-    const isCustomerMock = currentUser.name === "user" || currentUser.name === "7777777777" || currentUser.name === "Amit Kumar";
-    rows = rows.filter((item) => 
-      item.customer === currentUser.name || 
-      (isCustomerMock && item.customer === "Amit Kumar")
-    );
+    rows = rows.filter((item) => item.customer === currentUser.name);
   } else if (currentUser?.role === "DSA Partner") {
-    const isPartnerMock = currentUser.name === "dsa" || currentUser.name === "8888888888" || currentUser.name === "TCP Estate Co.";
     rows = rows.filter((item) => 
       item.dsaId === currentUser.id || 
-      item.dsaName === currentUser.name ||
-      (isPartnerMock && (item.dsaName === "TCP Estate Co." || item.dsaId === "DSA-10001"))
+      item.dsaName === currentUser.name
     );
   }
   const defaultDsa = store.dsas[0];
@@ -296,7 +296,12 @@ export function LeadsPage() {
       <Modal onClose={() => setCreating(false)} open={creating} title="Create lead">
         <RecordForm<Lead>
           fields={leadFields}
-          initialValue={{ owner: "Aditi Rao", product: "Personal Loan", source: "DSA Campaign", status: "New" }}
+          initialValue={{
+            owner: currentUser?.name ?? DEMO_USERS.admin.name,
+            product: "Personal Loan",
+            source: "DSA Campaign",
+            status: "New",
+          }}
           onCancel={() => setCreating(false)}
           onSubmit={(value) => {
             const dsaId = currentUser?.role === "DSA Partner" ? (currentUser.id || "dsa-1") : defaultDsa.id;
@@ -334,17 +339,11 @@ export function ApplicationsPage() {
 
   let rows = status ? store.applications.filter((item) => item.status === status) : store.applications;
   if (currentUser?.role === "Customer") {
-    const isCustomerMock = currentUser.name === "user" || currentUser.name === "7777777777" || currentUser.name === "Amit Kumar";
-    rows = rows.filter((item) => 
-      item.customer === currentUser.name || 
-      (isCustomerMock && item.customer === "Amit Kumar")
-    );
+    rows = rows.filter((item) => item.customer === currentUser.name);
   } else if (currentUser?.role === "DSA Partner") {
-    const isPartnerMock = currentUser.name === "dsa" || currentUser.name === "8888888888" || currentUser.name === "TCP Estate Co.";
     rows = rows.filter((item) => 
       item.dsaId === currentUser.id || 
-      item.dsaName === currentUser.name ||
-      (isPartnerMock && (item.dsaName === "TCP Estate Co." || item.dsaId === "DSA-10001"))
+      item.dsaName === currentUser.name
     );
   }
   const defaultDsa = store.dsas[0];
@@ -409,7 +408,7 @@ export function ApplicationsPage() {
           onSubmit={(value) => {
             const dsaId = currentUser?.role === "DSA Partner" ? (currentUser.id || "dsa-1") : defaultDsa.id;
             const dsaName = currentUser?.role === "DSA Partner" ? currentUser.name : defaultDsa.name;
-            createItem("applications", newApplication(value, dsaId, dsaName));
+            createItem("applications", newApplication(value, dsaId, dsaName, currentUser?.name));
             setCreating(false);
           }}
           submitLabel="Create application"
@@ -441,7 +440,7 @@ export function ApplicationsPage() {
 }
 
 export function ApplicationDetailPage({ id }: { id: string }) {
-  const { store, updateItem } = useMockStore();
+  const { store, updateItem, currentUser } = useMockStore();
   const application = store.applications.find((item) => item.id === id) ?? store.applications[0];
   const [note, setNote] = useState("");
   const documents = store.documents.filter((item) => item.applicationId === application.id);
@@ -453,7 +452,7 @@ export function ApplicationDetailPage({ id }: { id: string }) {
       notes: [note.trim(), ...application.notes],
       timeline: [
         {
-          actor: "Aditi Rao",
+          actor: currentUser?.name ?? DEMO_USERS.admin.name,
           at: new Date().toISOString(),
           id: makeId("tl"),
           note: note.trim(),
