@@ -8,7 +8,6 @@ import {
   FileWarning,
   Users,
   Check,
-  X,
   ArrowRight,
   UploadCloud,
   CheckCircle2,
@@ -17,7 +16,6 @@ import {
   Clock,
   Sparkles,
   ChevronRight,
-  Plus,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import Link from "next/link";
@@ -36,24 +34,27 @@ import {
   Select,
 } from "@/components/ui/primitives";
 import { useMockStore } from "@/lib/store";
+import { buildApplicationJourney } from "@/lib/product-journeys";
 import { compactNumber, formatCurrency, formatDate, makeId } from "@/lib/utils";
 import { Application, Product, Lead } from "@/lib/types";
+import { demoAgentName } from "@/lib/agent-names";
 
 export function DashboardPage() {
-  const { store, currentUser, updateItem, createItem } = useMockStore();
+  const { store, currentUser, createItem } = useMockStore();
 
   // State for Customer Loan Application Modal
   const [applyModalOpen, setApplyModalOpen] = useState(false);
   const [applyStep, setApplyStep] = useState(1);
-  const [loanProduct, setLoanProduct] = useState<Product>("Personal Loan");
-  const [loanAmount, setLoanAmount] = useState("500000");
-  const [loanSalary, setLoanSalary] = useState("50000");
-  const [customerCity, setCustomerCity] = useState("Mumbai");
+  const [loanProduct, setLoanProduct] = useState<Product | "">("");
+  const [loanAmount, setLoanAmount] = useState("");
+  const [loanSalary, setLoanSalary] = useState("");
+  const [customerCity, setCustomerCity] = useState("");
   const [customerPan, setCustomerPan] = useState("");
   const [customerAadhaar, setCustomerAadhaar] = useState("");
   const [uploadedDocs, setUploadedDocs] = useState<string[]>([]);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [sourcingPartner, setSourcingPartner] = useState("dsa-direct");
+  const [sourcingPartner, setSourcingPartner] = useState("");
+  const [managerView, setManagerView] = useState<"overview" | "verificationQueue">("overview");
 
   // ----------------------------------------------------
   // 1. DSA MANAGER (SUPER ADMIN) CALCULATIONS & RENDER
@@ -96,10 +97,6 @@ export function DashboardPage() {
     { name: "Disbursed", value: store.applications.filter((item) => item.status === "Disbursed").length },
   ];
 
-  const handleVerifyDsa = (id: string, approve: boolean) => {
-    updateItem("dsas", id, { status: approve ? "Active" : "Rejected" });
-  };
-
   // ----------------------------------------------------
   // 2. DSA PARTNER CALCULATIONS
   // ----------------------------------------------------
@@ -134,6 +131,13 @@ export function DashboardPage() {
     return store.dsas.filter((item) => item.manager === currentUser.name);
   }, [store.dsas, currentUser]);
 
+  const partnerProductConfigs = useMemo(() => {
+    if (!currentUser) return [];
+    return store.dsaProductConfigs
+      .filter((config) => config.status === "Active" && config.dsaId === currentUser.id)
+      .sort((left, right) => left.product.localeCompare(right.product));
+  }, [currentUser, store.dsaProductConfigs]);
+
   const partnerLeadTrend = [
     { name: "Jan", value: 4 },
     { name: "Feb", value: 7 },
@@ -163,6 +167,20 @@ export function DashboardPage() {
     return { active, disbursed, totalBorrowed };
   }, [customerApps]);
 
+  const customerJourneyConfigs = useMemo(
+    () =>
+      store.dsaProductConfigs
+        .filter((config) => config.status === "Active")
+        .sort((left, right) => left.dsaName.localeCompare(right.dsaName) || left.product.localeCompare(right.product)),
+    [store.dsaProductConfigs],
+  );
+  const customerDsaOptions = useMemo(
+    () => Array.from(new Map(customerJourneyConfigs.map((config) => [config.dsaId, config])).values()),
+    [customerJourneyConfigs],
+  );
+  const customerProductOptions = customerJourneyConfigs.filter((config) => config.dsaId === sourcingPartner);
+  const selectedCustomerConfig = customerProductOptions.find((config) => config.product === loanProduct);
+
   const handleSimulateUpload = (docName: string) => {
     setUploadedDocs((prev) => [...prev, docName]);
   };
@@ -170,13 +188,25 @@ export function DashboardPage() {
   const handleApplySubmit = () => {
     if (!currentUser) return;
     const errors: Record<string, string> = {};
+    if (!selectedCustomerConfig) {
+      errors.product = "Choose a DSA and one of its configured products.";
+    }
+    if (!customerCity.trim()) {
+      errors.city = "Enter city of residence.";
+    }
+    if (Number(loanAmount || 0) <= 0) {
+      errors.amount = "Enter a valid requested amount.";
+    }
+    if (Number(loanSalary || 0) <= 0) {
+      errors.salary = "Enter a valid monthly income.";
+    }
     if (!customerPan || !/^[A-Z]{5}\d{4}[A-Z]$/.test(customerPan.toUpperCase())) {
       errors.pan = "Enter a valid PAN card (e.g. ABCDE1234F)";
     }
     if (!customerAadhaar || !/^\d{12}$/.test(customerAadhaar)) {
       errors.aadhaar = "Enter a valid 12-digit Aadhaar number";
     }
-    if (Object.keys(errors).length > 0) {
+    if (Object.keys(errors).length > 0 || !selectedCustomerConfig) {
       setFormErrors(errors);
       return;
     }
@@ -185,13 +215,13 @@ export function DashboardPage() {
     const salary = Number(loanSalary);
     const panVal = customerPan.toUpperCase();
 
-    const selectedDsa = store.dsas.find((item) => item.id === sourcingPartner);
-    const dsaId = selectedDsa ? selectedDsa.id : "dsa-direct";
-    const dsaName = selectedDsa ? selectedDsa.name : "Cosmos Bank";
+    const dsaId = selectedCustomerConfig.dsaId;
+    const dsaName = selectedCustomerConfig.dsaName;
+    const product = selectedCustomerConfig.product;
 
     // Create lead record
     const leadId = makeId("lead");
-    const lCode = `LD-${Math.floor(10000 + Math.random() * 90000)}`;
+    const lCode = `LD-${leadId.slice(-5).toUpperCase()}`;
     const newLeadItem: Lead = {
       id: leadId,
       leadId: lCode,
@@ -199,8 +229,8 @@ export function DashboardPage() {
       mobile: currentUser.mobile || "7777777777",
       email: currentUser.email || "customer@example.com",
       city: customerCity,
-      source: selectedDsa ? "Partner" : "Website",
-      product: loanProduct,
+      source: "Partner",
+      product,
       amount: appAmount,
       status: "New",
       dsaId: dsaId,
@@ -212,7 +242,8 @@ export function DashboardPage() {
 
     // Create application record
     const appId = makeId("app");
-    const aCode = `APP-${Math.floor(10000 + Math.random() * 90000)}`;
+    const aCode = `APP-${appId.slice(-5).toUpperCase()}`;
+    const journeySeed = appId.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
     const newAppItem: Application = {
       id: appId,
       applicationId: aCode,
@@ -224,8 +255,14 @@ export function DashboardPage() {
       city: customerCity,
       dsaId: dsaId,
       dsaName: dsaName,
-      product: loanProduct,
+      product,
       loanAmount: appAmount,
+      journey: buildApplicationJourney(product, journeySeed, {
+        city: customerCity,
+        customer: currentUser.name,
+        loanAmount: appAmount,
+        salary,
+      }),
       status: "In Review",
       stage: "BRE Check",
       riskScore: 48,
@@ -256,17 +293,27 @@ export function DashboardPage() {
     createItem("leads", newLeadItem);
     createItem("applications", newAppItem);
 
-    // Reset Form
+    setLoanAmount("");
+    setLoanSalary("");
+    setCustomerCity("");
+    setCustomerPan("");
+    setCustomerAadhaar("");
+    setUploadedDocs([]);
+    setFormErrors({});
     setApplyStep(4); // Success Receipt
   };
 
   const resetForm = () => {
     setApplyStep(1);
+    setLoanProduct("");
+    setLoanAmount("");
+    setLoanSalary("");
+    setCustomerCity("");
     setCustomerPan("");
     setCustomerAadhaar("");
     setUploadedDocs([]);
     setFormErrors({});
-    setSourcingPartner("dsa-direct");
+    setSourcingPartner("");
     setApplyModalOpen(false);
   };
 
@@ -280,6 +327,92 @@ export function DashboardPage() {
     // --------------------------------------------------
     // RENDER: SUPER ADMIN / DSA MANAGER
     // --------------------------------------------------
+    if (managerView === "verificationQueue") {
+      return (
+        <div>
+          <PageHeader
+            description="Review submitted DSA records before making activation or rejection decisions from the full partner profile."
+            eyebrow="Portfolio cockpit"
+            title="Dashboard"
+          />
+
+          <div className="mb-6 inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+            <Button onClick={() => setManagerView("overview")} size="sm" type="button" variant="ghost">
+              Overview
+            </Button>
+            <Button onClick={() => setManagerView("verificationQueue")} size="sm" type="button" variant="secondary">
+              Verification Queue
+              <span className="ml-1 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
+                {pendingDsas.length}
+              </span>
+            </Button>
+          </div>
+
+          <Card className="shadow-md">
+            <CardHeader className="flex-row items-center justify-between border-b border-slate-100 pb-4">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Pending DSA Verification Queue</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Open each profile, verify KYC, documents, bank details, and business information, then approve or reject from the profile page.
+                </p>
+              </div>
+              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                {pendingDsas.length} awaiting
+              </span>
+            </CardHeader>
+            <CardContent className="p-0">
+              {pendingDsas.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-slate-50/75 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        <th className="p-4 pl-6">Partner Details</th>
+                        <th className="p-4">Contact</th>
+                        <th className="p-4">City</th>
+                        <th className="p-4">Status</th>
+                        <th className="p-4 text-right pr-6">Profile Review</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {pendingDsas.map((dsa) => (
+                        <tr key={dsa.id} className="hover:bg-slate-50/40 transition">
+                          <td className="p-4 pl-6">
+                            <div className="font-semibold text-slate-800">{dsa.name}</div>
+                            <div className="text-xs text-slate-500">{dsa.code} - {dsa.businessType}</div>
+                          </td>
+                          <td className="p-4 text-xs text-slate-600">
+                            <div>{dsa.email}</div>
+                            <div>{dsa.mobile}</div>
+                          </td>
+                          <td className="p-4 text-slate-700 font-medium">{dsa.city}</td>
+                          <td className="p-4">
+                            <StatusBadge status={dsa.status} />
+                          </td>
+                          <td className="p-4 text-right pr-6">
+                            <Link href={`/dsa/${dsa.id}`}>
+                              <Button size="sm" type="button" variant="outline">
+                                View full profile
+                              </Button>
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-8 text-center text-slate-500">
+                  <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto mb-2" />
+                  <p className="text-sm font-semibold text-slate-700">Verification queue is empty.</p>
+                  <p className="text-xs text-slate-400 mt-0.5">All onboarded partners have been processed.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
     return (
       <div>
         <PageHeader
@@ -288,11 +421,23 @@ export function DashboardPage() {
           title="Dashboard"
         />
 
+        <div className="mb-6 inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+          <Button onClick={() => setManagerView("overview")} size="sm" type="button" variant="secondary">
+            Overview
+          </Button>
+          <Button onClick={() => setManagerView("verificationQueue")} size="sm" type="button" variant="ghost">
+            Verification Queue
+            <span className="ml-1 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
+              {pendingDsas.length}
+            </span>
+          </Button>
+        </div>
+
         {/* Verification Alert Banner */}
         {pendingDsas.length > 0 && (
-          <div className="mb-6 rounded-xl bg-amber-50 border border-amber-200 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+          <div className="mb-6 rounded-xl bg-sky-50 border border-sky-200 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
             <div className="flex gap-3">
-              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-amber-100 text-amber-800">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-blue-100 text-blue-800">
                 <Clock className="h-5 w-5 animate-pulse" />
               </div>
               <div>
@@ -302,11 +447,14 @@ export function DashboardPage() {
                 </p>
               </div>
             </div>
-            <Link href="#verification-queue">
-              <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white font-bold shrink-0">
-                Review Queue
-              </Button>
-            </Link>
+            <Button
+              onClick={() => setManagerView("verificationQueue")}
+              size="sm"
+              className="bg-blue-700 hover:bg-blue-800 text-white font-bold shrink-0"
+              type="button"
+            >
+              Review Queue
+            </Button>
           </div>
         )}
 
@@ -332,85 +480,6 @@ export function DashboardPage() {
             subtitle="Application volume across DSA-sourced products"
             title="Application trend"
           />
-        </div>
-
-        {/* Dynamic Verification Queue section */}
-        <div id="verification-queue" className="mt-6 scroll-mt-20">
-          <Card className="shadow-md">
-            <CardHeader className="flex-row items-center justify-between border-b border-slate-100 pb-4">
-              <div>
-                <h2 className="text-base font-bold text-slate-900">Pending DSA Verification Queue</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Verify and onboard submitted partners instantly</p>
-              </div>
-              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                {pendingDsas.length} awaiting
-              </span>
-            </CardHeader>
-            <CardContent className="p-0">
-              {pendingDsas.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-sm">
-                    <thead>
-                      <tr className="bg-slate-50/75 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        <th className="p-4 pl-6">Partner Details</th>
-                        <th className="p-4">Contact</th>
-                        <th className="p-4">City</th>
-                        <th className="p-4">Status</th>
-                        <th className="p-4 text-right pr-6">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {pendingDsas.map((dsa) => (
-                        <tr key={dsa.id} className="hover:bg-slate-50/40 transition">
-                          <td className="p-4 pl-6">
-                            <div className="font-semibold text-slate-800">{dsa.name}</div>
-                            <div className="text-xs text-slate-500">{dsa.code} · {dsa.businessType}</div>
-                          </td>
-                          <td className="p-4 text-xs text-slate-600">
-                            <div>{dsa.email}</div>
-                            <div>{dsa.mobile}</div>
-                          </td>
-                          <td className="p-4 text-slate-700 font-medium">{dsa.city}</td>
-                          <td className="p-4">
-                            <StatusBadge status={dsa.status} />
-                          </td>
-                          <td className="p-4 text-right pr-6">
-                            <div className="flex justify-end gap-2">
-                              <button
-                                onClick={() => handleVerifyDsa(dsa.id, true)}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition shadow-sm"
-                                title="Approve & Activate"
-                              >
-                                <Check className="h-4.5 w-4.5" />
-                              </button>
-                              <button
-                                onClick={() => handleVerifyDsa(dsa.id, false)}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 transition shadow-sm"
-                                title="Reject Partner"
-                              >
-                                <X className="h-4.5 w-4.5" />
-                              </button>
-                              <Link href={`/dsa/${dsa.id}`}>
-                                <button className="inline-flex h-8 px-2.5 items-center justify-center rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition">
-                                  View profile
-                                </button>
-                              </Link>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="p-8 text-center text-slate-500">
-                  <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto mb-2" />
-                  <p className="text-sm font-semibold text-slate-700">Verification Queue is Empty!</p>
-                  <p className="text-xs text-slate-400 mt-0.5">All onboarded partners have been processed.</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </div>
 
         <div className="mt-6 grid gap-4 xl:grid-cols-2">
@@ -466,7 +535,6 @@ export function DashboardPage() {
                   ["KYC pending DSAs", store.dsas.filter((item) => item.status === "KYC Pending").length],
                   ["Verification checks", store.verificationChecks.filter((item) => item.status !== "Verified").length],
                   ["Pending approvals", store.approvals.filter((item) => item.status === "Pending").length],
-                  ["Unread notifications", store.notifications.filter((item) => item.status === "Unread").length],
                 ].map(([label, value]) => (
                   <div className="flex items-center justify-between rounded-md bg-slate-50 p-3" key={label}>
                     <span className="text-sm text-slate-600">{label}</span>
@@ -516,25 +584,30 @@ export function DashboardPage() {
 
           <Card className="shadow-md h-full flex flex-col justify-between">
             <CardHeader className="border-b border-slate-100 pb-4">
-              <h2 className="text-base font-bold text-slate-900">Partner Quick Desk</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Core operations for direct selling</p>
+              <h2 className="text-base font-bold text-slate-900">Available Product Journeys</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Live products configured for your DSA code</p>
             </CardHeader>
             <CardContent className="p-6 space-y-4 flex-1 flex flex-col justify-center">
-              <Link href="/dsa/onboarding" className="block">
-                <button className="w-full h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md transition flex items-center justify-center gap-2">
-                  <Building2 className="h-4.5 w-4.5" />
-                  Onboard Sub-Agent
+              {partnerProductConfigs.length ? (
+                <div className="space-y-2">
+                  {partnerProductConfigs.map((config) => (
+                    <div className="rounded-xl border border-sky-100 bg-sky-50/50 p-3" key={config.id}>
+                      <p className="text-sm font-bold text-blue-950">{config.product}</p>
+                      <p className="mt-0.5 text-[11px] font-medium text-blue-700">{config.dsaCode} - {config.commissionType}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-xs text-slate-600">
+                  No active product journeys are configured for your DSA yet.
+                </div>
+              )}
+              <Link href="/sell-now" className="block">
+                <button className="w-full h-12 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-sm shadow-md transition flex items-center justify-center gap-2">
+                  <ArrowRight className="h-4.5 w-4.5" />
+                  Fill or Send Journey
                 </button>
               </Link>
-              <Link href="/leads" className="block">
-                <button className="w-full h-12 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm shadow-md transition flex items-center justify-center gap-2">
-                  <Plus className="h-4.5 w-4.5" />
-                  Submit New Lead
-                </button>
-              </Link>
-              <div className="rounded-xl bg-slate-50 p-4 text-xs text-slate-600 leading-relaxed border border-slate-100 mt-2">
-                <strong className="text-slate-800">Note:</strong> Newly onboarded sub-agents will remain in <strong className="text-amber-600">Submitted</strong> status until verified by the Cosmos DSA Manager.
-              </div>
             </CardContent>
           </Card>
         </div>
@@ -568,7 +641,7 @@ export function DashboardPage() {
                     <tbody className="divide-y divide-slate-100">
                       {partnerAgents.map((agent) => (
                         <tr key={agent.id} className="hover:bg-slate-50/40 transition">
-                          <td className="p-4 pl-6 font-semibold text-slate-800">{agent.name}</td>
+                          <td className="p-4 pl-6 font-semibold text-slate-800">{demoAgentName(agent.id)}</td>
                           <td className="p-4 text-slate-600 font-mono text-xs">{agent.code}</td>
                           <td className="p-4 text-slate-600 text-xs">{agent.email}</td>
                           <td className="p-4 text-slate-500 text-xs">{formatDate(agent.onboardingDate)}</td>
@@ -591,7 +664,7 @@ export function DashboardPage() {
                 <div className="p-8 text-center text-slate-500">
                   <Users className="h-10 w-10 text-slate-300 mx-auto mb-2" />
                   <p className="text-sm font-semibold text-slate-700">No Sub-Agents Sourced Yet</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Click &quot;Onboard Sub-Agent&quot; to begin building your team.</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Approved agent records assigned to your DSA will appear here.</p>
                 </div>
               )}
             </CardContent>
@@ -608,7 +681,7 @@ export function DashboardPage() {
         {/* Welcome Header */}
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-900 via-indigo-950 to-slate-900 text-white p-6 md:p-8 shadow-lg mb-6">
           <div className="absolute -top-16 -right-16 w-48 h-48 bg-blue-500 rounded-full blur-3xl opacity-20" />
-          <div className="absolute -bottom-16 -left-16 w-48 h-48 bg-amber-500 rounded-full blur-3xl opacity-10" />
+          <div className="absolute -bottom-16 -left-16 w-48 h-48 bg-sky-500 rounded-full blur-3xl opacity-10" />
 
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="space-y-2">
@@ -627,7 +700,7 @@ export function DashboardPage() {
                 setApplyStep(1);
                 setApplyModalOpen(true);
               }}
-              className="h-12 px-6 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-black tracking-wide shadow-md shadow-amber-500/20 hover:shadow-lg transition flex items-center justify-center gap-2 border-none self-start md:self-auto"
+              className="h-12 px-6 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-sm font-black tracking-wide shadow-md shadow-blue-700/20 hover:shadow-lg transition flex items-center justify-center gap-2 border-none self-start md:self-auto"
             >
               Apply for a New Loan <ArrowRight className="h-4 w-4" />
             </button>
@@ -740,21 +813,18 @@ export function DashboardPage() {
                 <p className="text-xs text-blue-200 mt-0.5">Customized for {currentUser.name}</p>
               </div>
               <CardContent className="p-4 space-y-4">
-                {[
-                  { name: "Personal Loan", rate: "10.49% p.a.", tenure: "Up to 5 yrs" },
-                  { name: "Housing Loan", rate: "8.75% p.a.", tenure: "Up to 30 yrs" },
-                  { name: "Vehicle Loan", rate: "9.25% p.a.", tenure: "Up to 7 yrs" },
-                ].map((offer) => (
-                  <div key={offer.name} className="flex justify-between items-center rounded-xl bg-slate-50/70 p-3 border border-slate-100 hover:bg-slate-50 transition">
+                {customerJourneyConfigs.slice(0, 3).map((offer) => (
+                  <div key={offer.id} className="flex justify-between items-center rounded-xl bg-slate-50/70 p-3 border border-slate-100 hover:bg-slate-50 transition">
                     <div>
-                      <h4 className="text-xs font-bold text-slate-800">{offer.name}</h4>
-                      <p className="text-[10px] text-slate-400 mt-0.5">Tenure: {offer.tenure}</p>
+                      <h4 className="text-xs font-bold text-slate-800">{offer.product}</h4>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{offer.dsaName}</p>
                     </div>
                     <div className="text-right">
-                      <span className="text-xs font-bold text-emerald-600">{offer.rate}</span>
+                      <span className="text-xs font-bold text-blue-700">{offer.commissionType}</span>
                       <button
                         onClick={() => {
-                          setLoanProduct(offer.name as Product);
+                          setSourcingPartner(offer.dsaId);
+                          setLoanProduct(offer.product);
                           setApplyStep(1);
                           setApplyModalOpen(true);
                         }}
@@ -765,6 +835,11 @@ export function DashboardPage() {
                     </div>
                   </div>
                 ))}
+                {customerJourneyConfigs.length === 0 ? (
+                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-xs text-slate-500">
+                    No DSA product journeys are active yet.
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
 
@@ -822,29 +897,48 @@ export function DashboardPage() {
               <h3 className="text-sm font-bold text-slate-900 border-b pb-2 uppercase tracking-wider">Loan Product Specifications</h3>
               <div className="grid gap-4">
                 <Field>
-                  <Label htmlFor="loanProduct">Choose Product Type</Label>
-                  <Select id="loanProduct" onChange={(e) => setLoanProduct(e.target.value as Product)} value={loanProduct}>
-                    {["Personal Loan", "Home Loan", "Loan Against Property", "Business Loan", "Auto Loan"].map((p) => (
-                      <option key={p} value={p}>{p}</option>
+                  <Label htmlFor="sourcingPartner">Choose DSA Partner</Label>
+                  <Select
+                    id="sourcingPartner"
+                    onChange={(e) => {
+                      setSourcingPartner(e.target.value);
+                      setLoanProduct("");
+                      setFormErrors({});
+                    }}
+                    value={sourcingPartner}
+                  >
+                    <option value="">Select DSA</option>
+                    {customerDsaOptions.map((config) => (
+                      <option key={config.dsaId} value={config.dsaId}>{config.dsaName} ({config.dsaCode})</option>
                     ))}
                   </Select>
+                  {formErrors.product && <p className="text-xs font-semibold text-rose-600 mt-1">{formErrors.product}</p>}
                 </Field>
                 <Field>
-                  <Label htmlFor="sourcingPartner">Choose Sourcing Channel (Bank / DSA Partner)</Label>
-                  <Select id="sourcingPartner" onChange={(e) => setSourcingPartner(e.target.value)} value={sourcingPartner}>
-                    <option value="dsa-direct">Cosmos Bank (Direct)</option>
-                    {store.dsas.filter((d) => d.status === "Active").map((dsa) => (
-                      <option key={dsa.id} value={dsa.id}>{dsa.name} ({dsa.code})</option>
+                  <Label htmlFor="loanProduct">Choose Product Type</Label>
+                  <Select
+                    id="loanProduct"
+                    onChange={(e) => {
+                      setLoanProduct(e.target.value as Product | "");
+                      setFormErrors({});
+                    }}
+                    value={loanProduct}
+                  >
+                    <option value="">Select product</option>
+                    {customerProductOptions.map((config) => (
+                      <option key={config.id} value={config.product}>{config.product}</option>
                     ))}
                   </Select>
                 </Field>
                 <Field>
                   <Label htmlFor="loanAmount">Requested Amount (INR)</Label>
                   <Input id="loanAmount" type="number" onChange={(e) => setLoanAmount(e.target.value)} value={loanAmount} />
+                  {formErrors.amount && <p className="text-xs font-semibold text-rose-600 mt-1">{formErrors.amount}</p>}
                 </Field>
                 <Field>
                   <Label htmlFor="loanSalary">Net Monthly Salary (INR)</Label>
                   <Input id="loanSalary" type="number" onChange={(e) => setLoanSalary(e.target.value)} value={loanSalary} />
+                  {formErrors.salary && <p className="text-xs font-semibold text-rose-600 mt-1">{formErrors.salary}</p>}
                 </Field>
               </div>
               <div className="pt-4 flex justify-end">
@@ -887,6 +981,7 @@ export function DashboardPage() {
                 <Field>
                   <Label htmlFor="customerCity">City of Residence</Label>
                   <Input id="customerCity" onChange={(e) => setCustomerCity(e.target.value)} value={customerCity} />
+                  {formErrors.city && <p className="text-xs font-semibold text-rose-600 mt-1">{formErrors.city}</p>}
                 </Field>
               </div>
               <div className="pt-4 flex justify-between">

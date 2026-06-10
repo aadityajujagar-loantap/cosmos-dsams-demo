@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/primitives";
 import { FieldConfig, RecordForm } from "@/components/ui/record-form";
 import { DEMO_USERS } from "@/lib/demo-identities";
+import { buildApplicationJourney } from "@/lib/product-journeys";
 import { useMockStore } from "@/lib/store";
 import {
   Application,
@@ -43,6 +44,7 @@ import {
   Lead,
   LeadStatus,
   Product,
+  VerificationStatus,
 } from "@/lib/types";
 import { formatCurrency, formatDate, makeId } from "@/lib/utils";
 
@@ -82,6 +84,15 @@ const applicationStatuses: ApplicationStatus[] = [
   "On Hold",
 ];
 
+const verificationStatuses: VerificationStatus[] = ["Pending", "In Progress", "Verified", "Failed"];
+const riskBands = ["Low risk (0-64)", "Medium risk (65-78)", "High risk (79+)"];
+
+function riskBand(score: number) {
+  if (score > 78) return "High risk (79+)";
+  if (score > 64) return "Medium risk (65-78)";
+  return "Low risk (0-64)";
+}
+
 const leadFields: FieldConfig<Lead>[] = [
   { label: "Customer", name: "customer", required: true },
   { label: "Mobile", name: "mobile", required: true },
@@ -93,21 +104,6 @@ const leadFields: FieldConfig<Lead>[] = [
   { label: "Status", name: "status", options: leadStatuses, required: true, type: "select" },
   { label: "Owner", name: "owner", required: true },
   { label: "Next action", name: "nextAction", required: true },
-];
-
-const applicationFields: FieldConfig<Application>[] = [
-  { label: "Customer", name: "customer", required: true },
-  { label: "Mobile", name: "mobile", required: true },
-  { label: "Email", name: "email", required: true, type: "email" },
-  { label: "PAN", name: "pan", required: true },
-  { label: "Aadhaar", name: "aadhaar", required: true },
-  { label: "Product", name: "product", options: products, required: true, type: "select" },
-  { label: "Loan amount", name: "loanAmount", required: true, type: "number" },
-  { label: "Stage", name: "stage", options: applicationStages, required: true, type: "select" },
-  { label: "Status", name: "status", options: applicationStatuses, required: true, type: "select" },
-  { label: "Risk score", name: "riskScore", required: true, type: "number" },
-  { label: "Credit score", name: "creditScore", required: true, type: "number" },
-  { label: "Salary", name: "salary", required: true, type: "number" },
 ];
 
 function newLead(value: Partial<Lead>, dsaId: string, dsaName: string): Lead {
@@ -127,46 +123,6 @@ function newLead(value: Partial<Lead>, dsaId: string, dsaName: string): Lead {
     product: (value.product as Product) || "Personal Loan",
     source: (value.source as Lead["source"]) || "DSA Campaign",
     status: (value.status as LeadStatus) || "New",
-  };
-}
-
-function newApplication(
-  value: Partial<Application>,
-  dsaId: string,
-  dsaName: string,
-  actor: string = DEMO_USERS.admin.name,
-): Application {
-  return {
-    aadhaar: String(value.aadhaar ?? ""),
-    applicationId: `APP-${Date.now().toString().slice(-5)}`,
-    city: String(value.city ?? "Mumbai"),
-    createdAt: new Date().toISOString(),
-    creditScore: Number(value.creditScore ?? 700),
-    customer: String(value.customer ?? "New Customer"),
-    decisionSummary: "New application created from frontend mock workflow.",
-    dsaId,
-    dsaName,
-    email: String(value.email ?? ""),
-    id: makeId("app"),
-    loanAmount: Number(value.loanAmount ?? 500000),
-    mobile: String(value.mobile ?? ""),
-    notes: ["Application created in demo workspace."],
-    pan: String(value.pan ?? ""),
-    product: (value.product as Product) || "Personal Loan",
-    riskScore: Number(value.riskScore ?? 64),
-    salary: Number(value.salary ?? 45000),
-    stage: (value.stage as ApplicationStage) || "Lead Capture",
-    status: (value.status as ApplicationStatus) || "Draft",
-    timeline: [
-      {
-        actor,
-        at: new Date().toISOString(),
-        id: makeId("tl"),
-        note: "Application initiated through frontend CRUD.",
-        title: "Application created",
-      },
-    ],
-    verificationStatus: "Pending",
   };
 }
 
@@ -332,12 +288,21 @@ export function LeadsPage() {
 }
 
 export function ApplicationsPage() {
-  const { createItem, deleteItem, store, updateItem, currentUser } = useMockStore();
+  const { deleteItem, store, currentUser } = useMockStore();
   const [status, setStatus] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [editing, setEditing] = useState<Application | null>(null);
+  const [productFilter, setProductFilter] = useState("");
+  const [dsaTypeFilter, setDsaTypeFilter] = useState("");
+  const [stageFilter, setStageFilter] = useState("");
+  const [riskFilter, setRiskFilter] = useState("");
+  const [verificationFilter, setVerificationFilter] = useState("");
 
-  let rows = status ? store.applications.filter((item) => item.status === status) : store.applications;
+  const dsaById = useMemo(() => new Map(store.dsas.map((dsa) => [dsa.id, dsa])), [store.dsas]);
+  const dsaTypes = useMemo(
+    () => Array.from(new Set(store.dsas.map((dsa) => dsa.businessType))).sort(),
+    [store.dsas],
+  );
+
+  let rows = store.applications;
   if (currentUser?.role === "Customer") {
     rows = rows.filter((item) => item.customer === currentUser.name);
   } else if (currentUser?.role === "DSA Partner") {
@@ -346,7 +311,18 @@ export function ApplicationsPage() {
       item.dsaName === currentUser.name
     );
   }
-  const defaultDsa = store.dsas[0];
+
+  rows = rows.filter((item) => {
+    const dsaType = dsaById.get(item.dsaId)?.businessType ?? "Direct";
+    return (
+      (!productFilter || item.product === productFilter) &&
+      (!dsaTypeFilter || dsaType === dsaTypeFilter) &&
+      (!stageFilter || item.stage === stageFilter) &&
+      (!status || item.status === status) &&
+      (!riskFilter || riskBand(item.riskScore) === riskFilter) &&
+      (!verificationFilter || item.verificationStatus === verificationFilter)
+    );
+  });
 
   const columns: Column<Application>[] = [
     {
@@ -363,26 +339,32 @@ export function ApplicationsPage() {
       sortable: true,
       sortValue: (item) => item.applicationId,
     },
-    { cell: (item) => item.dsaName, header: "DSA", key: "dsaName" },
-    { cell: (item) => item.product, header: "Product", key: "product" },
+    {
+      cell: (item) => {
+        const dsa = dsaById.get(item.dsaId);
+        return (
+          <div>
+            <p className="font-medium text-slate-900">{item.dsaName}</p>
+            <p className="text-xs text-slate-500">{dsa?.businessType ?? "Direct"}{dsa?.tier ? ` · ${dsa.tier}` : ""}</p>
+          </div>
+        );
+      },
+      header: "DSA / Type",
+      key: "dsaName",
+      sortable: true,
+      sortValue: (item) => `${dsaById.get(item.dsaId)?.businessType ?? "Direct"}-${item.dsaName}`,
+    },
+    { cell: (item) => item.product, header: "Product", key: "product", sortable: true, sortValue: (item) => item.product },
     { cell: (item) => formatCurrency(item.loanAmount), header: "Loan amount", key: "loanAmount", sortable: true, sortValue: (item) => item.loanAmount },
-    { cell: (item) => item.stage, header: "Stage", key: "stage" },
+    { cell: (item) => item.stage, header: "Stage", key: "stage", sortable: true, sortValue: (item) => item.stage },
     { cell: (item) => <Badge tone={item.riskScore > 78 ? "rose" : item.riskScore > 65 ? "amber" : "green"}>{item.riskScore}</Badge>, header: "Risk", key: "riskScore", sortable: true, sortValue: (item) => item.riskScore },
-    { cell: (item) => <StatusBadge status={item.status} />, header: "Status", key: "status" },
+    { cell: (item) => <StatusBadge status={item.status} />, header: "Status", key: "status", sortable: true, sortValue: (item) => item.status },
   ];
 
   return (
     <div>
       <PageHeader
-        action={
-          currentUser?.role !== "Customer" ? (
-            <Button onClick={() => setCreating(true)} type="button">
-              <Plus className="h-4 w-4" />
-              New Application
-            </Button>
-          ) : undefined
-        }
-        description="Control application status, stage ownership, risk score, DSA linkage, and underwriting movement."
+        description="Review journey-created applications by product, DSA type, stage, risk, and underwriting status."
         eyebrow="Loan operations"
         title="Loan Application Management"
       />
@@ -390,51 +372,21 @@ export function ApplicationsPage() {
         actions={(item) => (
           <ActionPair
             onDelete={() => deleteItem("applications", item.id)}
-            onEdit={() => setEditing(item)}
             onView={() => window.location.assign(`/applications/${item.id}`)}
           />
         )}
         columns={columns}
-        filters={[{ label: "status", onChange: setStatus, options: applicationStatuses, value: status }]}
+        filters={[
+          { label: "product", onChange: setProductFilter, options: products, value: productFilter },
+          { label: "DSA type", onChange: setDsaTypeFilter, options: dsaTypes, value: dsaTypeFilter },
+          { label: "stage", onChange: setStageFilter, options: applicationStages, value: stageFilter },
+          { label: "status", onChange: setStatus, options: applicationStatuses, value: status },
+          { label: "risk band", onChange: setRiskFilter, options: riskBands, value: riskFilter },
+          { label: "verification", onChange: setVerificationFilter, options: verificationStatuses, value: verificationFilter },
+        ]}
         items={rows}
-        searchKeys={["applicationId", "customer", "pan", "aadhaar", "mobile", "dsaName"]}
+        searchKeys={["applicationId", "customer", "pan", "aadhaar", "mobile", "dsaName", "product", "stage", "verificationStatus"]}
       />
-
-      <Modal onClose={() => setCreating(false)} open={creating} title="Create application">
-        <RecordForm<Application>
-          fields={applicationFields}
-          initialValue={{ product: "Personal Loan", stage: "Lead Capture", status: "Draft", verificationStatus: "Pending" }}
-          onCancel={() => setCreating(false)}
-          onSubmit={(value) => {
-            const dsaId = currentUser?.role === "DSA Partner" ? (currentUser.id || "dsa-1") : defaultDsa.id;
-            const dsaName = currentUser?.role === "DSA Partner" ? currentUser.name : defaultDsa.name;
-            createItem("applications", newApplication(value, dsaId, dsaName, currentUser?.name));
-            setCreating(false);
-          }}
-          submitLabel="Create application"
-        />
-      </Modal>
-
-      <Modal onClose={() => setEditing(null)} open={Boolean(editing)} title="Edit application">
-        {editing ? (
-          <RecordForm<Application>
-            fields={applicationFields}
-            initialValue={editing}
-            onCancel={() => setEditing(null)}
-            onSubmit={(value) => {
-              updateItem("applications", editing.id, {
-                ...value,
-                creditScore: Number(value.creditScore ?? editing.creditScore),
-                loanAmount: Number(value.loanAmount ?? editing.loanAmount),
-                riskScore: Number(value.riskScore ?? editing.riskScore),
-                salary: Number(value.salary ?? editing.salary),
-              });
-              setEditing(null);
-            }}
-            submitLabel="Save application"
-          />
-        ) : null}
-      </Modal>
     </div>
   );
 }
@@ -445,6 +397,8 @@ export function ApplicationDetailPage({ id }: { id: string }) {
   const [note, setNote] = useState("");
   const documents = store.documents.filter((item) => item.applicationId === application.id);
   const checks = store.verificationChecks.filter((item) => item.applicationId === application.applicationId);
+  const journeySeed = Number(application.applicationId.replace(/\D/g, "")) || 1;
+  const journey = application.journey ?? buildApplicationJourney(application.product, journeySeed, application);
 
   function addNote() {
     if (!note.trim()) return;
@@ -497,6 +451,29 @@ export function ApplicationDetailPage({ id }: { id: string }) {
                 <DetailItem label="PAN" value={application.pan} />
                 <DetailItem label="Aadhaar" value={application.aadhaar} />
                 <DetailItem label="Salary" value={formatCurrency(application.salary)} />
+              </DetailGrid>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex-row items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-slate-950">{journey.name}</h2>
+                <p className="mt-1 text-xs text-slate-500">{journey.journeyId} - {journey.channel}</p>
+              </div>
+              <Badge tone="blue">{journey.currentStep}</Badge>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {journey.completedSteps.map((step) => (
+                  <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700" key={step}>
+                    {step}
+                  </div>
+                ))}
+              </div>
+              <DetailGrid>
+                {journey.fields.map((item) => (
+                  <DetailItem key={item.id} label={`${item.group} - ${item.label}`} value={item.value} />
+                ))}
               </DetailGrid>
             </CardContent>
           </Card>

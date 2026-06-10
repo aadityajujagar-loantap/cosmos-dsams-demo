@@ -46,7 +46,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             className={cn(
               "pointer-events-auto flex items-start gap-3 rounded-lg border bg-white p-4 text-sm shadow-xl shadow-slate-900/10",
-              item.variant === "warning" && "border-amber-200 bg-amber-50",
+              item.variant === "warning" && "border-sky-200 bg-sky-50",
               item.variant === "success" && "border-emerald-200 bg-emerald-50",
             )}
             key={item.id}

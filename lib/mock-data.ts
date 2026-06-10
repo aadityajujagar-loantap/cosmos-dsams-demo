@@ -2,6 +2,8 @@ import {
   ApprovalItem,
   ApprovalStage,
   Application,
+  ApplicationStage,
+  ApplicationStatus,
   AuditLog,
   BreRule,
   BusinessType,
@@ -9,6 +11,7 @@ import {
   DocumentRecord,
   DocumentType,
   Dsa,
+  DsaProductConfig,
   DsaStatus,
   Lead,
   LeadStatus,
@@ -23,6 +26,8 @@ import {
   VerificationStatus,
 } from "@/lib/types";
 import { DEMO_USERS, demoActor } from "@/lib/demo-identities";
+import { journeyPath } from "@/lib/journey-links";
+import { buildApplicationJourney } from "@/lib/product-journeys";
 
 const states = [
   ["Mumbai", "Maharashtra", "400001"],
@@ -326,6 +331,7 @@ export function createMockStore(): MockStore {
   const applications: Application[] = Array.from({ length: 64 }, (_, index) => {
     const lead = index === 2 ? leads[4] : index === 5 ? leads[10] : pick(leads, index * 2);
     const score = 52 + ((index * 9) % 46);
+    const salary = 28000 + ((index * 5300) % 180000);
     return {
       aadhaar: aadhaar(index),
       applicationId: `APP-${String(index + 1).padStart(5, "0")}`,
@@ -348,6 +354,12 @@ export function createMockStore(): MockStore {
       id: `app-${index + 1}`,
       loanAmount: lead.amount,
       mobile: lead.mobile,
+      journey: buildApplicationJourney(lead.product, index, {
+        city: lead.city,
+        customer: lead.customer,
+        loanAmount: lead.amount,
+        salary,
+      }),
       notes: [
         "Customer requested flexible EMI date.",
         "DSA confirmed all documents collected.",
@@ -356,7 +368,7 @@ export function createMockStore(): MockStore {
       pan: pan(index + 120),
       product: lead.product,
       riskScore: score,
-      salary: 28000 + ((index * 5300) % 180000),
+      salary,
       stage: pick(
         [
           "Lead Capture",
@@ -374,6 +386,95 @@ export function createMockStore(): MockStore {
       verificationStatus: pick(verificationStatuses, index + 1),
     };
   });
+
+  const dsaProductConfigs: DsaProductConfig[] = dsas
+    .filter((dsa) => dsa.status === "Active")
+    .slice(0, 12)
+    .flatMap((dsa, dsaIndex) =>
+      products.slice(0, dsaIndex % 3 === 0 ? 2 : 1).map((product, productIndex) => {
+        const id = `dsa-product-${dsaIndex + 1}-${productIndex + 1}`;
+        return {
+          bannerName: `${product.toLowerCase().replaceAll(" ", "-")}-banner.png`,
+          commissionType: pick(["Percentage-based", "Tiered"], dsaIndex + productIndex),
+          configuredAt: isoDay(dsaIndex + productIndex),
+          configuredBy: DEMO_USERS.admin.name,
+          dsaCode: dsa.code,
+          dsaId: dsa.id,
+          dsaName: dsa.name,
+          id,
+          loanUrl: journeyPath(id),
+          product,
+          ranges: [
+            {
+              effectiveDate: "2026-06-01",
+              endDate: "2027-06-01",
+              frequency: "Monthly",
+              id: `${product.slice(0, 2).toUpperCase()}-${dsaIndex + 1}-${productIndex + 1}`,
+              max: 3000000 + productIndex * 2000000,
+              min: 500000,
+              rate: 0.5 + productIndex * 0.25,
+            },
+          ],
+          status: "Active" as const,
+        };
+      }),
+    );
+
+  applications.push(
+    ...dsaProductConfigs.slice(0, 14).flatMap((config, configIndex) => {
+      const dsa = dsas.find((item) => item.id === config.dsaId);
+      return [0, 1].map((inner) => {
+        const seed = 300 + configIndex * 2 + inner;
+        const customer = person(seed);
+        const loanAmount = 400000 + ((seed * 91000) % 3200000);
+        const salary = 35000 + ((seed * 3200) % 140000);
+        return {
+          aadhaar: aadhaar(seed),
+          applicationId: `APP-D${String(configIndex * 2 + inner + 1).padStart(4, "0")}`,
+          city: dsa?.city ?? pick(states, seed)[0],
+          createdAt: isoDay(seed % 30),
+          creditScore: 650 + ((seed * 11) % 160),
+          customer,
+          decisionSummary: "Demo product-linked application for DSA profile product filtering.",
+          dsaId: config.dsaId,
+          dsaName: config.dsaName,
+          email: `${customer.toLowerCase().replace(" ", ".")}@example.com`,
+          id: `app-product-demo-${configIndex + 1}-${inner + 1}`,
+          loanAmount,
+          mobile: mobile(seed),
+          journey: buildApplicationJourney(config.product, seed, {
+            city: dsa?.city ?? pick(states, seed)[0],
+            customer,
+            loanAmount,
+            salary,
+          }),
+          notes: [
+            `Application mapped to configured ${config.product}.`,
+            "Dummy record added for DSA profile product filtering.",
+          ],
+          pan: pan(seed),
+          product: config.product,
+          riskScore: 48 + ((seed * 7) % 45),
+          salary,
+          stage: pick(
+            [
+              "Lead Capture",
+              "Document Review",
+              "BRE Check",
+              "Credit Underwriting",
+              "Risk Review",
+              "Approval",
+              "Disbursal",
+            ] as ApplicationStage[],
+            seed,
+          ),
+          status: pick(["Draft", "In Review", "Approved", "Rejected", "Disbursed", "On Hold"] as ApplicationStatus[], seed),
+          timeline: timeline(seed),
+          verificationStatus: pick(verificationStatuses, seed),
+        };
+      });
+    }),
+  );
 
 
   const documents = [
@@ -552,6 +653,7 @@ export function createMockStore(): MockStore {
     commissions,
     documents,
     dsas,
+    dsaProductConfigs,
     leads,
     notifications,
     roles: rolePermissions,

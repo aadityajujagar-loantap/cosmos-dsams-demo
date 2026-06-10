@@ -1,19 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  Bell,
   Building2,
   ChevronDown,
   ClipboardCheck,
-  FileSearch,
-  Landmark,
   LayoutDashboard,
   LineChart,
   Menu,
-  PanelLeftClose,
   Search,
+  Send,
   Settings,
   ShieldCheck,
   Users,
@@ -30,7 +28,6 @@ interface NavItem {
   href: string;
   icon: LucideIcon;
   label: string;
-  badge?: string;
 }
 
 interface NavGroup {
@@ -52,7 +49,6 @@ function isActive(pathname: string, href: string) {
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [collapsed, setCollapsed] = useState(false);
   const [globalQuery, setGlobalQuery] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -81,17 +77,17 @@ export function AppShell({ children }: { children: ReactNode }) {
           items: [
             { href: "/dsa/onboarding", icon: Building2, label: "Onboard DSA" },
             { href: "/dsa/management", icon: Users, label: "DSA Management" },
-            { href: "/dsa/product-setting", icon: Settings, label: "Product Setting", badge: "New" },
+            { href: "/dsa/product-setting", icon: Settings, label: "Product Setting" },
           ],
           label: "Partners",
         },
         {
-          items: [{ href: "/leads", icon: FileSearch, label: "Lead Pipeline" }],
-          label: "Leads",
-        },
-        {
           items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications" }],
           label: "Applications",
+        },
+        {
+          items: [{ href: "/sell-now", icon: Send, label: "Sell Now" }],
+          label: "Journeys",
         },
         {
           items: [{ href: "/bre/rules", icon: ShieldCheck, label: "BRE Rules" }],
@@ -115,14 +111,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         },
         {
           items: [
-            { href: "/dsa/onboarding", icon: Building2, label: "Onboard Sub-DSA" },
             { href: "/dsa/management", icon: Users, label: "My Agent Network" },
           ],
           label: "DSA Network",
         },
         {
-          items: [{ href: "/leads", icon: FileSearch, label: "Submit Leads" }],
-          label: "Sourcing",
+          items: [{ href: "/sell-now", icon: Send, label: "Sell Now" }],
+          label: "Journeys",
         },
         {
           items: [{ href: "/finance/commissions", icon: Wallet, label: "My Earnings" }],
@@ -137,17 +132,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           label: "Overview",
         },
         {
-          items: [
-            { href: "/leads", icon: FileSearch, label: "Apply for Loan" },
-            { href: "/applications", icon: ClipboardCheck, label: "My Applications" },
-          ],
+          items: [{ href: "/applications", icon: ClipboardCheck, label: "My Applications" }],
           label: "Loan Journey",
         },
       ];
     }
   }, [currentUser]);
 
-  const unread = store.notifications.filter((item) => item.status === "Unread").length;
   const globalResults = useMemo(() => {
     const query = globalQuery.trim().toLowerCase();
     if (!query) return [];
@@ -177,32 +168,18 @@ export function AppShell({ children }: { children: ReactNode }) {
           label: `${item.applicationId} · ${item.customer}`,
           meta: `${item.product} · ${item.status}`,
         })),
-      ...store.leads
-        .filter((item) =>
-          [item.leadId, item.customer, item.mobile, item.email].some((value) =>
-            value.toLowerCase().includes(query),
-          ),
-        )
-        .map((item) => ({
-          href: "/leads",
-          kind: "Lead",
-          label: `${item.leadId} · ${item.customer}`,
-          meta: `${item.product} · ${item.status}`,
-        })),
     ].slice(0, 10);
-  }, [globalQuery, store.applications, store.dsas, store.leads]);
+  }, [globalQuery, store.applications, store.dsas]);
 
   if (!mounted || !currentUser) return null;
 
   const navigation = (
-    <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-4">
+    <nav className="scrollbar-subtle flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-4">
       {navGroups.map((group) => (
         <div key={group.label}>
-          {!collapsed ? (
-            <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              {group.label}
-            </p>
-          ) : null}
+          <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            {group.label}
+          </p>
           <div className="space-y-1">
             {group.items.map((item) => {
               const Icon = item.icon;
@@ -212,23 +189,13 @@ export function AppShell({ children }: { children: ReactNode }) {
                   className={cn(
                     "flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950",
                     active && "bg-blue-50 text-blue-700 ring-1 ring-blue-100",
-                    collapsed && "justify-center px-2",
                   )}
                   href={item.href}
                   key={item.href}
                   onClick={() => setMobileOpen(false)}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
-                  {!collapsed ? (
-                    <span className="flex-1 flex items-center justify-between min-w-0">
-                      <span className="truncate">{item.label}</span>
-                      {item.badge && (
-                        <span className="ml-2 rounded-full bg-orange-500 text-[10px] font-bold text-white px-2 py-0.5 uppercase tracking-wide">
-                          {item.badge}
-                        </span>
-                      )}
-                    </span>
-                  ) : null}
+                  <span className="truncate">{item.label}</span>
                 </Link>
               );
             })}
@@ -241,37 +208,22 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
       <aside
-        className={cn(
-          "fixed left-0 top-0 z-30 hidden h-screen border-r border-slate-200 bg-white lg:flex lg:flex-col",
-          collapsed ? "w-20" : "w-72",
-        )}
+        className="fixed left-0 top-0 z-30 hidden h-screen w-72 border-r border-slate-200 bg-white lg:flex lg:flex-col"
       >
-        <div className="flex h-16 items-center gap-3 border-b border-slate-100 px-4">
-          <div className="grid h-9 w-9 place-items-center rounded-md bg-blue-600 text-white">
-            <Landmark className="h-5 w-5" />
-          </div>
-          {!collapsed ? (
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">Cosmos DSA Console</p>
-              <p className="truncate text-xs text-slate-500">Direct selling operations</p>
-            </div>
-          ) : null}
+        <div className="flex h-16 items-center border-b border-slate-100 px-4">
+          <Image
+            alt="Cosmos DSA"
+            className="h-10 w-auto max-w-[220px]"
+            height={40}
+            priority
+            src="/logo-dsasm-cosmos.svg"
+            width={220}
+          />
         </div>
         {navigation}
-        <div className="border-t border-slate-100 p-3">
-          <Button
-            className="w-full"
-            onClick={() => setCollapsed((current) => !current)}
-            type="button"
-            variant="ghost"
-          >
-            <PanelLeftClose className="h-4 w-4" />
-            {!collapsed ? "Collapse" : null}
-          </Button>
-        </div>
       </aside>
 
-      <div className={cn("min-h-screen transition-[padding]", collapsed ? "lg:pl-20" : "lg:pl-72")}>
+      <div className="min-h-screen lg:pl-72">
         <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
           <div className="flex h-16 items-center gap-3 px-4 lg:px-6">
             <Button
@@ -294,21 +246,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                   setSearchOpen(true);
                 }}
                 onFocus={() => setSearchOpen(true)}
-                placeholder="Search DSAs, applications, PAN, Aadhaar, leads"
+                placeholder="Search DSAs, applications, PAN, Aadhaar"
                 value={globalQuery}
               />
             </div>
             <div className="ml-auto flex items-center gap-2">
-              <Link href="/administration/notifications">
-                <Button aria-label="Notifications" className="relative" size="icon" type="button" variant="ghost">
-                  <Bell className="h-5 w-5" />
-                  {unread ? (
-                    <span className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-rose-600 px-1 text-[10px] font-semibold text-white">
-                      {unread}
-                    </span>
-                  ) : null}
-                </Button>
-              </Link>
               <div className="relative">
                 <button
                   aria-expanded={profileOpen}
@@ -359,14 +301,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             type="button"
           />
           <aside className="absolute left-0 top-0 flex h-full w-80 max-w-[86vw] flex-col bg-white shadow-2xl">
-            <div className="flex h-16 items-center gap-3 border-b border-slate-100 px-4">
-              <div className="grid h-9 w-9 place-items-center rounded-md bg-blue-600 text-white">
-                <Landmark className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold">Cosmos DSA Console</p>
-                <p className="text-xs text-slate-500">Direct selling operations</p>
-              </div>
+            <div className="flex h-16 items-center border-b border-slate-100 px-4">
+              <Image
+                alt="Cosmos DSA"
+                className="h-10 w-auto max-w-[210px]"
+                height={40}
+                priority
+                src="/logo-dsasm-cosmos.svg"
+                width={210}
+              />
             </div>
             {navigation}
           </aside>
@@ -374,7 +317,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       ) : null}
 
       <Modal
-        description="Search across partner, application, and lead identifiers."
+        description="Search across partner and application identifiers."
         onClose={() => setSearchOpen(false)}
         open={searchOpen}
         title="Global search"

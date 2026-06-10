@@ -5,6 +5,7 @@ import {
   ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -24,7 +25,9 @@ import {
   EntityMap,
   MockStore,
 } from "@/lib/types";
+import { journeyPath } from "@/lib/journey-links";
 import { makeId, titleCase } from "@/lib/utils";
+import { buildApplicationJourney } from "@/lib/product-journeys";
 
 interface StoreContextValue {
   createItem: <K extends CollectionName>(collection: K, item: EntityMap[K]) => void;
@@ -42,6 +45,52 @@ interface StoreContextValue {
 }
 
 const StoreContext = createContext<StoreContextValue | undefined>(undefined);
+const STORE_STORAGE_KEY = "cosmos_dsa_store";
+
+function ensureApplicationJourneys(store: MockStore): MockStore {
+  return {
+    ...store,
+    dsaProductConfigs: store.dsaProductConfigs.map((config) => ({
+      ...config,
+      loanUrl: journeyPath(config.id),
+    })),
+    applications: store.applications.map((application, index) =>
+      application.journey
+        ? application
+        : {
+            ...application,
+            journey: buildApplicationJourney(application.product, index, application),
+          },
+    ),
+  };
+}
+
+function initialStore(): MockStore {
+  const seededStore = createMockStore();
+  if (typeof window === "undefined") return ensureApplicationJourneys(seededStore);
+
+  const stored = localStorage.getItem(STORE_STORAGE_KEY);
+  if (!stored) return ensureApplicationJourneys(seededStore);
+
+  try {
+    const persistedStore = JSON.parse(stored) as Partial<MockStore>;
+    const mergedStore = { ...seededStore, ...persistedStore } as MockStore;
+    const existingApplicationIds = new Set(mergedStore.applications.map((item) => item.id));
+    const seededProductDemoApplications = seededStore.applications.filter((item) =>
+      item.id.startsWith("app-product-demo-"),
+    );
+
+    mergedStore.applications = [
+      ...mergedStore.applications,
+      ...seededProductDemoApplications.filter((item) => !existingApplicationIds.has(item.id)),
+    ];
+
+    return ensureApplicationJourneys(mergedStore);
+  } catch {
+    localStorage.removeItem(STORE_STORAGE_KEY);
+    return ensureApplicationJourneys(seededStore);
+  }
+}
 
 function displayName(item: unknown): string {
   if (!item || typeof item !== "object") return "record";
@@ -75,7 +124,7 @@ function audit(action: string, collection: CollectionName, actor: string): Audit
 }
 
 export function MockStoreProvider({ children }: { children: ReactNode }) {
-  const [store, setStore] = useState<MockStore>(() => createMockStore());
+  const [store, setStore] = useState<MockStore>(() => initialStore());
   const { toast } = useToast();
 
   const [currentUser, setCurrentUser] = useState<DemoSessionUser | null>(() => {
@@ -95,6 +144,10 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     }
     return null;
   });
+
+  useEffect(() => {
+    localStorage.setItem(STORE_STORAGE_KEY, JSON.stringify(store));
+  }, [store]);
 
   const login = useCallback((role: SessionRole) => {
     const user = getDemoUserByRole(role);

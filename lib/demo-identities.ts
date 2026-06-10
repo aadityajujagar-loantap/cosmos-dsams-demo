@@ -37,8 +37,21 @@ export const DEMO_USERS = {
 
 export const DEMO_USER_NAMES = ["admin", "dsa", "user"] as const;
 
+const DEMO_PASSWORDS: Record<DemoUserName, string> = {
+  admin: "admin@123",
+  dsa: "dsa@123",
+  user: "user@123",
+};
+
 export function demoActor(index = 0): DemoUserName {
   return DEMO_USER_NAMES[index % DEMO_USER_NAMES.length];
+}
+
+export function getDemoRoleForCredentials(identifier: string, password: string): SessionRole | null {
+  const username = identifier.trim().toLowerCase() as DemoUserName;
+  if (!DEMO_USER_NAMES.includes(username)) return null;
+  if (DEMO_PASSWORDS[username] !== password) return null;
+  return DEMO_USERS[username].role;
 }
 
 export function getDemoUserByRole(role: SessionRole): DemoSessionUser {

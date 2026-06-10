@@ -8,12 +8,11 @@ import {
   ClipboardList,
   Download,
   FileText,
-  Plus,
   ShieldCheck,
   TrendingUp,
   UploadCloud,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { KpiCard } from "@/components/charts";
 import { ActionPair, DetailGrid, DetailItem, PageHeader } from "@/components/module";
@@ -24,6 +23,7 @@ import {
   Card,
   CardContent,
   Drawer,
+  EmptyState,
   Field,
   Input,
   Label,
@@ -35,11 +35,20 @@ import {
 import { FieldConfig, RecordForm } from "@/components/ui/record-form";
 import { useToast } from "@/components/ui/toast";
 import { DEMO_USERS } from "@/lib/demo-identities";
+import { demoAgentName } from "@/lib/agent-names";
 import { useMockStore } from "@/lib/store";
-import { BusinessType, DocumentType, Dsa, DsaStatus } from "@/lib/types";
+import { BusinessType, DocumentType, Dsa, DsaStatus, Product } from "@/lib/types";
 import { formatCurrency, formatDate, makeId, percent } from "@/lib/utils";
 
 type DsaType = "Independent DSA" | "Exclusive DSA" | "Corporate DSA";
+type UploadedFileMeta = { name: string; size: string };
+
+interface OnboardingDraft {
+  dsaType: DsaType;
+  form: typeof initialOnboardingForm;
+  step: number;
+  uploadedFiles: Record<string, UploadedFileMeta>;
+}
 
 const businessTypes: BusinessType[] = [
   "Sole Proprietor",
@@ -57,6 +66,29 @@ const dsaStatuses: DsaStatus[] = [
   "Suspended",
   "Rejected",
 ];
+
+const queueStatuses: DsaStatus[] = ["Submitted", "KYC Pending"];
+const managementStatuses: DsaStatus[] = ["Active", "Suspended"];
+
+function isQueueStatus(status: DsaStatus) {
+  return queueStatuses.includes(status);
+}
+
+function activeDsaPatch(dsa: Dsa): Partial<Dsa> {
+  return {
+    approvalRate: 0,
+    commissionEarned: 0,
+    documents: dsa.documents.map((document) => ({
+      ...document,
+      status: "Verified" as const,
+      remarks: document.remarks || "Verified during DSA approval.",
+    })),
+    monthlyLeads: 0,
+    rejectionReason: undefined,
+    status: "Active",
+    tier: "Bronze",
+  };
+}
 
 const dsaFields: FieldConfig<Dsa>[] = [
   { label: "DSA name", name: "name", required: true },
@@ -93,47 +125,63 @@ const initialOnboardingForm = {
   status: "Submitted",
 };
 
-function newDsaFromForm(form: Partial<Dsa>): Dsa {
-  const id = makeId("dsa");
-  return {
-    address: String(form.address ?? "New partner office"),
-    approvalRate: 0,
-    bank: {
-      accountName: String(form.name ?? "New DSA"),
-      accountNumber: "0000000000",
-      bankName: "Cosmos Bank",
-      ifsc: "CBIN000000",
-    },
-    businessType: (form.businessType as BusinessType) || "Private Limited",
-    city: String(form.city ?? ""),
-    code: `DSA-${Date.now().toString().slice(-5)}`,
-    commissionEarned: 0,
-    contactPerson: String(form.contactPerson ?? ""),
-    documents: [],
-    email: String(form.email ?? ""),
-    gst: String(form.gst ?? ""),
-    id,
-    manager: String(form.manager ?? DEMO_USERS.admin.name),
-    mobile: String(form.mobile ?? ""),
-    monthlyLeads: 0,
-    name: String(form.name ?? "New DSA"),
-    onboardingDate: new Date().toISOString(),
-    pan: String(form.pan ?? ""),
-    pincode: String(form.pincode ?? ""),
-    riskRating: "Low",
-    state: String(form.state ?? ""),
-    status: (form.status as DsaStatus) || "Submitted",
-    tier: "Bronze",
-  };
+const DSA_ONBOARDING_DRAFT_KEY = "cosmos_dsa_onboarding_draft";
+
+function clampOnboardingStep(value: unknown) {
+  if (typeof value !== "number") return 0;
+  return Math.min(Math.max(value, 0), 5);
+}
+
+function formatFileSize(size: number) {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function isDsaType(value: unknown): value is DsaType {
+  return value === "Independent DSA" || value === "Exclusive DSA" || value === "Corporate DSA";
+}
+
+function readOnboardingDraft(): Partial<OnboardingDraft> {
+  if (typeof window === "undefined") return {};
+
+  const savedDraft = localStorage.getItem(DSA_ONBOARDING_DRAFT_KEY);
+  if (!savedDraft) return {};
+
+  try {
+    return JSON.parse(savedDraft) as Partial<OnboardingDraft>;
+  } catch {
+    localStorage.removeItem(DSA_ONBOARDING_DRAFT_KEY);
+    return {};
+  }
 }
 
 export function DsaOnboardingPage() {
   const { createItem, currentUser } = useMockStore();
-  const [step, setStep] = useState(0);
-  const [dsaType, setDsaType] = useState<DsaType>("Independent DSA");
-  const [form, setForm] = useState({ ...initialOnboardingForm });
+  const [initialDraft] = useState(() => readOnboardingDraft());
+  const [step, setStep] = useState(() => clampOnboardingStep(initialDraft.step));
+  const [dsaType, setDsaType] = useState<DsaType>(() =>
+    isDsaType(initialDraft.dsaType) ? initialDraft.dsaType : "Independent DSA",
+  );
+  const [form, setForm] = useState(() => ({ ...initialOnboardingForm, ...initialDraft.form }));
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [uploadedFiles, setUploadedFiles] = useState<Record<string, { name: string; size: string }>>({});
+  const [uploadedFiles, setUploadedFiles] = useState<Record<string, UploadedFileMeta>>(
+    () => initialDraft.uploadedFiles ?? {},
+  );
+
+  useEffect(() => {
+    const draft: OnboardingDraft = { dsaType, form, step, uploadedFiles };
+    localStorage.setItem(DSA_ONBOARDING_DRAFT_KEY, JSON.stringify(draft));
+  }, [dsaType, form, step, uploadedFiles]);
+
+  if (currentUser?.role === "DSA Partner") {
+    return (
+      <EmptyState
+        description="DSA admins cannot onboard partners. Use Sell Now to fill or send configured product journeys for customers."
+        title="DSA onboarding is restricted"
+      />
+    );
+  }
 
   function update(key: keyof typeof form, value: string) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -178,12 +226,13 @@ export function DsaOnboardingPage() {
     setStep(Math.max(0, currentStep - 1));
   }
 
-  function handleSimulateUpload(key: string, label: string) {
+  function handleFileUpload(key: string, file?: File) {
+    if (!file) return;
     setUploadedFiles((current) => ({
       ...current,
       [key]: {
-        name: `${label.toLowerCase().replace(/[^a-z0-9]/g, "-")}-proof.png`,
-        size: "148 KB",
+        name: file.name,
+        size: formatFileSize(file.size),
       },
     }));
   }
@@ -223,8 +272,6 @@ export function DsaOnboardingPage() {
       });
     }
 
-    const isSuperAdmin = currentUser?.role === "DSA Manager";
-    const newStatus: DsaStatus = isSuperAdmin ? "Active" : "Submitted";
     const managerName = currentUser?.role === "DSA Partner" ? currentUser.name : DEMO_USERS.admin.name;
 
     createItem("dsas", {
@@ -254,7 +301,7 @@ export function DsaOnboardingPage() {
       pincode: form.pincode,
       riskRating: "Low",
       state: form.state,
-      status: newStatus,
+      status: "Submitted",
       tier: "Bronze",
     });
     setStep(5);
@@ -266,6 +313,7 @@ export function DsaOnboardingPage() {
     setDsaType("Independent DSA");
     setUploadedFiles({});
     setStep(0);
+    localStorage.removeItem(DSA_ONBOARDING_DRAFT_KEY);
   }
 
   const renderField = (
@@ -292,6 +340,7 @@ export function DsaOnboardingPage() {
 
   const renderUploadSlot = (key: string, label: string) => {
     const file = uploadedFiles[key];
+    const inputId = `dsa-doc-${key}`;
     return (
       <div
         key={key}
@@ -308,11 +357,13 @@ export function DsaOnboardingPage() {
               {file.name} ({file.size})
             </p>
           ) : (
-            <p className="text-[10px] text-slate-400">Acceptable formats: JPEG, JPG or PNG.</p>
+            <p className="text-[10px] text-slate-400">Acceptable formats: JPEG, JPG, PNG or PDF.</p>
           )}
         </div>
         {file ? (
           <button
+            aria-label={`Remove ${label}`}
+            title="Remove document"
             type="button"
             onClick={() => {
               setUploadedFiles((current) => {
@@ -326,13 +377,23 @@ export function DsaOnboardingPage() {
             <Check className="h-4 w-4" />
           </button>
         ) : (
-          <button
-            type="button"
-            onClick={() => handleSimulateUpload(key, label)}
-            className="grid h-8 w-8 place-items-center rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
-          >
-            <UploadCloud className="h-4 w-4" />
-          </button>
+          <div className="flex shrink-0">
+            <input
+              accept=".jpg,.jpeg,.png,.pdf"
+              className="sr-only"
+              id={inputId}
+              onChange={(event) => handleFileUpload(key, event.currentTarget.files?.[0])}
+              type="file"
+            />
+            <label
+              aria-label={`Upload ${label}`}
+              className="grid h-8 w-8 cursor-pointer place-items-center rounded-lg bg-blue-50 text-blue-600 transition hover:bg-blue-100"
+              htmlFor={inputId}
+              title="Upload local file"
+            >
+              <UploadCloud className="h-4 w-4" />
+            </label>
+          </div>
         )}
       </div>
     );
@@ -458,7 +519,7 @@ export function DsaOnboardingPage() {
                   <Button
                     type="button"
                     onClick={() => setStep(1)}
-                    className="bg-amber-500 hover:bg-amber-600 text-white font-bold h-11 px-10 rounded-lg shadow-sm"
+                    className="bg-blue-700 hover:bg-blue-800 text-white font-bold h-11 px-10 rounded-lg shadow-sm"
                   >
                     Continue
                   </Button>
@@ -547,7 +608,7 @@ export function DsaOnboardingPage() {
                   <Button
                     type="button"
                     onClick={handleSubmit}
-                    className="bg-amber-500 hover:bg-amber-600 text-white font-bold h-11 px-12 rounded-lg shadow-sm"
+                    className="bg-blue-700 hover:bg-blue-800 text-white font-bold h-11 px-12 rounded-lg shadow-sm"
                   >
                     Submit
                   </Button>
@@ -573,13 +634,11 @@ export function DsaOnboardingPage() {
 
                 <div className="space-y-3">
                   <h2 className="text-3xl font-black text-blue-600 tracking-tight">
-                    {currentUser?.role === "DSA Manager" ? "Activated !" : "Submitted !"}
+                    Submitted !
                   </h2>
                   <p className="text-md font-bold text-slate-700">Thank you for onboarding a new DSA.</p>
                   <p className="text-sm text-slate-500 leading-relaxed">
-                    {currentUser?.role === "DSA Manager"
-                      ? "The DSA has been verified and activated immediately in the system."
-                      : "This application has been sent to the headquarters for final approval."}
+                    This application is now waiting in Dashboard &gt; Verification Queue for final approval.
                   </p>
                 </div>
 
@@ -587,7 +646,7 @@ export function DsaOnboardingPage() {
                   <Button
                     type="button"
                     onClick={() => alert("Receipt PDF downloaded.")}
-                    className="bg-amber-500 hover:bg-amber-600 text-white font-bold h-11 border-none rounded-lg w-full flex items-center justify-center gap-2"
+                    className="bg-blue-700 hover:bg-blue-800 text-white font-bold h-11 border-none rounded-lg w-full flex items-center justify-center gap-2"
                   >
                     <Download className="h-5 w-5" /> DOWNLOAD
                   </Button>
@@ -638,32 +697,18 @@ export function DsaOnboardingPage() {
 }
 
 export function DsaManagementPage() {
-  const { createItem, deleteItem, store, updateItem, currentUser } = useMockStore();
-  const { toast } = useToast();
+  const { deleteItem, store, updateItem, currentUser } = useMockStore();
   const [status, setStatus] = useState("");
   const [selected, setSelected] = useState<Dsa | null>(null);
   const [editing, setEditing] = useState<Dsa | null>(null);
-  const [creating, setCreating] = useState(false);
 
-  // Rejection states
-  const [rejectingDsa, setRejectingDsa] = useState<Dsa | null>(null);
-  const [rejectionReason, setRejectionReason] = useState("");
+  const getDsaApplications = (dsaId: string) =>
+    store.applications
+      .filter((application) => application.dsaId === dsaId)
+      .sort((left, right) => left.product.localeCompare(right.product) || left.applicationId.localeCompare(right.applicationId));
 
-  const handleRejectClick = (dsa: Dsa) => {
-    if (currentUser?.role === "DSA Manager") {
-      updateItem("dsas", dsa.id, { status: "Rejected" });
-      toast({
-        title: "Partner Rejected",
-        description: `${dsa.name} has been rejected.`,
-        variant: "success",
-      });
-      setSelected(null);
-    } else {
-      setRejectingDsa(dsa);
-    }
-  };
-
-  let rows = status ? store.dsas.filter((item) => item.status === status) : store.dsas;
+  let rows = store.dsas.filter((item) => managementStatuses.includes(item.status));
+  if (status) rows = rows.filter((item) => item.status === status);
   if (currentUser?.role === "DSA Partner") {
     rows = rows.filter((item) => item.manager === currentUser.name);
   }
@@ -673,7 +718,7 @@ export function DsaManagementPage() {
       cell: (item) => (
         <div>
           <Link className="font-semibold text-blue-700 hover:underline" href={`/dsa/${item.id}`}>
-            {item.name}
+            {currentUser?.role === "DSA Partner" ? demoAgentName(item.id) : item.name}
           </Link>
           <p className="text-xs text-slate-500">{item.code}</p>
         </div>
@@ -686,22 +731,20 @@ export function DsaManagementPage() {
     { cell: (item) => item.businessType, header: "Business type", key: "businessType" },
     { cell: (item) => item.city, header: "City", key: "city", sortable: true, sortValue: (item) => item.city },
     { cell: (item) => <StatusBadge status={item.status} />, header: "Status", key: "status" },
+    {
+      cell: (item) => getDsaApplications(item.id).length,
+      header: "Applications",
+      key: "applications",
+      sortable: true,
+      sortValue: (item) => getDsaApplications(item.id).length,
+    },
     { cell: (item) => <Badge>{item.tier}</Badge>, header: "Tier", key: "tier" },
     { cell: (item) => percent(item.approvalRate), header: "Approval", key: "approvalRate", sortable: true, sortValue: (item) => item.approvalRate },
-    { cell: (item) => formatCurrency(item.commissionEarned), header: "Commission", key: "commissionEarned", sortable: true, sortValue: (item) => item.commissionEarned },
   ];
 
   return (
     <div>
       <PageHeader
-        action={
-          currentUser?.role !== "Customer" ? (
-            <Button onClick={() => setCreating(true)} type="button">
-              <Plus className="h-4 w-4" />
-              New DSA
-            </Button>
-          ) : undefined
-        }
         description="Manage partner records, commercial readiness, KYC status, risk posture, and activation lifecycle."
         eyebrow="Partner network"
         title="DSA Management"
@@ -715,8 +758,8 @@ export function DsaManagementPage() {
           />
         )}
         columns={columns}
-        emptyAction={<Button onClick={() => setCreating(true)}>Create DSA</Button>}
-        filters={[{ label: "status", onChange: setStatus, options: dsaStatuses, value: status }]}
+        emptyDescription="Approved DSAs appear here after verification. Change filters if you are looking for an existing partner."
+        filters={[{ label: "status", onChange: setStatus, options: managementStatuses, value: status }]}
         items={rows}
         searchKeys={["name", "code", "pan", "mobile", "email", "city"]}
       />
@@ -725,7 +768,7 @@ export function DsaManagementPage() {
         description={selected ? `${selected.code} · ${selected.city}, ${selected.state}` : undefined}
         onClose={() => setSelected(null)}
         open={Boolean(selected)}
-        title={selected?.name ?? "DSA"}
+        title={selected ? (currentUser?.role === "DSA Partner" ? demoAgentName(selected.id) : selected.name) : "DSA"}
       >
         {selected ? (
           <div className="space-y-5">
@@ -737,33 +780,13 @@ export function DsaManagementPage() {
               <DetailItem label="Status" value={<StatusBadge status={selected.status} />} />
               <DetailItem label="Onboarded" value={formatDate(selected.onboardingDate)} />
               <DetailItem label="Monthly leads" value={selected.monthlyLeads} />
-              <DetailItem label="Commission" value={formatCurrency(selected.commissionEarned)} />
+              <DetailItem label="Applications" value={getDsaApplications(selected.id).length} />
             </DetailGrid>
-            {(currentUser?.role === "DSA Manager" || currentUser?.role === "DSA Partner") && (selected.status === "Submitted" || selected.status === "KYC Pending") && (
-              <div className="grid grid-cols-2 gap-3 pt-2">
-                <Button
-                  onClick={() => {
-                    updateItem("dsas", selected.id, { status: "Active" });
-                    toast({
-                      title: "Partner Approved",
-                      description: `${selected.name} is now active.`,
-                      variant: "success",
-                    });
-                    setSelected(null);
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs"
-                >
-                  Approve Partner
-                </Button>
-                <Button
-                  onClick={() => handleRejectClick(selected)}
-                  variant="secondary"
-                  className="bg-rose-50 text-rose-600 hover:bg-rose-100 border-none font-bold text-xs"
-                >
-                  Reject Partner
-                </Button>
+            {isQueueStatus(selected.status) ? (
+              <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-xs font-medium text-blue-800">
+                This partner is still in Dashboard &gt; Verification Queue. Open the full profile from the queue to approve or reject after review.
               </div>
-            )}
+            ) : null}
             <Link href={`/dsa/${selected.id}`}>
               <Button className="w-full" type="button">
                 Open full profile
@@ -772,23 +795,6 @@ export function DsaManagementPage() {
           </div>
         ) : null}
       </Drawer>
-
-      <Modal onClose={() => setCreating(false)} open={creating} title="Create DSA">
-        <RecordForm<Dsa>
-          fields={dsaFields}
-          initialValue={{
-            businessType: "Private Limited",
-            manager: currentUser?.role === "DSA Partner" ? currentUser.name : DEMO_USERS.admin.name,
-            status: "Submitted",
-          }}
-          onCancel={() => setCreating(false)}
-          onSubmit={(value) => {
-            createItem("dsas", newDsaFromForm(value));
-            setCreating(false);
-          }}
-          submitLabel="Create DSA"
-        />
-      </Modal>
 
       <Modal onClose={() => setEditing(null)} open={Boolean(editing)} title="Edit DSA">
         {editing ? (
@@ -804,88 +810,43 @@ export function DsaManagementPage() {
           />
         ) : null}
       </Modal>
-
-      <Modal onClose={() => {
-        setRejectingDsa(null);
-        setRejectionReason("");
-      }} open={Boolean(rejectingDsa)} title="Specify Rejection Reason">
-        <div className="space-y-4">
-          <Field>
-            <Label htmlFor="mgmtRejectionReason">Please provide the reason for rejecting this DSA partner:</Label>
-            <textarea
-              id="mgmtRejectionReason"
-              rows={3}
-              className="w-full rounded-md border border-slate-200 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              value={rejectionReason}
-              onChange={(e) => setRejectionReason(e.target.value)}
-              placeholder="Enter reason (e.g. KYC mismatch, business documentation incomplete)"
-            />
-          </Field>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button
-              variant="secondary"
-              type="button"
-              onClick={() => {
-                setRejectingDsa(null);
-                setRejectionReason("");
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              className="bg-rose-600 hover:bg-rose-700 text-white font-semibold"
-              type="button"
-              onClick={() => {
-                if (rejectingDsa) {
-                  updateItem("dsas", rejectingDsa.id, {
-                    status: "Rejected",
-                    rejectionReason: rejectionReason || "Documentation verification failed.",
-                  });
-                  toast({
-                    title: "Partner Rejected",
-                    description: `${rejectingDsa.name} has been rejected with reason.`,
-                    variant: "success",
-                  });
-                  setRejectingDsa(null);
-                  setRejectionReason("");
-                  setSelected(null);
-                }
-              }}
-            >
-              Reject Partner
-            </Button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }
 
 export function DsaProfilePage({ id }: { id: string }) {
-  const { store, updateItem, currentUser } = useMockStore();
+  const { deleteItem, store, updateItem, currentUser } = useMockStore();
   const { toast } = useToast();
   const [tab, setTab] = useState("overview");
-
-  // Rejection modal state
+  const [applicationProductFilter, setApplicationProductFilter] = useState("");
+  const [approvingDsa, setApprovingDsa] = useState<Dsa | null>(null);
   const [rejectingDsa, setRejectingDsa] = useState<Dsa | null>(null);
+  const [rejectionError, setRejectionError] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
 
   const dsa = store.dsas.find((item) => item.id === id) ?? store.dsas[0];
+  const canDecideDsa = currentUser?.role === "DSA Manager" && isQueueStatus(dsa.status);
+  const productConfigs = store.dsaProductConfigs
+    .filter((config) => config.dsaId === dsa.id && config.status === "Active")
+    .sort((left, right) => left.product.localeCompare(right.product));
+  const configuredProducts = productConfigs.map((config) => config.product);
 
-  const handleRejectClick = () => {
-    if (currentUser?.role === "DSA Manager") {
-      updateItem("dsas", dsa.id, { status: "Rejected" });
-      toast({
-        title: "Partner Rejected",
-        description: `${dsa.name} has been rejected.`,
-        variant: "success",
-      });
-    } else {
-      setRejectingDsa(dsa);
-    }
+  const closeDecisionModals = () => {
+    setApprovingDsa(null);
+    setRejectingDsa(null);
+    setRejectionError("");
+    setRejectionReason("");
   };
 
-  const applications = store.applications.filter((item) => item.dsaId === dsa.id);
+  const applications = store.applications
+    .filter((item) => item.dsaId === dsa.id)
+    .sort((left, right) => left.product.localeCompare(right.product) || left.applicationId.localeCompare(right.applicationId));
+  const effectiveApplicationProductFilter = configuredProducts.includes(applicationProductFilter as Product)
+    ? applicationProductFilter
+    : "";
+  const visibleApplications = effectiveApplicationProductFilter
+    ? applications.filter((application) => application.product === effectiveApplicationProductFilter)
+    : applications;
   const commissions = store.commissions.filter((item) => item.dsaId === dsa.id);
   const leads = store.leads.filter((item) => item.dsaId === dsa.id);
   const audit = store.auditLogs.slice(0, 8);
@@ -905,24 +866,17 @@ export function DsaProfilePage({ id }: { id: string }) {
         action={
           <div className="flex items-center gap-2">
             <StatusBadge status={dsa.status} />
-            {(currentUser?.role === "DSA Manager" || currentUser?.role === "DSA Partner") && (dsa.status === "Submitted" || dsa.status === "KYC Pending") && (
+            {canDecideDsa && (
               <div className="flex gap-2">
                 <Button
-                  onClick={() => {
-                    updateItem("dsas", dsa.id, { status: "Active" });
-                    toast({
-                      title: "Partner Approved",
-                      description: `${dsa.name} is now active.`,
-                      variant: "success",
-                    });
-                  }}
+                  onClick={() => setApprovingDsa(dsa)}
                   size="sm"
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1 h-auto"
                 >
                   Approve
                 </Button>
                 <Button
-                  onClick={handleRejectClick}
+                  onClick={() => setRejectingDsa(dsa)}
                   size="sm"
                   variant="secondary"
                   className="bg-rose-50 text-rose-600 hover:bg-rose-100 border-none font-bold text-xs py-1 h-auto"
@@ -953,6 +907,7 @@ export function DsaProfilePage({ id }: { id: string }) {
             { label: "KYC", value: "kyc" },
             { label: "Documents", value: "documents" },
             { label: "Performance Metrics", value: "performance" },
+            { label: "Products", value: "products" },
             { label: "Applications", value: "apps" },
             { label: "Commission", value: "commission" },
             { label: "Audit Timeline", value: "audit" },
@@ -1011,10 +966,82 @@ export function DsaProfilePage({ id }: { id: string }) {
               <DetailItem label="Commission earned" value={formatCurrency(commissionTotal || dsa.commissionEarned)} />
             </DetailGrid>
           ) : null}
+          {tab === "products" ? (
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Configured Products</h3>
+                  <p className="text-xs text-slate-500">Products configured here drive the Applications tab product filter.</p>
+                </div>
+                {currentUser?.role === "DSA Manager" ? (
+                  <Link href="/dsa/product-setting">
+                    <Button size="sm" type="button" variant="outline">
+                      Add product
+                    </Button>
+                  </Link>
+                ) : null}
+              </div>
+              {productConfigs.length ? (
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {productConfigs.map((config) => (
+                    <div className="rounded-md border border-slate-100 p-4" key={config.id}>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-slate-950">{config.product}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {config.commissionType} - {config.ranges.length} range{config.ranges.length === 1 ? "" : "s"}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <StatusBadge status={config.status} />
+                          {currentUser?.role === "DSA Manager" ? (
+                            <Button
+                              onClick={() => {
+                                deleteItem("dsaProductConfigs", config.id);
+                                if (applicationProductFilter === config.product) setApplicationProductFilter("");
+                              }}
+                              size="sm"
+                              type="button"
+                              variant="danger"
+                            >
+                              Remove
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="mt-3 grid gap-2 text-xs text-slate-500 md:grid-cols-2">
+                        <span>URL: {config.loanUrl}</span>
+                        <span>Configured: {formatDate(config.configuredAt)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">No products configured for this DSA yet.</p>
+              )}
+            </div>
+          ) : null}
           {tab === "apps" ? (
             <div className="space-y-3">
-              {applications.length ? (
-                applications.map((app) => (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Applications by Product</h3>
+                  <p className="text-xs text-slate-500">Sorted by product, then application number.</p>
+                </div>
+                <Select
+                  aria-label="application product"
+                  className="sm:w-56"
+                  onChange={(event) => setApplicationProductFilter(event.target.value)}
+                  value={effectiveApplicationProductFilter}
+                >
+                  <option value="">All products</option>
+                  {configuredProducts.map((product) => (
+                    <option key={product} value={product}>{product}</option>
+                  ))}
+                </Select>
+              </div>
+              {visibleApplications.length ? (
+                visibleApplications.map((app) => (
                   <Link
                     className="flex items-center justify-between rounded-md border border-slate-100 p-3 hover:bg-slate-50"
                     href={`/applications/${app.id}`}
@@ -1022,7 +1049,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                   >
                     <div>
                       <p className="font-semibold text-slate-950">{app.applicationId}</p>
-                      <p className="text-sm text-slate-500">{app.customer} · {formatCurrency(app.loanAmount)}</p>
+                      <p className="text-sm text-slate-500">{app.product} - {app.customer} - {formatCurrency(app.loanAmount)}</p>
                     </div>
                     <StatusBadge status={app.status} />
                   </Link>
@@ -1059,30 +1086,73 @@ export function DsaProfilePage({ id }: { id: string }) {
           ) : null}
         </CardContent>
       </Card>
-      <Modal onClose={() => {
-        setRejectingDsa(null);
-        setRejectionReason("");
-      }} open={Boolean(rejectingDsa)} title="Specify Rejection Reason">
+      <Modal
+        description="Confirm this only after KYC, documents, bank details, and business information have been checked."
+        onClose={closeDecisionModals}
+        open={Boolean(approvingDsa)}
+        title="Approve DSA Partner"
+        width="max-w-lg"
+      >
+        {approvingDsa ? (
+          <div className="space-y-4">
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-sm font-semibold text-emerald-900">{approvingDsa.name}</p>
+              <p className="mt-1 text-xs text-emerald-800">
+                Approval will move this DSA to DSA Management, remove it from the pending queue, and start platform metrics at zero.
+              </p>
+            </div>
+            <DetailGrid>
+              <DetailItem label="New status" value={<StatusBadge status="Active" />} />
+              <DetailItem label="Approval rate" value={percent(0)} />
+              <DetailItem label="Monthly lead target" value={0} />
+              <DetailItem label="Commission earned" value={formatCurrency(0)} />
+            </DetailGrid>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="secondary" type="button" onClick={closeDecisionModals}>
+                Cancel
+              </Button>
+              <Button
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                type="button"
+                onClick={() => {
+                  updateItem("dsas", approvingDsa.id, activeDsaPatch(approvingDsa));
+                  toast({
+                    title: "Partner Approved",
+                    description: `${approvingDsa.name} is now active in DSA Management.`,
+                    variant: "success",
+                  });
+                  closeDecisionModals();
+                }}
+              >
+                Approve and Activate
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal onClose={closeDecisionModals} open={Boolean(rejectingDsa)} title="Reject DSA Partner" width="max-w-lg">
         <div className="space-y-4">
           <Field>
-            <Label htmlFor="profileRejectionReason">Please provide the reason for rejecting this DSA partner:</Label>
+            <Label htmlFor="profileRejectionReason">Rejection reason</Label>
             <textarea
               id="profileRejectionReason"
               rows={3}
               className="w-full rounded-md border border-slate-200 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               value={rejectionReason}
-              onChange={(event) => setRejectionReason(event.target.value)}
+              onChange={(event) => {
+                setRejectionReason(event.target.value);
+                setRejectionError("");
+              }}
               placeholder="Enter reason (e.g. KYC mismatch, business documentation incomplete)"
             />
+            {rejectionError ? <p className="text-xs font-medium text-rose-600">{rejectionError}</p> : null}
           </Field>
           <div className="flex justify-end gap-2 pt-2">
             <Button
               variant="secondary"
               type="button"
-              onClick={() => {
-                setRejectingDsa(null);
-                setRejectionReason("");
-              }}
+              onClick={closeDecisionModals}
             >
               Cancel
             </Button>
@@ -1091,17 +1161,20 @@ export function DsaProfilePage({ id }: { id: string }) {
               type="button"
               onClick={() => {
                 if (rejectingDsa) {
+                  if (!rejectionReason.trim()) {
+                    setRejectionError("Add a reason before rejecting this DSA.");
+                    return;
+                  }
                   updateItem("dsas", rejectingDsa.id, {
                     status: "Rejected",
-                    rejectionReason: rejectionReason || "Documentation verification failed.",
+                    rejectionReason: rejectionReason.trim(),
                   });
                   toast({
                     title: "Partner Rejected",
-                    description: `${rejectingDsa.name} has been rejected with reason.`,
+                    description: `${rejectingDsa.name} has been rejected and removed from the pending queue.`,
                     variant: "success",
                   });
-                  setRejectingDsa(null);
-                  setRejectionReason("");
+                  closeDecisionModals();
                 }
               }}
             >

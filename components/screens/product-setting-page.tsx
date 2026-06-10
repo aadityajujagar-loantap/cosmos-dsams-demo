@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useMockStore } from "@/lib/store";
 import { useToast } from "@/components/ui/toast";
 import { PageHeader } from "@/components/module";
@@ -8,24 +8,19 @@ import {
   Button,
   Card,
   CardContent,
+  EmptyState,
   Field,
   Label,
   Select,
   Input,
 } from "@/components/ui/primitives";
-import { Plus, Trash2, UploadCloud, Check, Landmark, Image as ImageIcon } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { Copy, Plus, Trash2, UploadCloud, Check, Landmark, Image as ImageIcon } from "lucide-react";
+import { formatCurrency, makeId } from "@/lib/utils";
 import { DEMO_USERS } from "@/lib/demo-identities";
+import { journeyUrl } from "@/lib/journey-links";
+import { CommissionType, Product, ProductCommissionRange } from "@/lib/types";
 
-interface CommissionRange {
-  id: string;
-  min: number;
-  max: number;
-  effectiveDate: string;
-  endDate: string;
-  frequency: string;
-  rate: number;
-}
+const loanProducts: Product[] = ["Home Loan", "Personal Loan", "Loan Against Property", "Business Loan", "Auto Loan"];
 
 function productDefaults(product: string) {
   if (product === "Personal Loan") return { code: "PL", url: "personalloan" };
@@ -36,50 +31,58 @@ function productDefaults(product: string) {
 }
 
 export function ProductSettingPage() {
-  const { store, createItem, currentUser } = useMockStore();
+  const { store, createItem, updateItem, currentUser } = useMockStore();
   const { toast } = useToast();
 
-  const [product, setProduct] = useState<string>("Home Loan");
-  const [partner, setPartner] = useState<string>("dsa-direct");
-  const [commissionType, setCommissionType] = useState<string>("Percentage-based");
+  const [product, setProduct] = useState<Product | "">("");
+  const [partner, setPartner] = useState<string>("");
+  const [commissionType, setCommissionType] = useState<CommissionType | "">("");
 
   // Add range inputs
-  const [rangeId, setRangeId] = useState<string>("HL_Commission_01");
-  const [minRange, setMinRange] = useState<string>("1000000");
-  const [maxRange, setMaxRange] = useState<string>("3000000");
-  const [effectiveDate, setEffectiveDate] = useState<string>("1998-02-03");
-  const [endDate, setEndDate] = useState<string>("2028-02-03");
-  const [frequency, setFrequency] = useState<string>("Monthly");
-  const [rate, setRate] = useState<string>("0.52");
+  const [rangeId, setRangeId] = useState<string>("");
+  const [minRange, setMinRange] = useState<string>("");
+  const [maxRange, setMaxRange] = useState<string>("");
+  const [effectiveDate, setEffectiveDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
+  const [frequency, setFrequency] = useState<string>("");
+  const [rate, setRate] = useState<string>("");
 
-  // Prepopulated ranges
-  const [ranges, setRanges] = useState<CommissionRange[]>([
-    {
-      id: "HL_Commission_01",
-      min: 1000000,
-      max: 3000000,
-      effectiveDate: "1998-02-03",
-      endDate: "2028-02-03",
-      frequency: "Monthly",
-      rate: 0.52,
-    },
-  ]);
+  const [ranges, setRanges] = useState<ProductCommissionRange[]>([]);
 
-  // URL state
-  const [loanUrl, setLoanUrl] = useState<string>(
-    "https://digiloans.bankofmaharashtra.in/apply/homeloan?bom"
-  );
+  const [draftConfigId, setDraftConfigId] = useState<string>(() => makeId("dsa-product"));
 
   // Marketing banner state
-  const [bannerName, setBannerName] = useState<string>("home_loan_banner.png");
-  const [hasBanner, setHasBanner] = useState<boolean>(true);
+  const [bannerName, setBannerName] = useState<string>("");
+  const [bannerPreviewUrl, setBannerPreviewUrl] = useState<string>("");
+  const [hasBanner, setHasBanner] = useState<boolean>(false);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
 
-  const handleProductChange = (nextProduct: string) => {
+  useEffect(() => {
+    return () => {
+      if (bannerPreviewUrl) URL.revokeObjectURL(bannerPreviewUrl);
+    };
+  }, [bannerPreviewUrl]);
+
+  if (currentUser?.role !== "DSA Manager") {
+    return (
+      <EmptyState
+        description="Only the super admin can configure products. DSA admins see live approved products in Sell Now."
+        title="Product setup is restricted"
+      />
+    );
+  }
+
+  const handleProductChange = (nextProduct: Product | "") => {
+    if (!nextProduct) {
+      setProduct("");
+      setRangeId("");
+      setBannerName("");
+      return;
+    }
     const { code, url } = productDefaults(nextProduct);
     setProduct(nextProduct);
-    setRangeId(`${code}_Commission_${(ranges.length + 1).toString().padStart(2, "0")}`);
-    setLoanUrl(`https://digiloans.bankofmaharashtra.in/apply/${url}?bom`);
-    setBannerName(`${url}_banner.png`);
+    setRangeId((current) => current || `${code}_Commission_${(ranges.length + 1).toString().padStart(2, "0")}`);
+    setBannerName((current) => current || `${url}_banner.png`);
   };
 
   const handleAddRange = () => {
@@ -114,7 +117,16 @@ export function ProductSettingPage() {
       return;
     }
 
-    const newRange: CommissionRange = {
+    if (!effectiveDate || !endDate || !frequency) {
+      toast({
+        title: "Validation Error",
+        description: "Effective date, end date, and commission frequency are required.",
+        variant: "warning",
+      });
+      return;
+    }
+
+    const newRange: ProductCommissionRange = {
       id: rangeId,
       min: minVal,
       max: maxVal,
@@ -132,7 +144,7 @@ export function ProductSettingPage() {
     });
 
     // Reset range ID for next one
-    const { code } = productDefaults(product);
+    const { code } = productDefaults(product || "Home Loan");
     setRangeId(`${code}_Commission_${(ranges.length + 2).toString().padStart(2, "0")}`);
   };
 
@@ -146,16 +158,77 @@ export function ProductSettingPage() {
   };
 
   const handleConfigureCommission = () => {
-    // Save to audit logs
-    const partnerName = partner === "dsa-direct" 
-      ? "Cosmos Bank (Direct)" 
-      : store.dsas.find(d => d.id === partner)?.name || "Partner";
+    if (!product) {
+      toast({
+        title: "Select Product",
+        description: "Choose a loan product before saving this configuration.",
+        variant: "warning",
+      });
+      return;
+    }
+
+    if (!commissionType) {
+      toast({
+        title: "Select Commission Type",
+        description: "Choose a commission type before saving this configuration.",
+        variant: "warning",
+      });
+      return;
+    }
+
+    const selectedDsa = store.dsas.find((dsa) => dsa.id === partner && dsa.status === "Active");
+    if (!selectedDsa) {
+      toast({
+        title: "Select Active DSA",
+        description: "Choose an approved DSA partner before applying a product configuration.",
+        variant: "warning",
+      });
+      return;
+    }
+
+    if (ranges.length === 0) {
+      toast({
+        title: "Add Commission Range",
+        description: "Add at least one commission range before saving this product.",
+        variant: "warning",
+      });
+      return;
+    }
+
+    const existingConfig = store.dsaProductConfigs.find(
+      (config) => config.dsaId === selectedDsa.id && config.product === product,
+    );
+    const configId = existingConfig?.id ?? draftConfigId;
+    const landingEndpoint = journeyUrl(configId);
+    const payload = {
+      bannerName: hasBanner ? bannerName : undefined,
+      commissionType,
+      configuredAt: new Date().toISOString(),
+      configuredBy: currentUser?.name ?? DEMO_USERS.admin.name,
+      dsaCode: selectedDsa.code,
+      dsaId: selectedDsa.id,
+      dsaName: selectedDsa.name,
+      loanUrl: landingEndpoint,
+      product,
+      ranges,
+      status: "Active" as const,
+    };
+
+    if (existingConfig) {
+      updateItem("dsaProductConfigs", existingConfig.id, payload);
+    } else {
+      createItem("dsaProductConfigs", {
+        id: configId,
+        ...payload,
+      });
+      setDraftConfigId(makeId("dsa-product"));
+    }
 
     createItem("auditLogs", {
       id: `audit-${Date.now()}`,
       at: new Date().toISOString(),
       actor: currentUser?.name ?? DEMO_USERS.admin.name,
-      action: `Configured commission for ${product} (${partnerName})`,
+      action: `Configured ${product} for ${selectedDsa.name}`,
       entity: "Settings",
       severity: "Info",
       ipAddress: "10.24.0.91",
@@ -163,22 +236,78 @@ export function ProductSettingPage() {
 
     toast({
       title: "Configuration Saved",
-      description: `Successfully configured ${ranges.length} commission ranges for ${product} assigned to ${partnerName}.`,
+      description: `${product} is now available for ${selectedDsa.name}.`,
       variant: "success",
     });
   };
 
-  const activeDsas = store.dsas.filter((d) => d.status === "Active" || d.status === "Submitted" || d.status === "KYC Pending");
+  const activeDsas = store.dsas.filter((d) => d.status === "Active");
+  const selectedConfig = product && partner
+    ? store.dsaProductConfigs.find((config) => config.dsaId === partner && config.product === product)
+    : undefined;
+  const activeEndpoint = product && partner ? journeyUrl(selectedConfig?.id ?? draftConfigId) : "";
+
+  const copyEndpoint = async () => {
+    if (!activeEndpoint) {
+      toast({
+        title: "Select Product",
+        description: "Choose a DSA partner and product first.",
+        variant: "warning",
+      });
+      return;
+    }
+    await navigator.clipboard.writeText(activeEndpoint);
+    toast({
+      title: "Link Copied",
+      description: "Landing page endpoint copied to clipboard.",
+      variant: "success",
+    });
+  };
+
+  const handleBannerFile = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (bannerPreviewUrl) URL.revokeObjectURL(bannerPreviewUrl);
+    setBannerName(file.name);
+    setBannerPreviewUrl(URL.createObjectURL(file));
+    setHasBanner(true);
+    event.target.value = "";
+    toast({
+      title: "Banner Selected",
+      description: `${file.name} is ready for this product journey.`,
+      variant: "success",
+    });
+  };
 
   // Generate a beautiful, premium visual representation of a loan banner based on selection
   const renderBannerPreview = () => {
     if (!hasBanner) {
       return (
-        <div className="flex flex-col items-center justify-center border border-dashed border-slate-200 rounded-xl p-8 bg-slate-50 text-slate-400 h-52">
+        <button
+          className="flex h-52 w-full flex-col items-center justify-center rounded-xl border border-dashed border-blue-200 bg-blue-50/40 p-8 text-blue-500 transition hover:border-blue-300 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+          onClick={() => bannerInputRef.current?.click()}
+          type="button"
+        >
           <ImageIcon className="h-10 w-10 mb-2 stroke-1" />
           <p className="text-xs font-semibold">No active banner image</p>
-          <p className="text-[10px] text-slate-400 mt-1">Upload a banner image to showcase on the loan portal</p>
-        </div>
+          <p className="text-[10px] text-blue-400 mt-1">Click to choose a custom picture</p>
+        </button>
+      );
+    }
+
+    if (bannerPreviewUrl) {
+      return (
+        <button
+          className="relative h-52 w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100 text-left shadow-sm"
+          onClick={() => bannerInputRef.current?.click()}
+          type="button"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img alt={bannerName || "Uploaded banner"} className="h-full w-full object-cover" src={bannerPreviewUrl} />
+          <span className="absolute inset-x-0 bottom-0 bg-slate-950/70 px-4 py-2 text-xs font-semibold text-white">
+            {bannerName || "Custom banner"} - click to replace
+          </span>
+        </button>
       );
     }
 
@@ -195,7 +324,7 @@ export function ProductSettingPage() {
       perk1 = "Zero Processing Fees";
       perk2 = "Instant Sanctions";
     } else if (product === "Loan Against Property") {
-      bgClass = "from-amber-500 to-orange-600";
+      bgClass = "from-sky-500 to-blue-800";
       tag = "UNLOCK PROPERTY VALUE";
       title = "PROPERTY LOANS";
       perk1 = "LTV up to 75%";
@@ -271,9 +400,10 @@ export function ProductSettingPage() {
                   <Select
                     id="loanProductSelect"
                     value={product}
-                    onChange={(e) => handleProductChange(e.target.value)}
+                    onChange={(e) => handleProductChange(e.target.value as Product | "")}
                   >
-                    {["Home Loan", "Personal Loan", "Loan Against Property", "Business Loan", "Auto Loan"].map((p) => (
+                    <option value="">Select product</option>
+                    {loanProducts.map((p) => (
                       <option key={p} value={p}>{p}</option>
                     ))}
                   </Select>
@@ -286,7 +416,7 @@ export function ProductSettingPage() {
                     value={partner}
                     onChange={(e) => setPartner(e.target.value)}
                   >
-                    <option value="dsa-direct">Cosmos Bank (Direct)</option>
+                    <option value="">Select active DSA</option>
                     {activeDsas.map((dsa) => (
                       <option key={dsa.id} value={dsa.id}>
                         {dsa.name} ({dsa.code})
@@ -300,8 +430,9 @@ export function ProductSettingPage() {
                   <Select
                     id="commissionTypeSelect"
                     value={commissionType}
-                    onChange={(e) => setCommissionType(e.target.value)}
+                    onChange={(e) => setCommissionType(e.target.value as CommissionType | "")}
                   >
+                    <option value="">Select commission type</option>
                     <option value="Percentage-based">Percentage-based</option>
                     <option value="Fixed-fee">Fixed-fee flat rate</option>
                     <option value="Tiered">Tiered Slab-based</option>
@@ -380,6 +511,7 @@ export function ProductSettingPage() {
                       value={frequency}
                       onChange={(e) => setFrequency(e.target.value)}
                     >
+                      <option value="">Select frequency</option>
                       <option value="Monthly">Monthly</option>
                       <option value="Quarterly">Quarterly</option>
                       <option value="One-time">One-time</option>
@@ -470,7 +602,7 @@ export function ProductSettingPage() {
               <div className="flex justify-end border-t border-slate-100 pt-5">
                 <Button
                   onClick={handleConfigureCommission}
-                  className="bg-amber-500 hover:bg-amber-600 text-white font-bold h-11 px-6 flex items-center gap-2"
+                  className="bg-blue-500 hover:bg-blue-600 text-white font-bold h-11 px-6 flex items-center gap-2"
                 >
                   <Check className="h-5 w-5" /> Configure Loan Product Commission
                 </Button>
@@ -483,6 +615,13 @@ export function ProductSettingPage() {
         <div className="space-y-6">
           <Card>
             <CardContent className="p-5 space-y-5">
+              <input
+                accept="image/*"
+                className="hidden"
+                onChange={handleBannerFile}
+                ref={bannerInputRef}
+                type="file"
+              />
               <div>
                 <h3 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-2 uppercase tracking-wider">
                   Add Loan Product Banner
@@ -500,6 +639,9 @@ export function ProductSettingPage() {
                   variant="secondary"
                   onClick={() => {
                     setHasBanner(false);
+                    if (bannerPreviewUrl) URL.revokeObjectURL(bannerPreviewUrl);
+                    setBannerPreviewUrl("");
+                    setBannerName("");
                     toast({
                       title: "Banner Removed",
                       description: "Promotional marketing banner cleared.",
@@ -514,14 +656,9 @@ export function ProductSettingPage() {
                 <Button
                   type="button"
                   onClick={() => {
-                    setHasBanner(true);
-                    toast({
-                      title: "Banner Uploaded",
-                      description: `Mock file '${bannerName}' uploaded and processed successfully.`,
-                      variant: "success",
-                    });
+                    bannerInputRef.current?.click();
                   }}
-                  className="flex-1 bg-amber-500 hover:bg-amber-600 text-white text-xs py-2 h-auto flex items-center justify-center gap-1.5"
+                  className="flex-1 bg-blue-500 hover:bg-blue-600 text-white text-xs py-2 h-auto flex items-center justify-center gap-1.5"
                 >
                   <UploadCloud className="h-4 w-4" /> Upload
                 </Button>
@@ -540,16 +677,21 @@ export function ProductSettingPage() {
 
               <Field>
                 <Label htmlFor="loanUrlInput">Landing Page Endpoint</Label>
-                <Input
-                  id="loanUrlInput"
-                  value={loanUrl}
-                  onChange={(e) => setLoanUrl(e.target.value)}
-                  placeholder="https://..."
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="loanUrlInput"
+                    readOnly
+                    value={activeEndpoint}
+                    placeholder="Select DSA and product to generate journey link"
+                  />
+                  <Button onClick={copyEndpoint} size="icon" type="button" variant="outline">
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
               </Field>
 
               <p className="text-[10px] text-slate-400">
-                Ensure this URL points to a secure bank subdomain (e.g. bankofmaharashtra.in) with valid sourcing codes.
+                This is the same journey link used by Sell Now for customer self-serve submissions.
               </p>
             </CardContent>
           </Card>

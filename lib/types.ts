@@ -58,6 +58,8 @@ export type Product =
   | "Business Loan"
   | "Auto Loan";
 
+export type CommissionType = "Percentage-based" | "Fixed-fee" | "Tiered";
+
 export type RuleStatus = "Active" | "Inactive" | "Draft";
 export type RuleOperator = "AND" | "OR";
 export type RuleConditionOperator = ">" | ">=" | "<" | "<=" | "=" | "contains";
@@ -120,6 +122,30 @@ export interface Dsa extends Entity {
   rejectionReason?: string;
 }
 
+export interface ProductCommissionRange {
+  id: string;
+  min: number;
+  max: number;
+  effectiveDate: string;
+  endDate: string;
+  frequency: string;
+  rate: number;
+}
+
+export interface DsaProductConfig extends Entity {
+  dsaId: string;
+  dsaName: string;
+  dsaCode: string;
+  product: Product;
+  commissionType: CommissionType;
+  ranges: ProductCommissionRange[];
+  loanUrl: string;
+  bannerName?: string;
+  status: "Active" | "Inactive";
+  configuredAt: string;
+  configuredBy: string;
+}
+
 export interface Lead extends Entity {
   leadId: string;
   customer: string;
@@ -135,6 +161,23 @@ export interface Lead extends Entity {
   owner: string;
   createdAt: string;
   nextAction: string;
+}
+
+export interface ApplicationJourneyField {
+  id: string;
+  label: string;
+  value: string;
+  group: string;
+}
+
+export interface ApplicationJourney {
+  journeyId: string;
+  name: string;
+  product: Product;
+  channel: string;
+  completedSteps: string[];
+  currentStep: string;
+  fields: ApplicationJourneyField[];
 }
 
 export interface Application extends Entity {
@@ -157,6 +200,7 @@ export interface Application extends Entity {
   creditScore: number;
   verificationStatus: VerificationStatus;
   decisionSummary: string;
+  journey: ApplicationJourney;
   notes: string[];
   timeline: TimelineEvent[];
 }
@@ -278,6 +322,7 @@ export interface SettingItem extends Entity {
 
 export interface MockStore {
   dsas: Dsa[];
+  dsaProductConfigs: DsaProductConfig[];
   leads: Lead[];
   applications: Application[];
   breRules: BreRule[];
@@ -296,6 +341,7 @@ export type CollectionName = keyof MockStore;
 
 export interface EntityMap {
   dsas: Dsa;
+  dsaProductConfigs: DsaProductConfig;
   leads: Lead;
   applications: Application;
   breRules: BreRule;

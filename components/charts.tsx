@@ -24,7 +24,7 @@ import {
 import { Card, CardContent, CardHeader, Skeleton } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
 
-const colors = ["#2563eb", "#0f766e", "#d97706", "#7c3aed", "#dc2626", "#475569"];
+const colors = ["#2563eb", "#38bdf8", "#4c1d95", "#0f172a", "#7c3aed", "#0284c7"];
 
 function ChartFrame({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
@@ -68,7 +68,7 @@ export function KpiCard({
               "grid h-10 w-10 place-items-center rounded-md",
               tone === "blue" && "bg-blue-50 text-blue-700",
               tone === "green" && "bg-emerald-50 text-emerald-700",
-              tone === "amber" && "bg-amber-50 text-amber-700",
+              tone === "amber" && "bg-sky-50 text-blue-800",
               tone === "slate" && "bg-slate-100 text-slate-700",
             )}
           >
