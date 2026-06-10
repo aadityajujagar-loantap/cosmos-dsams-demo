@@ -165,14 +165,28 @@ function newApplication(value: Partial<Application>, dsaId: string, dsaName: str
 }
 
 export function LeadsPage() {
-  const { createItem, deleteItem, store, updateItem } = useMockStore();
+  const { createItem, deleteItem, store, updateItem, currentUser } = useMockStore();
   const [view, setView] = useState("table");
   const [status, setStatus] = useState("");
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Lead | null>(null);
   const [selected, setSelected] = useState<Lead | null>(null);
 
-  const rows = status ? store.leads.filter((item) => item.status === status) : store.leads;
+  let rows = status ? store.leads.filter((item) => item.status === status) : store.leads;
+  if (currentUser?.role === "Customer") {
+    const isCustomerMock = currentUser.name === "user" || currentUser.name === "7777777777" || currentUser.name === "Amit Kumar";
+    rows = rows.filter((item) => 
+      item.customer === currentUser.name || 
+      (isCustomerMock && item.customer === "Amit Kumar")
+    );
+  } else if (currentUser?.role === "DSA Partner") {
+    const isPartnerMock = currentUser.name === "dsa" || currentUser.name === "8888888888" || currentUser.name === "TCP Estate Co.";
+    rows = rows.filter((item) => 
+      item.dsaId === currentUser.id || 
+      item.dsaName === currentUser.name ||
+      (isPartnerMock && (item.dsaName === "TCP Estate Co." || item.dsaId === "DSA-10001"))
+    );
+  }
   const defaultDsa = store.dsas[0];
 
   const columns: Column<Lead>[] = [
@@ -199,10 +213,12 @@ export function LeadsPage() {
     <div>
       <PageHeader
         action={
-          <Button onClick={() => setCreating(true)} type="button">
-            <Plus className="h-4 w-4" />
-            New Lead
-          </Button>
+          currentUser?.role !== "Customer" ? (
+            <Button onClick={() => setCreating(true)} type="button">
+              <Plus className="h-4 w-4" />
+              New Lead
+            </Button>
+          ) : undefined
         }
         description="Track lead capture, qualification, DSA ownership, next actions, and conversion movement."
         eyebrow="Lead pipeline"
@@ -283,7 +299,9 @@ export function LeadsPage() {
           initialValue={{ owner: "Aditi Rao", product: "Personal Loan", source: "DSA Campaign", status: "New" }}
           onCancel={() => setCreating(false)}
           onSubmit={(value) => {
-            createItem("leads", newLead(value, defaultDsa.id, defaultDsa.name));
+            const dsaId = currentUser?.role === "DSA Partner" ? (currentUser.id || "dsa-1") : defaultDsa.id;
+            const dsaName = currentUser?.role === "DSA Partner" ? currentUser.name : defaultDsa.name;
+            createItem("leads", newLead(value, dsaId, dsaName));
             setCreating(false);
           }}
           submitLabel="Create lead"
@@ -309,11 +327,26 @@ export function LeadsPage() {
 }
 
 export function ApplicationsPage() {
-  const { createItem, deleteItem, store, updateItem } = useMockStore();
+  const { createItem, deleteItem, store, updateItem, currentUser } = useMockStore();
   const [status, setStatus] = useState("");
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Application | null>(null);
-  const rows = status ? store.applications.filter((item) => item.status === status) : store.applications;
+
+  let rows = status ? store.applications.filter((item) => item.status === status) : store.applications;
+  if (currentUser?.role === "Customer") {
+    const isCustomerMock = currentUser.name === "user" || currentUser.name === "7777777777" || currentUser.name === "Amit Kumar";
+    rows = rows.filter((item) => 
+      item.customer === currentUser.name || 
+      (isCustomerMock && item.customer === "Amit Kumar")
+    );
+  } else if (currentUser?.role === "DSA Partner") {
+    const isPartnerMock = currentUser.name === "dsa" || currentUser.name === "8888888888" || currentUser.name === "TCP Estate Co.";
+    rows = rows.filter((item) => 
+      item.dsaId === currentUser.id || 
+      item.dsaName === currentUser.name ||
+      (isPartnerMock && (item.dsaName === "TCP Estate Co." || item.dsaId === "DSA-10001"))
+    );
+  }
   const defaultDsa = store.dsas[0];
 
   const columns: Column<Application>[] = [
@@ -343,10 +376,12 @@ export function ApplicationsPage() {
     <div>
       <PageHeader
         action={
-          <Button onClick={() => setCreating(true)} type="button">
-            <Plus className="h-4 w-4" />
-            New Application
-          </Button>
+          currentUser?.role !== "Customer" ? (
+            <Button onClick={() => setCreating(true)} type="button">
+              <Plus className="h-4 w-4" />
+              New Application
+            </Button>
+          ) : undefined
         }
         description="Control application status, stage ownership, risk score, DSA linkage, and underwriting movement."
         eyebrow="Loan operations"
@@ -372,7 +407,9 @@ export function ApplicationsPage() {
           initialValue={{ product: "Personal Loan", stage: "Lead Capture", status: "Draft", verificationStatus: "Pending" }}
           onCancel={() => setCreating(false)}
           onSubmit={(value) => {
-            createItem("applications", newApplication(value, defaultDsa.id, defaultDsa.name));
+            const dsaId = currentUser?.role === "DSA Partner" ? (currentUser.id || "dsa-1") : defaultDsa.id;
+            const dsaName = currentUser?.role === "DSA Partner" ? currentUser.name : defaultDsa.name;
+            createItem("applications", newApplication(value, dsaId, dsaName));
             setCreating(false);
           }}
           submitLabel="Create application"

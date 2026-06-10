@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
   Building2,
@@ -22,7 +22,7 @@ import {
   Wallet,
   Workflow,
 } from "lucide-react";
-import { ReactNode, useMemo, useState } from "react";
+import { ReactNode, useMemo, useState, useEffect } from "react";
 
 import { Button, Input, Modal } from "@/components/ui/primitives";
 import { useMockStore } from "@/lib/store";
@@ -90,12 +90,105 @@ function isActive(pathname: string, href: string) {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [globalQuery, setGlobalQuery] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const { store } = useMockStore();
+  const { store, currentUser, logout } = useMockStore();
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted && !currentUser) {
+      router.push("/login");
+    }
+  }, [currentUser, router, mounted]);
+
+  const navGroups = useMemo(() => {
+    if (!currentUser) return [];
+
+    if (currentUser.role === "DSA Manager") {
+      // Super Admin
+      return [
+        {
+          items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
+          label: "Overview",
+        },
+        {
+          items: [
+            { href: "/dsa/onboarding", icon: Building2, label: "Onboard DSA" },
+            { href: "/dsa/management", icon: Users, label: "DSA Management" },
+            { href: "/dsa/product-setting", icon: Settings, label: "Product Setting", badge: "New" },
+          ],
+          label: "Partners",
+        },
+        {
+          items: [{ href: "/leads", icon: FileSearch, label: "Lead Pipeline" }],
+          label: "Leads",
+        },
+        {
+          items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications" }],
+          label: "Applications",
+        },
+        {
+          items: [{ href: "/bre/rules", icon: ShieldCheck, label: "BRE Rules" }],
+          label: "Rules",
+        },
+        {
+          items: [{ href: "/finance/commissions", icon: Wallet, label: "Commissions" }],
+          label: "Finance",
+        },
+        {
+          items: [{ href: "/analytics/reports", icon: LineChart, label: "Reports" }],
+          label: "Analytics",
+        },
+      ];
+    } else if (currentUser.role === "DSA Partner") {
+      // DSA Partner
+      return [
+        {
+          items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
+          label: "Overview",
+        },
+        {
+          items: [
+            { href: "/dsa/onboarding", icon: Building2, label: "Onboard Sub-DSA" },
+            { href: "/dsa/management", icon: Users, label: "My Agent Network" },
+          ],
+          label: "DSA Network",
+        },
+        {
+          items: [{ href: "/leads", icon: FileSearch, label: "Submit Leads" }],
+          label: "Sourcing",
+        },
+        {
+          items: [{ href: "/finance/commissions", icon: Wallet, label: "My Earnings" }],
+          label: "Finance",
+        },
+      ];
+    } else {
+      // Customer
+      return [
+        {
+          items: [{ href: "/", icon: LayoutDashboard, label: "My Status" }],
+          label: "Overview",
+        },
+        {
+          items: [
+            { href: "/leads", icon: FileSearch, label: "Apply for Loan" },
+            { href: "/applications", icon: ClipboardCheck, label: "My Applications" },
+          ],
+          label: "Loan Journey",
+        },
+      ];
+    }
+  }, [currentUser]);
+
   const unread = store.notifications.filter((item) => item.status === "Unread").length;
   const globalResults = useMemo(() => {
     const query = globalQuery.trim().toLowerCase();
@@ -141,6 +234,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     ].slice(0, 10);
   }, [globalQuery, store.applications, store.dsas, store.leads]);
 
+  if (!mounted || !currentUser) return null;
+
   const navigation = (
     <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-4">
       {navGroups.map((group) => (
@@ -151,7 +246,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </p>
           ) : null}
           <div className="space-y-1">
-            {group.items.map((item) => {
+            {group.items.map((item: any) => {
               const Icon = item.icon;
               const active = isActive(pathname, item.href);
               return (
@@ -166,7 +261,16 @@ export function AppShell({ children }: { children: ReactNode }) {
                   onClick={() => setMobileOpen(false)}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
-                  {!collapsed ? <span className="truncate">{item.label}</span> : null}
+                  {!collapsed ? (
+                    <span className="flex-1 flex items-center justify-between min-w-0">
+                      <span className="truncate">{item.label}</span>
+                      {item.badge && (
+                        <span className="ml-2 rounded-full bg-orange-500 text-[10px] font-bold text-white px-2 py-0.5 uppercase tracking-wide">
+                          {item.badge}
+                        </span>
+                      )}
+                    </span>
+                  ) : null}
                 </Link>
               );
             })}
@@ -255,34 +359,30 @@ export function AppShell({ children }: { children: ReactNode }) {
                   type="button"
                 >
                   <span className="grid h-7 w-7 place-items-center rounded-md bg-slate-900 text-xs font-semibold text-white">
-                    {initials("Aditi Rao")}
+                    {initials(currentUser.name)}
                   </span>
                   <span className="hidden sm:block">
-                    <span className="block text-xs font-semibold text-slate-950">Aditi Rao</span>
-                    <span className="block text-[11px] text-slate-500">Admin</span>
+                    <span className="block text-xs font-semibold text-slate-950">{currentUser.name}</span>
+                    <span className="block text-[11px] text-slate-500">{currentUser.role}</span>
                   </span>
                   <ChevronDown className="h-4 w-4 text-slate-400" />
                 </button>
                 {profileOpen ? (
                   <div className="absolute right-0 top-12 z-30 w-56 rounded-lg border border-slate-200 bg-white p-2 shadow-xl">
                     <div className="border-b border-slate-100 px-3 py-2">
-                      <p className="text-sm font-semibold text-slate-950">Aditi Rao</p>
-                      <p className="text-xs text-slate-500">aditi.rao@cosmosbank.example</p>
+                      <p className="text-sm font-semibold text-slate-950">{currentUser.name}</p>
+                      <p className="text-xs text-slate-500 truncate">{currentUser.email || currentUser.code || "Active Session"}</p>
                     </div>
-                    <Link
-                      className="mt-1 block rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-                      href="/administration/users"
-                      onClick={() => setProfileOpen(false)}
+                    <button
+                      onClick={() => {
+                        setProfileOpen(false);
+                        logout();
+                        router.push("/login");
+                      }}
+                      className="mt-1 w-full text-left block rounded-md px-3 py-2 text-sm text-rose-600 font-semibold hover:bg-rose-50 hover:text-rose-700 transition"
                     >
-                      User management
-                    </Link>
-                    <Link
-                      className="block rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-                      href="/administration/settings"
-                      onClick={() => setProfileOpen(false)}
-                    >
-                      Workspace settings
-                    </Link>
+                      Sign Out
+                    </button>
                   </div>
                 ) : null}
               </div>

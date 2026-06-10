@@ -265,7 +265,7 @@ export function createMockStore(): MockStore {
       email: `partner${index + 1}@${name.toLowerCase().replaceAll(" ", "")}.example`,
       gst: `27${pan(index).slice(0, 10)}1Z${index % 9}`,
       id: `dsa-${index + 1}`,
-      manager: pick(managers, index),
+      manager: index % 8 === 0 ? "TCP Estate Co." : pick(managers, index),
       mobile: mobile(index),
       monthlyLeads: 12 + ((index * 5) % 62),
       name,
@@ -283,17 +283,23 @@ export function createMockStore(): MockStore {
     const customer = person(index + 30);
     const dsa = pick(dsas, index);
     const city = pick(states, index + 4);
+    
+    const isCustomerAmit = index === 4 || index === 10;
+    const finalCustomer = isCustomerAmit ? "Amit Kumar" : customer;
+    const finalMobile = isCustomerAmit ? "7777777777" : mobile(index + 100);
+    const finalEmail = isCustomerAmit ? "amit.kumar@example.com" : `${customer.toLowerCase().replace(" ", ".")}@example.com`;
+
     return {
       amount: 250000 + ((index * 137000) % 4200000),
       city: city[0],
       createdAt: isoDay(index % 48),
-      customer,
+      customer: finalCustomer,
       dsaId: dsa.id,
       dsaName: dsa.name,
-      email: `${customer.toLowerCase().replace(" ", ".")}@example.com`,
+      email: finalEmail,
       id: `lead-${index + 1}`,
       leadId: `LD-${String(index + 1).padStart(5, "0")}`,
-      mobile: mobile(index + 100),
+      mobile: finalMobile,
       nextAction: pick(
         ["Collect bank statement", "Schedule verification", "Call back", "Send product quote"],
         index,
@@ -306,7 +312,7 @@ export function createMockStore(): MockStore {
   });
 
   const applications: Application[] = Array.from({ length: 64 }, (_, index) => {
-    const lead = pick(leads, index * 2);
+    const lead = index === 2 ? leads[4] : index === 5 ? leads[10] : pick(leads, index * 2);
     const score = 52 + ((index * 9) % 46);
     return {
       aadhaar: aadhaar(index),
@@ -356,6 +362,7 @@ export function createMockStore(): MockStore {
       verificationStatus: pick(verificationStatuses, index + 1),
     };
   });
+
 
   const documents = [
     ...dsas.flatMap((dsa) => dsa.documents),

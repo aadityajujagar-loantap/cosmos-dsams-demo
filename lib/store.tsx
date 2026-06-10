@@ -29,6 +29,16 @@ interface StoreContextValue {
     id: string,
     patch: Partial<EntityMap[K]>,
   ) => void;
+  currentUser: {
+    name: string;
+    role: "DSA Manager" | "DSA Partner" | "Customer";
+    code?: string;
+    id?: string;
+    email?: string;
+    mobile?: string;
+  } | null;
+  login: (role: "DSA Manager" | "DSA Partner" | "Customer", identifier: string) => void;
+  logout: () => void;
 }
 
 const StoreContext = createContext<StoreContextValue | undefined>(undefined);
@@ -67,6 +77,83 @@ function audit(action: string, collection: CollectionName): AuditLog {
 export function MockStoreProvider({ children }: { children: ReactNode }) {
   const [store, setStore] = useState<MockStore>(() => createMockStore());
   const { toast } = useToast();
+
+  const [currentUser, setCurrentUser] = useState<{
+    name: string;
+    role: "DSA Manager" | "DSA Partner" | "Customer";
+    code?: string;
+    id?: string;
+    email?: string;
+    mobile?: string;
+  } | null>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("cosmos_dsa_user");
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (parsed && (parsed.name === "Deepak Prakash" || parsed.name === "TCP Estate Co." || parsed.name === "Amit Kumar")) {
+            localStorage.removeItem("cosmos_dsa_user");
+            return null;
+          }
+          return parsed;
+        } catch (e) {
+          return null;
+        }
+      }
+    }
+    return null;
+  });
+
+  const login = useCallback((role: "DSA Manager" | "DSA Partner" | "Customer", identifier: string) => {
+    let user = null;
+    if (role === "DSA Manager") {
+      user = {
+        name: identifier,
+        role: "DSA Manager" as const,
+        id: "P09997767",
+        email: "admin@cosmosbank.example",
+        mobile: "9999999999",
+      };
+    } else if (role === "DSA Partner") {
+      user = {
+        name: identifier,
+        role: "DSA Partner" as const,
+        code: "DSA-10001",
+        id: "DSA-10001",
+        email: "partner@tcpestate.example",
+        mobile: "8888888888",
+      };
+    } else {
+      user = {
+        name: identifier,
+        role: "Customer" as const,
+        id: "CUST-88001",
+        email: "customer@example.com",
+        mobile: "7777777777",
+      };
+    }
+    setCurrentUser(user);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("cosmos_dsa_user", JSON.stringify(user));
+    }
+    toast({
+      description: `Logged in as ${user.name} (${user.role})`,
+      title: "Authentication successful",
+      variant: "success",
+    });
+  }, [toast]);
+
+  const logout = useCallback(() => {
+    setCurrentUser(null);
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("cosmos_dsa_user");
+    }
+    toast({
+      description: "You have been logged out.",
+      title: "Logged out",
+      variant: "warning",
+    });
+  }, [toast]);
 
   const getById = useCallback(
     <K extends CollectionName>(collection: K, id: string) =>
@@ -148,8 +235,8 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ createItem, deleteItem, getById, store, updateItem }),
-    [createItem, deleteItem, getById, store, updateItem],
+    () => ({ createItem, deleteItem, getById, store, updateItem, currentUser, login, logout }),
+    [createItem, deleteItem, getById, store, updateItem, currentUser, login, logout],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

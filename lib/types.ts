@@ -119,6 +119,7 @@ export interface Dsa extends Entity {
   approvalRate: number;
   commissionEarned: number;
   documents: DocumentRecord[];
+  rejectionReason?: string;
 }
 
 export interface Lead extends Entity {

@@ -181,24 +181,26 @@ export function PieChartCard({
         <h2 className="text-base font-semibold text-slate-950">{title}</h2>
         <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
       </CardHeader>
-      <CardContent className="h-72">
-        <ChartFrame>
-          <ResponsiveContainer height="100%" minWidth={0} width="100%">
-            <PieChart>
-              <Pie data={data} dataKey={dataKey} innerRadius={54} outerRadius={88} paddingAngle={3}>
-                {data.map((_, index) => (
-                  <Cell fill={colors[index % colors.length]} key={index} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </ChartFrame>
-        <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-600">
+      <CardContent className="h-80 flex flex-col justify-between">
+        <div className="h-56">
+          <ChartFrame>
+            <ResponsiveContainer height="100%" minWidth={0} width="100%">
+              <PieChart>
+                <Pie data={data} dataKey={dataKey} innerRadius={42} outerRadius={72} paddingAngle={3}>
+                  {data.map((_, index) => (
+                    <Cell fill={colors[index % colors.length]} key={index} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </ChartFrame>
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 border-t border-slate-100 pt-3">
           {data.map((item, index) => (
-            <span className="inline-flex items-center gap-2" key={String(item.name)}>
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colors[index % colors.length] }} />
-              {String(item.name)}
+            <span className="inline-flex items-center gap-1.5 min-w-0" key={String(item.name)}>
+              <span className="h-2 w-2 rounded-full shrink-0 block" style={{ backgroundColor: colors[index % colors.length] }} />
+              <span className="truncate leading-none">{String(item.name)}</span>
             </span>
           ))}
         </div>
