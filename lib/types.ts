@@ -11,7 +11,8 @@ export type DsaStatus =
   | "KYC Pending"
   | "Active"
   | "Suspended"
-  | "Rejected";
+  | "Rejected"
+  | "Blacklisted";
 
 export type LeadStatus =
   | "New"
@@ -230,6 +231,7 @@ export interface BreRule extends Entity {
   conditions: RuleCondition[];
   outcome: string;
   updatedAt: string;
+  mandatory?: boolean;
 }
 
 export interface VerificationCheck extends Entity {

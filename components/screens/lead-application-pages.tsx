@@ -143,7 +143,7 @@ export function LeadsPage() {
       item.dsaName === currentUser.name
     );
   }
-  const defaultDsa = store.dsas[0];
+  const defaultDsa = store.dsas.find((d) => d.status === "Active") || store.dsas[0];
 
   const columns: Column<Lead>[] = [
     {

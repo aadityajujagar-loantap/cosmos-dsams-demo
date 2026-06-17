@@ -14,13 +14,37 @@ import {
   Select,
   Input,
 } from "@/components/ui/primitives";
-import { Copy, Plus, Trash2, UploadCloud, Check, Landmark, Image as ImageIcon } from "lucide-react";
+import { Copy, Plus, Trash2, UploadCloud, Check, Landmark, Image as ImageIcon, FileCheck, AlertCircle } from "lucide-react";
 import { formatCurrency, makeId } from "@/lib/utils";
 import { DEMO_USERS } from "@/lib/demo-identities";
 import { journeyUrl } from "@/lib/journey-links";
 import { CommissionType, Product, ProductCommissionRange } from "@/lib/types";
 
 const loanProducts: Product[] = ["Home Loan", "Personal Loan", "Loan Against Property", "Business Loan", "Auto Loan"];
+
+// Required documents per product and borrower type
+const REQUIRED_DOCS: Record<string, { salaried: string[]; selfEmployed: string[] }> = {
+  "Home Loan": {
+    salaried: ["PAN Card", "Aadhaar Card", "Last 3 months salary slips", "6-month bank statement", "Form 16 / ITR (2 years)", "Property documents", "Sale agreement / NOC"],
+    selfEmployed: ["PAN Card", "Aadhaar Card", "Business registration proof", "GST returns (2 years)", "ITR with P&L (2 years)", "12-month bank statement", "Property documents", "Sale agreement"],
+  },
+  "Personal Loan": {
+    salaried: ["PAN Card", "Aadhaar Card", "Last 2 months salary slips", "3-month bank statement", "Employment letter"],
+    selfEmployed: ["PAN Card", "Aadhaar Card", "Business registration proof", "ITR (1 year)", "6-month bank statement"],
+  },
+  "Loan Against Property": {
+    salaried: ["PAN Card", "Aadhaar Card", "Last 3 months salary slips", "6-month bank statement", "Property title deed", "Encumbrance certificate", "Building plan approval"],
+    selfEmployed: ["PAN Card", "Aadhaar Card", "ITR with balance sheet (2 years)", "12-month bank statement", "Property title deed", "Encumbrance certificate"],
+  },
+  "Business Loan": {
+    salaried: ["PAN Card", "Aadhaar Card", "Salary slips (3 months)", "Bank statement (3 months)", "Employment proof"],
+    selfEmployed: ["PAN Card", "Aadhaar Card", "Business registration / GSTIN", "ITR with P&L (2 years)", "12-month bank statement", "Business vintage proof"],
+  },
+  "Auto Loan": {
+    salaried: ["PAN Card", "Aadhaar Card", "Salary slips (2 months)", "Bank statement (3 months)", "Vehicle proforma invoice"],
+    selfEmployed: ["PAN Card", "Aadhaar Card", "ITR (1 year)", "6-month bank statement", "Vehicle proforma invoice"],
+  },
+};
 
 function productDefaults(product: string) {
   if (product === "Personal Loan") return { code: "PL", url: "personalloan" };
@@ -37,6 +61,7 @@ export function ProductSettingPage() {
   const [product, setProduct] = useState<Product | "">("");
   const [partner, setPartner] = useState<string>("");
   const [commissionType, setCommissionType] = useState<CommissionType | "">("");
+  const [borrowerType, setBorrowerType] = useState<"salaried" | "selfEmployed">("salaried");
 
   // Add range inputs
   const [rangeId, setRangeId] = useState<string>("");
@@ -394,7 +419,7 @@ export function ProductSettingPage() {
                 <p className="text-xs text-slate-500 mt-1">Select the loan type, assign a partner channel, and configure payout rules.</p>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
                 <Field>
                   <Label htmlFor="loanProductSelect">Loan Product Name *</Label>
                   <Select
@@ -693,6 +718,61 @@ export function ProductSettingPage() {
               <p className="text-[10px] text-slate-400">
                 This is the same journey link used by Sell Now for customer self-serve submissions.
               </p>
+            </CardContent>
+          </Card>
+
+          {/* Required Documents Card */}
+          <Card>
+            <CardContent className="p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Required Documents</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Documents required for this product &amp; borrower type.</p>
+                </div>
+                <FileCheck className="h-4 w-4 text-blue-600" />
+              </div>
+
+              {/* Borrower type toggle */}
+              <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setBorrowerType("salaried")}
+                  className={`flex-1 py-2 transition-colors ${
+                    borrowerType === "salaried"
+                      ? "bg-blue-600 text-white"
+                      : "bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  Salaried
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBorrowerType("selfEmployed")}
+                  className={`flex-1 py-2 transition-colors ${
+                    borrowerType === "selfEmployed"
+                      ? "bg-blue-600 text-white"
+                      : "bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  Self-Employed
+                </button>
+              </div>
+
+              {product ? (
+                <ul className="space-y-2">
+                  {(REQUIRED_DOCS[product]?.[borrowerType] ?? []).map((doc, i) => (
+                    <li key={i} className="flex items-start gap-2 text-xs text-slate-700">
+                      <Check className="h-3.5 w-3.5 text-emerald-500 mt-0.5 shrink-0" />
+                      {doc}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="flex flex-col items-center gap-2 py-4 text-slate-400">
+                  <AlertCircle className="h-8 w-8 stroke-1" />
+                  <p className="text-xs text-center">Select a product above to see required documents.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

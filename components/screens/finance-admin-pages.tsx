@@ -109,7 +109,7 @@ export function CommissionsPage() {
   const { createItem, deleteItem, store, updateItem } = useMockStore();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Commission | null>(null);
-  const defaultDsa = store.dsas[0];
+  const defaultDsa = store.dsas.find((d) => d.status === "Active") || store.dsas[0];
   const totalPayout = store.commissions.reduce((sum, item) => sum + item.payout, 0);
   const processed = store.commissions.filter((item) => item.status === "Processed").reduce((sum, item) => sum + item.payout, 0);
 

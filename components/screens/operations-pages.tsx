@@ -185,6 +185,15 @@ export function BreRulesPage() {
     { cell: (item) => item.priority, header: "Priority", key: "priority", sortable: true, sortValue: (item) => item.priority },
     { cell: (item) => <StatusBadge status={item.status} />, header: "Status", key: "status" },
     { cell: (item) => `${item.operator} · ${item.conditions.length} conditions`, header: "Builder", key: "builder" },
+    {
+      cell: (item) => (
+        <Badge tone={item.mandatory ? "rose" : "slate"}>
+          {item.mandatory ? "Mandatory" : "Optional"}
+        </Badge>
+      ),
+      header: "Mandatory",
+      key: "mandatory",
+    },
   ];
 
   return (
@@ -196,7 +205,24 @@ export function BreRulesPage() {
         title="BRE Configuration"
       />
       <DataTable
-        actions={(item) => <ActionPair onDelete={() => deleteItem("breRules", item.id)} onEdit={() => setEditing(item)} />}
+        actions={(item) => (
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                updateItem("breRules", item.id, { mandatory: !item.mandatory });
+              }}
+              className={`shrink-0 whitespace-nowrap rounded-md border px-2.5 py-1 text-[11px] font-semibold transition ${
+                item.mandatory
+                  ? "border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100"
+                  : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+              }`}
+            >
+              {item.mandatory ? "Optional" : "Mandatory"}
+            </button>
+            <ActionPair onDelete={() => deleteItem("breRules", item.id)} onEdit={() => setEditing(item)} />
+          </div>
+        )}
         columns={columns}
         items={store.breRules}
         searchKeys={["ruleName", "ruleCode", "product", "outcome"]}

@@ -106,6 +106,7 @@ export function StatusBadge({ status }: { status: string }) {
             normalized.includes("failed") ||
             normalized.includes("lost") ||
             normalized.includes("suspend") ||
+            normalized.includes("blacklist") ||
             normalized.includes("critical")
           ? "rose"
           : "blue";

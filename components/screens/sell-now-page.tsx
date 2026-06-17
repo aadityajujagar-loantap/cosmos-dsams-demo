@@ -347,12 +347,16 @@ export function SellNowPage() {
   const [createdApplication, setCreatedApplication] = useState<Application | null>(null);
 
   const activeConfigs = useMemo(
-    () =>
-      store.dsaProductConfigs
-        .filter((config) => config.status === "Active")
+    () => {
+      const activeDsaIds = new Set(
+        store.dsas.filter((dsa) => dsa.status === "Active").map((dsa) => dsa.id)
+      );
+      return store.dsaProductConfigs
+        .filter((config) => config.status === "Active" && activeDsaIds.has(config.dsaId))
         .filter((config) => currentUser?.role !== "DSA Partner" || config.dsaId === currentUser.id)
-        .sort((left, right) => left.dsaName.localeCompare(right.dsaName) || left.product.localeCompare(right.product)),
-    [currentUser, store.dsaProductConfigs],
+        .sort((left, right) => left.dsaName.localeCompare(right.dsaName) || left.product.localeCompare(right.product));
+    },
+    [currentUser, store.dsaProductConfigs, store.dsas],
   );
 
   const effectiveDsaId =
@@ -664,7 +668,13 @@ export function BorrowerJourneyPage({ configId }: { configId: string }) {
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [stepIndex, setStepIndex] = useState(() => loadBorrowerDraft(configId).stepIndex ?? 0);
   const [createdApplication, setCreatedApplication] = useState<Application | null>(null);
-  const config = store.dsaProductConfigs.find((item) => item.id === configId && item.status === "Active");
+  const config = useMemo(() => {
+    const foundConfig = store.dsaProductConfigs.find((item) => item.id === configId && item.status === "Active");
+    if (!foundConfig) return undefined;
+    const dsa = store.dsas.find((item) => item.id === foundConfig.dsaId);
+    if (!dsa || dsa.status !== "Active") return undefined;
+    return foundConfig;
+  }, [configId, store.dsaProductConfigs, store.dsas]);
 
   const journey = config
     ? buildApplicationJourney(config.product, config.id.length + config.dsaCode.length, {

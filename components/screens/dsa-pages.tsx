@@ -13,6 +13,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { KpiCard } from "@/components/charts";
 import { ActionPair, DetailGrid, DetailItem, PageHeader } from "@/components/module";
@@ -58,6 +59,25 @@ const businessTypes: BusinessType[] = [
   "Public Limited",
 ];
 
+// India states and their major cities for onboarding dropdowns
+const INDIA_STATES_CITIES: Record<string, string[]> = {
+  "Andhra Pradesh": ["Visakhapatnam", "Vijayawada", "Guntur", "Tirupati"],
+  "Delhi": ["New Delhi", "Dwarka", "Rohini", "Lajpat Nagar"],
+  "Gujarat": ["Ahmedabad", "Surat", "Vadodara", "Rajkot"],
+  "Karnataka": ["Bengaluru", "Mysuru", "Mangaluru", "Hubballi"],
+  "Kerala": ["Thiruvananthapuram", "Kochi", "Kozhikode", "Thrissur"],
+  "Madhya Pradesh": ["Bhopal", "Indore", "Gwalior", "Jabalpur"],
+  "Maharashtra": ["Mumbai", "Pune", "Nagpur", "Nashik", "Thane"],
+  "Punjab": ["Amritsar", "Ludhiana", "Jalandhar", "Patiala"],
+  "Rajasthan": ["Jaipur", "Jodhpur", "Udaipur", "Kota"],
+  "Tamil Nadu": ["Chennai", "Coimbatore", "Madurai", "Salem"],
+  "Telangana": ["Hyderabad", "Warangal", "Nizamabad", "Karimnagar"],
+  "Uttar Pradesh": ["Lucknow", "Kanpur", "Agra", "Varanasi", "Noida"],
+  "West Bengal": ["Kolkata", "Howrah", "Durgapur", "Siliguri"],
+};
+
+const INDIA_STATES = Object.keys(INDIA_STATES_CITIES).sort();
+
 const dsaStatuses: DsaStatus[] = [
   "Draft",
   "Submitted",
@@ -65,10 +85,11 @@ const dsaStatuses: DsaStatus[] = [
   "Active",
   "Suspended",
   "Rejected",
+  "Blacklisted",
 ];
 
 const queueStatuses: DsaStatus[] = ["Submitted", "KYC Pending"];
-const managementStatuses: DsaStatus[] = ["Active", "Suspended"];
+const managementStatuses: DsaStatus[] = ["Active", "Suspended", "Blacklisted"];
 
 function isQueueStatus(status: DsaStatus) {
   return queueStatuses.includes(status);
@@ -101,7 +122,6 @@ const dsaFields: FieldConfig<Dsa>[] = [
   { label: "City", name: "city", required: true },
   { label: "State", name: "state", required: true },
   { label: "Pincode", name: "pincode", required: true },
-  { label: "Status", name: "status", options: dsaStatuses, required: true, type: "select" },
   { label: "Manager", name: "manager", required: true },
 ];
 
@@ -554,8 +574,38 @@ export function DsaOnboardingPage() {
                   {renderField("pan", "PAN")}
                   {renderField("gst", "GST")}
                   <div className="md:col-span-2">{renderField("address", "Address")}</div>
-                  {renderField("city", "City")}
-                  {renderField("state", "State")}
+                  <Field>
+                    <Label htmlFor="stateSelect">State</Label>
+                    <Select
+                      id="stateSelect"
+                      value={form.state}
+                      onChange={(e) => {
+                        update("state", e.target.value);
+                        update("city", "");
+                      }}
+                    >
+                      <option value="">Select state</option>
+                      {INDIA_STATES.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </Select>
+                    {errors.state ? <p className="text-xs font-medium text-rose-600 mt-1">{errors.state}</p> : null}
+                  </Field>
+                  <Field>
+                    <Label htmlFor="citySelect">City</Label>
+                    <Select
+                      id="citySelect"
+                      value={form.city}
+                      onChange={(e) => update("city", e.target.value)}
+                      disabled={!form.state}
+                    >
+                      <option value="">{form.state ? "Select city" : "Select state first"}</option>
+                      {(INDIA_STATES_CITIES[form.state] ?? []).map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </Select>
+                    {errors.city ? <p className="text-xs font-medium text-rose-600 mt-1">{errors.city}</p> : null}
+                  </Field>
                   {renderField("pincode", "Pincode")}
                 </div>
               </div>
@@ -697,10 +747,10 @@ export function DsaOnboardingPage() {
 }
 
 export function DsaManagementPage() {
-  const { deleteItem, store, updateItem, currentUser } = useMockStore();
+  const { store, updateItem, currentUser } = useMockStore();
   const [status, setStatus] = useState("");
-  const [selected, setSelected] = useState<Dsa | null>(null);
   const [editing, setEditing] = useState<Dsa | null>(null);
+  const router = useRouter();
 
   const getDsaApplications = (dsaId: string) =>
     store.applications
@@ -751,11 +801,14 @@ export function DsaManagementPage() {
       />
       <DataTable
         actions={(item) => (
-          <ActionPair
-            onDelete={() => deleteItem("dsas", item.id)}
-            onEdit={() => setEditing(item)}
-            onView={() => setSelected(item)}
-          />
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => router.push(`/dsa/${item.id}`)} size="sm" type="button" variant="outline">
+              View
+            </Button>
+            <Button onClick={() => setEditing(item)} size="sm" type="button" variant="secondary">
+              Edit
+            </Button>
+          </div>
         )}
         columns={columns}
         emptyDescription="Approved DSAs appear here after verification. Change filters if you are looking for an existing partner."
@@ -763,38 +816,6 @@ export function DsaManagementPage() {
         items={rows}
         searchKeys={["name", "code", "pan", "mobile", "email", "city"]}
       />
-
-      <Drawer
-        description={selected ? `${selected.code} · ${selected.city}, ${selected.state}` : undefined}
-        onClose={() => setSelected(null)}
-        open={Boolean(selected)}
-        title={selected ? (currentUser?.role === "DSA Partner" ? demoAgentName(selected.id) : selected.name) : "DSA"}
-      >
-        {selected ? (
-          <div className="space-y-5">
-            <DetailGrid>
-              <DetailItem label="PAN" value={selected.pan} />
-              <DetailItem label="GST" value={selected.gst} />
-              <DetailItem label="Contact" value={`${selected.contactPerson} · ${selected.mobile}`} />
-              <DetailItem label="Email" value={selected.email} />
-              <DetailItem label="Status" value={<StatusBadge status={selected.status} />} />
-              <DetailItem label="Onboarded" value={formatDate(selected.onboardingDate)} />
-              <DetailItem label="Monthly leads" value={selected.monthlyLeads} />
-              <DetailItem label="Applications" value={getDsaApplications(selected.id).length} />
-            </DetailGrid>
-            {isQueueStatus(selected.status) ? (
-              <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-xs font-medium text-blue-800">
-                This partner is still in Dashboard &gt; Verification Queue. Open the full profile from the queue to approve or reject after review.
-              </div>
-            ) : null}
-            <Link href={`/dsa/${selected.id}`}>
-              <Button className="w-full" type="button">
-                Open full profile
-              </Button>
-            </Link>
-          </div>
-        ) : null}
-      </Drawer>
 
       <Modal onClose={() => setEditing(null)} open={Boolean(editing)} title="Edit DSA">
         {editing ? (
@@ -823,6 +844,10 @@ export function DsaProfilePage({ id }: { id: string }) {
   const [rejectingDsa, setRejectingDsa] = useState<Dsa | null>(null);
   const [rejectionError, setRejectionError] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
+  const [deactivatingDsa, setDeactivatingDsa] = useState<Dsa | null>(null);
+  const [blacklistingDsa, setBlacklistingDsa] = useState<Dsa | null>(null);
+  const [activatingDsa, setActivatingDsa] = useState<Dsa | null>(null);
+  const [unblacklistingDsa, setUnblacklistingDsa] = useState<Dsa | null>(null);
 
   const dsa = store.dsas.find((item) => item.id === id) ?? store.dsas[0];
   const canDecideDsa = currentUser?.role === "DSA Manager" && isQueueStatus(dsa.status);
@@ -856,6 +881,8 @@ export function DsaProfilePage({ id }: { id: string }) {
     (item) => item.status === "Approved" || item.status === "Disbursed",
   ).length;
 
+  const canManageDsa = currentUser?.role === "DSA Manager" && ["Active", "Suspended", "Blacklisted"].includes(dsa.status);
+
   return (
     <div>
       <Link className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-blue-700" href="/dsa/management">
@@ -885,6 +912,68 @@ export function DsaProfilePage({ id }: { id: string }) {
                 </Button>
               </div>
             )}
+            {canManageDsa && (
+              <div className="flex gap-2">
+                {dsa.status === "Active" && (
+                  <>
+                    <Button
+                      onClick={() => setDeactivatingDsa(dsa)}
+                      size="sm"
+                      variant="outline"
+                      className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 font-bold text-xs py-1.5 px-3 h-auto"
+                    >
+                      Deactivate
+                    </Button>
+                    <Button
+                      onClick={() => setBlacklistingDsa(dsa)}
+                      size="sm"
+                      variant="outline"
+                      className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 font-bold text-xs py-1.5 px-3 h-auto"
+                    >
+                      Blacklist
+                    </Button>
+                  </>
+                )}
+                {dsa.status === "Suspended" && (
+                  <>
+                    <Button
+                      onClick={() => setActivatingDsa(dsa)}
+                      size="sm"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 px-3 h-auto border-none"
+                    >
+                      Activate
+                    </Button>
+                    <Button
+                      onClick={() => setBlacklistingDsa(dsa)}
+                      size="sm"
+                      variant="outline"
+                      className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 font-bold text-xs py-1.5 px-3 h-auto"
+                    >
+                      Blacklist
+                    </Button>
+                  </>
+                )}
+                {dsa.status === "Blacklisted" && (
+                  <>
+                    <Button
+                      onClick={() => setUnblacklistingDsa(dsa)}
+                      size="sm"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 px-3 h-auto border-none"
+                    >
+                      Remove from Blacklist
+                    </Button>
+                    <Button
+                      onClick={() => setDeactivatingDsa(dsa)}
+                      size="sm"
+                      variant="outline"
+                      className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 font-bold text-xs py-1.5 px-3 h-auto"
+                    >
+                      Deactivate
+                    </Button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         }
         description={`${dsa.code} · ${dsa.businessType} · managed by ${dsa.manager}`}
@@ -907,7 +996,7 @@ export function DsaProfilePage({ id }: { id: string }) {
             { label: "KYC", value: "kyc" },
             { label: "Documents", value: "documents" },
             { label: "Performance Metrics", value: "performance" },
-            { label: "Products", value: "products" },
+            { label: "Manage Products", value: "products" },
             { label: "Applications", value: "apps" },
             { label: "Commission", value: "commission" },
             { label: "Audit Timeline", value: "audit" },
@@ -995,17 +1084,39 @@ export function DsaProfilePage({ id }: { id: string }) {
                         <div className="flex items-center gap-2">
                           <StatusBadge status={config.status} />
                           {currentUser?.role === "DSA Manager" ? (
-                            <Button
-                              onClick={() => {
-                                deleteItem("dsaProductConfigs", config.id);
-                                if (applicationProductFilter === config.product) setApplicationProductFilter("");
-                              }}
-                              size="sm"
-                              type="button"
-                              variant="danger"
-                            >
-                              Remove
-                            </Button>
+                            <>
+                              <Button
+                                onClick={() => {
+                                  updateItem("dsaProductConfigs", config.id, {
+                                    status: config.status === "Active" ? "Inactive" : "Active",
+                                  });
+                                  toast({
+                                    title: config.status === "Active" ? "Product Disabled" : "Product Enabled",
+                                    description: `${config.product} has been ${config.status === "Active" ? "disabled" : "re-enabled"} for this DSA.`,
+                                    variant: "success",
+                                  });
+                                }}
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                                className={config.status === "Active"
+                                  ? "text-amber-600 hover:bg-amber-50 border-amber-200 font-semibold text-xs"
+                                  : "text-emerald-600 hover:bg-emerald-50 border-emerald-200 font-semibold text-xs"}
+                              >
+                                {config.status === "Active" ? "Disable" : "Enable"}
+                              </Button>
+                              <Button
+                                onClick={() => {
+                                  deleteItem("dsaProductConfigs", config.id);
+                                  if (applicationProductFilter === config.product) setApplicationProductFilter("");
+                                }}
+                                size="sm"
+                                type="button"
+                                variant="danger"
+                              >
+                                Remove
+                              </Button>
+                            </>
                           ) : null}
                         </div>
                       </div>
@@ -1060,15 +1171,43 @@ export function DsaProfilePage({ id }: { id: string }) {
             </div>
           ) : null}
           {tab === "commission" ? (
-            <div className="space-y-3">
-              {commissions.map((commission) => (
-                <div className="grid gap-3 rounded-md border border-slate-100 p-3 md:grid-cols-4" key={commission.id}>
-                  <DetailItem label="Month" value={commission.month} />
-                  <DetailItem label="Product" value={commission.product} />
-                  <DetailItem label="Disbursed" value={formatCurrency(commission.disbursedAmount)} />
-                  <DetailItem label="Payout" value={formatCurrency(commission.payout)} />
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Commission Payouts</h3>
+                  <p className="text-xs text-slate-500">Monthly slab-based commission records for this partner.</p>
                 </div>
-              ))}
+                <Button
+                  type="button"
+                  onClick={() => {
+                    const month = new Date().toLocaleString("default", { month: "short", year: "numeric" });
+                    const total = commissions.reduce((sum, c) => sum + c.payout, 0);
+                    toast({
+                      title: "Invoice Generated & Sent",
+                      description: `Monthly invoice for ${month} (${formatCurrency(total)}) has been generated and dispatched to ${dsa.email}.`,
+                      variant: "success",
+                    });
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 h-auto flex items-center gap-2"
+                >
+                  <BadgeIndianRupee className="h-4 w-4" />
+                  Generate &amp; Send Monthly Invoice
+                </Button>
+              </div>
+              {commissions.length ? (
+                <div className="space-y-3">
+                  {commissions.map((commission) => (
+                    <div className="grid gap-3 rounded-md border border-slate-100 p-3 md:grid-cols-4" key={commission.id}>
+                      <DetailItem label="Month" value={commission.month} />
+                      <DetailItem label="Product" value={commission.product} />
+                      <DetailItem label="Disbursed" value={formatCurrency(commission.disbursedAmount)} />
+                      <DetailItem label="Payout" value={formatCurrency(commission.payout)} />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">No commission records found for this DSA yet.</p>
+              )}
             </div>
           ) : null}
           {tab === "audit" ? (
@@ -1179,6 +1318,138 @@ export function DsaProfilePage({ id }: { id: string }) {
               }}
             >
               Reject Partner
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        onClose={() => setDeactivatingDsa(null)}
+        open={Boolean(deactivatingDsa)}
+        title="Deactivate DSA Partner?"
+        width="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Are you sure you want to deactivate <span className="font-bold text-slate-800">{deactivatingDsa?.name}</span>?
+          </p>
+          <p className="text-xs text-slate-500">
+            This will suspend the DSA, disable their marketing journeys, and remove their name from dropdowns across the platform.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => setDeactivatingDsa(null)} type="button" variant="secondary">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (deactivatingDsa) {
+                  updateItem("dsas", deactivatingDsa.id, { status: "Suspended" });
+                  setDeactivatingDsa(null);
+                }
+              }}
+              type="button"
+              variant="danger"
+            >
+              Deactivate
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        onClose={() => setBlacklistingDsa(null)}
+        open={Boolean(blacklistingDsa)}
+        title="Blacklist DSA Partner?"
+        width="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Are you sure you want to blacklist <span className="font-bold text-slate-800">{blacklistingDsa?.name}</span>?
+          </p>
+          <p className="text-xs text-slate-500">
+            This will put the partner in the blacklisted DSAs list, suspend their marketing journeys, and disable their access.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => setBlacklistingDsa(null)} type="button" variant="secondary">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (blacklistingDsa) {
+                  updateItem("dsas", blacklistingDsa.id, { status: "Blacklisted" });
+                  setBlacklistingDsa(null);
+                }
+              }}
+              type="button"
+              variant="danger"
+            >
+              Blacklist
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        onClose={() => setActivatingDsa(null)}
+        open={Boolean(activatingDsa)}
+        title="Reactivate DSA Partner?"
+        width="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Are you sure you want to reactivate <span className="font-bold text-slate-800">{activatingDsa?.name}</span>?
+          </p>
+          <p className="text-xs text-slate-500">
+            This will set the DSA's status to Active and restore their availability in dropdowns and marketing journeys.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => setActivatingDsa(null)} type="button" variant="secondary">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (activatingDsa) {
+                  updateItem("dsas", activatingDsa.id, { status: "Active" });
+                  setActivatingDsa(null);
+                }
+              }}
+              type="button"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+            >
+              Activate
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        onClose={() => setUnblacklistingDsa(null)}
+        open={Boolean(unblacklistingDsa)}
+        title="Remove DSA Partner from Blacklist?"
+        width="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Are you sure you want to remove <span className="font-bold text-slate-800">{unblacklistingDsa?.name}</span> from the blacklist?
+          </p>
+          <p className="text-xs text-slate-500">
+            This will restore their status to Active and make them available in dropdowns and marketing journeys again.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => setUnblacklistingDsa(null)} type="button" variant="secondary">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (unblacklistingDsa) {
+                  updateItem("dsas", unblacklistingDsa.id, { status: "Active" });
+                  setUnblacklistingDsa(null);
+                }
+              }}
+              type="button"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+            >
+              Remove and Activate
             </Button>
           </div>
         </div>
