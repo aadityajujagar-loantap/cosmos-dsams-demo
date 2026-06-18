@@ -8,6 +8,7 @@ export type BusinessType =
 export type DsaStatus =
   | "Draft"
   | "Submitted"
+  | "Pending Credit Approval"
   | "KYC Pending"
   | "Active"
   | "Suspended"
@@ -65,6 +66,9 @@ export type RuleStatus = "Active" | "Inactive" | "Draft";
 export type RuleOperator = "AND" | "OR";
 export type RuleConditionOperator = ">" | ">=" | "<" | "<=" | "=" | "contains";
 
+export type CibilScoreBand = "Above 800" | "751-800" | "700-750" | "Below 700";
+export type GenderFilter = "All" | "Male" | "Female";
+
 export type ApprovalStage =
   | "Maker"
   | "Checker"
@@ -79,6 +83,8 @@ export type ApprovalStatus =
 
 export type UserRole =
   | "Admin"
+  | "DSA Credit"
+  | "Branch User"
   | "DSA Partner"
   | "Customer";
 
@@ -234,6 +240,19 @@ export interface BreRule extends Entity {
   mandatory?: boolean;
 }
 
+export interface LoanSlab extends Entity {
+  schemeName: string;
+  product: Product;
+  maxLoanAmount: number;
+  cibilScoreBand: CibilScoreBand;
+  gender: GenderFilter;
+  roiFloating: number;
+  roiFixed: number;
+  maxLoanPeriodMonths: number;
+  createdAt: string;
+  createdBy: string;
+}
+
 export interface VerificationCheck extends Entity {
   checkId: string;
   applicationId: string;
@@ -328,6 +347,7 @@ export interface MockStore {
   leads: Lead[];
   applications: Application[];
   breRules: BreRule[];
+  loanSlabs: LoanSlab[];
   verificationChecks: VerificationCheck[];
   documents: DocumentRecord[];
   approvals: ApprovalItem[];
@@ -347,6 +367,7 @@ export interface EntityMap {
   leads: Lead;
   applications: Application;
   breRules: BreRule;
+  loanSlabs: LoanSlab;
   verificationChecks: VerificationCheck;
   documents: DocumentRecord;
   approvals: ApprovalItem;

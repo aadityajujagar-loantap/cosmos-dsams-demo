@@ -7,14 +7,17 @@ import {
   AuditLog,
   BreRule,
   BusinessType,
+  CibilScoreBand,
   Commission,
   DocumentRecord,
   DocumentType,
   Dsa,
   DsaProductConfig,
   DsaStatus,
+  GenderFilter,
   Lead,
   LeadStatus,
+  LoanSlab,
   MockStore,
   Notification,
   Product,
@@ -104,6 +107,7 @@ const dsaStatuses: DsaStatus[] = [
   "Active",
   "KYC Pending",
   "Submitted",
+  "Pending Credit Approval",
   "Suspended",
   "Rejected",
 ];
@@ -126,12 +130,16 @@ const verificationStatuses: VerificationStatus[] = [
 
 const roles: UserRole[] = [
   "Admin",
+  "DSA Credit",
+  "Branch User",
   "DSA Partner",
   "Customer",
 ];
 
 const managers = [
   DEMO_USERS.admin.name,
+  DEMO_USERS.credit.name,
+  DEMO_USERS.branch.name,
   DEMO_USERS.dsa.name,
 ];
 
@@ -234,9 +242,27 @@ export function createMockStore(): MockStore {
       status: "Active",
     },
     {
+      email: DEMO_USERS.credit.email,
+      id: "usr-credit",
+      lastLogin: isoDay(1),
+      name: DEMO_USERS.credit.name,
+      region: "West",
+      role: "DSA Credit",
+      status: "Active",
+    },
+    {
+      email: DEMO_USERS.branch.email,
+      id: "usr-branch",
+      lastLogin: isoDay(2),
+      name: DEMO_USERS.branch.name,
+      region: "West",
+      role: "Branch User",
+      status: "Active",
+    },
+    {
       email: DEMO_USERS.dsa.email,
       id: "usr-dsa",
-      lastLogin: isoDay(1),
+      lastLogin: isoDay(3),
       name: DEMO_USERS.dsa.name,
       region: "West",
       role: "DSA Partner",
@@ -245,7 +271,7 @@ export function createMockStore(): MockStore {
     {
       email: DEMO_USERS.user.email,
       id: "usr-user",
-      lastLogin: isoDay(2),
+      lastLogin: isoDay(4),
       name: DEMO_USERS.user.name,
       region: "West",
       role: "Customer",
@@ -282,7 +308,12 @@ export function createMockStore(): MockStore {
       email: `partner${index + 1}@${name.toLowerCase().replaceAll(" ", "")}.example`,
       gst: `27${pan(index).slice(0, 10)}1Z${index % 9}`,
       id: `dsa-${index + 1}`,
-      manager: index % 8 === 0 ? DEMO_USERS.dsa.name : DEMO_USERS.admin.name,
+      manager:
+        index % 11 === 0
+          ? DEMO_USERS.branch.name
+          : index % 8 === 0
+            ? DEMO_USERS.dsa.name
+            : DEMO_USERS.admin.name,
       mobile: mobile(index),
       monthlyLeads: 12 + ((index * 5) % 62),
       name,
@@ -575,11 +606,17 @@ export function createMockStore(): MockStore {
         id: `role-${roleIndex}-${moduleIndex}`,
         module,
         permissions: {
-          Approve: role === "Admin" || (role === "DSA Partner" && module === "DSA"),
-          Create: role !== "Customer" || module === "Leads" || module === "Applications",
+          Approve: role === "Admin" || role === "DSA Credit" || (role === "DSA Partner" && module === "DSA"),
+          Create:
+            role === "Branch User"
+              ? module === "Dashboard" || module === "DSA"
+              : role !== "Customer" || module === "Leads" || module === "Applications",
           Delete: role === "Admin",
-          Edit: role !== "Customer",
-          View: role === "Admin" || module !== "Admin",
+          Edit: role !== "Customer" && (role !== "Branch User" || module === "DSA"),
+          View:
+            role === "Admin" ||
+            role === "DSA Credit" ||
+            (role === "Branch User" ? module === "Dashboard" || module === "DSA" : module !== "Admin"),
         },
         role,
       }),
@@ -645,6 +682,66 @@ export function createMockStore(): MockStore {
     value: value as string,
   }));
 
+  // Real-world slab data based on 2025-26 Indian banking market rates
+  // Sources: SBI, HDFC, ICICI, Cosmos Bank published rate cards
+  const loanSlabs: LoanSlab[] = [
+    // ── HOME LOAN — Up to Rs. 35 Lakhs ──────────────────────────────────
+    { id: "slab-hl-1-1", schemeName: "Up to Rs. 35 Lakhs", product: "Home Loan", maxLoanAmount: 3500000, cibilScoreBand: "Above 800", gender: "All", roiFloating: 8.15, roiFixed: 9.20, maxLoanPeriodMonths: 240, createdAt: isoDay(1), createdBy: DEMO_USERS.admin.name },
+    { id: "slab-hl-1-2", schemeName: "Up to Rs. 35 Lakhs", product: "Home Loan", maxLoanAmount: 3500000, cibilScoreBand: "751-800", gender: "All", roiFloating: 8.35, roiFixed: 9.40, maxLoanPeriodMonths: 240, createdAt: isoDay(1), createdBy: DEMO_USERS.admin.name },
+    { id: "slab-hl-1-3", schemeName: "Up to Rs. 35 Lakhs", product: "Home Loan", maxLoanAmount: 3500000, cibilScoreBand: "700-750", gender: "All", roiFloating: 8.55, roiFixed: 9.65, maxLoanPeriodMonths: 240, createdAt: isoDay(1), createdBy: DEMO_USERS.admin.name },
+    { id: "slab-hl-1-4", schemeName: "Up to Rs. 35 Lakhs", product: "Home Loan", maxLoanAmount: 3500000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 9.05, roiFixed: 10.15, maxLoanPeriodMonths: 240, createdAt: isoDay(1), createdBy: DEMO_USERS.admin.name },
+    // ── HOME LOAN — Rs. 35 to Rs. 70 Lakhs ─────────────────────────────
+    { id: "slab-hl-2-1", schemeName: "Rs. 35 to Rs. 70 Lakhs", product: "Home Loan", maxLoanAmount: 7000000, cibilScoreBand: "Above 800", gender: "All", roiFloating: 8.20, roiFixed: 9.25, maxLoanPeriodMonths: 240, createdAt: isoDay(2), createdBy: DEMO_USERS.admin.name },
+    { id: "slab-hl-2-2", schemeName: "Rs. 35 to Rs. 70 Lakhs", product: "Home Loan", maxLoanAmount: 7000000, cibilScoreBand: "751-800", gender: "All", roiFloating: 8.40, roiFixed: 9.45, maxLoanPeriodMonths: 240, createdAt: isoDay(2), createdBy: DEMO_USERS.admin.name },
+    { id: "slab-hl-2-3", schemeName: "Rs. 35 to Rs. 70 Lakhs", product: "Home Loan", maxLoanAmount: 7000000, cibilScoreBand: "700-750", gender: "All", roiFloating: 8.60, roiFixed: 9.70, maxLoanPeriodMonths: 240, createdAt: isoDay(2), createdBy: DEMO_USERS.admin.name },
+    { id: "slab-hl-2-4", schemeName: "Rs. 35 to Rs. 70 Lakhs", product: "Home Loan", maxLoanAmount: 7000000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 9.15, roiFixed: 10.20, maxLoanPeriodMonths: 240, createdAt: isoDay(2), createdBy: DEMO_USERS.admin.name },
+    // ── HOME LOAN — Above Rs. 70 Lakhs ──────────────────────────────────
+    { id: "slab-hl-3-1", schemeName: "Above Rs. 70 Lakhs", product: "Home Loan", maxLoanAmount: 15000000, cibilScoreBand: "Above 800", gender: "All", roiFloating: 8.25, roiFixed: 9.30, maxLoanPeriodMonths: 360, createdAt: isoDay(3), createdBy: DEMO_USERS.admin.name },
+    { id: "slab-hl-3-2", schemeName: "Above Rs. 70 Lakhs", product: "Home Loan", maxLoanAmount: 15000000, cibilScoreBand: "751-800", gender: "All", roiFloating: 8.45, roiFixed: 9.50, maxLoanPeriodMonths: 360, createdAt: isoDay(3), createdBy: DEMO_USERS.admin.name },
+    { id: "slab-hl-3-3", schemeName: "Above Rs. 70 Lakhs", product: "Home Loan", maxLoanAmount: 15000000, cibilScoreBand: "700-750", gender: "All", roiFloating: 8.65, roiFixed: 9.75, maxLoanPeriodMonths: 360, createdAt: isoDay(3), createdBy: DEMO_USERS.admin.name },
+    { id: "slab-hl-3-4", schemeName: "Above Rs. 70 Lakhs", product: "Home Loan", maxLoanAmount: 15000000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 9.25, roiFixed: 10.35, maxLoanPeriodMonths: 360, createdAt: isoDay(3), createdBy: DEMO_USERS.admin.name },
+    // ── LOAN AGAINST PROPERTY — Residential ─────────────────────────────
+    { id: "slab-lap-1-1", schemeName: "Residential LAP", product: "Loan Against Property", maxLoanAmount: 10000000, cibilScoreBand: "Above 800", gender: "All", roiFloating: 9.00, roiFixed: 10.25, maxLoanPeriodMonths: 180, createdAt: isoDay(4), createdBy: DEMO_USERS.credit.name },
+    { id: "slab-lap-1-2", schemeName: "Residential LAP", product: "Loan Against Property", maxLoanAmount: 10000000, cibilScoreBand: "751-800", gender: "All", roiFloating: 9.50, roiFixed: 10.75, maxLoanPeriodMonths: 180, createdAt: isoDay(4), createdBy: DEMO_USERS.credit.name },
+    { id: "slab-lap-1-3", schemeName: "Residential LAP", product: "Loan Against Property", maxLoanAmount: 10000000, cibilScoreBand: "700-750", gender: "All", roiFloating: 10.00, roiFixed: 11.25, maxLoanPeriodMonths: 180, createdAt: isoDay(4), createdBy: DEMO_USERS.credit.name },
+    { id: "slab-lap-1-4", schemeName: "Residential LAP", product: "Loan Against Property", maxLoanAmount: 10000000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 11.00, roiFixed: 12.50, maxLoanPeriodMonths: 180, createdAt: isoDay(4), createdBy: DEMO_USERS.credit.name },
+    // ── LOAN AGAINST PROPERTY — Commercial ──────────────────────────────
+    { id: "slab-lap-2-1", schemeName: "Commercial LAP", product: "Loan Against Property", maxLoanAmount: 20000000, cibilScoreBand: "Above 800", gender: "All", roiFloating: 9.50, roiFixed: 10.75, maxLoanPeriodMonths: 120, createdAt: isoDay(5), createdBy: DEMO_USERS.credit.name },
+    { id: "slab-lap-2-2", schemeName: "Commercial LAP", product: "Loan Against Property", maxLoanAmount: 20000000, cibilScoreBand: "751-800", gender: "All", roiFloating: 10.00, roiFixed: 11.25, maxLoanPeriodMonths: 120, createdAt: isoDay(5), createdBy: DEMO_USERS.credit.name },
+    { id: "slab-lap-2-3", schemeName: "Commercial LAP", product: "Loan Against Property", maxLoanAmount: 20000000, cibilScoreBand: "700-750", gender: "All", roiFloating: 10.75, roiFixed: 12.00, maxLoanPeriodMonths: 120, createdAt: isoDay(5), createdBy: DEMO_USERS.credit.name },
+    { id: "slab-lap-2-4", schemeName: "Commercial LAP", product: "Loan Against Property", maxLoanAmount: 20000000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 12.00, roiFixed: 13.50, maxLoanPeriodMonths: 120, createdAt: isoDay(5), createdBy: DEMO_USERS.credit.name },
+    // ── PERSONAL LOAN — Salaried ─────────────────────────────────────────
+    { id: "slab-pl-1-1", schemeName: "Salaried Gold", product: "Personal Loan", maxLoanAmount: 1500000, cibilScoreBand: "Above 800", gender: "All", roiFloating: 10.50, roiFixed: 11.75, maxLoanPeriodMonths: 60, createdAt: isoDay(6), createdBy: DEMO_USERS.credit.name },
+    { id: "slab-pl-1-2", schemeName: "Salaried Gold", product: "Personal Loan", maxLoanAmount: 1500000, cibilScoreBand: "751-800", gender: "All", roiFloating: 12.00, roiFixed: 13.25, maxLoanPeriodMonths: 60, createdAt: isoDay(6), createdBy: DEMO_USERS.credit.name },
+    { id: "slab-pl-1-3", schemeName: "Salaried Gold", product: "Personal Loan", maxLoanAmount: 1500000, cibilScoreBand: "700-750", gender: "All", roiFloating: 14.50, roiFixed: 15.75, maxLoanPeriodMonths: 60, createdAt: isoDay(6), createdBy: DEMO_USERS.credit.name },
+    { id: "slab-pl-1-4", schemeName: "Salaried Gold", product: "Personal Loan", maxLoanAmount: 1500000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 18.00, roiFixed: 19.50, maxLoanPeriodMonths: 48, createdAt: isoDay(6), createdBy: DEMO_USERS.credit.name },
+    // ── PERSONAL LOAN — Self Employed ────────────────────────────────────
+    { id: "slab-pl-2-1", schemeName: "Self-Employed Premier", product: "Personal Loan", maxLoanAmount: 2500000, cibilScoreBand: "Above 800", gender: "All", roiFloating: 11.00, roiFixed: 12.50, maxLoanPeriodMonths: 60, createdAt: isoDay(7), createdBy: DEMO_USERS.credit.name },
+    { id: "slab-pl-2-2", schemeName: "Self-Employed Premier", product: "Personal Loan", maxLoanAmount: 2500000, cibilScoreBand: "751-800", gender: "All", roiFloating: 13.00, roiFixed: 14.50, maxLoanPeriodMonths: 60, createdAt: isoDay(7), createdBy: DEMO_USERS.credit.name },
+    { id: "slab-pl-2-3", schemeName: "Self-Employed Premier", product: "Personal Loan", maxLoanAmount: 2500000, cibilScoreBand: "700-750", gender: "All", roiFloating: 16.00, roiFixed: 17.50, maxLoanPeriodMonths: 60, createdAt: isoDay(7), createdBy: DEMO_USERS.credit.name },
+    { id: "slab-pl-2-4", schemeName: "Self-Employed Premier", product: "Personal Loan", maxLoanAmount: 2500000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 20.00, roiFixed: 22.00, maxLoanPeriodMonths: 36, createdAt: isoDay(7), createdBy: DEMO_USERS.credit.name },
+    // ── BUSINESS LOAN — MSME ─────────────────────────────────────────────
+    { id: "slab-bl-1-1", schemeName: "MSME Business Loan", product: "Business Loan", maxLoanAmount: 5000000, cibilScoreBand: "Above 800", gender: "All", roiFloating: 10.00, roiFixed: 11.25, maxLoanPeriodMonths: 84, createdAt: isoDay(8), createdBy: DEMO_USERS.admin.name },
+    { id: "slab-bl-1-2", schemeName: "MSME Business Loan", product: "Business Loan", maxLoanAmount: 5000000, cibilScoreBand: "751-800", gender: "All", roiFloating: 11.50, roiFixed: 12.75, maxLoanPeriodMonths: 84, createdAt: isoDay(8), createdBy: DEMO_USERS.admin.name },
+    { id: "slab-bl-1-3", schemeName: "MSME Business Loan", product: "Business Loan", maxLoanAmount: 5000000, cibilScoreBand: "700-750", gender: "All", roiFloating: 13.00, roiFixed: 14.50, maxLoanPeriodMonths: 60, createdAt: isoDay(8), createdBy: DEMO_USERS.admin.name },
+    { id: "slab-bl-1-4", schemeName: "MSME Business Loan", product: "Business Loan", maxLoanAmount: 5000000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 16.00, roiFixed: 18.00, maxLoanPeriodMonths: 48, createdAt: isoDay(8), createdBy: DEMO_USERS.admin.name },
+    // ── BUSINESS LOAN — Larger Enterprises ───────────────────────────────
+    { id: "slab-bl-2-1", schemeName: "Enterprise Growth Loan", product: "Business Loan", maxLoanAmount: 20000000, cibilScoreBand: "Above 800", gender: "All", roiFloating: 9.50, roiFixed: 10.75, maxLoanPeriodMonths: 120, createdAt: isoDay(9), createdBy: DEMO_USERS.admin.name },
+    { id: "slab-bl-2-2", schemeName: "Enterprise Growth Loan", product: "Business Loan", maxLoanAmount: 20000000, cibilScoreBand: "751-800", gender: "All", roiFloating: 10.75, roiFixed: 12.00, maxLoanPeriodMonths: 120, createdAt: isoDay(9), createdBy: DEMO_USERS.admin.name },
+    { id: "slab-bl-2-3", schemeName: "Enterprise Growth Loan", product: "Business Loan", maxLoanAmount: 20000000, cibilScoreBand: "700-750", gender: "All", roiFloating: 12.25, roiFixed: 13.75, maxLoanPeriodMonths: 96, createdAt: isoDay(9), createdBy: DEMO_USERS.admin.name },
+    { id: "slab-bl-2-4", schemeName: "Enterprise Growth Loan", product: "Business Loan", maxLoanAmount: 20000000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 15.00, roiFixed: 17.00, maxLoanPeriodMonths: 72, createdAt: isoDay(9), createdBy: DEMO_USERS.admin.name },
+    // ── AUTO LOAN — New Vehicle ───────────────────────────────────────────
+    { id: "slab-al-1-1", schemeName: "New Vehicle Loan", product: "Auto Loan", maxLoanAmount: 2500000, cibilScoreBand: "Above 800", gender: "All", roiFloating: 7.45, roiFixed: 8.50, maxLoanPeriodMonths: 84, createdAt: isoDay(10), createdBy: DEMO_USERS.credit.name },
+    { id: "slab-al-1-2", schemeName: "New Vehicle Loan", product: "Auto Loan", maxLoanAmount: 2500000, cibilScoreBand: "751-800", gender: "All", roiFloating: 8.00, roiFixed: 9.00, maxLoanPeriodMonths: 84, createdAt: isoDay(10), createdBy: DEMO_USERS.credit.name },
+    { id: "slab-al-1-3", schemeName: "New Vehicle Loan", product: "Auto Loan", maxLoanAmount: 2500000, cibilScoreBand: "700-750", gender: "All", roiFloating: 8.75, roiFixed: 9.75, maxLoanPeriodMonths: 60, createdAt: isoDay(10), createdBy: DEMO_USERS.credit.name },
+    { id: "slab-al-1-4", schemeName: "New Vehicle Loan", product: "Auto Loan", maxLoanAmount: 2500000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 10.25, roiFixed: 11.50, maxLoanPeriodMonths: 60, createdAt: isoDay(10), createdBy: DEMO_USERS.credit.name },
+    // ── AUTO LOAN — Used Vehicle ─────────────────────────────────────────
+    { id: "slab-al-2-1", schemeName: "Pre-Owned Vehicle Loan", product: "Auto Loan", maxLoanAmount: 1000000, cibilScoreBand: "Above 800", gender: "All", roiFloating: 10.50, roiFixed: 11.75, maxLoanPeriodMonths: 60, createdAt: isoDay(11), createdBy: DEMO_USERS.credit.name },
+    { id: "slab-al-2-2", schemeName: "Pre-Owned Vehicle Loan", product: "Auto Loan", maxLoanAmount: 1000000, cibilScoreBand: "751-800", gender: "All", roiFloating: 12.00, roiFixed: 13.25, maxLoanPeriodMonths: 60, createdAt: isoDay(11), createdBy: DEMO_USERS.credit.name },
+    { id: "slab-al-2-3", schemeName: "Pre-Owned Vehicle Loan", product: "Auto Loan", maxLoanAmount: 1000000, cibilScoreBand: "700-750", gender: "All", roiFloating: 14.00, roiFixed: 15.50, maxLoanPeriodMonths: 48, createdAt: isoDay(11), createdBy: DEMO_USERS.credit.name },
+    { id: "slab-al-2-4", schemeName: "Pre-Owned Vehicle Loan", product: "Auto Loan", maxLoanAmount: 1000000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 16.00, roiFixed: 18.00, maxLoanPeriodMonths: 36, createdAt: isoDay(11), createdBy: DEMO_USERS.credit.name },
+  ];
+
   return {
     applications,
     approvals,
@@ -655,6 +752,7 @@ export function createMockStore(): MockStore {
     dsas,
     dsaProductConfigs,
     leads,
+    loanSlabs,
     notifications,
     roles: rolePermissions,
     settings,

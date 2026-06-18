@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Eye, FileUp, GitBranch, Plus, RotateCcw, XCircle } from "lucide-react";
+import { CheckCircle2, Eye, FileUp, GitBranch, Layers, Plus, RotateCcw, Shield, XCircle } from "lucide-react";
 import { useState } from "react";
 
 import { ActionPair, DetailGrid, DetailItem, PageHeader } from "@/components/module";
@@ -24,8 +24,11 @@ import {
   ApprovalStage,
   ApprovalStatus,
   BreRule,
+  CibilScoreBand,
   DocumentRecord,
   DocumentType,
+  GenderFilter,
+  LoanSlab,
   Product,
   RuleCondition,
   RuleOperator,
@@ -168,109 +171,248 @@ function RuleBuilder({
   );
 }
 
-export function BreRulesPage() {
-  const { createItem, deleteItem, store, updateItem } = useMockStore();
-  const [creating, setCreating] = useState(false);
-  const [editing, setEditing] = useState<BreRule | null>(null);
-  const [conditions, setConditions] = useState<RuleCondition[]>([
-    { field: "Age", id: "new-cond-1", operator: ">", value: "21" },
-    { field: "Salary", id: "new-cond-2", operator: ">", value: "25000" },
-  ]);
-  const [operator, setOperator] = useState<RuleOperator>("AND");
+const cibilBands: CibilScoreBand[] = ["Above 800", "751-800", "700-750", "Below 700"];
+const genderOptions: GenderFilter[] = ["All", "Male", "Female"];
 
-  const columns: Column<BreRule>[] = [
-    { cell: (item) => <span className="font-semibold text-slate-950">{item.ruleName}</span>, header: "Rule", key: "ruleName", sortable: true, sortValue: (item) => item.ruleName },
-    { cell: (item) => item.ruleCode, header: "Code", key: "ruleCode" },
-    { cell: (item) => item.product, header: "Product", key: "product" },
-    { cell: (item) => item.priority, header: "Priority", key: "priority", sortable: true, sortValue: (item) => item.priority },
-    { cell: (item) => <StatusBadge status={item.status} />, header: "Status", key: "status" },
-    { cell: (item) => `${item.operator} · ${item.conditions.length} conditions`, header: "Builder", key: "builder" },
-    {
-      cell: (item) => (
-        <Badge tone={item.mandatory ? "rose" : "slate"}>
-          {item.mandatory ? "Mandatory" : "Optional"}
-        </Badge>
-      ),
-      header: "Mandatory",
-      key: "mandatory",
-    },
-  ];
+const cibilBandStyle: Record<CibilScoreBand, { pill: string; row: string; dot: string }> = {
+  "Above 800": { pill: "bg-emerald-50 text-emerald-700 border-emerald-200 ring-emerald-100", row: "hover:bg-emerald-50/30", dot: "bg-emerald-500" },
+  "751-800":   { pill: "bg-sky-50 text-sky-700 border-sky-200 ring-sky-100",             row: "hover:bg-sky-50/30",     dot: "bg-sky-500" },
+  "700-750":   { pill: "bg-amber-50 text-amber-700 border-amber-200 ring-amber-100",     row: "hover:bg-amber-50/30",  dot: "bg-amber-500" },
+  "Below 700": { pill: "bg-rose-50 text-rose-700 border-rose-200 ring-rose-100",         row: "hover:bg-rose-50/30",   dot: "bg-rose-500" },
+};
+
+const productEmoji: Record<string, string> = {
+  "Home Loan": "🏠",
+  "Loan Against Property": "🏢",
+  "Personal Loan": "👤",
+  "Business Loan": "💼",
+  "Auto Loan": "🚗",
+};
+
+const slabFormFields: FieldConfig<LoanSlab>[] = [
+  { label: "Scheme name", name: "schemeName", required: true },
+  { label: "Product", name: "product", options: products, required: true, type: "select" },
+  { label: "Max loan amount (₹)", name: "maxLoanAmount", required: true, type: "number" },
+  { label: "CIBIL / Equifax score band", name: "cibilScoreBand", options: cibilBands, required: true, type: "select" },
+  { label: "Gender", name: "gender", options: genderOptions, required: true, type: "select" },
+  { label: "ROI Floating (%)", name: "roiFloating", required: true, type: "number" },
+  { label: "ROI Fixed (%)", name: "roiFixed", required: true, type: "number" },
+  { label: "Max loan period (months)", name: "maxLoanPeriodMonths", required: true, type: "number" },
+];
+
+function formatLoanAmount(amount: number): string {
+  if (amount >= 10000000) return `₹${(amount / 10000000).toFixed(1)} Cr`;
+  if (amount >= 100000) return `₹${(amount / 100000).toFixed(0)} Lakhs`;
+  return `₹${amount.toLocaleString("en-IN")}`;
+}
+
+function RoiBar({ value, min, max, color }: { value: number; min: number; max: number; color: string }) {
+  const pct = Math.round(((value - min) / (max - min)) * 100);
+  return (
+    <div className="flex items-center gap-2">
+      <span className={`w-11 text-right text-sm font-bold tabular-nums ${color}`}>{value.toFixed(2)}%</span>
+      <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100">
+        <div className={`h-full rounded-full ${color.replace("text-", "bg-")} transition-all`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function SlabsTab() {
+  const { createItem, deleteItem, store, updateItem, currentUser } = useMockStore();
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<LoanSlab | null>(null);
+  const [productFilter, setProductFilter] = useState<string>("");
+  const [bandFilter, setBandFilter] = useState<string>("");
+
+  const canEdit = currentUser?.role === "DSA Manager" || currentUser?.role === "DSA Credit";
+
+  const rows = store.loanSlabs.filter(
+    (s) =>
+      (!productFilter || s.product === productFilter) &&
+      (!bandFilter || s.cibilScoreBand === bandFilter),
+  );
+
+  const grouped = rows.reduce<Record<string, LoanSlab[]>>((acc, slab) => {
+    const key = `${slab.product}|||${slab.schemeName}`;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(slab);
+    return acc;
+  }, {});
+
+  function handleCreate(value: Partial<LoanSlab>) {
+    createItem("loanSlabs", {
+      id: makeId("slab"),
+      schemeName: String(value.schemeName ?? "New Scheme"),
+      product: (value.product as Product) || "Home Loan",
+      maxLoanAmount: Number(value.maxLoanAmount ?? 5000000),
+      cibilScoreBand: (value.cibilScoreBand as CibilScoreBand) || "700-750",
+      gender: (value.gender as GenderFilter) || "All",
+      roiFloating: Number(value.roiFloating ?? 8.5),
+      roiFixed: Number(value.roiFixed ?? 9.5),
+      maxLoanPeriodMonths: Number(value.maxLoanPeriodMonths ?? 240),
+      createdAt: new Date().toISOString(),
+      createdBy: currentUser?.name ?? DEMO_USERS.admin.name,
+    });
+    setCreating(false);
+  }
+
+  function handleEdit(value: Partial<LoanSlab>) {
+    if (!editing) return;
+    updateItem("loanSlabs", editing.id, {
+      ...value,
+      maxLoanAmount: Number(value.maxLoanAmount ?? editing.maxLoanAmount),
+      roiFloating: Number(value.roiFloating ?? editing.roiFloating),
+      roiFixed: Number(value.roiFixed ?? editing.roiFixed),
+      maxLoanPeriodMonths: Number(value.maxLoanPeriodMonths ?? editing.maxLoanPeriodMonths),
+    });
+    setEditing(null);
+  }
 
   return (
     <div>
-      <PageHeader
-        action={<Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" />New Rule</Button>}
-        description="Configure product eligibility logic with priority, status, and a nested visual rule builder."
-        eyebrow="Business rule engine"
-        title="BRE Configuration"
-      />
-      <DataTable
-        actions={(item) => (
-          <div className="flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                updateItem("breRules", item.id, { mandatory: !item.mandatory });
-              }}
-              className={`shrink-0 whitespace-nowrap rounded-md border px-2.5 py-1 text-[11px] font-semibold transition ${
-                item.mandatory
-                  ? "border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100"
-                  : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-              }`}
-            >
-              {item.mandatory ? "Optional" : "Mandatory"}
-            </button>
-            <ActionPair onDelete={() => deleteItem("breRules", item.id)} onEdit={() => setEditing(item)} />
-          </div>
+      {/* Read-only notice */}
+      {!canEdit && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-700">
+          <Shield className="h-4 w-4 shrink-0" />
+          <span>Read-only — contact a <strong>DSA Manager</strong> or <strong>DSA Credit</strong> to modify slabs.</span>
+        </div>
+      )}
+
+      {/* Toolbar */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-2">
+          <select
+            className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={productFilter}
+            onChange={(e) => setProductFilter(e.target.value)}
+          >
+            <option value="">All products</option>
+            {products.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+          <select
+            className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={bandFilter}
+            onChange={(e) => setBandFilter(e.target.value)}
+          >
+            <option value="">All CIBIL bands</option>
+            {cibilBands.map((b) => <option key={b} value={b}>{b}</option>)}
+          </select>
+        </div>
+        {canEdit && (
+          <Button onClick={() => setCreating(true)} id="add-slab-btn">
+            <Plus className="h-4 w-4" />Add Slab
+          </Button>
         )}
-        columns={columns}
-        items={store.breRules}
-        searchKeys={["ruleName", "ruleCode", "product", "outcome"]}
-      />
-      <Modal onClose={() => setCreating(false)} open={creating} title="Create BRE rule" width="max-w-4xl">
-        <RuleBuilder conditions={conditions} operator={operator} setConditions={setConditions} setOperator={setOperator} />
-        <RecordForm<BreRule>
-          fields={ruleFields}
-          initialValue={{ outcome: "Route to risk", product: "Personal Loan", status: "Draft" }}
+      </div>
+
+      {/* Grouped table */}
+      {Object.keys(grouped).length === 0 ? (
+        <div className="grid min-h-48 place-items-center rounded-xl border border-dashed border-slate-200 bg-slate-50">
+          <div className="text-center">
+            <Layers className="mx-auto h-8 w-8 text-slate-300" />
+            <p className="mt-2 text-sm font-semibold text-slate-600">No slabs match the current filter</p>
+          </div>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="bg-[#1a2744] text-left text-xs font-semibold uppercase tracking-wide text-white">
+                <th className="px-4 py-3">Scheme / Product</th>
+                <th className="px-4 py-3">Max Loan</th>
+                <th className="px-4 py-3">CIBIL Band</th>
+                <th className="px-4 py-3">Gender</th>
+                <th className="px-4 py-3 text-orange-300">ROI Float.</th>
+                <th className="px-4 py-3 text-orange-300">ROI Fixed</th>
+                <th className="px-4 py-3">Max Tenure</th>
+                {canEdit && <th className="px-4 py-3 text-right">Actions</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {Object.entries(grouped).map(([groupKey, slabs]) => {
+                const [productName, schemeName] = groupKey.split("|||");
+                return (
+                  <>
+                    <tr key={`h-${groupKey}`} className="bg-slate-50">
+                      <td colSpan={canEdit ? 8 : 7} className="px-4 py-1.5">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+                          <Layers className="h-3 w-3 text-blue-500" />
+                          {schemeName}
+                          <span className="font-normal text-slate-400">— {productName}</span>
+                        </span>
+                      </td>
+                    </tr>
+                    {slabs.map((slab) => {
+                      const style = cibilBandStyle[slab.cibilScoreBand];
+                      return (
+                        <tr key={slab.id} className="transition-colors hover:bg-slate-50/70">
+                          <td className="px-4 py-2.5 text-slate-500 text-xs">{slab.schemeName}</td>
+                          <td className="px-4 py-2.5 font-medium text-slate-700">{formatLoanAmount(slab.maxLoanAmount)}</td>
+                          <td className="px-4 py-2.5">
+                            <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold ${style.pill}`}>
+                              <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+                              {slab.cibilScoreBand}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-xs text-slate-500">{slab.gender}</td>
+                          <td className="px-4 py-2.5 font-semibold text-blue-600 tabular-nums">{slab.roiFloating.toFixed(2)}%</td>
+                          <td className="px-4 py-2.5 font-semibold text-indigo-600 tabular-nums">{slab.roiFixed.toFixed(2)}%</td>
+                          <td className="px-4 py-2.5 text-xs text-slate-500">{slab.maxLoanPeriodMonths} mo</td>
+                          {canEdit && (
+                            <td className="px-4 py-2.5 text-right">
+                              <ActionPair onDelete={() => deleteItem("loanSlabs", slab.id)} onEdit={() => setEditing(slab)} />
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <Modal onClose={() => setCreating(false)} open={creating} title="Add new slab" width="max-w-2xl">
+        <RecordForm<LoanSlab>
+          fields={slabFormFields}
+          initialValue={{ product: "Home Loan", cibilScoreBand: "700-750", gender: "All", maxLoanPeriodMonths: 240 }}
           onCancel={() => setCreating(false)}
-          onSubmit={(value) => {
-            createItem("breRules", newRule(value, conditions, operator));
-            setCreating(false);
-          }}
-          submitLabel="Create rule"
+          onSubmit={handleCreate}
+          submitLabel="Add slab"
         />
       </Modal>
-      <Modal onClose={() => setEditing(null)} open={Boolean(editing)} title="Edit BRE rule" width="max-w-4xl">
+      <Modal onClose={() => setEditing(null)} open={Boolean(editing)} title="Edit slab" width="max-w-2xl">
         {editing ? (
-          <>
-            <RuleBuilder
-              conditions={editing.conditions}
-              operator={editing.operator}
-              setConditions={(next) => setEditing({ ...editing, conditions: next })}
-              setOperator={(next) => setEditing({ ...editing, operator: next })}
-            />
-            <RecordForm<BreRule>
-              fields={ruleFields}
-              initialValue={editing}
-              onCancel={() => setEditing(null)}
-              onSubmit={(value) => {
-                updateItem("breRules", editing.id, {
-                  ...value,
-                  conditions: editing.conditions,
-                  operator: editing.operator,
-                  priority: Number(value.priority ?? editing.priority),
-                  updatedAt: new Date().toISOString(),
-                });
-                setEditing(null);
-              }}
-              submitLabel="Save rule"
-            />
-          </>
+          <RecordForm<LoanSlab>
+            fields={slabFormFields}
+            initialValue={editing}
+            onCancel={() => setEditing(null)}
+            onSubmit={handleEdit}
+            submitLabel="Save slab"
+          />
         ) : null}
       </Modal>
     </div>
   );
 }
+
+
+export function BreRulesPage() {
+  return (
+    <div>
+      <PageHeader
+        description="Configure scheme-wise ROI slab configuration for loan products."
+        eyebrow="Business rule engine"
+        title="BRE Configuration"
+      />
+      <SlabsTab />
+    </div>
+  );
+}
+
 
 export function VerificationPage() {
   const { createItem, deleteItem, store, updateItem, currentUser } = useMockStore();

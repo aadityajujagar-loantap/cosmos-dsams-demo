@@ -18,7 +18,7 @@ import { Copy, Plus, Trash2, UploadCloud, Check, Landmark, Image as ImageIcon, F
 import { formatCurrency, makeId } from "@/lib/utils";
 import { DEMO_USERS } from "@/lib/demo-identities";
 import { journeyUrl } from "@/lib/journey-links";
-import { CommissionType, Product, ProductCommissionRange } from "@/lib/types";
+import { Product, ProductCommissionRange } from "@/lib/types";
 
 const loanProducts: Product[] = ["Home Loan", "Personal Loan", "Loan Against Property", "Business Loan", "Auto Loan"];
 
@@ -60,7 +60,7 @@ export function ProductSettingPage() {
 
   const [product, setProduct] = useState<Product | "">("");
   const [partner, setPartner] = useState<string>("");
-  const [commissionType, setCommissionType] = useState<CommissionType | "">("");
+  const [scheme, setScheme] = useState<string>("");
   const [borrowerType, setBorrowerType] = useState<"salaried" | "selfEmployed">("salaried");
 
   // Add range inputs
@@ -88,10 +88,12 @@ export function ProductSettingPage() {
     };
   }, [bannerPreviewUrl]);
 
-  if (currentUser?.role !== "DSA Manager") {
+  const canConfigureProducts = currentUser?.role === "DSA Manager" || currentUser?.role === "DSA Credit";
+
+  if (!canConfigureProducts) {
     return (
       <EmptyState
-        description="Only the super admin can configure products. DSA admins see live approved products in Sell Now."
+        description="Only DSA Manager and DSA Credit users can configure products. DSA admins see live approved products in Sell Now."
         title="Product setup is restricted"
       />
     );
@@ -100,15 +102,22 @@ export function ProductSettingPage() {
   const handleProductChange = (nextProduct: Product | "") => {
     if (!nextProduct) {
       setProduct("");
+      setScheme("");
       setRangeId("");
       setBannerName("");
       return;
     }
     const { code, url } = productDefaults(nextProduct);
     setProduct(nextProduct);
+    setScheme(""); // reset scheme when product changes
     setRangeId((current) => current || `${code}_Commission_${(ranges.length + 1).toString().padStart(2, "0")}`);
     setBannerName((current) => current || `${url}_banner.png`);
   };
+
+  // Schemes available for the selected product (derived from loan slabs)
+  const schemesForProduct = product
+    ? [...new Set(store.loanSlabs.filter((s) => s.product === product).map((s) => s.schemeName))]
+    : [];
 
   const handleAddRange = () => {
     if (!rangeId.trim()) {
@@ -192,10 +201,10 @@ export function ProductSettingPage() {
       return;
     }
 
-    if (!commissionType) {
+    if (!scheme) {
       toast({
-        title: "Select Commission Type",
-        description: "Choose a commission type before saving this configuration.",
+        title: "Select Scheme",
+        description: "Choose a scheme for this product before saving.",
         variant: "warning",
       });
       return;
@@ -227,7 +236,7 @@ export function ProductSettingPage() {
     const landingEndpoint = journeyUrl(configId);
     const payload = {
       bannerName: hasBanner ? bannerName : undefined,
-      commissionType,
+      commissionType: "Percentage-based" as const,
       configuredAt: new Date().toISOString(),
       configuredBy: currentUser?.name ?? DEMO_USERS.admin.name,
       dsaCode: selectedDsa.code,
@@ -409,7 +418,7 @@ export function ProductSettingPage() {
         title="Product Setting"
       />
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_400px]">
+      <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
         {/* Left Column - Configure Commission Form */}
         <div className="space-y-6">
           <Card>
@@ -419,7 +428,7 @@ export function ProductSettingPage() {
                 <p className="text-xs text-slate-500 mt-1">Select the loan type, assign a partner channel, and configure payout rules.</p>
               </div>
 
-              <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
                 <Field>
                   <Label htmlFor="loanProductSelect">Loan Product Name *</Label>
                   <Select
@@ -435,6 +444,21 @@ export function ProductSettingPage() {
                 </Field>
 
                 <Field>
+                  <Label htmlFor="schemeSelect">Scheme *</Label>
+                  <Select
+                    id="schemeSelect"
+                    value={scheme}
+                    onChange={(e) => setScheme(e.target.value)}
+                    disabled={!product}
+                  >
+                    <option value="">{product ? "Select scheme" : "Select product first"}</option>
+                    {schemesForProduct.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </Select>
+                </Field>
+
+                <Field className="sm:col-span-2">
                   <Label htmlFor="partnerSelect">Choose Bank / DSA Partner *</Label>
                   <Select
                     id="partnerSelect"
@@ -449,20 +473,6 @@ export function ProductSettingPage() {
                     ))}
                   </Select>
                 </Field>
-
-                <Field>
-                  <Label htmlFor="commissionTypeSelect">Commission Type *</Label>
-                  <Select
-                    id="commissionTypeSelect"
-                    value={commissionType}
-                    onChange={(e) => setCommissionType(e.target.value as CommissionType | "")}
-                  >
-                    <option value="">Select commission type</option>
-                    <option value="Percentage-based">Percentage-based</option>
-                    <option value="Fixed-fee">Fixed-fee flat rate</option>
-                    <option value="Tiered">Tiered Slab-based</option>
-                  </Select>
-                </Field>
               </div>
 
               {/* Add Commission Range Sub-card */}
@@ -474,9 +484,9 @@ export function ProductSettingPage() {
                   <Landmark className="h-4 w-4 text-blue-600" />
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-                  <Field className="sm:col-span-2">
-                    <Label htmlFor="rangeIdInput">Loan Commission ID</Label>
+                <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+                  <Field className="sm:col-span-2 md:col-span-1">
+                    <Label htmlFor="rangeIdInput">Commission ID</Label>
                     <Input
                       id="rangeIdInput"
                       value={rangeId}
@@ -486,7 +496,7 @@ export function ProductSettingPage() {
                   </Field>
 
                   <Field>
-                    <Label htmlFor="minRangeInput">Min Disbursement (INR)</Label>
+                    <Label htmlFor="minRangeInput">Min Disbursement (₹)</Label>
                     <Input
                       id="minRangeInput"
                       type="number"
@@ -497,7 +507,7 @@ export function ProductSettingPage() {
                   </Field>
 
                   <Field>
-                    <Label htmlFor="maxRangeInput">Max Disbursement (INR)</Label>
+                    <Label htmlFor="maxRangeInput">Max Disbursement (₹)</Label>
                     <Input
                       id="maxRangeInput"
                       type="number"
@@ -508,7 +518,7 @@ export function ProductSettingPage() {
                   </Field>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+                <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
                   <Field>
                     <Label htmlFor="effectiveDateInput">Effective Date</Label>
                     <Input
@@ -544,9 +554,7 @@ export function ProductSettingPage() {
                   </Field>
 
                   <Field>
-                    <Label htmlFor="rateInput">
-                      {commissionType === "Fixed-fee" ? "Incentive Rate (INR)" : "Commission Rate (%)"}
-                    </Label>
+                    <Label htmlFor="rateInput">Commission Rate (%)</Label>
                     <Input
                       id="rateInput"
                       type="number"
@@ -580,9 +588,7 @@ export function ProductSettingPage() {
                         <th className="px-4 py-2">Disbursement Range</th>
                         <th className="px-4 py-2 text-center">Dates</th>
                         <th className="px-4 py-2 text-center">Frequency</th>
-                        <th className="px-4 py-2 text-right">
-                          {commissionType === "Fixed-fee" ? "Payout" : "Rate"}
-                        </th>
+                        <th className="px-4 py-2 text-right">Rate (%)</th>
                         <th className="px-4 py-2 text-center">Action</th>
                       </tr>
                     </thead>
@@ -598,7 +604,7 @@ export function ProductSettingPage() {
                           </td>
                           <td className="px-4 py-3 text-center">{r.frequency}</td>
                           <td className="px-4 py-3 text-right font-semibold text-blue-700">
-                            {commissionType === "Fixed-fee" ? formatCurrency(r.rate) : `${r.rate}%`}
+                            {r.rate}%
                           </td>
                           <td className="px-4 py-3 text-center">
                             <button
@@ -613,8 +619,8 @@ export function ProductSettingPage() {
                       ))}
                       {ranges.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
-                            No commission ranges added yet. Please use the form above to add a range.
+                          <td colSpan={6} className="px-4 py-6 text-center text-slate-400 text-xs">
+                            No ranges yet — use the form above to add one.
                           </td>
                         </tr>
                       ) : null}

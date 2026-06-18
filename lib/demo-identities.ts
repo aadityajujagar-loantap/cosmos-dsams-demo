@@ -1,5 +1,5 @@
-export type SessionRole = "DSA Manager" | "DSA Partner" | "Customer";
-export type DemoUserName = "admin" | "dsa" | "user";
+export type SessionRole = "DSA Manager" | "DSA Credit" | "Branch User" | "DSA Partner" | "Customer";
+export type DemoUserName = "admin" | "credit" | "branch" | "dsa" | "user";
 
 export interface DemoSessionUser {
   name: DemoUserName;
@@ -18,6 +18,20 @@ export const DEMO_USERS = {
     name: "admin",
     role: "DSA Manager",
   },
+  credit: {
+    email: "credit@cosmosbank.example",
+    id: "credit",
+    mobile: "9999999998",
+    name: "credit",
+    role: "DSA Credit",
+  },
+  branch: {
+    email: "branch@cosmosbank.example",
+    id: "branch",
+    mobile: "9999999997",
+    name: "branch",
+    role: "Branch User",
+  },
   dsa: {
     code: "DSA-0001",
     email: "dsa@cosmosbank.example",
@@ -35,10 +49,12 @@ export const DEMO_USERS = {
   },
 } satisfies Record<DemoUserName, DemoSessionUser>;
 
-export const DEMO_USER_NAMES = ["admin", "dsa", "user"] as const;
+export const DEMO_USER_NAMES = ["admin", "credit", "branch", "dsa", "user"] as const;
 
 const DEMO_PASSWORDS: Record<DemoUserName, string> = {
   admin: "admin@123",
+  credit: "credit@123",
+  branch: "branch@123",
   dsa: "dsa@123",
   user: "user@123",
 };
@@ -56,6 +72,8 @@ export function getDemoRoleForCredentials(identifier: string, password: string):
 
 export function getDemoUserByRole(role: SessionRole): DemoSessionUser {
   if (role === "DSA Manager") return { ...DEMO_USERS.admin };
+  if (role === "DSA Credit") return { ...DEMO_USERS.credit };
+  if (role === "Branch User") return { ...DEMO_USERS.branch };
   if (role === "DSA Partner") return { ...DEMO_USERS.dsa };
   return { ...DEMO_USERS.user };
 }

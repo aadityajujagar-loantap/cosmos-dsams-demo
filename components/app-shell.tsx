@@ -46,6 +46,22 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function isPathAllowedForRole(role: string, pathname: string) {
+  if (role === "DSA Credit") {
+    return !pathname.startsWith("/dsa/onboarding");
+  }
+
+  if (role !== "Branch User") return true;
+
+  const branchDsaProfile =
+    pathname.startsWith("/dsa/") &&
+    !["/dsa/management", "/dsa/onboarding", "/dsa/product-setting"].some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`),
+    );
+
+  return pathname === "/" || pathname === "/dsa/management" || pathname === "/dsa/onboarding" || branchDsaProfile;
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -61,13 +77,15 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (mounted && !currentUser) {
       router.push("/login");
     }
-  }, [currentUser, router, mounted]);
+    if (mounted && currentUser && !isPathAllowedForRole(currentUser.role, pathname)) {
+      router.replace("/");
+    }
+  }, [currentUser, pathname, router, mounted]);
 
   const navGroups = useMemo<NavGroup[]>(() => {
     if (!currentUser) return [];
 
-    if (currentUser.role === "DSA Manager") {
-      // Super Admin
+    if (currentUser.role === "DSA Manager" || currentUser.role === "DSA Credit") {
       return [
         {
           items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
@@ -75,7 +93,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         },
         {
           items: [
-            { href: "/dsa/onboarding", icon: Building2, label: "Onboard DSA" },
+            ...(currentUser.role === "DSA Manager"
+              ? [{ href: "/dsa/onboarding", icon: Building2, label: "Onboard DSA" }]
+              : []),
             { href: "/dsa/management", icon: Users, label: "DSA Management" },
             { href: "/dsa/product-setting", icon: Settings, label: "Product Setting" },
           ],
@@ -102,8 +122,21 @@ export function AppShell({ children }: { children: ReactNode }) {
           label: "Analytics",
         },
       ];
+    } else if (currentUser.role === "Branch User") {
+      return [
+        {
+          items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
+          label: "Overview",
+        },
+        {
+          items: [
+            { href: "/dsa/onboarding", icon: Building2, label: "Onboard DSA" },
+            { href: "/dsa/management", icon: Users, label: "DSA Management" },
+          ],
+          label: "Branch DSA",
+        },
+      ];
     } else if (currentUser.role === "DSA Partner") {
-      // DSA Partner
       return [
         {
           items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
@@ -143,8 +176,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     const query = globalQuery.trim().toLowerCase();
     if (!query) return [];
 
+    const searchableDsas =
+      currentUser?.role === "Branch User"
+        ? store.dsas.filter((item) => item.manager === currentUser.name)
+        : store.dsas;
+    const searchableApplications = currentUser?.role === "Branch User" ? [] : store.applications;
+
     return [
-      ...store.dsas
+      ...searchableDsas
         .filter((item) =>
           [item.name, item.code, item.pan, item.mobile, item.email].some((value) =>
             value.toLowerCase().includes(query),
@@ -156,7 +195,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           label: item.name,
           meta: `${item.code} · ${item.pan}`,
         })),
-      ...store.applications
+      ...searchableApplications
         .filter((item) =>
           [item.applicationId, item.customer, item.pan, item.aadhaar, item.mobile, item.email].some(
             (value) => value.toLowerCase().includes(query),
@@ -169,7 +208,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           meta: `${item.product} · ${item.status}`,
         })),
     ].slice(0, 10);
-  }, [globalQuery, store.applications, store.dsas]);
+  }, [currentUser, globalQuery, store.applications, store.dsas]);
 
   if (!mounted || !currentUser) return null;
 

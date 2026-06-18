@@ -68,8 +68,41 @@ export function DashboardPage() {
   }, [store]);
 
   const pendingDsas = useMemo(() => {
-    return store.dsas.filter((item) => item.status === "Submitted" || item.status === "KYC Pending");
-  }, [store.dsas]);
+    if (currentUser?.role === "DSA Credit") {
+      return store.dsas.filter(
+        (item) =>
+          item.status === "Pending Credit Approval" ||
+          item.status === "Submitted" ||
+          item.status === "KYC Pending",
+      );
+    }
+    if (currentUser?.role === "DSA Manager") {
+      return store.dsas.filter(
+        (item) =>
+          item.status === "Submitted" ||
+          item.status === "KYC Pending" ||
+          item.status === "Pending Credit Approval",
+      );
+    }
+    return [];
+  }, [currentUser?.role, store.dsas]);
+
+  const branchDsas = useMemo(() => {
+    if (currentUser?.role !== "Branch User") return [];
+    return store.dsas
+      .filter((item) => item.manager === currentUser.name)
+      .sort((left, right) => right.onboardingDate.localeCompare(left.onboardingDate));
+  }, [currentUser, store.dsas]);
+
+  const branchStats = useMemo(
+    () => ({
+      active: branchDsas.filter((item) => item.status === "Active").length,
+      blacklisted: branchDsas.filter((item) => item.status === "Blacklisted").length,
+      pendingCredit: branchDsas.filter((item) => item.status === "Pending Credit Approval").length,
+      total: branchDsas.length,
+    }),
+    [branchDsas],
+  );
 
   const monthlyOnboarding = [
     { name: "Jan", value: 7 },
@@ -168,11 +201,14 @@ export function DashboardPage() {
   }, [customerApps]);
 
   const customerJourneyConfigs = useMemo(
-    () =>
-      store.dsaProductConfigs
+    () => {
+      const activeDsaIds = new Set(store.dsas.filter((dsa) => dsa.status === "Active").map((dsa) => dsa.id));
+      return store.dsaProductConfigs
         .filter((config) => config.status === "Active")
-        .sort((left, right) => left.dsaName.localeCompare(right.dsaName) || left.product.localeCompare(right.product)),
-    [store.dsaProductConfigs],
+        .filter((config) => activeDsaIds.has(config.dsaId))
+        .sort((left, right) => left.dsaName.localeCompare(right.dsaName) || left.product.localeCompare(right.product));
+    },
+    [store.dsaProductConfigs, store.dsas],
   );
   const customerDsaOptions = useMemo(
     () => Array.from(new Map(customerJourneyConfigs.map((config) => [config.dsaId, config])).values()),
@@ -323,7 +359,7 @@ export function DashboardPage() {
   // ----------------------------------------------------
   // VIEW RENDERER BASED ON USER ROLE
   // ----------------------------------------------------
-  if (currentUser.role === "DSA Manager") {
+  if (currentUser.role === "DSA Manager" || currentUser.role === "DSA Credit") {
     // --------------------------------------------------
     // RENDER: SUPER ADMIN / DSA MANAGER
     // --------------------------------------------------
@@ -331,8 +367,12 @@ export function DashboardPage() {
       return (
         <div>
           <PageHeader
-            description="Review submitted DSA records before making activation or rejection decisions from the full partner profile."
-            eyebrow="Portfolio cockpit"
+            description={
+              currentUser.role === "DSA Credit"
+                ? "Review Branch-submitted DSA records and complete credit approval from the full partner profile."
+                : "Review submitted DSA records before making activation or rejection decisions from the full partner profile."
+            }
+            eyebrow={currentUser.role === "DSA Credit" ? "Credit approval cockpit" : "Portfolio cockpit"}
             title="Dashboard"
           />
 
@@ -351,9 +391,13 @@ export function DashboardPage() {
           <Card className="shadow-md">
             <CardHeader className="flex-row items-center justify-between border-b border-slate-100 pb-4">
               <div>
-                <h2 className="text-base font-bold text-slate-900">Pending DSA Verification Queue</h2>
+                <h2 className="text-base font-bold text-slate-900">
+                  {currentUser.role === "DSA Credit" ? "Pending DSA Credit Approval Queue" : "Pending DSA Verification Queue"}
+                </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Open each profile, verify KYC, documents, bank details, and business information, then approve or reject from the profile page.
+                  {currentUser.role === "DSA Credit"
+                    ? "Open each Branch-submitted profile, review KYC, documents, bank details, and business information, then approve or reject from the profile page."
+                    : "Open each profile, verify KYC, documents, bank details, and business information, then approve or reject from the profile page."}
                 </p>
               </div>
               <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
@@ -416,8 +460,12 @@ export function DashboardPage() {
     return (
       <div>
         <PageHeader
-          description="Command center for partner onboarding, lead velocity, underwriting health, verification queues, and payout exposure."
-          eyebrow="Portfolio cockpit"
+          description={
+            currentUser.role === "DSA Credit"
+              ? "Credit desk command center for Branch-submitted DSA approvals, underwriting health, and payout exposure."
+              : "Command center for partner onboarding, lead velocity, underwriting health, verification queues, and payout exposure."
+          }
+          eyebrow={currentUser.role === "DSA Credit" ? "Credit approval cockpit" : "Portfolio cockpit"}
           title="Dashboard"
         />
 
@@ -441,9 +489,13 @@ export function DashboardPage() {
                 <Clock className="h-5 w-5 animate-pulse" />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-slate-800">DSAs Pending Approval</h4>
+                <h4 className="text-sm font-bold text-slate-800">
+                  {currentUser.role === "DSA Credit" ? "Branch DSAs Pending Credit Approval" : "DSAs Pending Approval"}
+                </h4>
                 <p className="text-xs text-slate-600 mt-0.5">
-                  There are {pendingDsas.length} Direct Selling Agents waiting for KYC & business review verification.
+                  {currentUser.role === "DSA Credit"
+                    ? `There are ${pendingDsas.length} Branch-submitted Direct Selling Agents waiting for DSA Credit approval.`
+                    : `There are ${pendingDsas.length} Direct Selling Agents waiting for KYC & business review verification.`}
                 </p>
               </div>
             </div>
@@ -458,10 +510,9 @@ export function DashboardPage() {
           </div>
         )}
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <KpiCard change="+12.4%" icon={Building2} label="Active DSAs" tone="blue" value={String(stats.activeDsas)} />
           <KpiCard change="+9.1%" icon={ClipboardCheck} label="Approved applications" tone="green" value={String(stats.approved)} />
-          <KpiCard change="-3.6%" icon={FileWarning} label="Risk queue" tone="amber" value={String(stats.riskQueue)} />
           <KpiCard change="+18.2%" icon={BadgeIndianRupee} label="Payout exposure" tone="slate" value={compactNumber(stats.totalPayout)} />
         </div>
 
@@ -532,7 +583,22 @@ export function DashboardPage() {
               </div>
               <div className="space-y-3">
                 {[
-                  ["KYC pending DSAs", store.dsas.filter((item) => item.status === "KYC Pending").length],
+                  [
+                    currentUser.role === "DSA Credit" ? "Pending credit approvals" : "KYC pending DSAs",
+                    currentUser.role === "DSA Credit"
+                      ? store.dsas.filter(
+                          (item) =>
+                            item.status === "Pending Credit Approval" ||
+                            item.status === "Submitted" ||
+                            item.status === "KYC Pending",
+                        ).length
+                      : store.dsas.filter(
+                          (item) =>
+                            item.status === "KYC Pending" ||
+                            item.status === "Submitted" ||
+                            item.status === "Pending Credit Approval",
+                        ).length,
+                  ],
                   ["Verification checks", store.verificationChecks.filter((item) => item.status !== "Verified").length],
                   ["Pending approvals", store.approvals.filter((item) => item.status === "Pending").length],
                 ].map(([label, value]) => (
@@ -545,6 +611,102 @@ export function DashboardPage() {
               <div className="mt-4 rounded-md bg-blue-50 p-4">
                 <p className="text-sm font-semibold text-blue-950">Projected commission liability</p>
                 <p className="mt-1 text-2xl font-semibold text-blue-700">{formatCurrency(stats.totalPayout)}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  } else if (currentUser.role === "Branch User") {
+    return (
+      <div>
+        <PageHeader
+          description="Onboard DSAs from the branch and track the internal approval handoff to DSA Credit."
+          eyebrow="Branch DSA desk"
+          title={`Branch Dashboard: ${currentUser.name}`}
+        />
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <KpiCard change="Submitted" icon={Building2} label="Branch onboarded" tone="blue" value={String(branchStats.total)} />
+          <KpiCard change="Credit queue" icon={Clock} label="Pending Credit" tone="amber" value={String(branchStats.pendingCredit)} />
+          <KpiCard change="Approved" icon={CheckCircle2} label="Activated DSAs" tone="green" value={String(branchStats.active)} />
+          <KpiCard change="Restricted" icon={FileWarning} label="Blacklisted" tone="slate" value={String(branchStats.blacklisted)} />
+        </div>
+
+        <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_360px]">
+          <Card className="shadow-md">
+            <CardHeader className="flex-row items-center justify-between border-b border-slate-100 pb-4">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Branch DSA onboarding tracker</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Credit decisions update here as DSA Credit reviews each submitted profile.
+                </p>
+              </div>
+              <Link href="/dsa/onboarding">
+                <Button size="sm" type="button">
+                  Onboard DSA
+                </Button>
+              </Link>
+            </CardHeader>
+            <CardContent className="p-0">
+              {branchDsas.length ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-slate-50/75 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        <th className="p-4 pl-6">Partner</th>
+                        <th className="p-4">Submitted</th>
+                        <th className="p-4">Status</th>
+                        <th className="p-4 text-right pr-6">Profile</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {branchDsas.slice(0, 8).map((dsa) => (
+                        <tr key={dsa.id} className="hover:bg-slate-50/40 transition">
+                          <td className="p-4 pl-6">
+                            <div className="font-semibold text-slate-800">{dsa.name}</div>
+                            <div className="text-xs text-slate-500">{dsa.code} - {dsa.businessType}</div>
+                          </td>
+                          <td className="p-4 text-xs text-slate-500">{formatDate(dsa.onboardingDate)}</td>
+                          <td className="p-4">
+                            <StatusBadge status={dsa.status} />
+                          </td>
+                          <td className="p-4 text-right pr-6">
+                            <Link href={`/dsa/${dsa.id}`}>
+                              <Button size="sm" type="button" variant="outline">
+                                Open
+                              </Button>
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-8 text-center text-slate-500">
+                  <Users className="h-10 w-10 text-slate-300 mx-auto mb-2" />
+                  <p className="text-sm font-semibold text-slate-700">No DSAs submitted from this branch yet.</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Use Onboard DSA to submit the first profile to DSA Credit.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-md">
+            <CardHeader className="border-b border-slate-100 pb-4">
+              <h2 className="text-base font-bold text-slate-900">Internal handoff</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Branch submissions remain inactive until DSA Credit approves them.</p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="rounded-md bg-sky-50 p-4">
+                <p className="text-sm font-semibold text-blue-950">Current credit queue</p>
+                <p className="mt-1 text-2xl font-semibold text-blue-700">{branchStats.pendingCredit}</p>
+              </div>
+              <div className="space-y-2 text-xs text-slate-600">
+                <p className="rounded-md border border-slate-100 p-3">1. Branch submits onboarding details and documents.</p>
+                <p className="rounded-md border border-slate-100 p-3">2. DSA Credit receives a workflow notification and reviews the profile.</p>
+                <p className="rounded-md border border-slate-100 p-3">3. Approved DSAs become active and appear in product and journey dropdowns.</p>
               </div>
             </CardContent>
           </Card>

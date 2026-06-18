@@ -479,7 +479,9 @@ export function SellNowPage() {
     });
   }
 
-  if (currentUser?.role !== "DSA Manager" && currentUser?.role !== "DSA Partner") {
+  const isBankJourneyUser = currentUser?.role === "DSA Manager" || currentUser?.role === "DSA Credit";
+
+  if (!isBankJourneyUser && currentUser?.role !== "DSA Partner") {
     return (
       <EmptyState
         description="This workspace is available to the admin and DSA journey desks."
@@ -575,7 +577,7 @@ export function SellNowPage() {
                       </div>
                     </div>
                     <div className="flex flex-wrap justify-end gap-2">
-                      {currentUser.role === "DSA Manager" ? (
+                      {isBankJourneyUser ? (
                         <Button onClick={() => sendJourney("Email")} type="button" variant="outline">
                           <Mail className="h-4 w-4" />
                           Send Email
@@ -643,7 +645,7 @@ export function SellNowPage() {
       ) : (
         <EmptyState
           action={
-            currentUser.role === "DSA Manager" ? (
+            isBankJourneyUser ? (
               <Link href="/dsa/product-setting">
                 <Button type="button">Open Product Setting</Button>
               </Link>

@@ -357,14 +357,13 @@ export function ApplicationsPage() {
     { cell: (item) => item.product, header: "Product", key: "product", sortable: true, sortValue: (item) => item.product },
     { cell: (item) => formatCurrency(item.loanAmount), header: "Loan amount", key: "loanAmount", sortable: true, sortValue: (item) => item.loanAmount },
     { cell: (item) => item.stage, header: "Stage", key: "stage", sortable: true, sortValue: (item) => item.stage },
-    { cell: (item) => <Badge tone={item.riskScore > 78 ? "rose" : item.riskScore > 65 ? "amber" : "green"}>{item.riskScore}</Badge>, header: "Risk", key: "riskScore", sortable: true, sortValue: (item) => item.riskScore },
     { cell: (item) => <StatusBadge status={item.status} />, header: "Status", key: "status", sortable: true, sortValue: (item) => item.status },
   ];
 
   return (
     <div>
       <PageHeader
-        description="Review journey-created applications by product, DSA type, stage, risk, and underwriting status."
+        description="Review journey-created applications by product, DSA type, stage, and underwriting status."
         eyebrow="Loan operations"
         title="Loan Application Management"
       />
@@ -381,7 +380,6 @@ export function ApplicationsPage() {
           { label: "DSA type", onChange: setDsaTypeFilter, options: dsaTypes, value: dsaTypeFilter },
           { label: "stage", onChange: setStageFilter, options: applicationStages, value: stageFilter },
           { label: "status", onChange: setStatus, options: applicationStatuses, value: status },
-          { label: "risk band", onChange: setRiskFilter, options: riskBands, value: riskFilter },
           { label: "verification", onChange: setVerificationFilter, options: verificationStatuses, value: verificationFilter },
         ]}
         items={rows}
@@ -430,9 +428,7 @@ export function ApplicationDetailPage({ id }: { id: string }) {
         eyebrow="Application detail"
         title={application.applicationId}
       />
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <KpiCard change="+2.3%" icon={ClipboardCheck} label="Credit score" tone="green" value={String(application.creditScore)} />
-        <KpiCard change="-4.1%" icon={ShieldAlert} label="Risk score" tone="amber" value={String(application.riskScore)} />
+      <div className="grid gap-4 md:grid-cols-2">
         <KpiCard change="+8.7%" icon={FileText} label="Documents" value={String(documents.length)} />
         <KpiCard change="+1.2%" icon={GitCompare} label="Verification" tone="slate" value={application.verificationStatus} />
       </div>
@@ -526,7 +522,7 @@ export function ApplicationDetailPage({ id }: { id: string }) {
               <h2 className="text-base font-semibold text-slate-950">Notes</h2>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Textarea onChange={(event) => setNote(event.target.value)} placeholder="Add credit, ops, or risk note" value={note} />
+              <Textarea onChange={(event) => setNote(event.target.value)} placeholder="Add credit or ops note" value={note} />
               <Button className="w-full" onClick={addNote} type="button">
                 Add note
               </Button>
@@ -591,8 +587,8 @@ export function DedupePage() {
   return (
     <div>
       <PageHeader
-        description="Search applicants and DSA-sourced records across PAN, Aadhaar, mobile, and email to identify duplicates, similar applications, and risk indicators."
-        eyebrow="Risk controls"
+        description="Search applicants and DSA-sourced records across PAN, Aadhaar, mobile, and email to identify duplicates and similar applications."
+        eyebrow="Dedupe controls"
         title="DSA & Dedupe View"
       />
       <Card>
@@ -642,8 +638,7 @@ export function DedupePage() {
                   </p>
                   <p className="mt-1 text-sm text-slate-500">DSA: {item.dsaName}</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Badge tone={item.riskScore > 78 ? "rose" : "amber"}>Risk {item.riskScore}</Badge>
+                 <div className="flex items-center gap-2">
                   <StatusBadge status={item.status} />
                 </div>
               </div>
@@ -658,12 +653,11 @@ export function DedupePage() {
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <h2 className="text-base font-semibold text-slate-950">Risk indicators</h2>
+              <h2 className="text-base font-semibold text-slate-950">Dedupe indicators</h2>
             </CardHeader>
             <CardContent className="space-y-3">
               {[
                 ["Shared DSA", similar.length],
-                ["High risk scores", results.filter((item) => item.riskScore > 78).length],
                 ["Same city cluster", results.filter((item) => item.city === results[0]?.city).length],
                 ["Open review holds", results.filter((item) => item.status === "On Hold").length],
               ].map(([label, value]) => (

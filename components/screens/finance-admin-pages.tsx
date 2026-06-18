@@ -50,6 +50,8 @@ const products: Product[] = [
 
 const userRoles: UserRole[] = [
   "Admin",
+  "DSA Credit",
+  "Branch User",
   "DSA Partner",
   "Customer",
 ];
@@ -298,7 +300,7 @@ export function UsersPage() {
   return (
     <div>
       <PageHeader
-        description="Maintain the three fixed demo accounts, their roles, access status, and regional ownership."
+        description="Maintain the fixed demo accounts, their roles, access status, and regional ownership."
         eyebrow="Administration"
         title="User Management"
       />

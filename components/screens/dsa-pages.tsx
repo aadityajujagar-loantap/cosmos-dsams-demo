@@ -81,6 +81,7 @@ const INDIA_STATES = Object.keys(INDIA_STATES_CITIES).sort();
 const dsaStatuses: DsaStatus[] = [
   "Draft",
   "Submitted",
+  "Pending Credit Approval",
   "KYC Pending",
   "Active",
   "Suspended",
@@ -88,8 +89,17 @@ const dsaStatuses: DsaStatus[] = [
   "Blacklisted",
 ];
 
-const queueStatuses: DsaStatus[] = ["Submitted", "KYC Pending"];
-const managementStatuses: DsaStatus[] = ["Active", "Suspended", "Blacklisted"];
+const queueStatuses: DsaStatus[] = ["Submitted", "KYC Pending", "Pending Credit Approval"];
+const managementStatuses: DsaStatus[] = [
+  "Draft",
+  "Submitted",
+  "Pending Credit Approval",
+  "KYC Pending",
+  "Active",
+  "Suspended",
+  "Rejected",
+  "Blacklisted",
+];
 
 function isQueueStatus(status: DsaStatus) {
   return queueStatuses.includes(status);
@@ -149,7 +159,7 @@ const DSA_ONBOARDING_DRAFT_KEY = "cosmos_dsa_onboarding_draft";
 
 function clampOnboardingStep(value: unknown) {
   if (typeof value !== "number") return 0;
-  return Math.min(Math.max(value, 0), 5);
+  return Math.min(Math.max(value, 0), 6);
 }
 
 function formatFileSize(size: number) {
@@ -178,6 +188,7 @@ function readOnboardingDraft(): Partial<OnboardingDraft> {
 
 export function DsaOnboardingPage() {
   const { createItem, currentUser } = useMockStore();
+  const isBranchOnboarding = currentUser?.role === "Branch User";
   const [initialDraft] = useState(() => readOnboardingDraft());
   const [step, setStep] = useState(() => clampOnboardingStep(initialDraft.step));
   const [dsaType, setDsaType] = useState<DsaType>(() =>
@@ -188,6 +199,8 @@ export function DsaOnboardingPage() {
   const [uploadedFiles, setUploadedFiles] = useState<Record<string, UploadedFileMeta>>(
     () => initialDraft.uploadedFiles ?? {},
   );
+  const [isPanVerifying, setIsPanVerifying] = useState(false);
+  const [isPanVerified, setIsPanVerified] = useState(false);
 
   useEffect(() => {
     const draft: OnboardingDraft = { dsaType, form, step, uploadedFiles };
@@ -229,6 +242,8 @@ export function DsaOnboardingPage() {
     if (currentStep === 2) {
       if (form.pan && !/^[A-Z]{5}\d{4}[A-Z]$/.test(form.pan)) {
         nextErrors.pan = "PAN format should be ABCDE1234F";
+      } else if (form.pan && !isPanVerified) {
+        nextErrors.pan = "Please verify your PAN";
       }
     }
     setErrors(nextErrors);
@@ -292,7 +307,10 @@ export function DsaOnboardingPage() {
       });
     }
 
-    const managerName = currentUser?.role === "DSA Partner" ? currentUser.name : DEMO_USERS.admin.name;
+    const managerName =
+      currentUser?.role === "DSA Partner" || currentUser?.role === "Branch User"
+        ? currentUser.name
+        : DEMO_USERS.admin.name;
 
     createItem("dsas", {
       address: form.address,
@@ -321,10 +339,10 @@ export function DsaOnboardingPage() {
       pincode: form.pincode,
       riskRating: "Low",
       state: form.state,
-      status: "Submitted",
+      status: isBranchOnboarding ? "Pending Credit Approval" : "Submitted",
       tier: "Bronze",
     });
-    setStep(5);
+    setStep(6);
   }
 
   function resetOnboarding() {
@@ -332,6 +350,8 @@ export function DsaOnboardingPage() {
     setForm({ ...initialOnboardingForm });
     setDsaType("Independent DSA");
     setUploadedFiles({});
+    setIsPanVerified(false);
+    setIsPanVerifying(false);
     setStep(0);
     localStorage.removeItem(DSA_ONBOARDING_DRAFT_KEY);
   }
@@ -430,9 +450,9 @@ export function DsaOnboardingPage() {
       <Card className="max-w-5xl mx-auto shadow-md">
         <CardContent className="p-6 md:p-8">
           {/* Top horizontal progress bar */}
-          {step > 0 && step < 5 ? (
+          {step > 0 && step < 6 ? (
             <div className="mb-8 flex items-center justify-between max-w-xl mx-auto px-4">
-              {[1, 2, 3, 4].map((i) => (
+              {[1, 2, 3, 4, 5].map((i) => (
                 <div key={i} className="flex items-center flex-1 last:flex-none">
                   <div className="flex flex-col items-center">
                     <div
@@ -445,10 +465,10 @@ export function DsaOnboardingPage() {
                       {i < step ? <Check className="h-4 w-4" /> : i}
                     </div>
                     <span className="text-[10px] font-bold text-slate-500 mt-1.5 uppercase tracking-wider text-center">
-                      {["Profile", "KYC", "Bank", "Docs"][i - 1]}
+                      {["Profile", "KYC", "Bank", "Docs", "Bank Verified"][i - 1]}
                     </span>
                   </div>
-                  {i < 4 && (
+                  {i < 5 && (
                     <div
                       className={`h-[2px] flex-1 mx-2 -mt-4 transition-colors ${
                         i < step ? "bg-blue-600" : "bg-slate-200"
@@ -571,7 +591,73 @@ export function DsaOnboardingPage() {
                   KYC & Address Details
                 </h3>
                 <div className="grid gap-4 md:grid-cols-2">
-                  {renderField("pan", "PAN")}
+                  <Field>
+                    <Label htmlFor="pan">PAN</Label>
+                    <div className="relative flex items-center">
+                      <Input
+                        id="pan"
+                        onChange={(event) => {
+                          const val = event.target.value.toUpperCase();
+                          update("pan", val);
+                          if (isPanVerified) setIsPanVerified(false);
+                          if (errors.pan) {
+                            setErrors((prev) => {
+                              const copy = { ...prev };
+                              delete copy.pan;
+                              return copy;
+                            });
+                          }
+                        }}
+                        className="pr-28 uppercase font-mono tracking-wider placeholder:font-sans placeholder:tracking-normal"
+                        placeholder="ABCDE1234F"
+                        value={form.pan}
+                        disabled={isPanVerifying}
+                      />
+                      <div className="absolute right-1">
+                        {isPanVerified ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1.5 rounded-md border border-emerald-200 mr-1">
+                            <Check className="h-3.5 w-3.5 stroke-[3]" /> Verified
+                          </span>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={!form.pan || isPanVerifying}
+                            onClick={() => {
+                              if (!/^[A-Z]{5}\d{4}[A-Z]$/.test(form.pan)) {
+                                setErrors((prev) => ({ ...prev, pan: "PAN format should be ABCDE1234F" }));
+                                return;
+                              }
+                              setErrors((prev) => {
+                                const copy = { ...prev };
+                                delete copy.pan;
+                                return copy;
+                              });
+                              setIsPanVerifying(true);
+                              setTimeout(() => {
+                                setIsPanVerifying(false);
+                                setIsPanVerified(true);
+                              }, 1000);
+                            }}
+                            className="h-8 text-xs font-semibold px-3"
+                          >
+                            {isPanVerifying ? (
+                              <span className="flex items-center gap-1">
+                                <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                                verifying
+                              </span>
+                            ) : (
+                              "Verify"
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    {errors.pan ? <p className="text-xs font-medium text-rose-600 mt-1">{errors.pan}</p> : null}
+                  </Field>
                   {renderField("gst", "GST")}
                   <div className="md:col-span-2">{renderField("address", "Address")}</div>
                   <Field>
@@ -654,27 +740,79 @@ export function DsaOnboardingPage() {
                   </div>
                 </div>
 
-                <div className="mt-10 flex flex-col items-center gap-2">
+              </div>
+            ) : null}
+
+            {/* Step 5: Bank Account Verified Status */}
+            {step === 5 ? (
+              <div className="space-y-6 max-w-xl mx-auto py-4">
+                <div className="text-center space-y-2">
+                  <div className="mx-auto bg-emerald-50 border border-emerald-200 text-emerald-600 rounded-full w-12 h-12 flex items-center justify-center shadow-sm">
+                    <ShieldCheck className="h-6 w-6 stroke-[2.5]" />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-950">
+                    Bank Verification Approved
+                  </h3>
+                  <p className="text-sm text-slate-500">
+                    The bank has verified this DSA and it is ready to onboard now.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-6 space-y-4 shadow-sm">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="block text-xs font-semibold uppercase tracking-wider text-slate-400">Account Holder</span>
+                      <span className="font-semibold text-slate-800">{form.accountName || "N/A"}</span>
+                    </div>
+                    <div>
+                      <span className="block text-xs font-semibold uppercase tracking-wider text-slate-400">Account Number</span>
+                      <span className="font-semibold text-slate-800 font-mono">{form.accountNumber || "N/A"}</span>
+                    </div>
+                    <div>
+                      <span className="block text-xs font-semibold uppercase tracking-wider text-slate-400">Bank Name</span>
+                      <span className="font-semibold text-slate-800">{form.bankName || "N/A"}</span>
+                    </div>
+                    <div>
+                      <span className="block text-xs font-semibold uppercase tracking-wider text-slate-400">IFSC Code</span>
+                      <span className="font-semibold text-slate-800 font-mono">{form.ifsc || "N/A"}</span>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-slate-200 pt-4">
+                    <div className="w-full flex items-center gap-3 bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl shadow-sm">
+                      <Check className="h-6 w-6 stroke-[3] text-emerald-600 shrink-0" />
+                      <div className="text-left">
+                        <p className="text-sm font-bold text-emerald-950">Pre-Verified by Bank</p>
+                        <p className="text-xs text-emerald-700 leading-relaxed">
+                          Cosmos Bank has successfully verified the settlement bank details for this DSA. The account is validated and ready for onboarding.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-between border-t border-slate-100 pt-5">
                   <Button
+                    onClick={() => goBack(5)}
                     type="button"
-                    onClick={handleSubmit}
-                    className="bg-blue-700 hover:bg-blue-800 text-white font-bold h-11 px-12 rounded-lg shadow-sm"
+                    variant="secondary"
+                    className="h-10 px-5"
                   >
-                    Submit
+                    Back
                   </Button>
-                  <button
+                  <Button
+                    onClick={handleSubmit}
                     type="button"
-                    onClick={() => goBack(4)}
-                    className="text-xs text-slate-500 hover:text-slate-800 underline mt-2"
+                    className="h-10 px-6 bg-blue-700 hover:bg-blue-800 text-white font-bold"
                   >
-                    Go back to Bank Details
-                  </button>
+                    Submit Onboarding
+                  </Button>
                 </div>
               </div>
             ) : null}
 
-            {/* Step 5: Submitted Success Receipt */}
-            {step === 5 ? (
+            {/* Step 6: Submitted Success Receipt */}
+            {step === 6 ? (
               <div className="flex flex-col items-center text-center p-8 space-y-6 max-w-md mx-auto">
                 <div className="relative grid h-24 w-24 place-items-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-100">
                   <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -688,7 +826,9 @@ export function DsaOnboardingPage() {
                   </h2>
                   <p className="text-md font-bold text-slate-700">Thank you for onboarding a new DSA.</p>
                   <p className="text-sm text-slate-500 leading-relaxed">
-                    This application is now waiting in Dashboard &gt; Verification Queue for final approval.
+                    {isBranchOnboarding
+                      ? "This application is now waiting with DSA Credit for approval. Track the status from DSA Management."
+                      : "This application is now waiting in Dashboard > Verification Queue for final approval."}
                   </p>
                 </div>
 
@@ -720,7 +860,7 @@ export function DsaOnboardingPage() {
             ) : null}
 
             {/* Bottom Back/Continue Navigation for middle steps */}
-            {step > 0 && step < 4 ? (
+            {step > 0 && step < 5 ? (
               <div className="mt-8 flex justify-between border-t border-slate-100 pt-5">
                 <Button
                   onClick={() => goBack(step)}
@@ -759,7 +899,7 @@ export function DsaManagementPage() {
 
   let rows = store.dsas.filter((item) => managementStatuses.includes(item.status));
   if (status) rows = rows.filter((item) => item.status === status);
-  if (currentUser?.role === "DSA Partner") {
+  if (currentUser?.role === "DSA Partner" || currentUser?.role === "Branch User") {
     rows = rows.filter((item) => item.manager === currentUser.name);
   }
 
@@ -795,7 +935,7 @@ export function DsaManagementPage() {
   return (
     <div>
       <PageHeader
-        description="Manage partner records, commercial readiness, KYC status, risk posture, and activation lifecycle."
+        description="Manage partner records, commercial readiness, KYC status, and activation lifecycle."
         eyebrow="Partner network"
         title="DSA Management"
       />
@@ -850,7 +990,9 @@ export function DsaProfilePage({ id }: { id: string }) {
   const [unblacklistingDsa, setUnblacklistingDsa] = useState<Dsa | null>(null);
 
   const dsa = store.dsas.find((item) => item.id === id) ?? store.dsas[0];
-  const canDecideDsa = currentUser?.role === "DSA Manager" && isQueueStatus(dsa.status);
+  const canDecideDsa =
+    (currentUser?.role === "DSA Manager" || currentUser?.role === "DSA Credit") &&
+    isQueueStatus(dsa.status);
   const productConfigs = store.dsaProductConfigs
     .filter((config) => config.dsaId === dsa.id && config.status === "Active")
     .sort((left, right) => left.product.localeCompare(right.product));
@@ -981,11 +1123,10 @@ export function DsaProfilePage({ id }: { id: string }) {
         title={dsa.name}
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <KpiCard change="+6.2%" icon={TrendingUp} label="Approval rate" tone="green" value={percent(dsa.approvalRate)} />
         <KpiCard change="+11.0%" icon={ClipboardList} label="Monthly leads" value={String(dsa.monthlyLeads)} />
         <KpiCard change="+8.4%" icon={BadgeIndianRupee} label="Commission" tone="slate" value={formatCurrency(commissionTotal || dsa.commissionEarned)} />
-        <KpiCard change="-1.8%" icon={ShieldCheck} label="Risk rating" tone="amber" value={dsa.riskRating} />
       </div>
 
       <div className="mt-6">
@@ -1022,7 +1163,6 @@ export function DsaProfilePage({ id }: { id: string }) {
               <DetailItem label="PAN" value={dsa.pan} />
               <DetailItem label="GST" value={dsa.gst} />
               <DetailItem label="Business type" value={dsa.businessType} />
-              <DetailItem label="Risk rating" value={<StatusBadge status={dsa.riskRating} />} />
               <DetailItem label="KYC readiness" value={<StatusBadge status={dsa.status === "KYC Pending" ? "Pending" : "Verified"} />} />
               <DetailItem label="Registered address" value={`${dsa.address}, ${dsa.city}, ${dsa.state} ${dsa.pincode}`} />
             </DetailGrid>

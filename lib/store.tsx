@@ -79,14 +79,26 @@ function initialStore(): MockStore {
     const seededProductDemoApplications = seededStore.applications.filter((item) =>
       item.id.startsWith("app-product-demo-"),
     );
+    const existingUserIds = new Set(mergedStore.users.map((item) => item.id));
+    const existingRoleIds = new Set(mergedStore.roles.map((item) => item.id));
 
     mergedStore.applications = [
       ...mergedStore.applications,
       ...seededProductDemoApplications.filter((item) => !existingApplicationIds.has(item.id)),
     ];
+    mergedStore.users = [
+      ...mergedStore.users,
+      ...seededStore.users.filter((item) => !existingUserIds.has(item.id)),
+    ];
+    mergedStore.roles = [
+      ...mergedStore.roles,
+      ...seededStore.roles.filter((item) => !existingRoleIds.has(item.id)),
+    ];
 
+    console.log("Mock store: loaded from localStorage. Total DSAs in persisted store:", mergedStore.dsas.length);
     return ensureApplicationJourneys(mergedStore);
-  } catch {
+  } catch (err) {
+    console.error("Mock store: failed to parse stored JSON. Resetting to seeded store.", err);
     localStorage.removeItem(STORE_STORAGE_KEY);
     return ensureApplicationJourneys(seededStore);
   }
@@ -146,6 +158,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
+    console.log("Mock store: saving to localStorage. Total DSAs:", store.dsas.length);
     localStorage.setItem(STORE_STORAGE_KEY, JSON.stringify(store));
   }, [store]);
 
@@ -191,6 +204,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
         if (collection !== "auditLogs") {
           next.auditLogs = [audit("Created", collection, actor), ...current.auditLogs];
         }
+        console.log(`Mock store: item created in collection "${collection}":`, item);
         return next;
       });
       toast({
