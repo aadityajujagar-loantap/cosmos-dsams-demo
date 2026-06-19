@@ -2,6 +2,7 @@ import {
   ApprovalItem,
   ApprovalStage,
   Application,
+  ApplicationDeviation,
   ApplicationStage,
   ApplicationStatus,
   AuditLog,
@@ -13,6 +14,7 @@ import {
   DocumentType,
   Dsa,
   DsaProductConfig,
+  DsaRecovery,
   DsaStatus,
   GenderFilter,
   Lead,
@@ -31,6 +33,7 @@ import {
 import { DEMO_USERS, demoActor } from "@/lib/demo-identities";
 import { journeyPath } from "@/lib/journey-links";
 import { buildApplicationJourney } from "@/lib/product-journeys";
+import { seededDsaId } from "@/lib/utils";
 
 const states = [
   ["Mumbai", "Maharashtra", "400001"],
@@ -105,6 +108,7 @@ const businessTypes: BusinessType[] = [
 const dsaStatuses: DsaStatus[] = [
   "Active",
   "Active",
+  "On Hold",
   "KYC Pending",
   "Submitted",
   "Pending Credit Approval",
@@ -281,13 +285,25 @@ export function createMockStore(): MockStore {
 
   const dsas: Dsa[] = Array.from({ length: 56 }, (_, index) => {
     const city = pick(states, index);
+    const id = seededDsaId(index);
     const name = `${pick(["Cosmos", "Prime", "Apex", "Nexora", "Credence", "BluePeak"], index)} ${pick(
       ["Financial Services", "Capital Partners", "Loan Point", "Credit Advisors", "Finserv"],
       index + 2,
     )}`;
+    const status = pick(dsaStatuses, index);
     const dsaDocs = [
-      document(index * 3 + 1, name, "PAN", undefined, `dsa-${index + 1}`),
-      document(index * 3 + 2, name, "Aadhaar", undefined, `dsa-${index + 1}`),
+      document(index * 3 + 1, name, "PAN", undefined, id),
+      {
+        ...document(index * 3 + 2, name, "Aadhaar", undefined, id),
+        ...(status === "On Hold"
+          ? {
+              fileName: "Missing - Applicant Aadhaar (Front)",
+              remarks: "Mandatory document missing during onboarding; DSA held before approval.",
+              size: "0 KB",
+              status: "Pending" as const,
+            }
+          : {}),
+      },
     ];
 
     return {
@@ -301,13 +317,13 @@ export function createMockStore(): MockStore {
       },
       businessType: pick(businessTypes, index),
       city: city[0],
-      code: `DSA-${String(index + 1).padStart(4, "0")}`,
+      code: id,
       commissionEarned: 86000 + index * 9400,
       contactPerson: person(index),
       documents: dsaDocs,
       email: `partner${index + 1}@${name.toLowerCase().replaceAll(" ", "")}.example`,
       gst: `27${pan(index).slice(0, 10)}1Z${index % 9}`,
-      id: `dsa-${index + 1}`,
+      id,
       manager:
         index % 11 === 0
           ? DEMO_USERS.branch.name
@@ -322,7 +338,7 @@ export function createMockStore(): MockStore {
       pincode: city[2],
       riskRating: pick(["Low", "Medium", "High"], index),
       state: city[1],
-      status: pick(dsaStatuses, index),
+      status,
       tier: pick(["Bronze", "Silver", "Gold", "Platinum"], index),
     };
   });
@@ -363,22 +379,44 @@ export function createMockStore(): MockStore {
     const lead = index === 2 ? leads[4] : index === 5 ? leads[10] : pick(leads, index * 2);
     const score = 52 + ((index * 9) % 46);
     const salary = 28000 + ((index * 5300) % 180000);
+    const creditScore = 610 + ((index * 17) % 210);
+    const deviationRequired = index === 2 || (index % 17 === 6 && score > 78);
+    const deviationReasons = [
+      creditScore < 700 ? `Bureau score ${creditScore} is below the product policy floor.` : "",
+      salary < 50000 ? `Declared monthly income INR ${salary.toLocaleString("en-IN")} needs exception approval.` : "",
+      score > 78 ? `BRE risk score ${score} crossed the manual-review threshold.` : "",
+    ].filter(Boolean);
+    const deviation: ApplicationDeviation | undefined = deviationRequired
+      ? {
+          id: `dev-${index + 1}`,
+          reasons: deviationReasons.length
+            ? deviationReasons
+            : ["Customer is being considered under a product-specific special-case exception."],
+          requestedAt: isoDay((index % 10) + 1),
+          requestedBy: "Cosmos Auto BRE",
+          required: true,
+          status: "Pending",
+        }
+      : undefined;
     return {
       aadhaar: aadhaar(index),
       applicationId: `APP-${String(index + 1).padStart(5, "0")}`,
       city: lead.city,
       createdAt: isoDay(index % 36),
-      creditScore: 610 + ((index * 17) % 210),
+      creditScore,
       customer: lead.customer,
-      decisionSummary: pick(
-        [
-          "Eligible with standard income documentation.",
-          "Manual review required due to bureau deviation.",
-          "Low risk profile with strong repayment indicators.",
-          "Hold until address verification is closed.",
-        ],
-        index,
-      ),
+      decisionSummary: deviation
+        ? `BRE deviation raised for special-case review: ${deviation.reasons.join(" ")}`
+        : pick(
+            [
+              "Eligible with standard income documentation.",
+              "Manual review required due to bureau deviation.",
+              "Low risk profile with strong repayment indicators.",
+              "Hold until address verification is closed.",
+            ],
+            index,
+          ),
+      ...(deviation ? { deviation } : {}),
       dsaId: lead.dsaId,
       dsaName: lead.dsaName,
       email: lead.email,
@@ -391,29 +429,48 @@ export function createMockStore(): MockStore {
         loanAmount: lead.amount,
         salary,
       }),
-      notes: [
-        "Customer requested flexible EMI date.",
-        "DSA confirmed all documents collected.",
-        "Risk desk asked for one additional clarification.",
-      ],
+      notes: deviation
+        ? [
+            `Deviation pending: ${deviation.reasons.join(" ")}`,
+            "Customer requested flexible EMI date.",
+            "DSA confirmed all documents collected.",
+          ]
+        : [
+            "Customer requested flexible EMI date.",
+            "DSA confirmed all documents collected.",
+            "Risk desk asked for one additional clarification.",
+          ],
       pan: pan(index + 120),
       product: lead.product,
       riskScore: score,
       salary,
-      stage: pick(
-        [
-          "Lead Capture",
-          "Document Review",
-          "BRE Check",
-          "Credit Underwriting",
-          "Risk Review",
-          "Approval",
-          "Disbursal",
-        ],
-        index,
-      ),
-      status: pick(["Draft", "In Review", "Approved", "Rejected", "Disbursed", "On Hold"], index),
-      timeline: timeline(index),
+      stage: deviation
+        ? "Risk Review"
+        : pick(
+            [
+              "Lead Capture",
+              "Document Review",
+              "BRE Check",
+              "Credit Underwriting",
+              "Risk Review",
+              "Approval",
+              "Disbursal",
+            ],
+            index,
+          ),
+      status: deviation ? "On Hold" : pick(["Draft", "In Review", "Approved", "Rejected", "Disbursed", "On Hold"], index),
+      timeline: deviation
+        ? [
+            {
+              actor: "Cosmos Auto BRE",
+              at: deviation.requestedAt,
+              id: `tl-dev-${index + 1}`,
+              note: `Deviation routed for approval: ${deviation.reasons.join(" ")}`,
+              title: "BRE deviation raised",
+            },
+            ...timeline(index),
+          ]
+        : timeline(index),
       verificationStatus: pick(verificationStatuses, index + 1),
     };
   });
@@ -665,7 +722,7 @@ export function createMockStore(): MockStore {
 
   const settings: SettingItem[] = [
     ["General", "Default region", "West", true],
-    ["General", "DSA code prefix", "DSA", true],
+    ["General", "DSA ID prefix", "COSDSA", true],
     ["Workflow", "Auto-assign verification", "Enabled", true],
     ["Workflow", "Final approval threshold", "INR 25,00,000", true],
     ["Notifications", "Risk alerts", "Instant", true],
@@ -742,6 +799,86 @@ export function createMockStore(): MockStore {
     { id: "slab-al-2-4", schemeName: "Pre-Owned Vehicle Loan", product: "Auto Loan", maxLoanAmount: 1000000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 16.00, roiFixed: 18.00, maxLoanPeriodMonths: 36, createdAt: isoDay(11), createdBy: DEMO_USERS.credit.name },
   ];
 
+  // ------------------------------------------------------------------
+  // DSA RECOVERY DATA (with carry-forward invoice logic)
+  // Covers 12 months (Jan–Dec 2026) for the first 20 Active DSAs.
+  // Carry-forward: if recovered < target in month N, shortfall is
+  // deducted from month N+1 invoice (carryForwardIn).
+  //
+  // Billing vs Recovered intentionally varied:
+  //   seed % 7 === 0  → full recovery  (billing == recovered, pending = 0)
+  //   seed % 7 === 1  → over-recovery  (billing < recovered, pending = 0)
+  //   otherwise       → partial recovery (billing > recovered, pending > 0)
+  // ------------------------------------------------------------------
+  const recoveryMonths = [
+    "Jan 2026", "Feb 2026", "Mar 2026", "Apr 2026",
+    "May 2026", "Jun 2026", "Jul 2026", "Aug 2026",
+    "Sep 2026", "Oct 2026", "Nov 2026", "Dec 2026",
+  ];
+  const activeDsasForRecovery = dsas.filter((d) => d.status === "Active").slice(0, 20);
+  const zones = ["West", "South", "North", "East", "Central"];
+
+  const dsaRecovery: DsaRecovery[] = [];
+  let recoveryIdCounter = 0;
+
+  for (let di = 0; di < activeDsasForRecovery.length; di++) {
+    const dsa = activeDsasForRecovery[di];
+    const zone = pick(zones, di);
+    let previousCarryForward = 0;
+
+    for (let mi = 0; mi < recoveryMonths.length; mi++) {
+      const seed = di * 100 + mi;
+      const targetAmount = 500000 + ((seed * 137000) % 3500000);
+      // Recovered: sometimes under, sometimes over target
+      const recoverFactor = [0.72, 0.85, 1.0, 1.15, 0.9, 1.05, 0.78, 1.1, 0.95, 1.0, 0.88, 1.08][mi % 12];
+      const baseRecovered = Math.round(targetAmount * recoverFactor);
+      // Add per-DSA variance
+      const recoveredAmount = Math.max(0, baseRecovered + ((seed * 31337) % 200000) - 100000);
+
+      const carryForwardIn = previousCarryForward;
+      const shortfall = Math.max(0, targetAmount - recoveredAmount);
+      const carryForwardOut = shortfall;
+      const invoiceAmount = Math.max(0, recoveredAmount - carryForwardIn);
+
+      const totalCases = 5 + ((seed * 7) % 45);
+
+      // Billing vs Recovery — intentionally varied across three scenarios:
+      let totalBilling: number;
+      if (seed % 7 === 0) {
+        // Full recovery: billing exactly equals recovered (pending = 0)
+        totalBilling = recoveredAmount;
+      } else if (seed % 7 === 1) {
+        // Over-recovery: DSA collected more than billed (pending = 0)
+        totalBilling = Math.round(recoveredAmount * (0.88 + ((seed * 3) % 8) / 100));
+      } else {
+        // Partial recovery: some amount still pending
+        const partialFactor = 1.05 + ((seed * 13) % 22) / 100; // 1.05 – 1.27
+        totalBilling = Math.round(recoveredAmount * partialFactor);
+      }
+      const pendingAmount = Math.max(0, totalBilling - recoveredAmount);
+      const npaCases = Math.floor((seed * 3) % 6);
+
+      dsaRecovery.push({
+        id: `rec-${++recoveryIdCounter}`,
+        dsaId: dsa.id,
+        dsaName: dsa.name,
+        month: recoveryMonths[mi],
+        zone,
+        targetAmount,
+        recoveredAmount,
+        carryForwardIn,
+        carryForwardOut,
+        invoiceAmount,
+        totalCases,
+        totalBilling,
+        pendingAmount,
+        npaCases,
+      });
+
+      previousCarryForward = carryForwardOut;
+    }
+  }
+
   return {
     applications,
     approvals,
@@ -749,6 +886,7 @@ export function createMockStore(): MockStore {
     breRules,
     commissions,
     documents,
+    dsaRecovery,
     dsas,
     dsaProductConfigs,
     leads,

@@ -11,12 +11,14 @@ import {
   ShieldCheck,
   TrendingUp,
   UploadCloud,
+  BarChart3,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { KpiCard } from "@/components/charts";
+import { BarChartCard, KpiCard, TrendCard } from "@/components/charts";
 import { ActionPair, DetailGrid, DetailItem, PageHeader } from "@/components/module";
+import { OnHoldDsaDocuments } from "@/components/screens/on-hold-dsa-documents";
 import { Column, DataTable } from "@/components/ui/data-table";
 import {
   Badge,
@@ -36,10 +38,16 @@ import {
 import { FieldConfig, RecordForm } from "@/components/ui/record-form";
 import { useToast } from "@/components/ui/toast";
 import { DEMO_USERS } from "@/lib/demo-identities";
+import {
+  dsaDocumentType,
+  isMissingDsaDocumentRecord,
+  requiredDsaDocumentGroups,
+  requiredDsaDocuments,
+} from "@/lib/dsa-documents";
 import { demoAgentName } from "@/lib/agent-names";
 import { useMockStore } from "@/lib/store";
-import { BusinessType, DocumentType, Dsa, DsaStatus, Product } from "@/lib/types";
-import { formatCurrency, formatDate, makeId, percent } from "@/lib/utils";
+import { BusinessType, Dsa, DsaStatus, Product } from "@/lib/types";
+import { formatCurrency, formatDate, generateDsaId, makeId, percent } from "@/lib/utils";
 
 type DsaType = "Independent DSA" | "Exclusive DSA" | "Corporate DSA";
 type UploadedFileMeta = { name: string; size: string };
@@ -83,18 +91,20 @@ const dsaStatuses: DsaStatus[] = [
   "Submitted",
   "Pending Credit Approval",
   "KYC Pending",
+  "On Hold",
   "Active",
   "Suspended",
   "Rejected",
   "Blacklisted",
 ];
 
-const queueStatuses: DsaStatus[] = ["Submitted", "KYC Pending", "Pending Credit Approval"];
+const queueStatuses: DsaStatus[] = ["Submitted", "KYC Pending", "Pending Credit Approval", "On Hold"];
 const managementStatuses: DsaStatus[] = [
   "Draft",
   "Submitted",
   "Pending Credit Approval",
   "KYC Pending",
+  "On Hold",
   "Active",
   "Suspended",
   "Rejected",
@@ -117,6 +127,10 @@ function activeDsaPatch(dsa: Dsa): Partial<Dsa> {
     monthlyLeads: 0,
     rejectionReason: undefined,
     status: "Active",
+    statusReason: undefined,
+    statusReasonAction: undefined,
+    statusReasonAt: undefined,
+    statusReasonBy: undefined,
     tier: "Bronze",
   };
 }
@@ -142,7 +156,6 @@ const initialOnboardingForm = {
   bankName: "",
   businessType: "Private Limited",
   city: "",
-  code: "",
   contactPerson: "",
   email: "",
   gst: "",
@@ -187,7 +200,7 @@ function readOnboardingDraft(): Partial<OnboardingDraft> {
 }
 
 export function DsaOnboardingPage() {
-  const { createItem, currentUser } = useMockStore();
+  const { createItem, currentUser, store } = useMockStore();
   const isBranchOnboarding = currentUser?.role === "Branch User";
   const [initialDraft] = useState(() => readOnboardingDraft());
   const [step, setStep] = useState(() => clampOnboardingStep(initialDraft.step));
@@ -201,6 +214,9 @@ export function DsaOnboardingPage() {
   );
   const [isPanVerifying, setIsPanVerifying] = useState(false);
   const [isPanVerified, setIsPanVerified] = useState(false);
+  const [isAbortModalOpen, setIsAbortModalOpen] = useState(false);
+  const [submittedDsaId, setSubmittedDsaId] = useState("");
+  const missingRequiredDocuments = requiredDsaDocuments.filter((document) => !uploadedFiles[document.key]);
 
   useEffect(() => {
     const draft: OnboardingDraft = { dsaType, form, step, uploadedFiles };
@@ -222,7 +238,7 @@ export function DsaOnboardingPage() {
 
   function validate(currentStep: number) {
     const requiredByStep: Record<number, string[]> = {
-      1: ["code", "name", "businessType", "contactPerson", "mobile", "email"],
+      1: ["name", "businessType", "contactPerson", "mobile", "email"],
       2: ["pan", "gst", "address", "city", "state", "pincode"],
       3: ["accountName", "accountNumber", "bankName", "ifsc"],
     };
@@ -270,42 +286,34 @@ export function DsaOnboardingPage() {
         size: formatFileSize(file.size),
       },
     }));
+    setErrors((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
   }
 
   function handleSubmit() {
-    const id = makeId("dsa");
-    const documentsList = Object.entries(uploadedFiles).map(([key, file]) => {
-      let docType: DocumentType = "Photograph";
-      if (key.toLowerCase().includes("pan")) docType = "PAN";
-      else if (key.toLowerCase().includes("aadhaar")) docType = "Aadhaar";
-      else if (key.toLowerCase().includes("bank")) docType = "Bank Statement";
+    const id = generateDsaId(store.dsas.map((dsa) => dsa.id));
+    const submittedAt = new Date().toISOString();
+    const hasMissingDocuments = missingRequiredDocuments.length > 0;
+    const documentsList = requiredDsaDocuments.map((document) => {
+      const file = uploadedFiles[document.key];
 
       return {
         id: makeId("doc"),
         documentId: `DOC-${Math.floor(10000 + Math.random() * 90000)}`,
         ownerName: form.name,
-        type: docType,
-        fileName: file.name,
-        size: file.size,
+        type: dsaDocumentType(document.key),
+        fileName: file?.name ?? `Missing - ${document.label}`,
+        size: file?.size ?? "0 KB",
         status: "Pending" as const,
-        uploadedAt: new Date().toISOString(),
-        remarks: "Uploaded via onboarding portal",
+        uploadedAt: submittedAt,
+        remarks: file
+          ? "Uploaded via onboarding portal"
+          : "Mandatory document missing during onboarding; DSA held before approval.",
       };
     });
-
-    if (documentsList.length === 0) {
-      documentsList.push({
-        id: makeId("doc"),
-        documentId: "DOC-99001",
-        ownerName: form.name,
-        type: "PAN",
-        fileName: "dsa-pan-card.png",
-        size: "148 KB",
-        status: "Pending",
-        uploadedAt: new Date().toISOString(),
-        remarks: "Uploaded via onboarding portal",
-      });
-    }
 
     const managerName =
       currentUser?.role === "DSA Partner" || currentUser?.role === "Branch User"
@@ -323,7 +331,7 @@ export function DsaOnboardingPage() {
       },
       businessType: form.businessType as BusinessType,
       city: form.city,
-      code: form.code || `DSA-${Date.now().toString().slice(-4)}`,
+      code: id,
       commissionEarned: 0,
       contactPerson: form.contactPerson,
       documents: documentsList,
@@ -334,14 +342,15 @@ export function DsaOnboardingPage() {
       mobile: form.mobile,
       monthlyLeads: 0,
       name: form.name,
-      onboardingDate: new Date().toISOString(),
+      onboardingDate: submittedAt,
       pan: form.pan,
       pincode: form.pincode,
       riskRating: "Low",
       state: form.state,
-      status: isBranchOnboarding ? "Pending Credit Approval" : "Submitted",
+      status: hasMissingDocuments ? "On Hold" : isBranchOnboarding ? "Pending Credit Approval" : "Submitted",
       tier: "Bronze",
     });
+    setSubmittedDsaId(id);
     setStep(6);
   }
 
@@ -352,9 +361,22 @@ export function DsaOnboardingPage() {
     setUploadedFiles({});
     setIsPanVerified(false);
     setIsPanVerifying(false);
+    setIsAbortModalOpen(false);
+    setSubmittedDsaId("");
     setStep(0);
     localStorage.removeItem(DSA_ONBOARDING_DRAFT_KEY);
   }
+
+  const abortOnboardingButton = (
+    <Button
+      onClick={() => setIsAbortModalOpen(true)}
+      type="button"
+      variant="outline"
+      className="h-10 border-rose-200 px-5 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+    >
+      Abort DSA Onboarding
+    </Button>
+  );
 
   const renderField = (
     key: keyof typeof form,
@@ -382,59 +404,63 @@ export function DsaOnboardingPage() {
     const file = uploadedFiles[key];
     const inputId = `dsa-doc-${key}`;
     return (
-      <div
-        key={key}
-        className={`flex items-center justify-between rounded-xl border border-dashed p-4 transition-all duration-200 ${
-          file
-            ? "border-emerald-300 bg-emerald-50/20"
-            : "border-slate-200 bg-slate-50/50 hover:bg-slate-50"
-        }`}
-      >
-        <div className="min-w-0 flex-1 pr-3">
-          <p className="text-xs font-bold text-slate-800 truncate">{label}</p>
+      <div key={key} className="space-y-1">
+        <div
+          className={`flex items-center justify-between rounded-xl border border-dashed p-4 transition-all duration-200 ${
+            file
+              ? "border-emerald-300 bg-emerald-50/20"
+              : errors[key]
+                ? "border-rose-300 bg-rose-50/30"
+                : "border-slate-200 bg-slate-50/50 hover:bg-slate-50"
+          }`}
+        >
+          <div className="min-w-0 flex-1 pr-3">
+            <p className="text-xs font-bold text-slate-800 truncate">{label}</p>
+            {file ? (
+              <p className="text-[10px] text-emerald-600 font-semibold truncate">
+                {file.name} ({file.size})
+              </p>
+            ) : (
+              <p className="text-[10px] text-slate-400">Acceptable formats: JPEG, JPG, PNG or PDF.</p>
+            )}
+          </div>
           {file ? (
-            <p className="text-[10px] text-emerald-600 font-semibold truncate">
-              {file.name} ({file.size})
-            </p>
+            <button
+              aria-label={`Remove ${label}`}
+              title="Remove document"
+              type="button"
+              onClick={() => {
+                setUploadedFiles((current) => {
+                  const copy = { ...current };
+                  delete copy[key];
+                  return copy;
+                });
+              }}
+              className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-rose-50 hover:text-rose-600 transition"
+            >
+              <Check className="h-4 w-4" />
+            </button>
           ) : (
-            <p className="text-[10px] text-slate-400">Acceptable formats: JPEG, JPG, PNG or PDF.</p>
+            <div className="flex shrink-0">
+              <input
+                accept=".jpg,.jpeg,.png,.pdf"
+                className="sr-only"
+                id={inputId}
+                onChange={(event) => handleFileUpload(key, event.currentTarget.files?.[0])}
+                type="file"
+              />
+              <label
+                aria-label={`Upload ${label}`}
+                className="grid h-8 w-8 cursor-pointer place-items-center rounded-lg bg-blue-50 text-blue-600 transition hover:bg-blue-100"
+                htmlFor={inputId}
+                title="Upload local file"
+              >
+                <UploadCloud className="h-4 w-4" />
+              </label>
+            </div>
           )}
         </div>
-        {file ? (
-          <button
-            aria-label={`Remove ${label}`}
-            title="Remove document"
-            type="button"
-            onClick={() => {
-              setUploadedFiles((current) => {
-                const copy = { ...current };
-                delete copy[key];
-                return copy;
-              });
-            }}
-            className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-rose-50 hover:text-rose-600 transition"
-          >
-            <Check className="h-4 w-4" />
-          </button>
-        ) : (
-          <div className="flex shrink-0">
-            <input
-              accept=".jpg,.jpeg,.png,.pdf"
-              className="sr-only"
-              id={inputId}
-              onChange={(event) => handleFileUpload(key, event.currentTarget.files?.[0])}
-              type="file"
-            />
-            <label
-              aria-label={`Upload ${label}`}
-              className="grid h-8 w-8 cursor-pointer place-items-center rounded-lg bg-blue-50 text-blue-600 transition hover:bg-blue-100"
-              htmlFor={inputId}
-              title="Upload local file"
-            >
-              <UploadCloud className="h-4 w-4" />
-            </label>
-          </div>
-        )}
+        {errors[key] ? <p className="text-xs font-medium text-rose-600">{errors[key]}</p> : null}
       </div>
     );
   };
@@ -574,7 +600,6 @@ export function DsaOnboardingPage() {
                   Partner Profile Details
                 </h3>
                 <div className="grid gap-4 md:grid-cols-2">
-                  {renderField("code", "DSA code")}
                   {renderField("name", "Legal business name")}
                   {renderField("businessType", "Business type", { options: businessTypes })}
                   {renderField("contactPerson", "Contact person")}
@@ -715,31 +740,27 @@ export function DsaOnboardingPage() {
             {/* Step 4: Doc Uploads */}
             {step === 4 ? (
               <div className="space-y-6">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 border-b pb-2 uppercase tracking-wider">
-                    Upload Applicant Documents
-                  </h3>
-                  <div className="grid gap-4 md:grid-cols-3 mt-4">
-                    {renderUploadSlot("applicantPan", "Applicant PAN Card")}
-                    {renderUploadSlot("aadhaarFront", "Applicant Aadhaar (Front)")}
-                    {renderUploadSlot("aadhaarBack", "Applicant Aadhaar (Back)")}
+                {requiredDsaDocumentGroups.map((group, index) => (
+                  <div className={index === 0 ? "" : "pt-4"} key={group.title}>
+                    <h3 className="text-sm font-bold text-slate-900 border-b pb-2 uppercase tracking-wider">
+                      {group.title}
+                    </h3>
+                    <p className="mt-2 text-xs font-medium text-slate-500">
+                      Documents are required before approval. Missing files can be completed from the on-hold queue after submission.
+                    </p>
+                    <div className="grid gap-4 md:grid-cols-3 mt-4">
+                      {group.documents.map((document) => renderUploadSlot(document.key, document.label))}
+                    </div>
                   </div>
-                </div>
-
-                <div className="pt-4">
-                  <h3 className="text-sm font-bold text-slate-900 border-b pb-2 uppercase tracking-wider">
-                    Upload Company Documents
-                  </h3>
-                  <div className="grid gap-4 md:grid-cols-3 mt-4">
-                    {renderUploadSlot("companyPan", "Company PAN Card")}
-                    {renderUploadSlot("bankProof", "Bank Account Proof")}
-                    {renderUploadSlot("mouDoc", "MOU Document")}
-                    {renderUploadSlot("empanelmentLetter", "Empanelment Letter")}
-                    {renderUploadSlot("gstin", "GSTIN")}
-                    {renderUploadSlot("others", "Others")}
+                ))}
+                {missingRequiredDocuments.length ? (
+                  <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-blue-900">
+                    <p className="font-semibold">Missing documents will move this DSA to On Hold.</p>
+                    <p className="mt-1 text-xs text-blue-800">
+                      DSA Credit, Branch User, or Super Admin can upload the remaining documents from the on-hold list before approval.
+                    </p>
                   </div>
-                </div>
-
+                ) : null}
               </div>
             ) : null}
 
@@ -751,10 +772,12 @@ export function DsaOnboardingPage() {
                     <ShieldCheck className="h-6 w-6 stroke-[2.5]" />
                   </div>
                   <h3 className="text-xl font-bold text-slate-950">
-                    Bank Verification Approved
+                    {missingRequiredDocuments.length ? "Bank Verified - Documents Pending" : "Bank Verification Approved"}
                   </h3>
                   <p className="text-sm text-slate-500">
-                    The bank has verified this DSA and it is ready to onboard now.
+                    {missingRequiredDocuments.length
+                      ? "Bank details are verified. Because documents are missing, this DSA will be submitted as On Hold."
+                      : "The bank has verified this DSA and it is ready to onboard now."}
                   </p>
                 </div>
 
@@ -791,15 +814,18 @@ export function DsaOnboardingPage() {
                   </div>
                 </div>
 
-                <div className="flex justify-between border-t border-slate-100 pt-5">
-                  <Button
-                    onClick={() => goBack(5)}
-                    type="button"
-                    variant="secondary"
-                    className="h-10 px-5"
-                  >
-                    Back
-                  </Button>
+                <div className="flex flex-col gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <Button
+                      onClick={() => goBack(5)}
+                      type="button"
+                      variant="secondary"
+                      className="h-10 px-5"
+                    >
+                      Back
+                    </Button>
+                    {abortOnboardingButton}
+                  </div>
                   <Button
                     onClick={handleSubmit}
                     type="button"
@@ -826,11 +852,22 @@ export function DsaOnboardingPage() {
                   </h2>
                   <p className="text-md font-bold text-slate-700">Thank you for onboarding a new DSA.</p>
                   <p className="text-sm text-slate-500 leading-relaxed">
-                    {isBranchOnboarding
+                    {missingRequiredDocuments.length
+                      ? "Mandatory documents are missing, so this DSA is now On Hold until the pending documents are uploaded."
+                      : isBranchOnboarding
                       ? "This application is now waiting with DSA Credit for approval. Track the status from DSA Management."
                       : "This application is now waiting in Dashboard > Verification Queue for final approval."}
                   </p>
                 </div>
+
+                {submittedDsaId ? (
+                  <div className="w-full rounded-xl border border-blue-100 bg-blue-50/70 p-4 text-left">
+                    <p className="text-xs font-semibold uppercase text-blue-700">Generated DSA ID</p>
+                    <p className="mt-1 break-all font-mono text-sm font-bold text-blue-950">
+                      {submittedDsaId}
+                    </p>
+                  </div>
+                ) : null}
 
                 <div className="pt-4 flex flex-col gap-3 w-full max-w-xs">
                   <Button
@@ -861,15 +898,18 @@ export function DsaOnboardingPage() {
 
             {/* Bottom Back/Continue Navigation for middle steps */}
             {step > 0 && step < 5 ? (
-              <div className="mt-8 flex justify-between border-t border-slate-100 pt-5">
-                <Button
-                  onClick={() => goBack(step)}
-                  type="button"
-                  variant="secondary"
-                  className="h-10 px-5"
-                >
-                  Back
-                </Button>
+              <div className="mt-8 flex flex-col gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <Button
+                    onClick={() => goBack(step)}
+                    type="button"
+                    variant="secondary"
+                    className="h-10 px-5"
+                  >
+                    Back
+                  </Button>
+                  {abortOnboardingButton}
+                </div>
                 <Button
                   onClick={() => goNext(step)}
                   type="button"
@@ -882,6 +922,177 @@ export function DsaOnboardingPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Modal
+        onClose={() => setIsAbortModalOpen(false)}
+        open={isAbortModalOpen}
+        title="Abort DSA onboarding?"
+        width="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            This will delete all in-progress onboarding data from this session, including profile fields, KYC details, bank details, uploaded document metadata, and the saved draft.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => setIsAbortModalOpen(false)} type="button" variant="secondary">
+              Cancel
+            </Button>
+            <Button onClick={resetOnboarding} type="button" className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">
+              Remove and Activate
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// DSA RECOVERY REPORTS sub-component (used in the Reports tab)
+// ──────────────────────────────────────────────────────────────────────────────
+function DsaRecoveryReports({ dsaId }: { dsaId: string }) {
+  const { store } = useMockStore();
+  const recoveryRows = store.dsaRecovery
+    .filter((r) => r.dsaId === dsaId)
+    .sort((a, b) => {
+      const order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const [aM, aY] = a.month.split(" ");
+      const [bM, bY] = b.month.split(" ");
+      return Number(aY) - Number(bY) || order.indexOf(aM) - order.indexOf(bM);
+    });
+
+  if (recoveryRows.length === 0) {
+    return (
+      <div className="py-10 text-center text-slate-500 text-sm">
+        <BarChart3 className="mx-auto h-10 w-10 text-slate-300 mb-3" />
+        <p className="font-semibold text-slate-700">No recovery data available for this DSA.</p>
+        <p className="text-xs text-slate-400 mt-1">Recovery analytics data is available for active DSAs only.</p>
+      </div>
+    );
+  }
+
+  const totalRecovered = recoveryRows.reduce((s, r) => s + r.recoveredAmount, 0);
+  const totalInvoice = recoveryRows.reduce((s, r) => s + r.invoiceAmount, 0);
+  const totalNpa = recoveryRows.reduce((s, r) => s + r.npaCases, 0);
+  const totalPending = recoveryRows.reduce((s, r) => s + r.pendingAmount, 0);
+
+  return (
+    <div className="space-y-6">
+      {/* Carry-forward info banner */}
+      <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-900">
+        <TrendingUp className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+        <span>
+          <strong>Carry-Forward Logic:</strong> If recovery falls short of target in a month, the shortfall reduces next month&apos;s invoice.
+          E.g. target ₹10,000, recovered ₹8,000 → shortfall ₹2,000 deducted from next month → if next month recovery is ₹20,000, invoice = ₹18,000.
+        </span>
+      </div>
+
+      {/* KPI summary */}
+      <div className="grid gap-3 sm:grid-cols-4">
+        {[
+          { label: "Total Recovered", value: formatCurrency(totalRecovered), color: "text-emerald-700" },
+          { label: "Total Invoice Generated", value: formatCurrency(totalInvoice), color: "text-blue-700" },
+          { label: "Total Pending", value: formatCurrency(totalPending), color: "text-rose-600" },
+          { label: "Total NPA Cases", value: String(totalNpa), color: totalNpa > 0 ? "text-rose-600" : "text-slate-600" },
+        ].map((kpi) => (
+          <div key={kpi.label} className="rounded-lg border border-slate-100 bg-slate-50 p-4">
+            <p className="text-xs text-slate-500">{kpi.label}</p>
+            <p className={`mt-1 text-lg font-bold ${kpi.color}`}>{kpi.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Recovery vs Target trend chart */}
+      <TrendCard
+        data={recoveryRows.map((r) => ({
+          name: r.month.split(" ")[0],
+          value: Math.round(r.recoveredAmount / 1000),
+        }))}
+        dataKey="value"
+        subtitle="Monthly recovery amount (₹K) vs target — shortfalls trigger carry-forward into next invoice"
+        title="Recovery vs Target Trend (₹K)"
+        type="area"
+      />
+
+      {/* Invoice generated vs carry-forward chart */}
+      <BarChartCard
+        data={recoveryRows.map((r) => ({
+          name: r.month.split(" ")[0],
+          value: Math.round(r.invoiceAmount / 1000),
+        }))}
+        dataKey="value"
+        subtitle="Net invoice amount (₹K) raised after deducting carry-forward shortfall"
+        title="Invoice Generated After Carry-Forward (₹K)"
+      />
+
+      {/* Month-wise detailed table */}
+      <div>
+        <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
+          <BarChart3 className="h-4 w-4 text-blue-600" />
+          Month-wise Recovery Report
+        </h3>
+        <div className="overflow-x-auto rounded-lg border border-slate-100">
+          <table className="w-full text-left text-sm border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                <th className="p-3 pl-4">Month</th>
+                <th className="p-3 text-right">Target</th>
+                <th className="p-3 text-right">Recovered</th>
+                <th className="p-3 text-right">Carry-In</th>
+                <th className="p-3 text-right">Carry-Out</th>
+                <th className="p-3 text-right">Invoice</th>
+                <th className="p-3 text-right">Cases</th>
+                <th className="p-3 text-right">Billing</th>
+                <th className="p-3 text-right">Pending</th>
+                <th className="p-3 pr-4 text-right">NPA</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {recoveryRows.map((row) => {
+                const achievedPct = row.targetAmount > 0 ? Math.round((row.recoveredAmount / row.targetAmount) * 100) : 0;
+                const isUnder = row.recoveredAmount < row.targetAmount;
+                return (
+                  <tr key={row.id} className="hover:bg-slate-50/50 transition">
+                    <td className="p-3 pl-4 font-semibold text-slate-800">{row.month}</td>
+                    <td className="p-3 text-right text-slate-600 text-xs">{formatCurrency(row.targetAmount)}</td>
+                    <td className="p-3 text-right text-xs">
+                      <span className={`font-bold ${isUnder ? "text-rose-600" : "text-emerald-700"}`}>
+                        {formatCurrency(row.recoveredAmount)}
+                      </span>
+                      <span className={`ml-1.5 text-[10px] font-bold px-1 py-0.5 rounded-full ${isUnder ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-700"}`}>
+                        {achievedPct}%
+                      </span>
+                    </td>
+                    <td className="p-3 text-right text-amber-600 text-xs">{row.carryForwardIn > 0 ? formatCurrency(row.carryForwardIn) : "—"}</td>
+                    <td className="p-3 text-right text-orange-600 text-xs font-medium">{row.carryForwardOut > 0 ? formatCurrency(row.carryForwardOut) : "—"}</td>
+                    <td className="p-3 text-right font-bold text-blue-700 text-xs">{formatCurrency(row.invoiceAmount)}</td>
+                    <td className="p-3 text-right text-slate-600 text-xs">{row.totalCases}</td>
+                    <td className="p-3 text-right text-slate-600 text-xs">{formatCurrency(row.totalBilling)}</td>
+                    <td className="p-3 text-right text-rose-500 text-xs">{formatCurrency(row.pendingAmount)}</td>
+                    <td className="p-3 pr-4 text-right text-xs">
+                      <span className={`font-bold ${row.npaCases > 0 ? "text-rose-600" : "text-slate-400"}`}>{row.npaCases}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="bg-slate-50 border-t border-slate-200 text-xs font-bold text-slate-700">
+                <td className="p-3 pl-4">TOTAL</td>
+                <td className="p-3 text-right">{formatCurrency(recoveryRows.reduce((s, r) => s + r.targetAmount, 0))}</td>
+                <td className="p-3 text-right text-emerald-700">{formatCurrency(totalRecovered)}</td>
+                <td className="p-3 text-right text-amber-600">{formatCurrency(recoveryRows.reduce((s, r) => s + r.carryForwardIn, 0))}</td>
+                <td className="p-3 text-right text-orange-600">{formatCurrency(recoveryRows.reduce((s, r) => s + r.carryForwardOut, 0))}</td>
+                <td className="p-3 text-right text-blue-700">{formatCurrency(totalInvoice)}</td>
+                <td className="p-3 text-right">{recoveryRows.reduce((s, r) => s + r.totalCases, 0)}</td>
+                <td className="p-3 text-right">{formatCurrency(recoveryRows.reduce((s, r) => s + r.totalBilling, 0))}</td>
+                <td className="p-3 text-right text-rose-500">{formatCurrency(totalPending)}</td>
+                <td className="p-3 pr-4 text-right text-rose-600">{totalNpa}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
@@ -890,6 +1101,7 @@ export function DsaManagementPage() {
   const { store, updateItem, currentUser } = useMockStore();
   const [status, setStatus] = useState("");
   const [editing, setEditing] = useState<Dsa | null>(null);
+  const [managementTab, setManagementTab] = useState("all");
   const router = useRouter();
 
   const getDsaApplications = (dsaId: string) =>
@@ -897,26 +1109,33 @@ export function DsaManagementPage() {
       .filter((application) => application.dsaId === dsaId)
       .sort((left, right) => left.product.localeCompare(right.product) || left.applicationId.localeCompare(right.applicationId));
 
-  let rows = store.dsas.filter((item) => managementStatuses.includes(item.status));
-  if (status) rows = rows.filter((item) => item.status === status);
+  let scopedRows = store.dsas.filter((item) => managementStatuses.includes(item.status));
   if (currentUser?.role === "DSA Partner" || currentUser?.role === "Branch User") {
-    rows = rows.filter((item) => item.manager === currentUser.name);
+    scopedRows = scopedRows.filter((item) => item.manager === currentUser.name);
   }
+  const onHoldRows = scopedRows
+    .filter((item) => item.status === "On Hold")
+    .sort((left, right) => right.onboardingDate.localeCompare(left.onboardingDate));
+  const rows = status ? scopedRows.filter((item) => item.status === status) : scopedRows;
 
   const columns: Column<Dsa>[] = [
     {
       cell: (item) => (
-        <div>
-          <Link className="font-semibold text-blue-700 hover:underline" href={`/dsa/${item.id}`}>
-            {currentUser?.role === "DSA Partner" ? demoAgentName(item.id) : item.name}
-          </Link>
-          <p className="text-xs text-slate-500">{item.code}</p>
-        </div>
+        <Link className="font-semibold text-blue-700 hover:underline" href={`/dsa/${item.id}`}>
+          {currentUser?.role === "DSA Partner" ? demoAgentName(item.id) : item.name}
+        </Link>
       ),
       header: "Partner",
       key: "name",
       sortable: true,
       sortValue: (item) => item.name,
+    },
+    {
+      cell: (item) => <span className="font-mono text-xs text-slate-600">{item.code}</span>,
+      header: "DSA ID",
+      key: "code",
+      sortable: true,
+      sortValue: (item) => item.code,
     },
     { cell: (item) => item.businessType, header: "Business type", key: "businessType" },
     { cell: (item) => item.city, header: "City", key: "city", sortable: true, sortValue: (item) => item.city },
@@ -939,23 +1158,40 @@ export function DsaManagementPage() {
         eyebrow="Partner network"
         title="DSA Management"
       />
-      <DataTable
-        actions={(item) => (
-          <div className="flex justify-end gap-2">
-            <Button onClick={() => router.push(`/dsa/${item.id}`)} size="sm" type="button" variant="outline">
-              View
-            </Button>
-            <Button onClick={() => setEditing(item)} size="sm" type="button" variant="secondary">
-              Edit
-            </Button>
-          </div>
-        )}
-        columns={columns}
-        emptyDescription="Approved DSAs appear here after verification. Change filters if you are looking for an existing partner."
-        filters={[{ label: "status", onChange: setStatus, options: managementStatuses, value: status }]}
-        items={rows}
-        searchKeys={["name", "code", "pan", "mobile", "email", "city"]}
-      />
+      <div className="mb-5">
+        <Tabs
+          onChange={setManagementTab}
+          tabs={[
+            { label: "All DSAs", value: "all" },
+            { label: `On Hold (${onHoldRows.length})`, value: "onHold" },
+          ]}
+          value={managementTab}
+        />
+      </div>
+      {managementTab === "onHold" ? (
+        <OnHoldDsaDocuments
+          description="Upload remaining mandatory documents here. A DSA stays On Hold until every missing document is uploaded."
+          dsas={onHoldRows}
+        />
+      ) : (
+        <DataTable
+          actions={(item) => (
+            <div className="flex justify-end gap-2">
+              <Button onClick={() => router.push(`/dsa/${item.id}`)} size="sm" type="button" variant="outline">
+                View
+              </Button>
+              <Button onClick={() => setEditing(item)} size="sm" type="button" variant="secondary">
+                Edit
+              </Button>
+            </div>
+          )}
+          columns={columns}
+          emptyDescription="Approved DSAs appear here after verification. Change filters if you are looking for an existing partner."
+          filters={[{ label: "status", onChange: setStatus, options: managementStatuses, value: status }]}
+          items={rows}
+          searchKeys={["name", "code", "pan", "mobile", "email", "city"]}
+        />
+      )}
 
       <Modal onClose={() => setEditing(null)} open={Boolean(editing)} title="Edit DSA">
         {editing ? (
@@ -976,8 +1212,9 @@ export function DsaManagementPage() {
 }
 
 export function DsaProfilePage({ id }: { id: string }) {
-  const { deleteItem, store, updateItem, currentUser } = useMockStore();
+  const { deleteDsaCascade, deleteItem, store, updateItem, currentUser } = useMockStore();
   const { toast } = useToast();
+  const router = useRouter();
   const [tab, setTab] = useState("overview");
   const [applicationProductFilter, setApplicationProductFilter] = useState("");
   const [approvingDsa, setApprovingDsa] = useState<Dsa | null>(null);
@@ -988,13 +1225,20 @@ export function DsaProfilePage({ id }: { id: string }) {
   const [blacklistingDsa, setBlacklistingDsa] = useState<Dsa | null>(null);
   const [activatingDsa, setActivatingDsa] = useState<Dsa | null>(null);
   const [unblacklistingDsa, setUnblacklistingDsa] = useState<Dsa | null>(null);
+  const [deletingDsa, setDeletingDsa] = useState<Dsa | null>(null);
+  const [viewingLifecycleReason, setViewingLifecycleReason] = useState<Dsa | null>(null);
+  const [lifecycleReason, setLifecycleReason] = useState("");
+  const [lifecycleReasonError, setLifecycleReasonError] = useState("");
 
   const dsa = store.dsas.find((item) => item.id === id) ?? store.dsas[0];
+  const missingProfileDocuments = dsa.documents.filter(isMissingDsaDocumentRecord);
   const canDecideDsa =
     (currentUser?.role === "DSA Manager" || currentUser?.role === "DSA Credit") &&
     isQueueStatus(dsa.status);
-  const productConfigs = store.dsaProductConfigs
-    .filter((config) => config.dsaId === dsa.id && config.status === "Active")
+  const canApproveDsa = canDecideDsa && missingProfileDocuments.length === 0;
+  const allProductConfigs = store.dsaProductConfigs.filter((config) => config.dsaId === dsa.id);
+  const productConfigs = allProductConfigs
+    .filter((config) => config.status === "Active")
     .sort((left, right) => left.product.localeCompare(right.product));
   const configuredProducts = productConfigs.map((config) => config.product);
 
@@ -1017,13 +1261,48 @@ export function DsaProfilePage({ id }: { id: string }) {
   const commissions = store.commissions.filter((item) => item.dsaId === dsa.id);
   const leads = store.leads.filter((item) => item.dsaId === dsa.id);
   const audit = store.auditLogs.slice(0, 8);
+  const applicationIds = new Set(applications.map((application) => application.id));
+  const applicationCodes = new Set(applications.map((application) => application.applicationId));
+  const linkedDocumentCount = store.documents.filter(
+    (document) => document.dsaId === dsa.id || applicationIds.has(document.applicationId ?? ""),
+  ).length;
+  const linkedVerificationCount = store.verificationChecks.filter((check) => applicationCodes.has(check.applicationId)).length;
+  const linkedApprovalCount = store.approvals.filter((approval) => applicationCodes.has(approval.applicationId)).length;
+  const linkedUserCount = store.users.filter(
+    (user) => user.id === dsa.id || user.email === dsa.email || user.name === dsa.name,
+  ).length;
 
   const commissionTotal = commissions.reduce((sum, item) => sum + item.payout, 0);
   const approvedApplications = applications.filter(
     (item) => item.status === "Approved" || item.status === "Disbursed",
   ).length;
 
-  const canManageDsa = currentUser?.role === "DSA Manager" && ["Active", "Suspended", "Blacklisted"].includes(dsa.status);
+  const canLifecycleRoleManageDsa =
+    currentUser?.role === "DSA Manager" ||
+    currentUser?.role === "DSA Credit" ||
+    (currentUser?.role === "Branch User" && dsa.manager === currentUser.name);
+  const canManageDsaLifecycle = canLifecycleRoleManageDsa && ["Active", "Suspended", "Blacklisted"].includes(dsa.status);
+  const canViewDsaLifecycleReason = canLifecycleRoleManageDsa;
+  const canDeleteDsa = currentUser?.role === "DSA Manager";
+
+  function closeLifecycleModals() {
+    setDeactivatingDsa(null);
+    setBlacklistingDsa(null);
+    setLifecycleReason("");
+    setLifecycleReasonError("");
+  }
+
+  function openDeactivationModal(nextDsa: Dsa) {
+    setLifecycleReason("");
+    setLifecycleReasonError("");
+    setDeactivatingDsa(nextDsa);
+  }
+
+  function openBlacklistModal(nextDsa: Dsa) {
+    setLifecycleReason("");
+    setLifecycleReasonError("");
+    setBlacklistingDsa(nextDsa);
+  }
 
   return (
     <div>
@@ -1038,8 +1317,10 @@ export function DsaProfilePage({ id }: { id: string }) {
             {canDecideDsa && (
               <div className="flex gap-2">
                 <Button
+                  disabled={!canApproveDsa}
                   onClick={() => setApprovingDsa(dsa)}
                   size="sm"
+                  title={canApproveDsa ? "Approve DSA" : "Missing mandatory documents"}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1 h-auto"
                 >
                   Approve
@@ -1054,12 +1335,12 @@ export function DsaProfilePage({ id }: { id: string }) {
                 </Button>
               </div>
             )}
-            {canManageDsa && (
+            {canManageDsaLifecycle && (
               <div className="flex gap-2">
                 {dsa.status === "Active" && (
                   <>
                     <Button
-                      onClick={() => setDeactivatingDsa(dsa)}
+                      onClick={() => openDeactivationModal(dsa)}
                       size="sm"
                       variant="outline"
                       className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 font-bold text-xs py-1.5 px-3 h-auto"
@@ -1067,7 +1348,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                       Deactivate
                     </Button>
                     <Button
-                      onClick={() => setBlacklistingDsa(dsa)}
+                      onClick={() => openBlacklistModal(dsa)}
                       size="sm"
                       variant="outline"
                       className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 font-bold text-xs py-1.5 px-3 h-auto"
@@ -1086,7 +1367,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                       Activate
                     </Button>
                     <Button
-                      onClick={() => setBlacklistingDsa(dsa)}
+                      onClick={() => openBlacklistModal(dsa)}
                       size="sm"
                       variant="outline"
                       className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 font-bold text-xs py-1.5 px-3 h-auto"
@@ -1105,7 +1386,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                       Remove from Blacklist
                     </Button>
                     <Button
-                      onClick={() => setDeactivatingDsa(dsa)}
+                      onClick={() => openDeactivationModal(dsa)}
                       size="sm"
                       variant="outline"
                       className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 font-bold text-xs py-1.5 px-3 h-auto"
@@ -1116,9 +1397,20 @@ export function DsaProfilePage({ id }: { id: string }) {
                 )}
               </div>
             )}
+            {canDeleteDsa ? (
+              <Button
+                onClick={() => setDeletingDsa(dsa)}
+                size="sm"
+                type="button"
+                variant="danger"
+                className="font-bold text-xs py-1.5 px-3 h-auto"
+              >
+                Delete Permanently
+              </Button>
+            ) : null}
           </div>
         }
-        description={`${dsa.code} · ${dsa.businessType} · managed by ${dsa.manager}`}
+        description={`${dsa.businessType} - managed by ${dsa.manager}`}
         eyebrow="DSA profile"
         title={dsa.name}
       />
@@ -1128,6 +1420,39 @@ export function DsaProfilePage({ id }: { id: string }) {
         <KpiCard change="+11.0%" icon={ClipboardList} label="Monthly leads" value={String(dsa.monthlyLeads)} />
         <KpiCard change="+8.4%" icon={BadgeIndianRupee} label="Commission" tone="slate" value={formatCurrency(commissionTotal || dsa.commissionEarned)} />
       </div>
+
+      {missingProfileDocuments.length ? (
+        <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-blue-900">
+          <p className="font-semibold">DSA on hold before approval</p>
+          <p className="mt-1 text-xs text-blue-800">
+            {missingProfileDocuments.length} mandatory document{missingProfileDocuments.length === 1 ? " is" : "s are"} missing. Upload completion is required before activation.
+          </p>
+        </div>
+      ) : null}
+
+      {canViewDsaLifecycleReason && dsa.statusReason ? (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="font-semibold">{dsa.statusReasonAction ?? dsa.status} reason recorded</p>
+              <p className="mt-1 text-xs text-amber-800">
+                {dsa.statusReasonBy ? `By ${dsa.statusReasonBy}` : "Recorded by internal user"}
+                {dsa.statusReasonAt ? ` - ${formatDate(dsa.statusReasonAt)}` : ""}
+              </p>
+            </div>
+            <StatusBadge status={dsa.status} />
+          </div>
+          <Button
+            className="mt-3 border-amber-200 bg-white text-amber-900 hover:bg-amber-100"
+            onClick={() => setViewingLifecycleReason(dsa)}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            View reason
+          </Button>
+        </div>
+      ) : null}
 
       <div className="mt-6">
         <Tabs
@@ -1140,6 +1465,7 @@ export function DsaProfilePage({ id }: { id: string }) {
             { label: "Manage Products", value: "products" },
             { label: "Applications", value: "apps" },
             { label: "Commission", value: "commission" },
+            { label: "Reports", value: "reports" },
             { label: "Audit Timeline", value: "audit" },
           ]}
           value={tab}
@@ -1150,6 +1476,7 @@ export function DsaProfilePage({ id }: { id: string }) {
         <CardContent>
           {tab === "overview" ? (
             <DetailGrid>
+              <DetailItem label="DSA ID" value={dsa.code} />
               <DetailItem label="Contact person" value={dsa.contactPerson} />
               <DetailItem label="Mobile" value={dsa.mobile} />
               <DetailItem label="Email" value={dsa.email} />
@@ -1363,6 +1690,9 @@ export function DsaProfilePage({ id }: { id: string }) {
               ))}
             </div>
           ) : null}
+          {tab === "reports" ? (
+            <DsaRecoveryReports dsaId={dsa.id} />
+          ) : null}
         </CardContent>
       </Card>
       <Modal
@@ -1464,7 +1794,84 @@ export function DsaProfilePage({ id }: { id: string }) {
       </Modal>
 
       <Modal
-        onClose={() => setDeactivatingDsa(null)}
+        onClose={() => setViewingLifecycleReason(null)}
+        open={Boolean(viewingLifecycleReason && canViewDsaLifecycleReason)}
+        title={`${viewingLifecycleReason?.statusReasonAction ?? viewingLifecycleReason?.status ?? "Lifecycle"} reason`}
+        width="max-w-md"
+      >
+        {viewingLifecycleReason ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 p-4">
+              <div>
+                <p className="text-sm font-semibold text-amber-950">{viewingLifecycleReason.name}</p>
+                <p className="mt-1 text-xs text-amber-800">
+                  {viewingLifecycleReason.statusReasonBy
+                    ? `Recorded by ${viewingLifecycleReason.statusReasonBy}`
+                    : "Recorded by internal user"}
+                  {viewingLifecycleReason.statusReasonAt
+                    ? ` on ${formatDate(viewingLifecycleReason.statusReasonAt)}`
+                    : ""}
+                </p>
+              </div>
+              <StatusBadge status={viewingLifecycleReason.status} />
+            </div>
+            <div className="rounded-md border border-slate-200 bg-white p-4 text-sm leading-relaxed text-slate-700">
+              {viewingLifecycleReason.statusReason}
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={() => setViewingLifecycleReason(null)} type="button" variant="secondary">
+                Close
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        onClose={() => setDeletingDsa(null)}
+        open={Boolean(deletingDsa)}
+        title="Permanently delete DSA?"
+        width="max-w-lg"
+      >
+        <div className="space-y-4">
+          <div className="rounded-md border border-rose-200 bg-rose-50 p-4">
+            <p className="text-sm font-semibold text-rose-900">{deletingDsa?.name}</p>
+            <p className="mt-1 text-xs text-rose-800">
+              This removes the DSA record and every linked product, lead, application, payout, and document record from the app.
+            </p>
+          </div>
+          <div className="grid gap-2 text-sm sm:grid-cols-2">
+            <DetailItem label="Product configs" value={allProductConfigs.length} />
+            <DetailItem label="Leads" value={leads.length} />
+            <DetailItem label="Applications" value={applications.length} />
+            <DetailItem label="Commissions" value={commissions.length} />
+            <DetailItem label="Documents" value={linkedDocumentCount} />
+            <DetailItem label="Verification checks" value={linkedVerificationCount} />
+            <DetailItem label="Approval records" value={linkedApprovalCount} />
+            <DetailItem label="User records" value={linkedUserCount} />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => setDeletingDsa(null)} type="button" variant="secondary">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!deletingDsa) return;
+                deleteDsaCascade(deletingDsa.id);
+                setDeletingDsa(null);
+                router.push("/dsa/management");
+              }}
+              type="button"
+              variant="danger"
+            >
+              Delete Permanently
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        onClose={closeLifecycleModals}
         open={Boolean(deactivatingDsa)}
         title="Deactivate DSA Partner?"
         width="max-w-md"
@@ -1476,15 +1883,41 @@ export function DsaProfilePage({ id }: { id: string }) {
           <p className="text-xs text-slate-500">
             This will suspend the DSA, disable their marketing journeys, and remove their name from dropdowns across the platform.
           </p>
+          <Field>
+            <Label htmlFor="deactivationReason">Deactivation reason</Label>
+            <textarea
+              id="deactivationReason"
+              rows={3}
+              className="w-full rounded-md border border-slate-200 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              value={lifecycleReason}
+              onChange={(event) => {
+                setLifecycleReason(event.target.value);
+                setLifecycleReasonError("");
+              }}
+              placeholder="Enter reason visible to Branch, DSA Credit, and Super Admin"
+            />
+            {lifecycleReasonError ? <p className="text-xs font-medium text-rose-600">{lifecycleReasonError}</p> : null}
+          </Field>
           <div className="flex justify-end gap-2">
-            <Button onClick={() => setDeactivatingDsa(null)} type="button" variant="secondary">
+            <Button onClick={closeLifecycleModals} type="button" variant="secondary">
               Cancel
             </Button>
             <Button
               onClick={() => {
                 if (deactivatingDsa) {
-                  updateItem("dsas", deactivatingDsa.id, { status: "Suspended" });
-                  setDeactivatingDsa(null);
+                  const reason = lifecycleReason.trim();
+                  if (!reason) {
+                    setLifecycleReasonError("Add a reason before deactivating this DSA.");
+                    return;
+                  }
+                  updateItem("dsas", deactivatingDsa.id, {
+                    status: "Suspended",
+                    statusReason: reason,
+                    statusReasonAction: "Deactivated",
+                    statusReasonAt: new Date().toISOString(),
+                    statusReasonBy: currentUser?.name ?? DEMO_USERS.admin.name,
+                  });
+                  closeLifecycleModals();
                 }
               }}
               type="button"
@@ -1497,7 +1930,7 @@ export function DsaProfilePage({ id }: { id: string }) {
       </Modal>
 
       <Modal
-        onClose={() => setBlacklistingDsa(null)}
+        onClose={closeLifecycleModals}
         open={Boolean(blacklistingDsa)}
         title="Blacklist DSA Partner?"
         width="max-w-md"
@@ -1509,15 +1942,41 @@ export function DsaProfilePage({ id }: { id: string }) {
           <p className="text-xs text-slate-500">
             This will put the partner in the blacklisted DSAs list, suspend their marketing journeys, and disable their access.
           </p>
+          <Field>
+            <Label htmlFor="blacklistReason">Blacklist reason</Label>
+            <textarea
+              id="blacklistReason"
+              rows={3}
+              className="w-full rounded-md border border-slate-200 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              value={lifecycleReason}
+              onChange={(event) => {
+                setLifecycleReason(event.target.value);
+                setLifecycleReasonError("");
+              }}
+              placeholder="Enter reason visible to Branch, DSA Credit, and Super Admin"
+            />
+            {lifecycleReasonError ? <p className="text-xs font-medium text-rose-600">{lifecycleReasonError}</p> : null}
+          </Field>
           <div className="flex justify-end gap-2">
-            <Button onClick={() => setBlacklistingDsa(null)} type="button" variant="secondary">
+            <Button onClick={closeLifecycleModals} type="button" variant="secondary">
               Cancel
             </Button>
             <Button
               onClick={() => {
                 if (blacklistingDsa) {
-                  updateItem("dsas", blacklistingDsa.id, { status: "Blacklisted" });
-                  setBlacklistingDsa(null);
+                  const reason = lifecycleReason.trim();
+                  if (!reason) {
+                    setLifecycleReasonError("Add a reason before blacklisting this DSA.");
+                    return;
+                  }
+                  updateItem("dsas", blacklistingDsa.id, {
+                    status: "Blacklisted",
+                    statusReason: reason,
+                    statusReasonAction: "Blacklisted",
+                    statusReasonAt: new Date().toISOString(),
+                    statusReasonBy: currentUser?.name ?? DEMO_USERS.admin.name,
+                  });
+                  closeLifecycleModals();
                 }
               }}
               type="button"
@@ -1540,7 +1999,7 @@ export function DsaProfilePage({ id }: { id: string }) {
             Are you sure you want to reactivate <span className="font-bold text-slate-800">{activatingDsa?.name}</span>?
           </p>
           <p className="text-xs text-slate-500">
-            This will set the DSA's status to Active and restore their availability in dropdowns and marketing journeys.
+            This will set the DSA&apos;s status to Active and restore their availability in dropdowns and marketing journeys.
           </p>
           <div className="flex justify-end gap-2">
             <Button onClick={() => setActivatingDsa(null)} type="button" variant="secondary">
@@ -1549,7 +2008,13 @@ export function DsaProfilePage({ id }: { id: string }) {
             <Button
               onClick={() => {
                 if (activatingDsa) {
-                  updateItem("dsas", activatingDsa.id, { status: "Active" });
+                  updateItem("dsas", activatingDsa.id, {
+                    status: "Active",
+                    statusReason: undefined,
+                    statusReasonAction: undefined,
+                    statusReasonAt: undefined,
+                    statusReasonBy: undefined,
+                  });
                   setActivatingDsa(null);
                 }
               }}
@@ -1582,7 +2047,13 @@ export function DsaProfilePage({ id }: { id: string }) {
             <Button
               onClick={() => {
                 if (unblacklistingDsa) {
-                  updateItem("dsas", unblacklistingDsa.id, { status: "Active" });
+                  updateItem("dsas", unblacklistingDsa.id, {
+                    status: "Active",
+                    statusReason: undefined,
+                    statusReasonAction: undefined,
+                    statusReasonAt: undefined,
+                    statusReasonBy: undefined,
+                  });
                   setUnblacklistingDsa(null);
                 }
               }}

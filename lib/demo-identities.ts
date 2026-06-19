@@ -1,3 +1,5 @@
+import { seededDsaId } from "@/lib/utils";
+
 export type SessionRole = "DSA Manager" | "DSA Credit" | "Branch User" | "DSA Partner" | "Customer";
 export type DemoUserName = "admin" | "credit" | "branch" | "dsa" | "user";
 
@@ -33,9 +35,9 @@ export const DEMO_USERS = {
     role: "Branch User",
   },
   dsa: {
-    code: "DSA-0001",
+    code: seededDsaId(0),
     email: "dsa@cosmosbank.example",
-    id: "dsa-1",
+    id: seededDsaId(0),
     mobile: "8888888888",
     name: "dsa",
     role: "DSA Partner",

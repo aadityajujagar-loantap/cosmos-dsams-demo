@@ -1,4 +1,5 @@
 import type { Application, ApplicationJourney, Product } from "@/lib/types";
+import { buildApplicationDeviation, evaluateBreDeviation } from "@/lib/bre";
 import { makeId } from "@/lib/utils";
 
 type JourneySeed = Pick<Application, "city" | "customer" | "loanAmount" | "salary">;
@@ -176,15 +177,35 @@ export function createJourneyApplication({
     32,
     Math.min(91, 82 - Math.floor((creditScore - 600) / 12) + Math.round(applicant.loanAmount / 1000000)),
   );
+  const submittedAt = new Date().toISOString();
+  const breDeviation = evaluateBreDeviation({
+    creditScore,
+    loanAmount: applicant.loanAmount,
+    product,
+    riskScore,
+    salary: applicant.salary,
+  });
+  const deviation = breDeviation.required
+    ? buildApplicationDeviation({
+        actor: "Cosmos Auto BRE",
+        reasons: breDeviation.reasons,
+        requestedAt: submittedAt,
+      })
+    : null;
+  const status: Application["status"] = deviation ? "On Hold" : "In Review";
+  const stage: Application["stage"] = deviation ? "Risk Review" : "BRE Check";
 
   return {
     aadhaar: applicant.aadhaar.length >= 4 ? `XXXX-XXXX-${applicant.aadhaar.slice(-4)}` : applicant.aadhaar,
     applicationId: `APP-J${String(Date.now()).slice(-6)}`,
     city: applicant.city,
-    createdAt: new Date().toISOString(),
+    createdAt: submittedAt,
     creditScore,
     customer: applicant.customer,
-    decisionSummary: `${product} journey submitted through ${source === "Assisted" ? "assisted Sell Now" : "customer self-serve journey"} for ${dsaName}. Queued for BRE and verification review.`,
+    decisionSummary: deviation
+      ? `${product} journey submitted for ${dsaName}. BRE deviation raised because ${breDeviation.reasons.join(" ")} Pending approval by Branch User, DSA Credit, or Super Admin.`
+      : `${product} journey submitted through ${source === "Assisted" ? "assisted Sell Now" : "customer self-serve journey"} for ${dsaName}. Queued for BRE and verification review.`,
+    ...(deviation ? { deviation } : {}),
     dsaId,
     dsaName,
     email: applicant.email,
@@ -203,26 +224,40 @@ export function createJourneyApplication({
     notes: [
       `${source === "Assisted" ? "Admin filled" : "Customer submitted"} full ${product} journey.`,
       `Sourced by ${dsaName}.`,
+      ...(deviation ? [`Deviation pending: ${breDeviation.reasons.join(" ")}`] : []),
     ],
     pan: applicant.pan.toUpperCase(),
     product,
     riskScore,
     salary: applicant.salary,
-    stage: "BRE Check",
-    status: "In Review",
+    stage,
+    status,
     timeline: [
       {
         actor,
-        at: new Date().toISOString(),
+        at: submittedAt,
         id: makeId("tl"),
         note: `${product} journey completed with product-specific details.`,
         title: "Journey submitted",
       },
+      ...(deviation
+        ? [
+            {
+              actor: "Cosmos Auto BRE",
+              at: submittedAt,
+              id: makeId("tl"),
+              note: `Deviation routed for approval: ${breDeviation.reasons.join(" ")}`,
+              title: "BRE deviation raised",
+            },
+          ]
+        : []),
       {
         actor: "Cosmos Auto Desk",
-        at: new Date().toISOString(),
+        at: submittedAt,
         id: makeId("tl"),
-        note: "Application created from journey payload and routed to BRE checks.",
+        note: deviation
+          ? "Application created from journey payload and placed on hold for deviation approval."
+          : "Application created from journey payload and routed to BRE checks.",
         title: "Application created",
       },
     ],

@@ -10,6 +10,7 @@ export type DsaStatus =
   | "Submitted"
   | "Pending Credit Approval"
   | "KYC Pending"
+  | "On Hold"
   | "Active"
   | "Suspended"
   | "Rejected"
@@ -127,6 +128,10 @@ export interface Dsa extends Entity {
   commissionEarned: number;
   documents: DocumentRecord[];
   rejectionReason?: string;
+  statusReason?: string;
+  statusReasonAction?: "Deactivated" | "Blacklisted";
+  statusReasonAt?: string;
+  statusReasonBy?: string;
 }
 
 export interface ProductCommissionRange {
@@ -187,6 +192,25 @@ export interface ApplicationJourney {
   fields: ApplicationJourneyField[];
 }
 
+export type DeviationStatus = "Pending" | "Approved" | "Rejected";
+export type DeviationApproverRole = "Branch User" | "DSA Credit" | "DSA Manager";
+
+export interface ApplicationDeviation {
+  id: string;
+  required: true;
+  status: DeviationStatus;
+  reasons: string[];
+  requestedAt: string;
+  requestedBy: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  approvedByRole?: DeviationApproverRole;
+  rejectedAt?: string;
+  rejectedBy?: string;
+  rejectedByRole?: DeviationApproverRole;
+  remarks?: string;
+}
+
 export interface Application extends Entity {
   applicationId: string;
   customer: string;
@@ -208,6 +232,7 @@ export interface Application extends Entity {
   verificationStatus: VerificationStatus;
   decisionSummary: string;
   journey: ApplicationJourney;
+  deviation?: ApplicationDeviation;
   notes: string[];
   timeline: TimelineEvent[];
 }
@@ -301,6 +326,32 @@ export interface Commission extends Entity {
   status: "Pending" | "Processed" | "Hold";
 }
 
+/**
+ * DsaRecovery captures per-DSA per-month recovery metrics.
+ * The carry-forward concept: if a DSA recovers less than their target in month N,
+ * the shortfall is carried forward and deducted from the next month's invoice.
+ * E.g. target=10000, recovered=8000 → carryForward=2000;
+ * next month if recovered=20000 → invoiceAmount = 20000 - 2000 = 18000.
+ */
+export interface DsaRecovery extends Entity {
+  dsaId: string;
+  dsaName: string;
+  month: string;
+  zone: string;
+  targetAmount: number;
+  recoveredAmount: number;
+  /** Shortfall brought in from the previous month */
+  carryForwardIn: number;
+  /** Shortfall generated in this month (carried to next month) */
+  carryForwardOut: number;
+  /** Invoice raised = recoveredAmount - carryForwardIn (floored at 0) */
+  invoiceAmount: number;
+  totalCases: number;
+  totalBilling: number;
+  pendingAmount: number;
+  npaCases: number;
+}
+
 export interface User extends Entity {
   name: string;
   email: string;
@@ -352,6 +403,7 @@ export interface MockStore {
   documents: DocumentRecord[];
   approvals: ApprovalItem[];
   commissions: Commission[];
+  dsaRecovery: DsaRecovery[];
   users: User[];
   roles: RolePermission[];
   auditLogs: AuditLog[];
@@ -372,6 +424,7 @@ export interface EntityMap {
   documents: DocumentRecord;
   approvals: ApprovalItem;
   commissions: Commission;
+  dsaRecovery: DsaRecovery;
   users: User;
   roles: RolePermission;
   auditLogs: AuditLog;

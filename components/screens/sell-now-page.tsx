@@ -528,7 +528,7 @@ export function SellNowPage() {
                 />
                 {effectiveConfig ? (
                   <div className="grid gap-3 md:grid-cols-3">
-                    <DetailItem label="DSA code" value={effectiveConfig.dsaCode} />
+                    <DetailItem label="DSA ID" value={effectiveConfig.dsaCode} />
                     <DetailItem label="Configured product" value={effectiveConfig.product} />
                     <DetailItem label="Commission type" value={effectiveConfig.commissionType} />
                   </div>

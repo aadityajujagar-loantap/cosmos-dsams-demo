@@ -36,6 +36,52 @@ export function makeId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+let lastDsaIdTimestamp = 0;
+
+function padDatePart(value: number, length = 2) {
+  return String(value).padStart(length, "0");
+}
+
+function formatDsaIdDate(date: Date) {
+  return [
+    date.getFullYear(),
+    padDatePart(date.getMonth() + 1),
+    padDatePart(date.getDate()),
+  ].join("");
+}
+
+function formatDsaIdTime(date: Date) {
+  return [
+    padDatePart(date.getHours()),
+    padDatePart(date.getMinutes()),
+    padDatePart(date.getSeconds()),
+    padDatePart(date.getMilliseconds(), 3),
+  ].join("");
+}
+
+export function formatDsaTimestampId(date: Date) {
+  return `COSDSA${formatDsaIdDate(date)}${formatDsaIdTime(date)}`;
+}
+
+export function seededDsaId(index: number) {
+  return formatDsaTimestampId(new Date(2026, 5, 3 - index, 9, 0, 0, index));
+}
+
+export function generateDsaId(existingIds: Iterable<string> = []) {
+  const reservedIds = new Set(existingIds);
+  let timestamp = Math.max(Date.now(), lastDsaIdTimestamp + 1);
+  let id = "";
+
+  do {
+    const date = new Date(timestamp);
+    id = formatDsaTimestampId(date);
+    timestamp += 1;
+  } while (reservedIds.has(id));
+
+  lastDsaIdTimestamp = timestamp - 1;
+  return id;
+}
+
 export function initials(name: string) {
   return name
     .split(" ")

@@ -26,11 +26,12 @@ import {
   MockStore,
 } from "@/lib/types";
 import { journeyPath } from "@/lib/journey-links";
-import { makeId, titleCase } from "@/lib/utils";
+import { makeId, seededDsaId, titleCase } from "@/lib/utils";
 import { buildApplicationJourney } from "@/lib/product-journeys";
 
 interface StoreContextValue {
   createItem: <K extends CollectionName>(collection: K, item: EntityMap[K]) => void;
+  deleteDsaCascade: (id: string) => void;
   deleteItem: <K extends CollectionName>(collection: K, id: string) => void;
   getById: <K extends CollectionName>(collection: K, id: string) => EntityMap[K] | undefined;
   store: MockStore;
@@ -46,6 +47,9 @@ interface StoreContextValue {
 
 const StoreContext = createContext<StoreContextValue | undefined>(undefined);
 const STORE_STORAGE_KEY = "cosmos_dsa_store";
+const COLON_DSA_ID_PATTERN = /^COSDSA(\d{8})(\d{2}):(\d{2}):(\d{2}):(\d{3})$/;
+const LEGACY_DSA_ID_PATTERN = /^dsa-(\d+)$/;
+const LEGACY_DSA_CODE_PATTERN = /^DSA-\d+$/;
 
 function ensureApplicationJourneys(store: MockStore): MockStore {
   return {
@@ -61,6 +65,99 @@ function ensureApplicationJourneys(store: MockStore): MockStore {
             ...application,
             journey: buildApplicationJourney(application.product, index, application),
           },
+    ),
+  };
+}
+
+function legacyDsaIdToSeededId(id: string) {
+  const match = LEGACY_DSA_ID_PATTERN.exec(id);
+  if (!match) return id;
+
+  const index = Number(match[1]) - 1;
+  if (!Number.isInteger(index) || index < 0) return id;
+  return seededDsaId(index);
+}
+
+function normalizeDsaId(id: string) {
+  const colonMatch = COLON_DSA_ID_PATTERN.exec(id);
+  if (colonMatch) {
+    return `COSDSA${colonMatch.slice(1).join("")}`;
+  }
+
+  return legacyDsaIdToSeededId(id);
+}
+
+function shouldReplaceLegacyDsaCode(code: string, oldId: string) {
+  return code === oldId || normalizeDsaId(code) !== code || LEGACY_DSA_CODE_PATTERN.test(code);
+}
+
+function migrateLegacyDsaIds(store: MockStore): MockStore {
+  const idMap = new Map<string, string>();
+
+  store.dsas.forEach((dsa) => {
+    const nextId = normalizeDsaId(dsa.id);
+    if (nextId !== dsa.id) idMap.set(dsa.id, nextId);
+  });
+
+  const mapDsaId = (id: string) => idMap.get(id) ?? normalizeDsaId(id);
+
+  return {
+    ...store,
+    applications: store.applications.map((application) => ({
+      ...application,
+      dsaId: mapDsaId(application.dsaId),
+    })),
+    commissions: store.commissions.map((commission) => ({
+      ...commission,
+      dsaId: mapDsaId(commission.dsaId),
+    })),
+    documents: store.documents.map((document) => ({
+      ...document,
+      dsaId: document.dsaId ? mapDsaId(document.dsaId) : document.dsaId,
+    })),
+    dsaProductConfigs: store.dsaProductConfigs.map((config) => {
+      const dsaId = mapDsaId(config.dsaId);
+      return {
+        ...config,
+        dsaCode: shouldReplaceLegacyDsaCode(config.dsaCode, config.dsaId) ? dsaId : config.dsaCode,
+        dsaId,
+      };
+    }),
+    dsas: store.dsas.map((dsa) => {
+      const id = mapDsaId(dsa.id);
+      return {
+        ...dsa,
+        code: shouldReplaceLegacyDsaCode(dsa.code, dsa.id) ? id : dsa.code,
+        documents: dsa.documents.map((document) => ({
+          ...document,
+          dsaId: document.dsaId ? mapDsaId(document.dsaId) : document.dsaId,
+        })),
+        id,
+      };
+    }),
+    leads: store.leads.map((lead) => ({
+      ...lead,
+      dsaId: mapDsaId(lead.dsaId),
+    })),
+  };
+}
+
+function hasMissingDsaDocumentPlaceholder(dsa: MockStore["dsas"][number]) {
+  return dsa.documents.some(
+    (document) => document.size === "0 KB" || document.remarks.includes("Mandatory document missing"),
+  );
+}
+
+function migrateOnHoldDsaStatuses(store: MockStore): MockStore {
+  return {
+    ...store,
+    dsas: store.dsas.map((dsa) =>
+      hasMissingDsaDocumentPlaceholder(dsa)
+        ? {
+            ...dsa,
+            status: "On Hold",
+          }
+        : dsa,
     ),
   };
 }
@@ -95,8 +192,10 @@ function initialStore(): MockStore {
       ...seededStore.roles.filter((item) => !existingRoleIds.has(item.id)),
     ];
 
-    console.log("Mock store: loaded from localStorage. Total DSAs in persisted store:", mergedStore.dsas.length);
-    return ensureApplicationJourneys(mergedStore);
+    const migratedStore = migrateOnHoldDsaStatuses(migrateLegacyDsaIds(mergedStore));
+
+    console.log("Mock store: loaded from localStorage. Total DSAs in persisted store:", migratedStore.dsas.length);
+    return ensureApplicationJourneys(migratedStore);
   } catch (err) {
     console.error("Mock store: failed to parse stored JSON. Resetting to seeded store.", err);
     localStorage.removeItem(STORE_STORAGE_KEY);
@@ -145,7 +244,11 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
-          if (isDemoSessionUser(parsed)) return parsed;
+          if (isDemoSessionUser(parsed)) {
+            const normalizedUser = getDemoUserByRole(parsed.role);
+            localStorage.setItem("cosmos_dsa_user", JSON.stringify(normalizedUser));
+            return normalizedUser;
+          }
           localStorage.removeItem("cosmos_dsa_user");
           return null;
         } catch {
@@ -270,9 +373,82 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     [currentUser?.name, toast],
   );
 
+  const deleteDsaCascade = useCallback(
+    (id: string) => {
+      let deletedName = "record";
+      let removedLinkedRecords = 0;
+      let found = false;
+
+      setStore((current) => {
+        const actor = currentUser?.name ?? DEMO_USERS.admin.name;
+        const target = current.dsas.find((item) => item.id === id);
+        if (!target) return current;
+
+        found = true;
+        deletedName = displayName(target);
+
+        const targetApplications = current.applications.filter((item) => item.dsaId === id);
+        const targetApplicationIds = new Set(targetApplications.map((item) => item.id));
+        const targetApplicationCodes = new Set(targetApplications.map((item) => item.applicationId));
+        const targetUsers = current.users.filter(
+          (item) => item.id === id || item.email === target.email || item.name === target.name,
+        );
+        const targetDocuments = current.documents.filter(
+          (item) => item.dsaId === id || targetApplicationIds.has(item.applicationId ?? ""),
+        );
+        const targetVerificationChecks = current.verificationChecks.filter((item) =>
+          targetApplicationCodes.has(item.applicationId),
+        );
+        const targetApprovals = current.approvals.filter((item) => targetApplicationCodes.has(item.applicationId));
+        const targetConfigs = current.dsaProductConfigs.filter((item) => item.dsaId === id);
+        const targetLeads = current.leads.filter((item) => item.dsaId === id);
+        const targetCommissions = current.commissions.filter((item) => item.dsaId === id);
+
+        removedLinkedRecords =
+          targetApplications.length +
+          targetUsers.length +
+          targetDocuments.length +
+          targetVerificationChecks.length +
+          targetApprovals.length +
+          targetConfigs.length +
+          targetLeads.length +
+          targetCommissions.length;
+
+        return {
+          ...current,
+          applications: current.applications.filter((item) => item.dsaId !== id),
+          approvals: current.approvals.filter((item) => !targetApplicationCodes.has(item.applicationId)),
+          auditLogs: [audit("Deleted", "dsas", actor), ...current.auditLogs],
+          commissions: current.commissions.filter((item) => item.dsaId !== id),
+          documents: current.documents.filter(
+            (item) => item.dsaId !== id && !targetApplicationIds.has(item.applicationId ?? ""),
+          ),
+          dsaProductConfigs: current.dsaProductConfigs.filter((item) => item.dsaId !== id),
+          dsas: current.dsas.filter((item) => item.id !== id),
+          leads: current.leads.filter((item) => item.dsaId !== id),
+          users: current.users.filter(
+            (item) => item.id !== id && item.email !== target.email && item.name !== target.name,
+          ),
+          verificationChecks: current.verificationChecks.filter(
+            (item) => !targetApplicationCodes.has(item.applicationId),
+          ),
+        };
+      });
+
+      toast({
+        description: found
+          ? `${deletedName} and ${removedLinkedRecords} linked record${removedLinkedRecords === 1 ? "" : "s"} were removed.`
+          : "The selected DSA was not found.",
+        title: found ? "DSA permanently deleted" : "DSA not found",
+        variant: "warning",
+      });
+    },
+    [currentUser?.name, toast],
+  );
+
   const value = useMemo(
-    () => ({ createItem, deleteItem, getById, store, updateItem, currentUser, login, logout }),
-    [createItem, deleteItem, getById, store, updateItem, currentUser, login, logout],
+    () => ({ createItem, deleteDsaCascade, deleteItem, getById, store, updateItem, currentUser, login, logout }),
+    [createItem, deleteDsaCascade, deleteItem, getById, store, updateItem, currentUser, login, logout],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

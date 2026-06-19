@@ -39,6 +39,7 @@ import { buildApplicationJourney } from "@/lib/product-journeys";
 import { useMockStore } from "@/lib/store";
 import {
   Application,
+  DeviationApproverRole,
   ApplicationStage,
   ApplicationStatus,
   Lead,
@@ -86,11 +87,23 @@ const applicationStatuses: ApplicationStatus[] = [
 
 const verificationStatuses: VerificationStatus[] = ["Pending", "In Progress", "Verified", "Failed"];
 const riskBands = ["Low risk (0-64)", "Medium risk (65-78)", "High risk (79+)"];
+const deviationApproverRoles: DeviationApproverRole[] = ["Branch User", "DSA Credit", "DSA Manager"];
 
 function riskBand(score: number) {
   if (score > 78) return "High risk (79+)";
   if (score > 64) return "Medium risk (65-78)";
   return "Low risk (0-64)";
+}
+
+function getDeviationApproverRole(role?: string): DeviationApproverRole | null {
+  return deviationApproverRoles.includes(role as DeviationApproverRole)
+    ? (role as DeviationApproverRole)
+    : null;
+}
+
+function containsDeviationText(value: string) {
+  const normalized = value.toLowerCase();
+  return normalized.includes("deviation") || normalized.includes("special-case") || normalized.includes("exception review");
 }
 
 const leadFields: FieldConfig<Lead>[] = [
@@ -260,7 +273,7 @@ export function LeadsPage() {
           }}
           onCancel={() => setCreating(false)}
           onSubmit={(value) => {
-            const dsaId = currentUser?.role === "DSA Partner" ? (currentUser.id || "dsa-1") : defaultDsa.id;
+            const dsaId = currentUser?.role === "DSA Partner" ? (currentUser.id || defaultDsa.id) : defaultDsa.id;
             const dsaName = currentUser?.role === "DSA Partner" ? currentUser.name : defaultDsa.name;
             createItem("leads", newLead(value, dsaId, dsaName));
             setCreating(false);
@@ -324,6 +337,7 @@ export function ApplicationsPage() {
     );
   });
 
+  const canSeeDeviation = Boolean(getDeviationApproverRole(currentUser?.role));
   const columns: Column<Application>[] = [
     {
       cell: (item) => (
@@ -357,8 +371,24 @@ export function ApplicationsPage() {
     { cell: (item) => item.product, header: "Product", key: "product", sortable: true, sortValue: (item) => item.product },
     { cell: (item) => formatCurrency(item.loanAmount), header: "Loan amount", key: "loanAmount", sortable: true, sortValue: (item) => item.loanAmount },
     { cell: (item) => item.stage, header: "Stage", key: "stage", sortable: true, sortValue: (item) => item.stage },
-    { cell: (item) => <StatusBadge status={item.status} />, header: "Status", key: "status", sortable: true, sortValue: (item) => item.status },
   ];
+
+  if (canSeeDeviation) {
+    columns.push({
+      cell: (item) =>
+        item.deviation?.required ? (
+          <StatusBadge status={`Deviation ${item.deviation.status}`} />
+        ) : (
+          <span className="text-xs font-medium text-slate-400">Standard</span>
+        ),
+      header: "Deviation",
+      key: "deviation",
+      sortable: true,
+      sortValue: (item) => item.deviation?.status ?? "Standard",
+    });
+  }
+
+  columns.push({ cell: (item) => <StatusBadge status={item.status} />, header: "Status", key: "status", sortable: true, sortValue: (item) => item.status });
 
   return (
     <div>
@@ -393,10 +423,30 @@ export function ApplicationDetailPage({ id }: { id: string }) {
   const { store, updateItem, currentUser } = useMockStore();
   const application = store.applications.find((item) => item.id === id) ?? store.applications[0];
   const [note, setNote] = useState("");
+  const [isDeviationModalOpen, setIsDeviationModalOpen] = useState(false);
+  const [deviationInboxText, setDeviationInboxText] = useState("");
+  const [deviationInboxError, setDeviationInboxError] = useState("");
   const documents = store.documents.filter((item) => item.applicationId === application.id);
   const checks = store.verificationChecks.filter((item) => item.applicationId === application.applicationId);
   const journeySeed = Number(application.applicationId.replace(/\D/g, "")) || 1;
   const journey = application.journey ?? buildApplicationJourney(application.product, journeySeed, application);
+  const deviationApproverRole = getDeviationApproverRole(currentUser?.role);
+  const canSeeDeviation = Boolean(deviationApproverRole && application.deviation?.required);
+  const canResolveDeviation = Boolean(
+    canSeeDeviation &&
+      application.deviation?.required &&
+      application.deviation.status === "Pending",
+  );
+  const visibleDecisionSummary =
+    application.deviation?.required && !canSeeDeviation
+      ? "Application is under manual credit review. The credit desk will update the final decision after review."
+      : application.decisionSummary;
+  const visibleNotes = canSeeDeviation
+    ? application.notes
+    : application.notes.filter((item) => !containsDeviationText(item));
+  const visibleTimeline = canSeeDeviation
+    ? application.timeline
+    : application.timeline.filter((item) => !containsDeviationText(`${item.title} ${item.note}`));
 
   function addNote() {
     if (!note.trim()) return;
@@ -414,6 +464,97 @@ export function ApplicationDetailPage({ id }: { id: string }) {
       ],
     });
     setNote("");
+  }
+
+  function getDeviationInboxNote() {
+    const trimmed = deviationInboxText.trim();
+    if (!trimmed) {
+      setDeviationInboxError("Add review information before submitting this deviation case.");
+      return null;
+    }
+    return trimmed;
+  }
+
+  function submitDeviationNote() {
+    if (!application.deviation?.required || !deviationApproverRole) return;
+    const inboxNote = getDeviationInboxNote();
+    if (!inboxNote) return;
+
+    const actor = currentUser?.name ?? DEMO_USERS.admin.name;
+    const now = new Date().toISOString();
+    const noteText = `Deviation inbox update by ${actor}: ${inboxNote}`;
+
+    updateItem("applications", application.id, {
+      deviation: {
+        ...application.deviation,
+        remarks: inboxNote,
+      },
+      notes: [noteText, ...application.notes],
+      timeline: [
+        {
+          actor,
+          at: now,
+          id: makeId("tl"),
+          note: inboxNote,
+          title: "Deviation inbox updated",
+        },
+        ...application.timeline,
+      ],
+    });
+    setDeviationInboxText("");
+    setDeviationInboxError("");
+  }
+
+  function resolveDeviation(resolution: "Approved" | "Rejected") {
+    if (!application.deviation?.required || !deviationApproverRole) return;
+    const inboxNote = getDeviationInboxNote();
+    if (!inboxNote) return;
+
+    const actor = currentUser?.name ?? DEMO_USERS.admin.name;
+    const now = new Date().toISOString();
+    const approved = resolution === "Approved";
+    const nextStatus: Application["status"] = approved ? "Approved" : "Rejected";
+    const nextStage: Application["stage"] = approved ? "Approval" : "Risk Review";
+    const note = approved
+      ? `Deviation approved by ${actor}. Application approved. Reviewer note: ${inboxNote}`
+      : `Deviation rejected by ${actor}. Application rejected under exception review. Reviewer note: ${inboxNote}`;
+
+    updateItem("applications", application.id, {
+      decisionSummary: note,
+      deviation: {
+        ...application.deviation,
+        ...(approved
+          ? {
+              approvedAt: now,
+              approvedBy: actor,
+              approvedByRole: deviationApproverRole,
+            }
+          : {
+              rejectedAt: now,
+              rejectedBy: actor,
+              rejectedByRole: deviationApproverRole,
+            }),
+        remarks: inboxNote,
+        status: resolution,
+      },
+      notes: [note, ...application.notes],
+      stage: nextStage,
+      status: nextStatus,
+      timeline: [
+        {
+          actor,
+          at: now,
+          id: makeId("tl"),
+          note,
+          title: `Deviation ${resolution}`,
+        },
+        ...application.timeline,
+      ],
+      verificationStatus: approved ? "Verified" : "Failed",
+    });
+    setDeviationInboxText("");
+    setDeviationInboxError("");
+    setIsDeviationModalOpen(false);
   }
 
   return (
@@ -482,10 +623,26 @@ export function ApplicationDetailPage({ id }: { id: string }) {
                 <DetailItem label="DSA" value={application.dsaName} />
                 <DetailItem label="Stage" value={application.stage} />
                 <DetailItem label="Verification" value={<StatusBadge status={application.verificationStatus} />} />
-                <DetailItem label="Decision summary" value={application.decisionSummary} />
+                <DetailItem label="Decision summary" value={visibleDecisionSummary} />
               </DetailGrid>
             </CardContent>
           </Card>
+          {canSeeDeviation ? (
+            <Card>
+              <CardHeader className="flex-row items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-semibold text-slate-950">Deviation Review</h2>
+                  <p className="mt-1 text-xs text-slate-500">Open the reviewer inbox to view and act on this case.</p>
+                </div>
+                <StatusBadge status={`Deviation ${application.deviation?.status ?? "Pending"}`} />
+              </CardHeader>
+              <CardContent>
+                <Button onClick={() => setIsDeviationModalOpen(true)} type="button">
+                  Open Deviation Inbox
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
           <Card>
             <CardHeader>
               <h2 className="text-base font-semibold text-slate-950">Documents</h2>
@@ -526,7 +683,7 @@ export function ApplicationDetailPage({ id }: { id: string }) {
               <Button className="w-full" onClick={addNote} type="button">
                 Add note
               </Button>
-              {application.notes.map((item) => (
+              {visibleNotes.map((item) => (
                 <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-600" key={item}>
                   {item}
                 </p>
@@ -538,7 +695,7 @@ export function ApplicationDetailPage({ id }: { id: string }) {
               <h2 className="text-base font-semibold text-slate-950">Timeline</h2>
             </CardHeader>
             <CardContent className="space-y-3">
-              {application.timeline.map((item) => (
+              {visibleTimeline.map((item) => (
                 <div className="border-l-2 border-blue-100 pl-3" key={item.id}>
                   <p className="text-sm font-semibold text-slate-950">{item.title}</p>
                   <p className="text-xs text-slate-500">{item.actor} · {formatDate(item.at)}</p>
@@ -549,6 +706,74 @@ export function ApplicationDetailPage({ id }: { id: string }) {
           </Card>
         </div>
       </div>
+      <Modal
+        onClose={() => {
+          setIsDeviationModalOpen(false);
+          setDeviationInboxError("");
+        }}
+        open={isDeviationModalOpen && canSeeDeviation}
+        title="Deviation Inbox"
+        width="max-w-2xl"
+      >
+        {application.deviation?.required && canSeeDeviation ? (
+          <div className="space-y-4">
+            <DetailGrid>
+              <DetailItem label="Application" value={application.applicationId} />
+              <DetailItem label="Applicant" value={application.customer} />
+              <DetailItem label="Product" value={application.product} />
+              <DetailItem label="Status" value={<StatusBadge status={`Deviation ${application.deviation.status}`} />} />
+              <DetailItem label="Requested by" value={application.deviation.requestedBy} />
+              <DetailItem label="Requested on" value={formatDate(application.deviation.requestedAt)} />
+            </DetailGrid>
+            <div className="rounded-md border border-sky-100 bg-sky-50 p-4">
+              <p className="text-sm font-semibold text-blue-950">Deviation reasons</p>
+              <ul className="mt-2 list-disc space-y-1 pl-4 text-sm text-blue-800">
+                {application.deviation.reasons.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            </div>
+            {application.deviation.remarks ? (
+              <div className="rounded-md border border-slate-100 bg-slate-50 p-3 text-sm text-slate-600">
+                <span className="font-semibold text-slate-800">Latest inbox note:</span> {application.deviation.remarks}
+              </div>
+            ) : null}
+            <Field>
+              <Label htmlFor="deviationInboxText">Inbox note / reason</Label>
+              <Textarea
+                id="deviationInboxText"
+                onChange={(event) => {
+                  setDeviationInboxText(event.target.value);
+                  setDeviationInboxError("");
+                }}
+                placeholder="Add deviation justification, branch observation, compensating factor, or rejection reason"
+                rows={5}
+                value={deviationInboxText}
+              />
+              {deviationInboxError ? <p className="text-xs font-medium text-rose-600">{deviationInboxError}</p> : null}
+            </Field>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button onClick={submitDeviationNote} type="button" variant="secondary">
+                Submit Note
+              </Button>
+              {canResolveDeviation ? (
+                <>
+                  <Button onClick={() => resolveDeviation("Rejected")} type="button" variant="danger">
+                    Reject Application
+                  </Button>
+                  <Button
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={() => resolveDeviation("Approved")}
+                    type="button"
+                  >
+                    Approve Application
+                  </Button>
+                </>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }

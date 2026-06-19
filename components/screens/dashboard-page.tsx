@@ -16,12 +16,18 @@ import {
   Clock,
   Sparkles,
   ChevronRight,
+  Trophy,
+  TrendingUp,
+  TrendingDown,
+  Info,
+  ChevronDown,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 
 import { BarChartCard, KpiCard, PieChartCard, TrendCard } from "@/components/charts";
 import { PageHeader } from "@/components/module";
+import { OnHoldDsaDocuments } from "@/components/screens/on-hold-dsa-documents";
 import {
   Card,
   CardContent,
@@ -32,8 +38,10 @@ import {
   Input,
   Label,
   Select,
+  Tabs,
 } from "@/components/ui/primitives";
 import { useMockStore } from "@/lib/store";
+import { buildApplicationDeviation, evaluateBreDeviation } from "@/lib/bre";
 import { buildApplicationJourney } from "@/lib/product-journeys";
 import { compactNumber, formatCurrency, formatDate, makeId } from "@/lib/utils";
 import { Application, Product, Lead } from "@/lib/types";
@@ -54,7 +62,7 @@ export function DashboardPage() {
   const [uploadedDocs, setUploadedDocs] = useState<string[]>([]);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [sourcingPartner, setSourcingPartner] = useState("");
-  const [managerView, setManagerView] = useState<"overview" | "verificationQueue">("overview");
+  const [managerView, setManagerView] = useState<"overview" | "verificationQueue" | "onHoldQueue">("overview");
 
   // ----------------------------------------------------
   // 1. DSA MANAGER (SUPER ADMIN) CALCULATIONS & RENDER
@@ -87,6 +95,20 @@ export function DashboardPage() {
     return [];
   }, [currentUser?.role, store.dsas]);
 
+  const onHoldDsas = useMemo(() => {
+    if (currentUser?.role === "Branch User") {
+      return store.dsas
+        .filter((item) => item.status === "On Hold" && item.manager === currentUser.name)
+        .sort((left, right) => right.onboardingDate.localeCompare(left.onboardingDate));
+    }
+    if (currentUser?.role === "DSA Credit" || currentUser?.role === "DSA Manager") {
+      return store.dsas
+        .filter((item) => item.status === "On Hold")
+        .sort((left, right) => right.onboardingDate.localeCompare(left.onboardingDate));
+    }
+    return [];
+  }, [currentUser, store.dsas]);
+
   const branchDsas = useMemo(() => {
     if (currentUser?.role !== "Branch User") return [];
     return store.dsas
@@ -98,6 +120,7 @@ export function DashboardPage() {
     () => ({
       active: branchDsas.filter((item) => item.status === "Active").length,
       blacklisted: branchDsas.filter((item) => item.status === "Blacklisted").length,
+      onHold: branchDsas.filter((item) => item.status === "On Hold").length,
       pendingCredit: branchDsas.filter((item) => item.status === "Pending Credit Approval").length,
       total: branchDsas.length,
     }),
@@ -129,6 +152,139 @@ export function DashboardPage() {
     { name: "Approved", value: stats.approved },
     { name: "Disbursed", value: store.applications.filter((item) => item.status === "Disbursed").length },
   ];
+
+  // ----------------------------------------------------
+  // RECOVERY ANALYTICS STATE & COMPUTATIONS
+  // ----------------------------------------------------
+  // All months that appear in recovery data (ordered)
+  const allRecoveryMonths = useMemo(() => {
+    const order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const monthSet = Array.from(new Set(store.dsaRecovery.map((r) => r.month)));
+    return monthSet.sort((a, b) => {
+      const [aM, aY] = a.split(" ");
+      const [bM, bY] = b.split(" ");
+      return Number(aY) - Number(bY) || order.indexOf(aM) - order.indexOf(bM);
+    });
+  }, [store.dsaRecovery]);
+
+  // Converts "Jan 2026" → "2026-01" (HTML input[type=month] value)
+  function monthLabelToInputVal(label: string) {
+    const ORDER = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const [m, y] = label.split(" ");
+    return `${y}-${String(ORDER.indexOf(m) + 1).padStart(2, "0")}`;
+  }
+  // Converts "2026-01" → "Jan 2026"
+  function inputValToMonthLabel(val: string) {
+    const ORDER = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const [y, m] = val.split("-");
+    return `${ORDER[Number(m) - 1]} ${y}`;
+  }
+
+  const recoveryMonthMin = allRecoveryMonths.length > 0 ? monthLabelToInputVal(allRecoveryMonths[0]) : "2026-01";
+  const recoveryMonthMax = allRecoveryMonths.length > 0 ? monthLabelToInputVal(allRecoveryMonths[allRecoveryMonths.length - 1]) : "2026-12";
+
+  // Default: first 5 months of available data (from = earliest, to = 5th or last)
+  const [fromMonth, setFromMonth] = useState<string>(() => recoveryMonthMin);
+  const [toMonth, setToMonth] = useState<string>(() => {
+    if (allRecoveryMonths.length === 0) return "2026-05";
+    return monthLabelToInputVal(allRecoveryMonths[Math.min(4, allRecoveryMonths.length - 1)]);
+  });
+  const [recoveryTab, setRecoveryTab] = useState("panindia");
+
+  // Filter allRecoveryMonths to only those within [fromMonth, toMonth]
+  const selectedMonths = useMemo(() => {
+    return allRecoveryMonths.filter((label) => {
+      const v = monthLabelToInputVal(label);
+      return v >= fromMonth && v <= toMonth;
+    });
+  }, [allRecoveryMonths, fromMonth, toMonth]);
+
+
+  // All recovery records for the selected window
+  const windowedRecovery = useMemo(
+    () => store.dsaRecovery.filter((r) => selectedMonths.includes(r.month)),
+    [store.dsaRecovery, selectedMonths]
+  );
+
+  // PAN India monthly totals for trend chart
+  const panIndiaTrend = useMemo(
+    () =>
+      selectedMonths.map((month) => {
+        const rows = windowedRecovery.filter((r) => r.month === month);
+        return {
+          name: month.split(" ")[0],
+          recovered: rows.reduce((s, r) => s + r.recoveredAmount, 0),
+          target: rows.reduce((s, r) => s + r.targetAmount, 0),
+          invoice: rows.reduce((s, r) => s + r.invoiceAmount, 0),
+          cases: rows.reduce((s, r) => s + r.totalCases, 0),
+          billing: Math.round(rows.reduce((s, r) => s + r.totalBilling, 0) / 100000),
+        };
+      }),
+    [windowedRecovery, selectedMonths]
+  );
+
+  // Top performing DSAs by total recovered in selected window
+  const topDSAs = useMemo(() => {
+    const byDsa: Record<string, { name: string; recovered: number; cases: number; invoiced: number; npa: number }> = {};
+    for (const r of windowedRecovery) {
+      if (!byDsa[r.dsaId]) byDsa[r.dsaId] = { name: r.dsaName, recovered: 0, cases: 0, invoiced: 0, npa: 0 };
+      byDsa[r.dsaId].recovered += r.recoveredAmount;
+      byDsa[r.dsaId].cases += r.totalCases;
+      byDsa[r.dsaId].invoiced += r.invoiceAmount;
+      byDsa[r.dsaId].npa += r.npaCases;
+    }
+    return Object.entries(byDsa)
+      .map(([id, v]) => ({ id, ...v }))
+      .sort((a, b) => b.recovered - a.recovered)
+      .slice(0, 8);
+  }, [windowedRecovery]);
+
+  // Zone-wise totals per month for grouped chart
+  const zoneTrend = useMemo(() => {
+    const zones = Array.from(new Set(store.dsaRecovery.map((r) => r.zone)));
+    return selectedMonths.map((month) => {
+      const entry: Record<string, string | number> = { name: month.split(" ")[0] };
+      for (const z of zones) {
+        entry[z] = store.dsaRecovery
+          .filter((r) => r.month === month && r.zone === z)
+          .reduce((s, r) => s + r.recoveredAmount, 0);
+      }
+      return entry;
+    });
+  }, [store.dsaRecovery, selectedMonths]);
+
+  const zoneNames = useMemo(
+    () => Array.from(new Set(store.dsaRecovery.map((r) => r.zone))),
+    [store.dsaRecovery]
+  );
+
+  // Individual DSA rows: aggregate across selected window per DSA
+  const individualDSARows = useMemo(() => {
+    const byDsa: Record<string, {
+      name: string; zone: string;
+      cases: number; billing: number; recovered: number;
+      pending: number; npa: number; carryIn: number; carryOut: number; invoice: number;
+    }> = {};
+    for (const r of windowedRecovery) {
+      if (!byDsa[r.dsaId]) {
+        byDsa[r.dsaId] = {
+          name: r.dsaName, zone: r.zone,
+          cases: 0, billing: 0, recovered: 0, pending: 0, npa: 0,
+          carryIn: 0, carryOut: 0, invoice: 0,
+        };
+      }
+      byDsa[r.dsaId].cases += r.totalCases;
+      byDsa[r.dsaId].billing += r.totalBilling;
+      byDsa[r.dsaId].recovered += r.recoveredAmount;
+      byDsa[r.dsaId].pending += r.pendingAmount;
+      byDsa[r.dsaId].npa += r.npaCases;
+      byDsa[r.dsaId].carryIn += r.carryForwardIn;
+      byDsa[r.dsaId].carryOut += r.carryForwardOut;
+      byDsa[r.dsaId].invoice += r.invoiceAmount;
+    }
+    return Object.values(byDsa).sort((a, b) => b.recovered - a.recovered);
+  }, [windowedRecovery]);
+
 
   // ----------------------------------------------------
   // 2. DSA PARTNER CALCULATIONS
@@ -280,6 +436,31 @@ export function DashboardPage() {
     const appId = makeId("app");
     const aCode = `APP-${appId.slice(-5).toUpperCase()}`;
     const journeySeed = appId.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+    const createdAt = new Date().toISOString();
+    const amountPressure = appAmount / Math.max(salary, 1);
+    const creditScore = Math.round(Math.max(560, Math.min(820, 740 + (salary / 10000) * 3 - amountPressure * 4)));
+    const riskScore = Math.round(
+      Math.max(
+        35,
+        Math.min(94, 62 + amountPressure / 2 + (creditScore < 700 ? (700 - creditScore) / 5 : -(creditScore - 700) / 20)),
+      ),
+    );
+    const breDeviation = evaluateBreDeviation({
+      creditScore,
+      loanAmount: appAmount,
+      product,
+      riskScore,
+      salary,
+    });
+    const deviation = breDeviation.required
+      ? buildApplicationDeviation({
+          actor: "Cosmos Auto BRE",
+          reasons: breDeviation.reasons,
+          requestedAt: createdAt,
+        })
+      : null;
+    const applicationStatus: Application["status"] = deviation ? "On Hold" : "In Review";
+    const applicationStage: Application["stage"] = deviation ? "Risk Review" : "BRE Check";
     const newAppItem: Application = {
       id: appId,
       applicationId: aCode,
@@ -293,34 +474,51 @@ export function DashboardPage() {
       dsaName: dsaName,
       product,
       loanAmount: appAmount,
+      ...(deviation ? { deviation } : {}),
       journey: buildApplicationJourney(product, journeySeed, {
         city: customerCity,
         customer: currentUser.name,
         loanAmount: appAmount,
         salary,
       }),
-      status: "In Review",
-      stage: "BRE Check",
-      riskScore: 48,
-      creditScore: 742,
+      status: applicationStatus,
+      stage: applicationStage,
+      riskScore,
+      creditScore,
       salary: salary,
-      createdAt: new Date().toISOString(),
-      decisionSummary: `Successfully submitted via customer direct portal. Sourced by ${dsaName}. Queued for automated BRE rule scoring.`,
-      notes: [`Customer applied directly, assigning lead sourcing to ${dsaName}.`],
+      createdAt,
+      decisionSummary: deviation
+        ? `Submitted via customer direct portal and sourced by ${dsaName}. BRE deviation raised because ${breDeviation.reasons.join(" ")} Pending approval by Branch User, DSA Credit, or Super Admin.`
+        : `Successfully submitted via customer direct portal. Sourced by ${dsaName}. Queued for automated BRE rule scoring.`,
+      notes: [
+        `Customer applied directly, assigning lead sourcing to ${dsaName}.`,
+        ...(deviation ? [`Deviation pending: ${breDeviation.reasons.join(" ")}`] : []),
+      ],
       timeline: [
         {
           id: makeId("tl"),
           title: "Application Created",
           note: `Form submitted directly by the borrower, assigned to ${dsaName}.`,
           actor: currentUser.name,
-          at: new Date().toISOString(),
+          at: createdAt,
         },
+        ...(deviation
+          ? [
+              {
+                id: makeId("tl"),
+                title: "BRE Deviation Raised",
+                note: `Special-case approval required: ${breDeviation.reasons.join(" ")}`,
+                actor: "Cosmos Auto BRE",
+                at: createdAt,
+              },
+            ]
+          : []),
         {
           id: makeId("tl"),
           title: "Auto KYC Verified",
           note: "PAN and Aadhaar validation checked against dummy bureau database.",
           actor: "Cosmos Auto Desk",
-          at: new Date().toISOString(),
+          at: createdAt,
         },
       ],
       verificationStatus: "In Progress",
@@ -386,6 +584,12 @@ export function DashboardPage() {
                 {pendingDsas.length}
               </span>
             </Button>
+            <Button onClick={() => setManagerView("onHoldQueue")} size="sm" type="button" variant="ghost">
+              On-Hold Queue
+              <span className="ml-1 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
+                {onHoldDsas.length}
+              </span>
+            </Button>
           </div>
 
           <Card className="shadow-md">
@@ -410,7 +614,8 @@ export function DashboardPage() {
                   <table className="w-full text-left border-collapse text-sm">
                     <thead>
                       <tr className="bg-slate-50/75 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        <th className="p-4 pl-6">Partner Details</th>
+                        <th className="p-4 pl-6">Partner</th>
+                        <th className="p-4">DSA ID</th>
                         <th className="p-4">Contact</th>
                         <th className="p-4">City</th>
                         <th className="p-4">Status</th>
@@ -422,8 +627,9 @@ export function DashboardPage() {
                         <tr key={dsa.id} className="hover:bg-slate-50/40 transition">
                           <td className="p-4 pl-6">
                             <div className="font-semibold text-slate-800">{dsa.name}</div>
-                            <div className="text-xs text-slate-500">{dsa.code} - {dsa.businessType}</div>
+                            <div className="text-xs text-slate-500">{dsa.businessType}</div>
                           </td>
+                          <td className="p-4 font-mono text-xs text-slate-600">{dsa.code}</td>
                           <td className="p-4 text-xs text-slate-600">
                             <div>{dsa.email}</div>
                             <div>{dsa.mobile}</div>
@@ -457,6 +663,43 @@ export function DashboardPage() {
       );
     }
 
+    if (managerView === "onHoldQueue") {
+      return (
+        <div>
+          <PageHeader
+            description="Upload missing mandatory DSA documents before moving the partner back into approval review."
+            eyebrow={currentUser.role === "DSA Credit" ? "Credit approval cockpit" : "Portfolio cockpit"}
+            title="Dashboard"
+          />
+
+          <div className="mb-6 inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+            <Button onClick={() => setManagerView("overview")} size="sm" type="button" variant="ghost">
+              Overview
+            </Button>
+            <Button onClick={() => setManagerView("verificationQueue")} size="sm" type="button" variant="ghost">
+              Verification Queue
+              <span className="ml-1 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
+                {pendingDsas.length}
+              </span>
+            </Button>
+            <Button onClick={() => setManagerView("onHoldQueue")} size="sm" type="button" variant="secondary">
+              On-Hold Queue
+              <span className="ml-1 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
+                {onHoldDsas.length}
+              </span>
+            </Button>
+          </div>
+
+          <OnHoldDsaDocuments
+            description="Upload remaining documents here. Once completed, the DSA moves back to approval review."
+            dsas={onHoldDsas}
+            emptyDescription="No DSAs are currently waiting for missing documents."
+            title="On-Hold DSA Document Queue"
+          />
+        </div>
+      );
+    }
+
     return (
       <div>
         <PageHeader
@@ -477,6 +720,12 @@ export function DashboardPage() {
             Verification Queue
             <span className="ml-1 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
               {pendingDsas.length}
+            </span>
+          </Button>
+          <Button onClick={() => setManagerView("onHoldQueue")} size="sm" type="button" variant="ghost">
+            On-Hold Queue
+            <span className="ml-1 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
+              {onHoldDsas.length}
             </span>
           </Button>
         </div>
@@ -516,23 +765,287 @@ export function DashboardPage() {
           <KpiCard change="+18.2%" icon={BadgeIndianRupee} label="Payout exposure" tone="slate" value={compactNumber(stats.totalPayout)} />
         </div>
 
-        {/* Onboarding & Sourcing trends */}
-        <div className="mt-6 grid gap-4 xl:grid-cols-2">
-          <TrendCard
-            data={monthlyOnboarding}
-            dataKey="value"
-            subtitle="New partner onboarding over the current fiscal window"
-            title="Monthly onboarding trend"
-            type="area"
-          />
-          <TrendCard
-            data={applicationTrend}
-            dataKey="value"
-            subtitle="Application volume across DSA-sourced products"
-            title="Application trend"
-          />
+        {/* ── DSA RECOVERY ANALYTICS SECTION ────────────────────────── */}
+        <div className="mt-8">
+          {/* Section header + month-window dropdown */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-blue-600" />
+                DSA Recovery Analytics
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">Total recovery performance for the selected date range</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500 font-medium">From:</span>
+                <input
+                  type="month"
+                  className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  min="2020-01"
+                  max="2030-12"
+                  value={fromMonth}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (!val) return;
+                    if (val > toMonth) {
+                      setToMonth(val);
+                    }
+                    setFromMonth(val);
+                  }}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500 font-medium">To:</span>
+                <input
+                  type="month"
+                  className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  min="2020-01"
+                  max="2030-12"
+                  value={toMonth}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (!val) return;
+                    if (val < fromMonth) {
+                      setFromMonth(val);
+                    }
+                    setToMonth(val);
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Carry-forward info badge */}
+          <div className="mb-4 flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-900">
+            <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <span>
+              <strong>Carry-Forward Invoice Logic:</strong> If a DSA recovers less than their target (e.g. ₹8,000 of ₹10,000), the ₹2,000 shortfall is deducted from the next month&apos;s invoice. So if they recover ₹20,000 next month, the invoice raised is ₹18,000.
+            </span>
+          </div>
+
+          {/* Analytics tabs + Top DSAs leaderboard side-by-side */}
+          <div className="grid gap-4 xl:grid-cols-[1fr_300px]">
+            {/* Left: tabbed analytics */}
+            <Card className="shadow-sm">
+              <CardHeader className="border-b border-slate-100 pb-3">
+                <Tabs
+                  onChange={setRecoveryTab}
+                  tabs={[
+                    { label: "PAN India", value: "panindia" },
+                    { label: "Individual DSA", value: "individual" },
+                    { label: "Zone-wise", value: "zone" },
+                  ]}
+                  value={recoveryTab}
+                />
+              </CardHeader>
+              <CardContent className="pt-4">
+                {/* PAN India tab */}
+                {recoveryTab === "panindia" && (
+                  <div className="space-y-4">
+                    <div className="overflow-x-auto rounded-lg border border-slate-100">
+                      <table className="w-full text-left text-sm border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                            <th className="p-3 pl-4">Month</th>
+                            <th className="p-3 text-right">Target</th>
+                            <th className="p-3 text-right">Recovered</th>
+                            <th className="p-3 text-right">Invoice Generated</th>
+                            <th className="p-3 text-right">Cases</th>
+                            <th className="p-3 pr-4 text-right">Billing (₹L)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {panIndiaTrend.map((row) => {
+                            const achievedPct = row.target > 0 ? Math.round((row.recovered / row.target) * 100) : 0;
+                            const isUnder = row.recovered < row.target;
+                            return (
+                              <tr key={row.name} className="hover:bg-slate-50/50 transition">
+                                <td className="p-3 pl-4 font-semibold text-slate-800">{row.name}</td>
+                                <td className="p-3 text-right text-slate-600">{compactNumber(row.target)}</td>
+                                <td className="p-3 text-right">
+                                  <span className={`font-bold ${isUnder ? "text-rose-600" : "text-emerald-600"}`}>
+                                    {compactNumber(row.recovered)}
+                                  </span>
+                                  <span className={`ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isUnder ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-600"}`}>
+                                    {achievedPct}%
+                                  </span>
+                                </td>
+                                <td className="p-3 text-right font-medium text-blue-700">{compactNumber(row.invoice)}</td>
+                                <td className="p-3 text-right text-slate-600">{row.cases}</td>
+                                <td className="p-3 pr-4 text-right text-slate-600">₹{row.billing}L</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-slate-50 border-t border-slate-200 text-xs font-bold text-slate-700">
+                            <td className="p-3 pl-4">TOTAL</td>
+                            <td className="p-3 text-right">{compactNumber(panIndiaTrend.reduce((s, r) => s + r.target, 0))}</td>
+                            <td className="p-3 text-right">{compactNumber(panIndiaTrend.reduce((s, r) => s + r.recovered, 0))}</td>
+                            <td className="p-3 text-right text-blue-700">{compactNumber(panIndiaTrend.reduce((s, r) => s + r.invoice, 0))}</td>
+                            <td className="p-3 text-right">{panIndiaTrend.reduce((s, r) => s + r.cases, 0)}</td>
+                            <td className="p-3 pr-4 text-right">₹{panIndiaTrend.reduce((s, r) => s + r.billing, 0)}L</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                    <TrendCard
+                      data={panIndiaTrend.map((r) => ({ name: r.name, value: Math.round(r.recovered / 100000) }))}
+                      dataKey="value"
+                      subtitle="Total recovery in ₹ Lakhs across all DSAs for selected months"
+                      title="PAN India Recovery Trend (₹L)"
+                      type="area"
+                    />
+                  </div>
+                )}
+
+                {/* Individual DSA tab */}
+                {recoveryTab === "individual" && (
+                  <div className="overflow-x-auto rounded-lg border border-slate-100">
+                    <table className="w-full text-left text-sm border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                          <th className="p-3 pl-4">DSA Name</th>
+                          <th className="p-3">Zone</th>
+                          <th className="p-3 text-right">Cases</th>
+                          <th className="p-3 text-right">Billing</th>
+                          <th className="p-3 text-right">Recovered</th>
+                          <th className="p-3 text-right">Pending</th>
+                          <th className="p-3 text-right">NPA</th>
+                          <th className="p-3 text-right">Carry-Fwd</th>
+                          <th className="p-3 pr-4 text-right">Invoice</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {individualDSARows.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50/50 transition">
+                            <td className="p-3 pl-4">
+                              <span className="font-semibold text-slate-800 text-xs line-clamp-1">{row.name}</span>
+                            </td>
+                            <td className="p-3 text-xs text-slate-500">{row.zone}</td>
+                            <td className="p-3 text-right text-slate-600 text-xs">{row.cases}</td>
+                            <td className="p-3 text-right text-slate-600 text-xs">{compactNumber(row.billing)}</td>
+                            <td className="p-3 text-right font-semibold text-emerald-700 text-xs">{compactNumber(row.recovered)}</td>
+                            <td className="p-3 text-right text-rose-500 text-xs">{compactNumber(row.pending)}</td>
+                            <td className="p-3 text-right text-xs">
+                              <span className={`font-bold ${row.npa > 0 ? "text-rose-600" : "text-slate-400"}`}>{row.npa}</span>
+                            </td>
+                            <td className="p-3 text-right text-amber-600 text-xs font-medium">{compactNumber(row.carryOut)}</td>
+                            <td className="p-3 pr-4 text-right font-bold text-blue-700 text-xs">{compactNumber(row.invoice)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Zone-wise tab */}
+                {recoveryTab === "zone" && (
+                  <div className="space-y-4">
+                    <div className="overflow-x-auto rounded-lg border border-slate-100">
+                      <table className="w-full text-left text-sm border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                            <th className="p-3 pl-4">Month</th>
+                            {zoneNames.map((z) => (
+                              <th key={z} className="p-3 text-right">{z}</th>
+                            ))}
+                            <th className="p-3 pr-4 text-right">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {zoneTrend.map((row) => {
+                            const rowTotal = zoneNames.reduce((s, z) => s + (Number(row[z]) || 0), 0);
+                            return (
+                              <tr key={String(row.name)} className="hover:bg-slate-50/50 transition">
+                                <td className="p-3 pl-4 font-semibold text-slate-800">{String(row.name)}</td>
+                                {zoneNames.map((z) => (
+                                  <td key={z} className="p-3 text-right text-xs text-slate-600">
+                                    {compactNumber(Number(row[z]) || 0)}
+                                  </td>
+                                ))}
+                                <td className="p-3 pr-4 text-right font-bold text-blue-700 text-xs">{compactNumber(rowTotal)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <BarChartCard
+                      data={zoneTrend.map((r) => ({
+                        name: String(r.name),
+                        value: zoneNames.reduce((s, z) => s + (Number(r[z]) || 0), 0) / 100000,
+                      }))}
+                      dataKey="value"
+                      subtitle="Total recovery (₹L) across all zones for selected months"
+                      title="Zone-wise Recovery (₹L)"
+                    />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Right: Top Performing DSAs */}
+            <Card className="shadow-sm">
+              <CardHeader className="border-b border-slate-100 pb-3">
+                <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <Trophy className="h-4 w-4 text-amber-500" />
+                  Top Performing DSAs
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">Ranked by total recovery in selected window</p>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="divide-y divide-slate-100">
+                  {topDSAs.map((dsa, idx) => (
+                    <div key={dsa.id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50/50 transition">
+                      <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${
+                        idx === 0 ? "bg-amber-100 text-amber-700" :
+                        idx === 1 ? "bg-slate-100 text-slate-600" :
+                        idx === 2 ? "bg-orange-100 text-orange-700" :
+                        "bg-slate-50 text-slate-500"
+                      }`}>
+                        {idx + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-slate-800 truncate">{dsa.name}</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">
+                          {dsa.cases} cases · NPA: {dsa.npa}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xs font-bold text-emerald-700">{compactNumber(dsa.recovered)}</p>
+                        <p className="text-[10px] text-blue-600">inv: {compactNumber(dsa.invoiced)}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {topDSAs.length === 0 && (
+                    <div className="px-4 py-8 text-center text-xs text-slate-500">No recovery data for this window.</div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Recovery Invoice Trend + Cases charts */}
+          <div className="mt-4 grid gap-4 xl:grid-cols-2">
+            <TrendCard
+              data={panIndiaTrend.map((r) => ({ name: r.name, value: Math.round(r.invoice / 100000) }))}
+              dataKey="value"
+              subtitle="Invoice amount generated (₹L) across all DSAs in selected period"
+              title="DSA Invoice Generation Trend (₹L)"
+              type="line"
+            />
+            <BarChartCard
+              data={panIndiaTrend.map((r) => ({ name: r.name, value: r.cases }))}
+              dataKey="value"
+              subtitle="Total cases handled across all DSAs for each month"
+              title="Month-wise Total Cases"
+            />
+          </div>
         </div>
 
+        {/* Approval mix + Commission run-rate */}
         <div className="mt-6 grid gap-4 xl:grid-cols-2">
           <PieChartCard data={funnel} dataKey="value" subtitle="Lead-to-disbursal stage breakdown" title="Approval mix" />
           <BarChartCard
@@ -599,6 +1112,7 @@ export function DashboardPage() {
                             item.status === "Pending Credit Approval",
                         ).length,
                   ],
+                  ["On-hold DSAs", store.dsas.filter((item) => item.status === "On Hold").length],
                   ["Verification checks", store.verificationChecks.filter((item) => item.status !== "Verified").length],
                   ["Pending approvals", store.approvals.filter((item) => item.status === "Pending").length],
                 ].map(([label, value]) => (
@@ -626,9 +1140,10 @@ export function DashboardPage() {
           title={`Branch Dashboard: ${currentUser.name}`}
         />
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <KpiCard change="Submitted" icon={Building2} label="Branch onboarded" tone="blue" value={String(branchStats.total)} />
           <KpiCard change="Credit queue" icon={Clock} label="Pending Credit" tone="amber" value={String(branchStats.pendingCredit)} />
+          <KpiCard change="Docs hold" icon={FileWarning} label="On-Hold DSAs" tone="amber" value={String(branchStats.onHold)} />
           <KpiCard change="Approved" icon={CheckCircle2} label="Activated DSAs" tone="green" value={String(branchStats.active)} />
           <KpiCard change="Restricted" icon={FileWarning} label="Blacklisted" tone="slate" value={String(branchStats.blacklisted)} />
         </div>
@@ -655,6 +1170,7 @@ export function DashboardPage() {
                     <thead>
                       <tr className="bg-slate-50/75 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                         <th className="p-4 pl-6">Partner</th>
+                        <th className="p-4">DSA ID</th>
                         <th className="p-4">Submitted</th>
                         <th className="p-4">Status</th>
                         <th className="p-4 text-right pr-6">Profile</th>
@@ -665,8 +1181,9 @@ export function DashboardPage() {
                         <tr key={dsa.id} className="hover:bg-slate-50/40 transition">
                           <td className="p-4 pl-6">
                             <div className="font-semibold text-slate-800">{dsa.name}</div>
-                            <div className="text-xs text-slate-500">{dsa.code} - {dsa.businessType}</div>
+                            <div className="text-xs text-slate-500">{dsa.businessType}</div>
                           </td>
+                          <td className="p-4 font-mono text-xs text-slate-600">{dsa.code}</td>
                           <td className="p-4 text-xs text-slate-500">{formatDate(dsa.onboardingDate)}</td>
                           <td className="p-4">
                             <StatusBadge status={dsa.status} />
@@ -711,6 +1228,16 @@ export function DashboardPage() {
             </CardContent>
           </Card>
         </div>
+
+        <div className="mt-6">
+          <OnHoldDsaDocuments
+            description="Upload remaining documents for branch-submitted DSAs. They stay On Hold until all missing files are uploaded."
+            dsas={onHoldDsas}
+            emptyDescription="No branch DSAs are currently on hold."
+            maxRows={6}
+            title="Branch On-Hold DSA Documents"
+          />
+        </div>
       </div>
     );
   } else if (currentUser.role === "DSA Partner") {
@@ -747,7 +1274,7 @@ export function DashboardPage() {
           <Card className="shadow-md h-full flex flex-col justify-between">
             <CardHeader className="border-b border-slate-100 pb-4">
               <h2 className="text-base font-bold text-slate-900">Available Product Journeys</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Live products configured for your DSA code</p>
+              <p className="text-xs text-slate-500 mt-0.5">Live products configured for your DSA ID</p>
             </CardHeader>
             <CardContent className="p-6 space-y-4 flex-1 flex flex-col justify-center">
               {partnerProductConfigs.length ? (
@@ -793,7 +1320,7 @@ export function DashboardPage() {
                     <thead>
                       <tr className="bg-slate-50/75 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                         <th className="p-4 pl-6">Agent Name</th>
-                        <th className="p-4">Agent Code</th>
+                        <th className="p-4">DSA ID</th>
                         <th className="p-4">Email ID</th>
                         <th className="p-4">Onboarded</th>
                         <th className="p-4">Status</th>
@@ -894,6 +1421,9 @@ export function DashboardPage() {
                   else if (app.stage === "BRE Check") activeIdx = 2;
                   else if (app.stage === "Credit Underwriting" || app.stage === "Risk Review") activeIdx = 3;
                   else if (app.stage === "Approval" || app.stage === "Disbursal") activeIdx = 4;
+                  const visibleDecisionSummary = app.deviation?.required
+                    ? "Application is under manual credit review. The credit desk will update the final decision after review."
+                    : app.decisionSummary;
 
                   return (
                     <div key={app.id} className="p-5 rounded-xl border border-slate-200 bg-white space-y-4 hover:shadow-sm transition">
@@ -950,7 +1480,7 @@ export function DashboardPage() {
                       <div className="bg-slate-50 rounded-lg p-3 text-xs text-slate-600 flex items-start gap-2 border border-slate-100">
                         <Activity className="h-4.5 w-4.5 text-blue-600 mt-0.5 shrink-0" />
                         <div>
-                          <strong className="text-slate-700">Latest update:</strong> {app.decisionSummary}
+                          <strong className="text-slate-700">Latest update:</strong> {visibleDecisionSummary}
                           <span className="block text-[10px] text-slate-400 mt-1 font-medium">Updated: {formatDate(app.createdAt)}</span>
                         </div>
                       </div>

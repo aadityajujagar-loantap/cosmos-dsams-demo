@@ -6,8 +6,13 @@ import {
   FileText,
   Plus,
   Settings,
+  Building2,
+  Info,
+  BarChart3,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 
 import { BarChartCard, KpiCard, PieChartCard, TrendCard } from "@/components/charts";
 import { ActionPair, PageHeader } from "@/components/module";
@@ -218,6 +223,30 @@ export function ReportsPage() {
     value: [19, 14, 8, 6, 11][index],
   }));
 
+  // DSA Recovery analysis state and memoized variables
+  const dsasWithRecovery = useMemo(() => {
+    const ids = Array.from(new Set(store.dsaRecovery.map((r) => r.dsaId)));
+    return store.dsas.filter((d) => ids.includes(d.id));
+  }, [store.dsas, store.dsaRecovery]);
+
+  const [selectedDsaId, setSelectedDsaId] = useState<string>(() => dsasWithRecovery[0]?.id || "");
+
+  const recoveryRows = useMemo(() => {
+    return store.dsaRecovery
+      .filter((r) => r.dsaId === selectedDsaId)
+      .sort((a, b) => {
+        const order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const [aM, aY] = a.month.split(" ");
+        const [bM, bY] = b.month.split(" ");
+        return Number(aY) - Number(bY) || order.indexOf(aM) - order.indexOf(bM);
+      });
+  }, [store.dsaRecovery, selectedDsaId]);
+
+  const totalRecovered = useMemo(() => recoveryRows.reduce((s, r) => s + r.recoveredAmount, 0), [recoveryRows]);
+  const totalInvoice = useMemo(() => recoveryRows.reduce((s, r) => s + r.invoiceAmount, 0), [recoveryRows]);
+  const totalNpa = useMemo(() => recoveryRows.reduce((s, r) => s + r.npaCases, 0), [recoveryRows]);
+  const totalPending = useMemo(() => recoveryRows.reduce((s, r) => s + r.pendingAmount, 0), [recoveryRows]);
+
   return (
     <div>
       <PageHeader
@@ -229,6 +258,7 @@ export function ReportsPage() {
         onChange={setTab}
         tabs={[
           { label: "DSA Performance", value: "performance" },
+          { label: "DSA Recovery", value: "recovery" },
           { label: "Application Volume", value: "volume" },
           { label: "Approval Rate", value: "approval" },
           { label: "Rejection Analysis", value: "rejection" },
@@ -236,38 +266,190 @@ export function ReportsPage() {
         ]}
         value={tab}
       />
-      <div className="mt-6 grid gap-4 xl:grid-cols-2">
-        {tab === "performance" ? (
-          <>
-            <BarChartCard data={performance} dataKey="value" subtitle="Approval percentage for top sourced DSAs" title="DSA Performance" />
-            <Card><CardContent><ReportList rows={store.dsas.slice(0, 8).map((item) => [item.name, `${item.approvalRate}%`, item.tier])} /></CardContent></Card>
-          </>
-        ) : null}
-        {tab === "volume" ? (
-          <>
-            <BarChartCard data={volume} dataKey="value" subtitle="Applications grouped by product" title="Application Volume" />
-            <PieChartCard data={volume} dataKey="value" subtitle="Product contribution mix" title="Volume Mix" />
-          </>
-        ) : null}
-        {tab === "approval" ? (
-          <>
-            <TrendCard data={[42, 49, 55, 58, 61, 64].map((value, index) => ({ name: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"][index], value }))} dataKey="value" subtitle="Portfolio approval movement" title="Approval Rate" type="area" />
-            <Card><CardContent><ReportList rows={[["Auto approved", "31%", "Low risk"], ["Manual approval", "33%", "Credit desk"], ["Rejected", "19%", "Policy"], ["On hold", "17%", "Evidence"]]}/></CardContent></Card>
-          </>
-        ) : null}
-        {tab === "rejection" ? (
-          <>
-            <BarChartCard data={rejection} dataKey="value" subtitle="Top rejection drivers" title="Rejection Analysis" />
-            <Card><CardContent><ReportList rows={rejection.map((item) => [item.name, String(item.value), "Cases"])} /></CardContent></Card>
-          </>
-        ) : null}
-        {tab === "conversion" ? (
-          <>
-            <TrendCard data={[28, 32, 35, 39, 37, 42].map((value, index) => ({ name: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"][index], value }))} dataKey="value" subtitle="Lead to application conversion rate" title="Lead Conversion" />
-            <PieChartCard data={["New", "Contacted", "Qualified", "Converted", "Lost"].map((status) => ({ name: status, value: store.leads.filter((item) => item.status === status).length }))} dataKey="value" subtitle="Lead status mix" title="Lead Funnel Mix" />
-          </>
-        ) : null}
-      </div>
+
+      {tab === "recovery" ? (
+        <div className="mt-6 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-blue-600" />
+                Select Partner for Recovery Analysis
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">Analyze carry-forward invoices, targets, shortfalls, and NPA cases per month.</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs font-semibold text-slate-500">DSA Partner:</span>
+              <Select
+                aria-label="selected-dsa-recovery"
+                className="w-64"
+                onChange={(e) => setSelectedDsaId(e.target.value)}
+                value={selectedDsaId}
+              >
+                {dsasWithRecovery.map((dsa) => (
+                  <option key={dsa.id} value={dsa.id}>{dsa.name} ({dsa.code})</option>
+                ))}
+              </Select>
+            </div>
+          </div>
+          
+          {recoveryRows.length > 0 ? (
+            <div className="space-y-6">
+              {/* Carry-forward info banner */}
+              <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-900 shadow-sm">
+                <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Carry-Forward Invoice Logic:</strong> If a DSA recovers less than their target in month N, the shortfall is deducted from their next month&apos;s invoice.
+                  E.g. Target ₹10,00,000, recovered ₹8,00,000 → ₹2,00,000 shortfall carried forward. If they recover ₹20,00,000 next month, net invoice is ₹18,00,000.
+                </span>
+              </div>
+
+              {/* KPI summary */}
+              <div className="grid gap-3 sm:grid-cols-4">
+                {[
+                  { label: "Total Recovered", value: formatCurrency(totalRecovered), color: "text-emerald-700" },
+                  { label: "Total Invoice Generated", value: formatCurrency(totalInvoice), color: "text-blue-700" },
+                  { label: "Total Pending", value: formatCurrency(totalPending), color: "text-rose-600" },
+                  { label: "Total NPA Cases", value: String(totalNpa), color: totalNpa > 0 ? "text-rose-600" : "text-slate-600" },
+                ].map((kpi) => (
+                  <div key={kpi.label} className="rounded-lg border border-slate-100 bg-white p-4 shadow-sm">
+                    <p className="text-xs text-slate-500 font-medium">{kpi.label}</p>
+                    <p className={`mt-1 text-lg font-bold ${kpi.color}`}>{kpi.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Charts side-by-side */}
+              <div className="grid gap-4 xl:grid-cols-2">
+                <TrendCard
+                  data={recoveryRows.map((r) => ({
+                    name: r.month.split(" ")[0],
+                    value: Math.round(r.recoveredAmount / 1000),
+                  }))}
+                  dataKey="value"
+                  subtitle="Monthly recovery amount (₹K) vs target"
+                  title="Recovery Trend (₹K)"
+                  type="area"
+                />
+                <BarChartCard
+                  data={recoveryRows.map((r) => ({
+                    name: r.month.split(" ")[0],
+                    value: Math.round(r.invoiceAmount / 1000),
+                  }))}
+                  dataKey="value"
+                  subtitle="Net invoice raised after carry-forward shortfall adjustment"
+                  title="Invoice Generated After Carry-Forward (₹K)"
+                />
+              </div>
+
+              {/* Detailed table */}
+              <Card className="shadow-sm">
+                <CardContent className="p-0">
+                  <div className="p-5 border-b border-slate-100">
+                    <h4 className="text-sm font-bold text-slate-900">Month-wise Recovery &amp; Billing Report</h4>
+                    <p className="text-xs text-slate-500 mt-0.5">Granular view of recovery target achievement and billing metrics.</p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                          <th className="p-4 pl-6">Month</th>
+                          <th className="p-4 text-right">Target</th>
+                          <th className="p-4 text-right">Recovered</th>
+                          <th className="p-4 text-right">Carry-In</th>
+                          <th className="p-4 text-right">Carry-Out</th>
+                          <th className="p-4 text-right">Invoice</th>
+                          <th className="p-4 text-right">Cases</th>
+                          <th className="p-4 text-right">Billing</th>
+                          <th className="p-4 text-right">Pending</th>
+                          <th className="p-4 pr-6 text-right">NPA</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {recoveryRows.map((row) => {
+                          const achievedPct = row.targetAmount > 0 ? Math.round((row.recoveredAmount / row.targetAmount) * 100) : 0;
+                          const isUnder = row.recoveredAmount < row.targetAmount;
+                          return (
+                            <tr key={row.id} className="hover:bg-slate-50/50 transition">
+                              <td className="p-4 pl-6 font-semibold text-slate-800">{row.month}</td>
+                              <td className="p-4 text-right text-slate-600 text-xs">{formatCurrency(row.targetAmount)}</td>
+                              <td className="p-4 text-right text-xs">
+                                <span className={`font-bold ${isUnder ? "text-rose-600" : "text-emerald-700"}`}>
+                                  {formatCurrency(row.recoveredAmount)}
+                                </span>
+                                <span className={`ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isUnder ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-700"}`}>
+                                  {achievedPct}%
+                                </span>
+                              </td>
+                              <td className="p-4 text-right text-amber-600 text-xs">{row.carryForwardIn > 0 ? formatCurrency(row.carryForwardIn) : "—"}</td>
+                              <td className="p-4 text-right text-orange-600 text-xs font-medium">{row.carryForwardOut > 0 ? formatCurrency(row.carryForwardOut) : "—"}</td>
+                              <td className="p-4 text-right font-bold text-blue-700 text-xs">{formatCurrency(row.invoiceAmount)}</td>
+                              <td className="p-4 text-right text-slate-600 text-xs">{row.totalCases}</td>
+                              <td className="p-4 text-right text-slate-600 text-xs">{formatCurrency(row.totalBilling)}</td>
+                              <td className="p-4 text-right text-rose-500 text-xs">{formatCurrency(row.pendingAmount)}</td>
+                              <td className="p-4 pr-6 text-right text-xs">
+                                <span className={`font-bold ${row.npaCases > 0 ? "text-rose-600" : "text-slate-400"}`}>{row.npaCases}</span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-slate-50 border-t border-slate-200 text-xs font-bold text-slate-700">
+                          <td className="p-4 pl-6">TOTAL</td>
+                          <td className="p-4 text-right">{formatCurrency(recoveryRows.reduce((s, r) => s + r.targetAmount, 0))}</td>
+                          <td className="p-4 text-right text-emerald-700">{formatCurrency(totalRecovered)}</td>
+                          <td className="p-4 text-right text-amber-600">{formatCurrency(recoveryRows.reduce((s, r) => s + r.carryForwardIn, 0))}</td>
+                          <td className="p-4 text-right text-orange-600">{formatCurrency(recoveryRows.reduce((s, r) => s + r.carryForwardOut, 0))}</td>
+                          <td className="p-4 text-right text-blue-700">{formatCurrency(totalInvoice)}</td>
+                          <td className="p-4 text-right">{recoveryRows.reduce((s, r) => s + r.totalCases, 0)}</td>
+                          <td className="p-4 text-right">{formatCurrency(recoveryRows.reduce((s, r) => s + r.totalBilling, 0))}</td>
+                          <td className="p-4 text-right text-rose-500">{formatCurrency(totalPending)}</td>
+                          <td className="p-4 pr-6 text-right text-rose-600">{totalNpa}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <div className="py-12 text-center text-slate-500 text-sm">No recovery records for this partner.</div>
+          )}
+        </div>
+      ) : (
+        <div className="mt-6 grid gap-4 xl:grid-cols-2">
+          {tab === "performance" ? (
+            <>
+              <BarChartCard data={performance} dataKey="value" subtitle="Approval percentage for top sourced DSAs" title="DSA Performance" />
+              <Card><CardContent><ReportList rows={store.dsas.slice(0, 8).map((item) => [item.name, `${item.approvalRate}%`, item.tier])} /></CardContent></Card>
+            </>
+          ) : null}
+          {tab === "volume" ? (
+            <>
+              <BarChartCard data={volume} dataKey="value" subtitle="Applications grouped by product" title="Application Volume" />
+              <PieChartCard data={volume} dataKey="value" subtitle="Product contribution mix" title="Volume Mix" />
+            </>
+          ) : null}
+          {tab === "approval" ? (
+            <>
+              <TrendCard data={[42, 49, 55, 58, 61, 64].map((value, index) => ({ name: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"][index], value }))} dataKey="value" subtitle="Portfolio approval movement" title="Approval Rate" type="area" />
+              <Card><CardContent><ReportList rows={[["Auto approved", "31%", "Low risk"], ["Manual approval", "33%", "Credit desk"], ["Rejected", "19%", "Policy"], ["On hold", "17%", "Evidence"]]}/></CardContent></Card>
+            </>
+          ) : null}
+          {tab === "rejection" ? (
+            <>
+              <BarChartCard data={rejection} dataKey="value" subtitle="Top rejection drivers" title="Rejection Analysis" />
+              <Card><CardContent><ReportList rows={rejection.map((item) => [item.name, String(item.value), "Cases"])} /></CardContent></Card>
+            </>
+          ) : null}
+          {tab === "conversion" ? (
+            <>
+              <TrendCard data={[28, 32, 35, 39, 37, 42].map((value, index) => ({ name: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"][index], value }))} dataKey="value" subtitle="Lead to application conversion rate" title="Lead Conversion" />
+              <PieChartCard data={["New", "Contacted", "Qualified", "Converted", "Lost"].map((status) => ({ name: status, value: store.leads.filter((item) => item.status === status).length }))} dataKey="value" subtitle="Lead status mix" title="Lead Funnel Mix" />
+            </>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }
