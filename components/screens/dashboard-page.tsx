@@ -46,7 +46,7 @@ import { buildApplicationJourney } from "@/lib/product-journeys";
 import { getActiveProductConfigs, getUniqueProductConfigs, resolveProductConfig } from "@/lib/product-configs";
 import { compactNumber, formatCurrency, formatDate, makeId } from "@/lib/utils";
 import { Application, Product, Lead } from "@/lib/types";
-import { demoAgentName } from "@/lib/agent-names";
+import { demoAgentEmail, demoAgentName } from "@/lib/agent-names";
 
 const CUSTOMER_DSA_DISPLAY_NAME = "Cosmos DSA";
 
@@ -1327,7 +1327,7 @@ export function DashboardPage() {
                       {partnerAgents.map((agent) => (
                         <tr key={agent.id} className="hover:bg-slate-50/40 transition">
                           <td className="p-4 pl-6 font-semibold text-slate-800">{demoAgentName(agent.id)}</td>
-                          <td className="p-4 text-slate-600 text-xs">{currentUser?.email ?? "dsa@cosmosbank.example"}</td>
+                          <td className="p-4 text-slate-600 text-xs">{demoAgentEmail(agent.id)}</td>
                           <td className="p-4 text-slate-500 text-xs">{formatDate(agent.onboardingDate)}</td>
                           <td className="p-4">
                             <StatusBadge status={agent.status} />

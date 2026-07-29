@@ -21,3 +21,13 @@ export function demoAgentName(id: string) {
   const seed = id.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
   return AGENT_NAMES[seed % AGENT_NAMES.length];
 }
+
+export function demoAgentEmail(id: string) {
+  const localPart = demoAgentName(id)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ".")
+    .replace(/(^\.|\.$)/g, "");
+
+  return `${localPart || "agent"}@cosmosbank.in`;
+}

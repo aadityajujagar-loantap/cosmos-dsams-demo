@@ -43,7 +43,7 @@ import {
   requiredDsaDocumentGroups,
   requiredDsaDocuments,
 } from "@/lib/dsa-documents";
-import { demoAgentName } from "@/lib/agent-names";
+import { demoAgentEmail, demoAgentName } from "@/lib/agent-names";
 import { useMockStore } from "@/lib/store";
 import { BusinessType, Dsa, DsaStatus, Product } from "@/lib/types";
 import { formatCurrency, formatDate, generateDsaId, makeId, percent } from "@/lib/utils";
@@ -1114,7 +1114,6 @@ export function DsaManagementPage() {
   const [managementTab, setManagementTab] = useState("all");
   const router = useRouter();
   const isNetworkPage = currentUser?.role === "DSA Partner";
-  const networkEmail = currentUser?.email ?? DEMO_USERS.dsa.email;
 
   const getDsaApplications = (dsaId: string) =>
     store.applications
@@ -1144,7 +1143,7 @@ export function DsaManagementPage() {
         approvedOrDisbursed,
         conversion: applications.length ? (approvedOrDisbursed / applications.length) * 100 : 0,
         disbursed,
-        email: networkEmail,
+        email: demoAgentEmail(item.id),
         id: item.id,
         leads: leads.length,
         name: demoAgentName(item.id),
@@ -1417,6 +1416,7 @@ export function DsaProfilePage({ id }: { id: string }) {
 
   if (currentUser?.role === "DSA Partner") {
     const networkPartnerName = demoAgentName(dsa.id);
+    const networkPartnerEmail = demoAgentEmail(dsa.id);
     const conversion = applications.length ? (approvedApplications / applications.length) * 100 : 0;
 
     return (
@@ -1451,7 +1451,7 @@ export function DsaProfilePage({ id }: { id: string }) {
           <CardContent>
             <DetailGrid>
               <DetailItem label="Partner" value={networkPartnerName} />
-              <DetailItem label="Email" value={currentUser?.email ?? DEMO_USERS.dsa.email} />
+              <DetailItem label="Email" value={networkPartnerEmail} />
               <DetailItem label="Conversion" value={percent(conversion)} />
               <DetailItem label="Disbursed applications" value={disbursedApplications} />
               <DetailItem label="Commission earned" value={formatCurrency(commissionTotal || dsa.commissionEarned)} />
