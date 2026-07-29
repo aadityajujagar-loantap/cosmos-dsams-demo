@@ -48,6 +48,8 @@ import { compactNumber, formatCurrency, formatDate, makeId } from "@/lib/utils";
 import { Application, Product, Lead } from "@/lib/types";
 import { demoAgentName } from "@/lib/agent-names";
 
+const CUSTOMER_DSA_DISPLAY_NAME = "Cosmos DSA";
+
 export function DashboardPage() {
   const { store, currentUser, createItem } = useMockStore();
 
@@ -405,7 +407,7 @@ export function DashboardPage() {
     const panVal = customerPan.toUpperCase();
 
     const dsaId = selectedCustomerConfig.dsaId;
-    const dsaName = selectedCustomerConfig.dsaName;
+    const dsaName = CUSTOMER_DSA_DISPLAY_NAME;
     const product = selectedCustomerConfig.product;
 
     // Create lead record
@@ -512,13 +514,13 @@ export function DashboardPage() {
           : []),
         {
           id: makeId("tl"),
-          title: "Auto KYC Verified",
-          note: "PAN and Aadhaar validation checked against dummy bureau database.",
+          title: "Verification Pending",
+          note: "Customer documents are pending upload and verification.",
           actor: "Cosmos Auto Desk",
           at: createdAt,
         },
       ],
-      verificationStatus: "In Progress",
+      verificationStatus: "Pending",
     };
 
     createItem("leads", newLeadItem);
@@ -1502,7 +1504,7 @@ export function DashboardPage() {
                   <div key={offer.id} className="flex justify-between items-center rounded-xl bg-slate-50/70 p-3 border border-slate-100 hover:bg-slate-50 transition">
                     <div>
                       <h4 className="text-xs font-bold text-slate-800">{offer.product}</h4>
-                      <p className="text-[10px] text-slate-400 mt-0.5">{offer.dsaName}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{CUSTOMER_DSA_DISPLAY_NAME}</p>
                     </div>
                     <div className="text-right">
                       <span className="text-xs font-bold text-blue-700">{offer.commissionType}</span>

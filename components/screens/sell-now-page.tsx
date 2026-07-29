@@ -1001,31 +1001,7 @@ export function SellNowPage() {
                   />
                 </CardContent>
               </Card>
-            ) : (
-              <Card>
-                <CardContent>
-                  <Field className="max-w-md">
-                    <Label htmlFor="sellNowBulkPartnerProduct">Loan product</Label>
-                    <Select
-                      id="sellNowBulkPartnerProduct"
-                      onChange={(event) => {
-                        setSelectedProduct(event.target.value);
-                        setBulkFile(null);
-                        setBulkResult(null);
-                      }}
-                      value={effectiveProduct}
-                    >
-                      <option value="">Select product</option>
-                      {productsForDsa.map((config) => (
-                        <option key={config.id} value={config.product}>
-                          {config.product}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                </CardContent>
-              </Card>
-            )}
+            ) : null}
 
             <Card>
               <CardHeader className="flex-row items-center justify-between gap-3">
@@ -1081,6 +1057,7 @@ export function SellNowPage() {
               </CardContent>
             </Card>
 
+            {!isDsaPartner ? (
             <Card>
               <CardHeader>
                 <h2 className="text-base font-semibold text-slate-950">CSV schema</h2>
@@ -1117,6 +1094,7 @@ export function SellNowPage() {
                 </div>
               </CardContent>
             </Card>
+            ) : null}
           </div>
         ) : (
           <EmptyState

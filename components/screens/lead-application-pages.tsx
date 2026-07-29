@@ -10,6 +10,7 @@ import {
   ListFilter,
   Plus,
   Search,
+  UploadCloud,
   ShieldAlert,
 } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
@@ -42,12 +43,15 @@ import {
   DeviationApproverRole,
   ApplicationStage,
   ApplicationStatus,
+  DocumentRecord,
   Lead,
   LeadStatus,
   Product,
   VerificationStatus,
 } from "@/lib/types";
 import { formatCurrency, formatDate, makeId } from "@/lib/utils";
+
+const CUSTOMER_DSA_DISPLAY_NAME = "Cosmos DSA";
 
 const products: Product[] = [
   "Personal Loan",
@@ -358,7 +362,7 @@ export function ApplicationsPage() {
         const dsa = dsaById.get(item.dsaId);
         return (
           <div>
-            <p className="font-medium text-slate-900">{item.dsaName}</p>
+            <p className="font-medium text-slate-900">{currentUser?.role === "Customer" ? CUSTOMER_DSA_DISPLAY_NAME : item.dsaName}</p>
             <p className="text-xs text-slate-500">{dsa?.businessType ?? "Direct"}{dsa?.tier ? ` · ${dsa.tier}` : ""}</p>
           </div>
         );
@@ -366,7 +370,7 @@ export function ApplicationsPage() {
       header: "DSA / Type",
       key: "dsaName",
       sortable: true,
-      sortValue: (item) => `${dsaById.get(item.dsaId)?.businessType ?? "Direct"}-${item.dsaName}`,
+      sortValue: (item) => `${dsaById.get(item.dsaId)?.businessType ?? "Direct"}-${currentUser?.role === "Customer" ? CUSTOMER_DSA_DISPLAY_NAME : item.dsaName}`,
     },
     { cell: (item) => item.product, header: "Product", key: "product", sortable: true, sortValue: (item) => item.product },
     { cell: (item) => formatCurrency(item.loanAmount), header: "Loan amount", key: "loanAmount", sortable: true, sortValue: (item) => item.loanAmount },
@@ -420,13 +424,16 @@ export function ApplicationsPage() {
 }
 
 export function ApplicationDetailPage({ id }: { id: string }) {
-  const { store, updateItem, currentUser } = useMockStore();
+  const { createItem, store, updateItem, currentUser } = useMockStore();
   const application = store.applications.find((item) => item.id === id) ?? store.applications[0];
   const [note, setNote] = useState("");
   const [isDeviationModalOpen, setIsDeviationModalOpen] = useState(false);
   const [deviationInboxText, setDeviationInboxText] = useState("");
   const [deviationInboxError, setDeviationInboxError] = useState("");
   const documents = store.documents.filter((item) => item.applicationId === application.id);
+  const isCustomerApplication = currentUser?.role === "Customer" && application.customer === currentUser.name;
+  const visibleDsaName = currentUser?.role === "Customer" ? CUSTOMER_DSA_DISPLAY_NAME : application.dsaName;
+  const visibleVerificationStatus = isCustomerApplication && documents.length === 0 ? "Pending" : application.verificationStatus;
   const checks = store.verificationChecks.filter((item) => item.applicationId === application.applicationId);
   const journeySeed = Number(application.applicationId.replace(/\D/g, "")) || 1;
   const journey = application.journey ?? buildApplicationJourney(application.product, journeySeed, application);
@@ -448,6 +455,42 @@ export function ApplicationDetailPage({ id }: { id: string }) {
     ? application.timeline
     : application.timeline.filter((item) => !containsDeviationText(`${item.title} ${item.note}`));
 
+  function uploadCustomerDocument(event: FormEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file || !isCustomerApplication) return;
+
+    const now = new Date().toISOString();
+    const documentId = makeId("doc");
+    const nextDocument: DocumentRecord = {
+      applicationId: application.id,
+      documentId: `DOC-${documentId.slice(-5).toUpperCase()}`,
+      fileName: file.name,
+      id: documentId,
+      ownerName: application.customer,
+      remarks: "Uploaded by customer. Pending verification by Cosmos operations.",
+      size: `${Math.max(1, Math.round(file.size / 1024))} KB`,
+      status: "Pending",
+      type: "Bank Statement",
+      uploadedAt: now,
+    };
+
+    createItem("documents", nextDocument);
+    updateItem("applications", application.id, {
+      notes: [`Customer uploaded ${file.name}. Verification pending.`, ...application.notes],
+      timeline: [
+        {
+          actor: currentUser?.name ?? application.customer,
+          at: now,
+          id: makeId("tl"),
+          note: `${file.name} uploaded and queued for document verification.`,
+          title: "Document uploaded",
+        },
+        ...application.timeline,
+      ],
+      verificationStatus: "Pending",
+    });
+  }
   function addNote() {
     if (!note.trim()) return;
     updateItem("applications", application.id, {
@@ -571,7 +614,7 @@ export function ApplicationDetailPage({ id }: { id: string }) {
       />
       <div className="grid gap-4 md:grid-cols-2">
         <KpiCard change="+8.7%" icon={FileText} label="Documents" value={String(documents.length)} />
-        <KpiCard change="+1.2%" icon={GitCompare} label="Verification" tone="slate" value={application.verificationStatus} />
+        <KpiCard change="+1.2%" icon={GitCompare} label="Verification" tone="slate" value={visibleVerificationStatus} />
       </div>
 
       <div className="mt-6 grid gap-4 xl:grid-cols-[1fr_360px]">
@@ -620,9 +663,9 @@ export function ApplicationDetailPage({ id }: { id: string }) {
             </CardHeader>
             <CardContent>
               <DetailGrid>
-                <DetailItem label="DSA" value={application.dsaName} />
+                <DetailItem label="DSA" value={visibleDsaName} />
                 <DetailItem label="Stage" value={application.stage} />
-                <DetailItem label="Verification" value={<StatusBadge status={application.verificationStatus} />} />
+                <DetailItem label="Verification" value={<StatusBadge status={visibleVerificationStatus} />} />
                 <DetailItem label="Decision summary" value={visibleDecisionSummary} />
               </DetailGrid>
             </CardContent>
@@ -644,8 +687,15 @@ export function ApplicationDetailPage({ id }: { id: string }) {
             </Card>
           ) : null}
           <Card>
-            <CardHeader>
+            <CardHeader className="flex-row items-center justify-between gap-3">
               <h2 className="text-base font-semibold text-slate-950">Documents</h2>
+              {isCustomerApplication ? (
+                <label className="inline-flex h-8 cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 transition hover:bg-slate-50">
+                  <UploadCloud className="h-3.5 w-3.5" />
+                  Upload
+                  <Input accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={uploadCustomerDocument} type="file" />
+                </label>
+              ) : null}
             </CardHeader>
             <CardContent className="grid gap-3 md:grid-cols-2">
               {documents.map((doc) => (
@@ -659,6 +709,11 @@ export function ApplicationDetailPage({ id }: { id: string }) {
                   </div>
                 </div>
               ))}
+              {documents.length === 0 ? (
+                <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500 md:col-span-2">
+                  No documents uploaded yet. Upload PAN, income, or bank documents to start verification.
+                </div>
+              ) : null}
             </CardContent>
           </Card>
           <Card>
