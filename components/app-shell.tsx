@@ -144,9 +144,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         },
         {
           items: [
-            { href: "/dsa/management", icon: Users, label: "My Agent Network" },
+            { href: "/dsa/management", icon: Users, label: "Manage My Network" },
           ],
-          label: "DSA Network",
+          label: "Network",
         },
         {
           items: [{ href: "/sell-now", icon: Send, label: "Sell Now" }],

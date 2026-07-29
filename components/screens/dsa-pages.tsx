@@ -21,7 +21,6 @@ import { ActionPair, DetailGrid, DetailItem, PageHeader } from "@/components/mod
 import { OnHoldDsaDocuments } from "@/components/screens/on-hold-dsa-documents";
 import { Column, DataTable } from "@/components/ui/data-table";
 import {
-  Badge,
   Button,
   Card,
   CardContent,
@@ -110,6 +109,17 @@ const managementStatuses: DsaStatus[] = [
   "Rejected",
   "Blacklisted",
 ];
+
+type NetworkPersonRow = {
+  applications: number;
+  approvedOrDisbursed: number;
+  conversion: number;
+  disbursed: number;
+  email: string;
+  id: string;
+  leads: number;
+  name: string;
+};
 
 function isQueueStatus(status: DsaStatus) {
   return queueStatuses.includes(status);
@@ -1103,6 +1113,8 @@ export function DsaManagementPage() {
   const [editing, setEditing] = useState<Dsa | null>(null);
   const [managementTab, setManagementTab] = useState("all");
   const router = useRouter();
+  const isNetworkPage = currentUser?.role === "DSA Partner";
+  const networkEmail = currentUser?.email ?? DEMO_USERS.dsa.email;
 
   const getDsaApplications = (dsaId: string) =>
     store.applications
@@ -1118,11 +1130,88 @@ export function DsaManagementPage() {
     .sort((left, right) => right.onboardingDate.localeCompare(left.onboardingDate));
   const rows = status ? scopedRows.filter((item) => item.status === status) : scopedRows;
 
+  const networkRows: NetworkPersonRow[] = scopedRows
+    .map((item) => {
+      const leads = store.leads.filter((lead) => lead.dsaId === item.id);
+      const applications = getDsaApplications(item.id);
+      const approvedOrDisbursed = applications.filter(
+        (application) => application.status === "Approved" || application.status === "Disbursed",
+      ).length;
+      const disbursed = applications.filter((application) => application.status === "Disbursed").length;
+
+      return {
+        applications: applications.length,
+        approvedOrDisbursed,
+        conversion: applications.length ? (approvedOrDisbursed / applications.length) * 100 : 0,
+        disbursed,
+        email: networkEmail,
+        id: item.id,
+        leads: leads.length,
+        name: demoAgentName(item.id),
+      };
+    })
+    .sort((left, right) => right.applications - left.applications || right.leads - left.leads || left.name.localeCompare(right.name));
+
+  const networkColumns: Column<NetworkPersonRow>[] = [
+    {
+      cell: (item) => (
+        <Link className="font-semibold text-blue-700 hover:underline" href={`/dsa/${item.id}`}>
+          {item.name}
+        </Link>
+      ),
+      header: "Partner",
+      key: "name",
+      sortable: true,
+      sortValue: (item) => item.name,
+    },
+    { cell: (item) => item.email, header: "Email", key: "email", sortable: true, sortValue: (item) => item.email },
+    { cell: (item) => item.leads, header: "Leads collected", key: "leads", sortable: true, sortValue: (item) => item.leads },
+    {
+      cell: (item) => item.applications,
+      header: "Applications collected",
+      key: "applications",
+      sortable: true,
+      sortValue: (item) => item.applications,
+    },
+    {
+      cell: (item) => item.approvedOrDisbursed,
+      header: "Approved / disbursed",
+      key: "approvedOrDisbursed",
+      sortable: true,
+      sortValue: (item) => item.approvedOrDisbursed,
+    },
+    { cell: (item) => percent(item.conversion), header: "Conversion", key: "conversion", sortable: true, sortValue: (item) => item.conversion },
+  ];
+
+  if (isNetworkPage) {
+    return (
+      <div>
+        <PageHeader
+          description="Partner activity, lead collection, and application sourcing across your network."
+          eyebrow="Network"
+          title="Manage My Network"
+        />
+        <DataTable
+          actions={(item) => (
+            <Button onClick={() => router.push(`/dsa/${item.id}`)} size="sm" type="button" variant="outline">
+              View
+            </Button>
+          )}
+          columns={networkColumns}
+          emptyDescription="Partner activity will appear here once leads or applications are collected."
+          emptyTitle="No partners found"
+          items={networkRows}
+          searchKeys={["name", "email"]}
+        />
+      </div>
+    );
+  }
+
   const columns: Column<Dsa>[] = [
     {
       cell: (item) => (
         <Link className="font-semibold text-blue-700 hover:underline" href={`/dsa/${item.id}`}>
-          {currentUser?.role === "DSA Partner" ? demoAgentName(item.id) : item.name}
+          {item.name}
         </Link>
       ),
       header: "Partner",
@@ -1137,9 +1226,14 @@ export function DsaManagementPage() {
       sortable: true,
       sortValue: (item) => item.code,
     },
-    { cell: (item) => item.businessType, header: "Business type", key: "businessType" },
-    { cell: (item) => item.city, header: "City", key: "city", sortable: true, sortValue: (item) => item.city },
     { cell: (item) => <StatusBadge status={item.status} />, header: "Status", key: "status" },
+    {
+      cell: (item) => store.leads.filter((lead) => lead.dsaId === item.id).length,
+      header: "Leads",
+      key: "leads",
+      sortable: true,
+      sortValue: (item) => store.leads.filter((lead) => lead.dsaId === item.id).length,
+    },
     {
       cell: (item) => getDsaApplications(item.id).length,
       header: "Applications",
@@ -1147,17 +1241,11 @@ export function DsaManagementPage() {
       sortable: true,
       sortValue: (item) => getDsaApplications(item.id).length,
     },
-    { cell: (item) => <Badge>{item.tier}</Badge>, header: "Tier", key: "tier" },
     { cell: (item) => percent(item.approvalRate), header: "Approval", key: "approvalRate", sortable: true, sortValue: (item) => item.approvalRate },
   ];
 
   return (
     <div>
-      <PageHeader
-        description="Manage partner records, commercial readiness, KYC status, and activation lifecycle."
-        eyebrow="Partner network"
-        title="DSA Management"
-      />
       <div className="mb-5">
         <Tabs
           onChange={setManagementTab}
@@ -1215,7 +1303,7 @@ export function DsaProfilePage({ id }: { id: string }) {
   const { deleteDsaCascade, deleteItem, store, updateItem, currentUser } = useMockStore();
   const { toast } = useToast();
   const router = useRouter();
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState("performance");
   const [applicationProductFilter, setApplicationProductFilter] = useState("");
   const [approvingDsa, setApprovingDsa] = useState<Dsa | null>(null);
   const [rejectingDsa, setRejectingDsa] = useState<Dsa | null>(null);
@@ -1276,7 +1364,30 @@ export function DsaProfilePage({ id }: { id: string }) {
   const approvedApplications = applications.filter(
     (item) => item.status === "Approved" || item.status === "Disbursed",
   ).length;
-
+  const disbursedApplications = applications.filter((item) => item.status === "Disbursed").length;
+  const sourcedLoanValue = applications.reduce((sum, item) => sum + item.loanAmount, 0);
+  const agentAnalysis = Array.from(
+    leads.reduce((analysis, lead) => {
+      const current = analysis.get(lead.owner) ?? {
+        applications: 0,
+        approvedOrDisbursed: 0,
+        leads: 0,
+        loanValue: 0,
+        name: lead.owner,
+      };
+      current.leads += 1;
+      current.loanValue += lead.amount;
+      const leadApplications = applications.filter(
+        (application) => application.customer === lead.customer && application.dsaId === lead.dsaId,
+      );
+      current.applications += leadApplications.length;
+      current.approvedOrDisbursed += leadApplications.filter(
+        (application) => application.status === "Approved" || application.status === "Disbursed",
+      ).length;
+      analysis.set(lead.owner, current);
+      return analysis;
+    }, new Map<string, { name: string; leads: number; applications: number; approvedOrDisbursed: number; loanValue: number }>()),
+  ).map(([, value]) => value).sort((left, right) => right.applications - left.applications || right.leads - left.leads);
   const canLifecycleRoleManageDsa =
     currentUser?.role === "DSA Manager" ||
     currentUser?.role === "DSA Credit" ||
@@ -1302,6 +1413,140 @@ export function DsaProfilePage({ id }: { id: string }) {
     setLifecycleReason("");
     setLifecycleReasonError("");
     setBlacklistingDsa(nextDsa);
+  }
+
+  if (currentUser?.role === "DSA Partner") {
+    const networkPartnerName = demoAgentName(dsa.id);
+    const conversion = applications.length ? (approvedApplications / applications.length) * 100 : 0;
+
+    return (
+      <div>
+        <Link className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-blue-700" href="/dsa/management">
+          <ArrowLeft className="h-4 w-4" />
+          Back to Manage My Network
+        </Link>
+        <PageHeader
+          description="Lead collection, application sourcing, and payout activity for this network partner."
+          eyebrow="Network partner"
+          title={networkPartnerName}
+        />
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: "Leads collected", value: String(leads.length) },
+            { label: "Applications collected", value: String(applications.length) },
+            { label: "Approved / disbursed", value: String(approvedApplications) },
+            { label: "Loan value", value: formatCurrency(sourcedLoanValue) },
+          ].map((metric) => (
+            <Card key={metric.label}>
+              <CardContent className="p-4">
+                <p className="text-sm text-slate-500">{metric.label}</p>
+                <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{metric.value}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <Card className="mt-4">
+          <CardContent>
+            <DetailGrid>
+              <DetailItem label="Partner" value={networkPartnerName} />
+              <DetailItem label="Email" value={currentUser?.email ?? DEMO_USERS.dsa.email} />
+              <DetailItem label="Conversion" value={percent(conversion)} />
+              <DetailItem label="Disbursed applications" value={disbursedApplications} />
+              <DetailItem label="Commission earned" value={formatCurrency(commissionTotal || dsa.commissionEarned)} />
+              <DetailItem label="Active products" value={productConfigs.length || "None"} />
+            </DetailGrid>
+          </CardContent>
+        </Card>
+
+        <Card className="mt-4">
+          <CardContent>
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Collected Applications</h3>
+                <p className="text-xs text-slate-500">Applications sourced by this network partner.</p>
+              </div>
+              <span className="text-xs font-semibold text-slate-500">{applications.length} total</span>
+            </div>
+            {applications.length ? (
+              <div className="mt-3 overflow-x-auto rounded-md border border-slate-200">
+                <table className="w-full min-w-[760px] text-left text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="p-3">Application</th>
+                      <th className="p-3">Customer</th>
+                      <th className="p-3">Product</th>
+                      <th className="p-3 text-right">Amount</th>
+                      <th className="p-3">Stage</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3 text-right">Created</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {applications.map((application) => (
+                      <tr key={application.id}>
+                        <td className="p-3 font-mono text-xs text-slate-600">{application.applicationId}</td>
+                        <td className="p-3 font-semibold text-slate-900">{application.customer}</td>
+                        <td className="p-3 text-slate-700">{application.product}</td>
+                        <td className="p-3 text-right font-medium text-slate-900">{formatCurrency(application.loanAmount)}</td>
+                        <td className="p-3 text-slate-700">{application.stage}</td>
+                        <td className="p-3"><StatusBadge status={application.status} /></td>
+                        <td className="p-3 text-right text-slate-600">{formatDate(application.createdAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-slate-500">No applications have been collected yet.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="mt-4">
+          <CardContent>
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Lead Pipeline</h3>
+                <p className="text-xs text-slate-500">Leads collected before application submission.</p>
+              </div>
+              <span className="text-xs font-semibold text-slate-500">{leads.length} total</span>
+            </div>
+            {leads.length ? (
+              <div className="mt-3 overflow-x-auto rounded-md border border-slate-200">
+                <table className="w-full min-w-[700px] text-left text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="p-3">Lead</th>
+                      <th className="p-3">Customer</th>
+                      <th className="p-3">Product</th>
+                      <th className="p-3 text-right">Amount</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3">Next action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {leads.map((lead) => (
+                      <tr key={lead.id}>
+                        <td className="p-3 font-mono text-xs text-slate-600">{lead.leadId}</td>
+                        <td className="p-3 font-semibold text-slate-900">{lead.customer}</td>
+                        <td className="p-3 text-slate-700">{lead.product}</td>
+                        <td className="p-3 text-right font-medium text-slate-900">{formatCurrency(lead.amount)}</td>
+                        <td className="p-3"><StatusBadge status={lead.status} /></td>
+                        <td className="p-3 text-slate-700">{lead.nextAction}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-slate-500">No leads have been collected yet.</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (
@@ -1410,14 +1655,14 @@ export function DsaProfilePage({ id }: { id: string }) {
             ) : null}
           </div>
         }
-        description={`${dsa.businessType} - managed by ${dsa.manager}`}
-        eyebrow="DSA profile"
+        description="Partner performance, sourcing activity, and configured loan products."
+        eyebrow="Partner analysis"
         title={dsa.name}
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <KpiCard change="+6.2%" icon={TrendingUp} label="Approval rate" tone="green" value={percent(dsa.approvalRate)} />
-        <KpiCard change="+11.0%" icon={ClipboardList} label="Monthly leads" value={String(dsa.monthlyLeads)} />
+        <KpiCard change="+11.0%" icon={ClipboardList} label="Applications sourced" value={String(applications.length)} />
         <KpiCard change="+8.4%" icon={BadgeIndianRupee} label="Commission" tone="slate" value={formatCurrency(commissionTotal || dsa.commissionEarned)} />
       </div>
 
@@ -1458,10 +1703,10 @@ export function DsaProfilePage({ id }: { id: string }) {
         <Tabs
           onChange={setTab}
           tabs={[
+            { label: "Partner analysis", value: "performance" },
             { label: "Basic Info", value: "overview" },
             { label: "KYC", value: "kyc" },
             { label: "Documents", value: "documents" },
-            { label: "Performance Metrics", value: "performance" },
             { label: "Manage Products", value: "products" },
             { label: "Applications", value: "apps" },
             { label: "Commission", value: "commission" },
@@ -1479,7 +1724,7 @@ export function DsaProfilePage({ id }: { id: string }) {
               <DetailItem label="DSA ID" value={dsa.code} />
               <DetailItem label="Contact person" value={dsa.contactPerson} />
               <DetailItem label="Mobile" value={dsa.mobile} />
-              <DetailItem label="Email" value={dsa.email} />
+              <DetailItem label="Email" value={currentUser?.email ?? DEMO_USERS.dsa.email} />
               <DetailItem label="Address" value={`${dsa.address}, ${dsa.city}, ${dsa.state} ${dsa.pincode}`} />
               <DetailItem label="Bank" value={`${dsa.bank.bankName} · ${dsa.bank.ifsc}`} />
               <DetailItem label="Tier" value={dsa.tier} />
@@ -1513,14 +1758,50 @@ export function DsaProfilePage({ id }: { id: string }) {
             </div>
           ) : null}
           {tab === "performance" ? (
-            <DetailGrid>
-              <DetailItem label="Leads sourced" value={leads.length} />
-              <DetailItem label="Applications sourced" value={applications.length} />
-              <DetailItem label="Approved or disbursed" value={approvedApplications} />
-              <DetailItem label="Approval rate" value={percent(dsa.approvalRate)} />
-              <DetailItem label="Monthly lead target" value={dsa.monthlyLeads} />
-              <DetailItem label="Commission earned" value={formatCurrency(commissionTotal || dsa.commissionEarned)} />
-            </DetailGrid>
+            <div className="space-y-5">
+              <DetailGrid>
+                <DetailItem label="Leads sourced" value={leads.length} />
+                <DetailItem label="Applications sourced" value={applications.length} />
+                <DetailItem label="Approved or disbursed" value={approvedApplications} />
+                <DetailItem label="Disbursed applications" value={disbursedApplications} />
+                <DetailItem label="Sourced loan value" value={formatCurrency(sourcedLoanValue)} />
+                <DetailItem label="Commission earned" value={formatCurrency(commissionTotal || dsa.commissionEarned)} />
+              </DetailGrid>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">User activity analysis</h3>
+                <p className="mt-1 text-xs text-slate-500">Performance for users who sourced activity for this DSA.</p>
+                {agentAnalysis.length ? (
+                  <div className="mt-3 overflow-x-auto rounded-md border border-slate-200">
+                    <table className="w-full min-w-[700px] text-left text-sm">
+                      <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                        <tr>
+                          <th className="p-3">User</th>
+                          <th className="p-3 text-right">Leads</th>
+                          <th className="p-3 text-right">Applications</th>
+                          <th className="p-3 text-right">Approved / disbursed</th>
+                          <th className="p-3 text-right">Conversion</th>
+                          <th className="p-3 text-right">Loan value</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {agentAnalysis.map((agent) => (
+                          <tr key={agent.name}>
+                            <td className="p-3 font-semibold text-slate-900">{agent.name}</td>
+                            <td className="p-3 text-right text-slate-700">{agent.leads}</td>
+                            <td className="p-3 text-right text-slate-700">{agent.applications}</td>
+                            <td className="p-3 text-right text-slate-700">{agent.approvedOrDisbursed}</td>
+                            <td className="p-3 text-right text-slate-700">{percent(agent.applications ? (agent.approvedOrDisbursed / agent.applications) * 100 : 0)}</td>
+                            <td className="p-3 text-right font-medium text-slate-900">{formatCurrency(agent.loanValue)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="mt-3 text-sm text-slate-500">No user activity has been recorded for this DSA yet.</p>
+                )}
+              </div>
+            </div>
           ) : null}
           {tab === "products" ? (
             <div className="space-y-4">

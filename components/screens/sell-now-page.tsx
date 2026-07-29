@@ -20,6 +20,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { DEMO_USERS } from "@/lib/demo-identities";
 import { configJourneyUrl } from "@/lib/journey-links";
+import { getActiveProductConfigs } from "@/lib/product-configs";
 import {
   buildApplicationJourney,
   createJourneyApplication,
@@ -337,6 +338,7 @@ function JourneySelection({
 export function SellNowPage() {
   const { createItem, currentUser, store } = useMockStore();
   const { toast } = useToast();
+  const isDsaPartner = currentUser?.role === "DSA Partner";
   const [selectedDsaId, setSelectedDsaId] = useState(() => loadSellNowDraft().selectedDsaId ?? "");
   const [selectedProduct, setSelectedProduct] = useState(() => loadSellNowDraft().selectedProduct ?? "");
   const [mode, setMode] = useState(() => loadSellNowDraft().mode ?? "send");
@@ -347,16 +349,11 @@ export function SellNowPage() {
   const [createdApplication, setCreatedApplication] = useState<Application | null>(null);
 
   const activeConfigs = useMemo(
-    () => {
-      const activeDsaIds = new Set(
-        store.dsas.filter((dsa) => dsa.status === "Active").map((dsa) => dsa.id)
-      );
-      return store.dsaProductConfigs
-        .filter((config) => config.status === "Active" && activeDsaIds.has(config.dsaId))
-        .filter((config) => currentUser?.role !== "DSA Partner" || config.dsaId === currentUser.id)
-        .sort((left, right) => left.dsaName.localeCompare(right.dsaName) || left.product.localeCompare(right.product));
-    },
-    [currentUser, store.dsaProductConfigs, store.dsas],
+    () =>
+      getActiveProductConfigs(store, {
+        dsaId: isDsaPartner ? currentUser?.id : undefined,
+      }),
+    [currentUser?.id, isDsaPartner, store],
   );
 
   const effectiveDsaId =
@@ -500,6 +497,7 @@ export function SellNowPage() {
 
       {activeConfigs.length ? (
         <div className="space-y-6">
+          {!isDsaPartner ? (
             <Card>
               <CardHeader>
                 <h2 className="text-base font-semibold text-slate-950">Journey selection</h2>
@@ -535,6 +533,7 @@ export function SellNowPage() {
                 ) : null}
               </CardContent>
             </Card>
+          ) : null}
 
             <Card>
               <CardHeader className="flex-row items-center justify-between gap-3">
@@ -542,7 +541,7 @@ export function SellNowPage() {
                   <h2 className="text-base font-semibold text-slate-950">Journey action</h2>
                   {effectiveConfig ? (
                     <p className="mt-1 text-xs text-slate-500">
-                      {effectiveConfig.dsaName} - {effectiveConfig.product}
+                      {isDsaPartner ? effectiveConfig.product : `${effectiveConfig.dsaName} - ${effectiveConfig.product}`}
                     </p>
                   ) : null}
                 </div>
@@ -556,6 +555,29 @@ export function SellNowPage() {
                 />
               </CardHeader>
               <CardContent className="space-y-5">
+                {isDsaPartner ? (
+                  <Field className="max-w-md">
+                    <Label htmlFor="sellNowPartnerProduct">Loan product</Label>
+                    <Select
+                      id="sellNowPartnerProduct"
+                      onChange={(event) => {
+                        setSelectedProduct(event.target.value);
+                        setFieldValues({});
+                        setCreatedApplication(null);
+                        setLastLink("");
+                        setStepIndex(0);
+                      }}
+                      value={effectiveProduct}
+                    >
+                      <option value="">Select product</option>
+                      {productsForDsa.map((config) => (
+                        <option key={config.id} value={config.product}>
+                          {config.product}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                ) : null}
                 <ApplicantFields
                   draft={applicant}
                   onChange={(patch) => setApplicant((current) => ({ ...current, ...patch }))}
@@ -623,7 +645,7 @@ export function SellNowPage() {
                 )}
               </CardContent>
             </Card>
-            {effectiveConfig ? (
+            {!isDsaPartner && effectiveConfig ? (
               <Card>
                 <CardHeader>
                   <h2 className="text-base font-semibold text-slate-950">Configured payout</h2>
@@ -653,7 +675,7 @@ export function SellNowPage() {
           }
           description={
             currentUser.role === "DSA Partner"
-              ? "No active products are configured for your DSA yet."
+              ? "No active loan products are configured for your DSA yet."
               : "Configure at least one active DSA product before starting a journey."
           }
           title="No journeys configured"

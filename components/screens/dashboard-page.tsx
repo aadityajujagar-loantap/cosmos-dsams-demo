@@ -43,6 +43,7 @@ import {
 import { useMockStore } from "@/lib/store";
 import { buildApplicationDeviation, evaluateBreDeviation } from "@/lib/bre";
 import { buildApplicationJourney } from "@/lib/product-journeys";
+import { getActiveProductConfigs, getUniqueProductConfigs, resolveProductConfig } from "@/lib/product-configs";
 import { compactNumber, formatCurrency, formatDate, makeId } from "@/lib/utils";
 import { Application, Product, Lead } from "@/lib/types";
 import { demoAgentName } from "@/lib/agent-names";
@@ -357,21 +358,17 @@ export function DashboardPage() {
   }, [customerApps]);
 
   const customerJourneyConfigs = useMemo(
-    () => {
-      const activeDsaIds = new Set(store.dsas.filter((dsa) => dsa.status === "Active").map((dsa) => dsa.id));
-      return store.dsaProductConfigs
-        .filter((config) => config.status === "Active")
-        .filter((config) => activeDsaIds.has(config.dsaId))
-        .sort((left, right) => left.dsaName.localeCompare(right.dsaName) || left.product.localeCompare(right.product));
-    },
-    [store.dsaProductConfigs, store.dsas],
+    () => getActiveProductConfigs(store),
+    [store],
   );
-  const customerDsaOptions = useMemo(
-    () => Array.from(new Map(customerJourneyConfigs.map((config) => [config.dsaId, config])).values()),
+  const customerProductOptions = useMemo(
+    () => getUniqueProductConfigs(customerJourneyConfigs),
     [customerJourneyConfigs],
   );
-  const customerProductOptions = customerJourneyConfigs.filter((config) => config.dsaId === sourcingPartner);
-  const selectedCustomerConfig = customerProductOptions.find((config) => config.product === loanProduct);
+  const selectedCustomerConfig = useMemo(
+    () => resolveProductConfig(customerJourneyConfigs, loanProduct, sourcingPartner),
+    [customerJourneyConfigs, loanProduct, sourcingPartner],
+  );
 
   const handleSimulateUpload = (docName: string) => {
     setUploadedDocs((prev) => [...prev, docName]);
@@ -381,7 +378,7 @@ export function DashboardPage() {
     if (!currentUser) return;
     const errors: Record<string, string> = {};
     if (!selectedCustomerConfig) {
-      errors.product = "Choose a DSA and one of its configured products.";
+      errors.product = "Choose an active configured loan product.";
     }
     if (!customerCity.trim()) {
       errors.city = "Enter city of residence.";
@@ -615,7 +612,6 @@ export function DashboardPage() {
                     <thead>
                       <tr className="bg-slate-50/75 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                         <th className="p-4 pl-6">Partner</th>
-                        <th className="p-4">DSA ID</th>
                         <th className="p-4">Contact</th>
                         <th className="p-4">City</th>
                         <th className="p-4">Status</th>
@@ -1170,7 +1166,6 @@ export function DashboardPage() {
                     <thead>
                       <tr className="bg-slate-50/75 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                         <th className="p-4 pl-6">Partner</th>
-                        <th className="p-4">DSA ID</th>
                         <th className="p-4">Submitted</th>
                         <th className="p-4">Status</th>
                         <th className="p-4 text-right pr-6">Profile</th>
@@ -1306,11 +1301,11 @@ export function DashboardPage() {
           <Card className="shadow-md">
             <CardHeader className="flex-row items-center justify-between border-b border-slate-100 pb-4">
               <div>
-                <h2 className="text-base font-bold text-slate-900">My Agent Network Directory</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Sub-agents onboarded and managed by your business</p>
+                <h2 className="text-base font-bold text-slate-900">Manage My Network</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Partners onboarded and managed by your business</p>
               </div>
               <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                {partnerAgents.length} Agents
+                {partnerAgents.length} Partners
               </span>
             </CardHeader>
             <CardContent className="p-0">
@@ -1320,7 +1315,6 @@ export function DashboardPage() {
                     <thead>
                       <tr className="bg-slate-50/75 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                         <th className="p-4 pl-6">Agent Name</th>
-                        <th className="p-4">DSA ID</th>
                         <th className="p-4">Email ID</th>
                         <th className="p-4">Onboarded</th>
                         <th className="p-4">Status</th>
@@ -1331,8 +1325,7 @@ export function DashboardPage() {
                       {partnerAgents.map((agent) => (
                         <tr key={agent.id} className="hover:bg-slate-50/40 transition">
                           <td className="p-4 pl-6 font-semibold text-slate-800">{demoAgentName(agent.id)}</td>
-                          <td className="p-4 text-slate-600 font-mono text-xs">{agent.code}</td>
-                          <td className="p-4 text-slate-600 text-xs">{agent.email}</td>
+                          <td className="p-4 text-slate-600 text-xs">{currentUser?.email ?? "dsa@cosmosbank.example"}</td>
                           <td className="p-4 text-slate-500 text-xs">{formatDate(agent.onboardingDate)}</td>
                           <td className="p-4">
                             <StatusBadge status={agent.status} />
@@ -1340,7 +1333,7 @@ export function DashboardPage() {
                           <td className="p-4 text-right pr-6">
                             <Link href={`/dsa/${agent.id}`}>
                               <button className="inline-flex h-8 px-3 items-center justify-center rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
-                                Open Profile
+                                View
                               </button>
                             </Link>
                           </td>
@@ -1352,8 +1345,8 @@ export function DashboardPage() {
               ) : (
                 <div className="p-8 text-center text-slate-500">
                   <Users className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm font-semibold text-slate-700">No Sub-Agents Sourced Yet</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Approved agent records assigned to your DSA will appear here.</p>
+                  <p className="text-sm font-semibold text-slate-700">No Network Partners Yet</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Approved partner records assigned to your network will appear here.</p>
                 </div>
               )}
             </CardContent>
@@ -1588,26 +1581,9 @@ export function DashboardPage() {
             <div className="space-y-4">
               <h3 className="text-sm font-bold text-slate-900 border-b pb-2 uppercase tracking-wider">Loan Product Specifications</h3>
               <div className="grid gap-4">
+
                 <Field>
-                  <Label htmlFor="sourcingPartner">Choose DSA Partner</Label>
-                  <Select
-                    id="sourcingPartner"
-                    onChange={(e) => {
-                      setSourcingPartner(e.target.value);
-                      setLoanProduct("");
-                      setFormErrors({});
-                    }}
-                    value={sourcingPartner}
-                  >
-                    <option value="">Select DSA</option>
-                    {customerDsaOptions.map((config) => (
-                      <option key={config.dsaId} value={config.dsaId}>{config.dsaName} ({config.dsaCode})</option>
-                    ))}
-                  </Select>
-                  {formErrors.product && <p className="text-xs font-semibold text-rose-600 mt-1">{formErrors.product}</p>}
-                </Field>
-                <Field>
-                  <Label htmlFor="loanProduct">Choose Product Type</Label>
+                  <Label htmlFor="loanProduct">Choose Loan Product</Label>
                   <Select
                     id="loanProduct"
                     onChange={(e) => {
@@ -1618,9 +1594,10 @@ export function DashboardPage() {
                   >
                     <option value="">Select product</option>
                     {customerProductOptions.map((config) => (
-                      <option key={config.id} value={config.product}>{config.product}</option>
+                      <option key={config.product} value={config.product}>{config.product}</option>
                     ))}
                   </Select>
+                  {formErrors.product && <p className="text-xs font-semibold text-rose-600 mt-1">{formErrors.product}</p>}
                 </Field>
                 <Field>
                   <Label htmlFor="loanAmount">Requested Amount (INR)</Label>
