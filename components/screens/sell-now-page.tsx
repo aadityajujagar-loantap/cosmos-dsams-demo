@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Copy, Mail, MessageSquare, Send } from "lucide-react";
+import { BookOpen, CheckCircle2, Copy, FileSpreadsheet, Loader2, Mail, MessageSquare, Send, UploadCloud } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import type { ChangeEvent } from "react";
 
 import { DetailItem, PageHeader } from "@/components/module";
 import {
@@ -14,6 +15,7 @@ import {
   Field,
   Input,
   Label,
+  Modal,
   Select,
   Tabs,
 } from "@/components/ui/primitives";
@@ -68,6 +70,107 @@ interface JourneyFormStep {
 }
 
 const sellNowDraftKey = "cosmos_sell_now_draft";
+
+type SellNowWorkspaceTab = "punch" | "bulk" | "docs";
+
+interface BulkUploadResult {
+  acceptedRows: number;
+  fileName: string;
+  product: string;
+  rejectedRows: number;
+  requestedAt: string;
+  totalRows: number;
+}
+
+const bulkCsvTemplate = [
+  "customer_name,mobile,email,city,loan_amount,monthly_income,pan,aadhaar",
+  "Aarav Sharma,9876543210,aarav.sharma@example.com,Mumbai,750000,85000,ABCDE1234F,123456789012",
+  "Meera Iyer,9876501234,meera.iyer@example.com,Pune,1250000,140000,BCDEA2345G,234567890123",
+].join("\n");
+
+const apiReferenceSections = [
+  {
+    method: "POST",
+    path: "/api/v1/applications/punch-in",
+    summary: "Create one application against an active configured product journey.",
+    request: JSON.stringify(
+      {
+        dsaCode: "COS-DSA-0001",
+        product: "Personal Loan",
+        customer: {
+          name: "Aarav Sharma",
+          mobile: "9876543210",
+          email: "aarav.sharma@example.com",
+          city: "Mumbai",
+          pan: "ABCDE1234F",
+          aadhaar: "123456789012",
+        },
+        loan: {
+          amount: 750000,
+          monthlyIncome: 85000,
+        },
+        source: "api",
+      },
+      null,
+      2,
+    ),
+    response: JSON.stringify(
+      {
+        applicationId: "APP-000245",
+        status: "In Review",
+        stage: "BRE Check",
+        product: "Personal Loan",
+        submittedAt: "2026-07-29T10:30:00+05:30",
+      },
+      null,
+      2,
+    ),
+  },
+  {
+    method: "POST",
+    path: "/api/v1/applications/bulk-upload",
+    summary: "Upload a CSV batch and receive row-level validation results.",
+    request: [
+      "curl --request POST https://api.cosmosbank.in/dsa/api/v1/applications/bulk-upload \\",
+      "  --header 'Authorization: Bearer <token>' \\",
+      "  --header 'X-DSA-Code: COS-DSA-0001' \\",
+      "  --form 'product=Personal Loan' \\",
+      "  --form 'file=@applications.csv'",
+    ].join("\n"),
+    response: JSON.stringify(
+      {
+        batchId: "BULK-20260729-0007",
+        status: "Queued",
+        totalRows: 120,
+        acceptedRows: 117,
+        rejectedRows: 3,
+        reportUrl: "/api/v1/applications/bulk-upload/BULK-20260729-0007/report",
+      },
+      null,
+      2,
+    ),
+  },
+  {
+    method: "GET",
+    path: "/api/v1/products",
+    summary: "List active products configured for the authenticated partner.",
+    request: [
+      "curl --request GET https://api.cosmosbank.in/dsa/api/v1/products \\",
+      "  --header 'Authorization: Bearer <token>' \\",
+      "  --header 'X-DSA-Code: COS-DSA-0001'",
+    ].join("\n"),
+    response: JSON.stringify(
+      {
+        products: [
+          { product: "Personal Loan", status: "Active", minAmount: 500000, maxAmount: 3000000 },
+          { product: "Business Loan", status: "Active", minAmount: 1000000, maxAmount: 5000000 },
+        ],
+      },
+      null,
+      2,
+    ),
+  },
+];
 
 function loadSellNowDraft(): Partial<SellNowDraftState> {
   if (typeof window === "undefined") return {};
@@ -335,6 +438,101 @@ function JourneySelection({
   );
 }
 
+function DocumentationCodeBlock({
+  label,
+  onCopy,
+  value,
+}: {
+  label: string;
+  onCopy: (label: string, value: string) => void;
+  value: string;
+}) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-950 text-slate-100">
+      <div className="flex items-center justify-between gap-3 border-b border-white/10 px-3 py-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">{label}</p>
+        <Button className="border-white/10 bg-slate-900 text-slate-100 hover:bg-slate-800" onClick={() => onCopy(label, value)} size="sm" type="button" variant="outline">
+          <Copy className="h-3.5 w-3.5" />
+          Copy
+        </Button>
+      </div>
+      <pre className="max-h-80 overflow-auto p-3 text-xs leading-5 text-slate-100">
+        <code>{value}</code>
+      </pre>
+    </div>
+  );
+}
+
+function ApiDocumentationPanel({ onCopy }: { onCopy: (label: string, value: string) => void }) {
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="flex-row items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-slate-950">API Documentation</h2>
+            <p className="mt-1 text-xs text-slate-500">Production integration reference for direct application punch-in and CSV batch intake.</p>
+          </div>
+          <BookOpen className="h-5 w-5 text-blue-700" />
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid gap-3 md:grid-cols-3">
+            <DetailItem label="Base URL" value="https://api.cosmosbank.in/dsa" />
+            <DetailItem label="Authentication" value="Bearer token" />
+            <DetailItem label="Idempotency" value="Idempotency-Key header" />
+          </div>
+          <div className="rounded-md border border-slate-100 bg-slate-50 p-4">
+            <h3 className="text-sm font-semibold text-slate-950">Required headers</h3>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[640px] text-left text-sm">
+                <thead className="text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="p-2">Header</th>
+                    <th className="p-2">Required</th>
+                    <th className="p-2">Purpose</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {[
+                    ["Authorization", "Yes", "Bearer token issued to the partner integration."],
+                    ["X-DSA-Code", "Yes", "Maps the request to the configured partner product setup."],
+                    ["Idempotency-Key", "Recommended", "Prevents duplicate applications on retry."],
+                    ["Content-Type", "Yes", "application/json for punch-in, multipart/form-data for bulk upload."],
+                  ].map(([header, required, purpose]) => (
+                    <tr key={header}>
+                      <td className="p-2 font-mono text-xs text-slate-700">{header}</td>
+                      <td className="p-2 text-slate-700">{required}</td>
+                      <td className="p-2 text-slate-700">{purpose}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {apiReferenceSections.map((section) => (
+        <Card key={`${section.method}-${section.path}`}>
+          <CardHeader>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">{section.method}</span>
+                  <code className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-800">{section.path}</code>
+                </div>
+                <p className="mt-2 text-sm text-slate-600">{section.summary}</p>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-4 lg:grid-cols-2">
+            <DocumentationCodeBlock label="Request" onCopy={onCopy} value={section.request} />
+            <DocumentationCodeBlock label="Response" onCopy={onCopy} value={section.response} />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
 export function SellNowPage() {
   const { createItem, currentUser, store } = useMockStore();
   const { toast } = useToast();
@@ -347,6 +545,11 @@ export function SellNowPage() {
   const [lastLink, setLastLink] = useState(() => loadSellNowDraft().lastLink ?? "");
   const [stepIndex, setStepIndex] = useState(() => loadSellNowDraft().stepIndex ?? 0);
   const [createdApplication, setCreatedApplication] = useState<Application | null>(null);
+  const [workspaceTab, setWorkspaceTab] = useState<SellNowWorkspaceTab>("punch");
+  const [bulkFile, setBulkFile] = useState<File | null>(null);
+  const [bulkUploading, setBulkUploading] = useState(false);
+  const [bulkResult, setBulkResult] = useState<BulkUploadResult | null>(null);
+  const [bulkResultOpen, setBulkResultOpen] = useState(false);
 
   const activeConfigs = useMemo(
     () =>
@@ -394,6 +597,81 @@ export function SellNowPage() {
     );
   }, [effectiveDsaId, effectiveProduct, lastLink, mode, stepIndex]);
 
+
+  async function copyText(label: string, value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast({ title: `${label} copied`, description: "Content copied to clipboard.", variant: "success" });
+    } catch {
+      toast({ title: "Copy failed", description: "Clipboard access is not available in this browser session.", variant: "warning" });
+    }
+  }
+
+  function selectBulkFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
+    setBulkResult(null);
+    setBulkFile(null);
+
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      event.currentTarget.value = "";
+      toast({ title: "CSV required", description: "Upload a .csv file using the supported bulk application template.", variant: "warning" });
+      return;
+    }
+
+    setBulkFile(file);
+  }
+
+  async function uploadBulkCsv() {
+    if (!effectiveConfig) {
+      toast({ title: "Select product", description: "Choose an active configured loan product before uploading a CSV.", variant: "warning" });
+      return;
+    }
+    if (!bulkFile) {
+      toast({ title: "CSV required", description: "Select a bulk application CSV file before uploading.", variant: "warning" });
+      return;
+    }
+
+    setBulkUploading(true);
+    setBulkResult(null);
+
+    try {
+      const contents = await bulkFile.text();
+      const lines = contents.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      const headers = (lines[0] ?? "").split(",").map((header) => header.trim().toLowerCase());
+      const requiredHeaders = ["customer_name", "mobile", "email", "city", "loan_amount", "monthly_income", "pan", "aadhaar"];
+      const missingHeaders = requiredHeaders.filter((header) => !headers.includes(header));
+      const dataRows = Math.max(0, lines.length - 1);
+
+      await new Promise((resolve) => window.setTimeout(resolve, 900));
+
+      if (missingHeaders.length) {
+        toast({ title: "Template mismatch", description: `Missing CSV columns: ${missingHeaders.join(", ")}.`, variant: "warning" });
+        return;
+      }
+      if (dataRows === 0) {
+        toast({ title: "No rows found", description: "Add at least one application row below the CSV header.", variant: "warning" });
+        return;
+      }
+
+      const rejectedRows = lines.slice(1).filter((line) => line.split(",").length < requiredHeaders.length).length;
+      const acceptedRows = Math.max(0, dataRows - rejectedRows);
+      setBulkResult({
+        acceptedRows,
+        fileName: bulkFile.name,
+        product: effectiveConfig.product,
+        rejectedRows,
+        requestedAt: new Date().toLocaleString("en-IN"),
+        totalRows: dataRows,
+      });
+      setBulkResultOpen(true);
+      toast({ title: "Bulk upload queued", description: `${acceptedRows} rows accepted for ${effectiveConfig.product}.`, variant: "success" });
+    } catch {
+      toast({ title: "Upload failed", description: "The CSV could not be read. Check the file and try again.", variant: "warning" });
+    } finally {
+      setBulkUploading(false);
+    }
+  }
   async function copyLink(value: string) {
     if (!value) {
       toast({ title: "No link available", description: "Select a configured journey first.", variant: "warning" });
@@ -490,50 +768,63 @@ export function SellNowPage() {
   return (
     <div>
       <PageHeader
-        description="Choose an approved DSA product journey, send it to a customer, or complete the same journey on the customer's behalf."
+        description="Punch in one application, upload CSV batches, or share API integration details from one workspace."
         eyebrow="Journeys"
         title="Sell Now"
       />
 
-      {activeConfigs.length ? (
-        <div className="space-y-6">
-          {!isDsaPartner ? (
-            <Card>
-              <CardHeader>
-                <h2 className="text-base font-semibold text-slate-950">Journey selection</h2>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                <JourneySelection
-                  configs={activeConfigs}
-                  lockDsa={currentUser.role === "DSA Partner"}
-                  onDsaChange={(value) => {
-                    setSelectedDsaId(value);
-                    setSelectedProduct("");
-                    setFieldValues({});
-                    setCreatedApplication(null);
-                    setLastLink("");
-                    setStepIndex(0);
-                  }}
-                  onProductChange={(value) => {
-                    setSelectedProduct(value);
-                    setFieldValues({});
-                    setCreatedApplication(null);
-                    setLastLink("");
-                    setStepIndex(0);
-                  }}
-                  selectedDsaId={effectiveDsaId}
-                  selectedProduct={effectiveProduct}
-                />
-                {effectiveConfig ? (
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <DetailItem label="DSA ID" value={effectiveConfig.dsaCode} />
-                    <DetailItem label="Configured product" value={effectiveConfig.product} />
-                    <DetailItem label="Commission type" value={effectiveConfig.commissionType} />
-                  </div>
-                ) : null}
-              </CardContent>
-            </Card>
-          ) : null}
+      <div className="mb-5">
+        <Tabs
+          onChange={(value) => setWorkspaceTab(value as SellNowWorkspaceTab)}
+          tabs={[
+            { label: "Punch-in Application", value: "punch" },
+            { label: "Bulk Upload", value: "bulk" },
+            { label: "API Documentation", value: "docs" },
+          ]}
+          value={workspaceTab}
+        />
+      </div>
+
+      {workspaceTab === "punch" ? (
+        activeConfigs.length ? (
+          <div className="space-y-6">
+            {!isDsaPartner ? (
+              <Card>
+                <CardHeader>
+                  <h2 className="text-base font-semibold text-slate-950">Journey selection</h2>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <JourneySelection
+                    configs={activeConfigs}
+                    lockDsa={currentUser.role === "DSA Partner"}
+                    onDsaChange={(value) => {
+                      setSelectedDsaId(value);
+                      setSelectedProduct("");
+                      setFieldValues({});
+                      setCreatedApplication(null);
+                      setLastLink("");
+                      setStepIndex(0);
+                    }}
+                    onProductChange={(value) => {
+                      setSelectedProduct(value);
+                      setFieldValues({});
+                      setCreatedApplication(null);
+                      setLastLink("");
+                      setStepIndex(0);
+                    }}
+                    selectedDsaId={effectiveDsaId}
+                    selectedProduct={effectiveProduct}
+                  />
+                  {effectiveConfig ? (
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <DetailItem label="DSA ID" value={effectiveConfig.dsaCode} />
+                      <DetailItem label="Configured product" value={effectiveConfig.product} />
+                      <DetailItem label="Commission type" value={effectiveConfig.commissionType} />
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+            ) : null}
 
             <Card>
               <CardHeader className="flex-row items-center justify-between gap-3">
@@ -663,24 +954,215 @@ export function SellNowPage() {
                 </CardContent>
               </Card>
             ) : null}
-        </div>
-      ) : (
-        <EmptyState
-          action={
-            isBankJourneyUser ? (
-              <Link href="/dsa/product-setting">
-                <Button type="button">Open Product Setting</Button>
-              </Link>
-            ) : undefined
-          }
-          description={
-            currentUser.role === "DSA Partner"
-              ? "No active loan products are configured for your DSA yet."
-              : "Configure at least one active DSA product before starting a journey."
-          }
-          title="No journeys configured"
-        />
-      )}
+          </div>
+        ) : (
+          <EmptyState
+            action={
+              isBankJourneyUser ? (
+                <Link href="/dsa/product-setting">
+                  <Button type="button">Open Product Setting</Button>
+                </Link>
+              ) : undefined
+            }
+            description={
+              currentUser.role === "DSA Partner"
+                ? "No active loan products are configured for your DSA yet."
+                : "Configure at least one active DSA product before starting a journey."
+            }
+            title="No journeys configured"
+          />
+        )
+      ) : null}
+
+      {workspaceTab === "bulk" ? (
+        activeConfigs.length ? (
+          <div className="space-y-6">
+            {!isDsaPartner ? (
+              <Card>
+                <CardHeader>
+                  <h2 className="text-base font-semibold text-slate-950">Bulk upload product</h2>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <JourneySelection
+                    configs={activeConfigs}
+                    onDsaChange={(value) => {
+                      setSelectedDsaId(value);
+                      setSelectedProduct("");
+                      setBulkFile(null);
+                      setBulkResult(null);
+                    }}
+                    onProductChange={(value) => {
+                      setSelectedProduct(value);
+                      setBulkFile(null);
+                      setBulkResult(null);
+                    }}
+                    selectedDsaId={effectiveDsaId}
+                    selectedProduct={effectiveProduct}
+                  />
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent>
+                  <Field className="max-w-md">
+                    <Label htmlFor="sellNowBulkPartnerProduct">Loan product</Label>
+                    <Select
+                      id="sellNowBulkPartnerProduct"
+                      onChange={(event) => {
+                        setSelectedProduct(event.target.value);
+                        setBulkFile(null);
+                        setBulkResult(null);
+                      }}
+                      value={effectiveProduct}
+                    >
+                      <option value="">Select product</option>
+                      {productsForDsa.map((config) => (
+                        <option key={config.id} value={config.product}>
+                          {config.product}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
+              <CardHeader className="flex-row items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-semibold text-slate-950">Bulk application upload</h2>
+                  <p className="mt-1 text-xs text-slate-500">Upload one CSV file for the selected configured product.</p>
+                </div>
+                <FileSpreadsheet className="h-5 w-5 text-blue-700" />
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {effectiveConfig ? (
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <DetailItem label="Product" value={effectiveConfig.product} />
+                    <DetailItem label="Partner" value={isDsaPartner ? currentUser.name : effectiveConfig.dsaName} />
+                    <DetailItem label="Batch status" value={bulkResult ? "Last batch queued" : "Ready"} />
+                  </div>
+                ) : null}
+
+                <label
+                  className="flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-blue-200 bg-blue-50/50 p-8 text-center transition hover:bg-blue-50"
+                  htmlFor="bulkCsvFile"
+                >
+                  <UploadCloud className="h-9 w-9 text-blue-700" />
+                  <span className="mt-3 text-sm font-semibold text-slate-950">Upload bulk CSV</span>
+                  <span className="mt-1 text-xs text-slate-500">CSV only, one header row, one application per row.</span>
+                  <Input accept=".csv,text/csv" className="hidden" id="bulkCsvFile" onChange={selectBulkFile} type="file" />
+                </label>
+
+                {bulkFile ? (
+                  <div className="rounded-md border border-slate-100 bg-slate-50 p-3 text-sm text-slate-700">
+                    <p className="font-semibold text-slate-950">{bulkFile.name}</p>
+                    <p className="mt-1 text-xs text-slate-500">{Math.max(1, Math.round(bulkFile.size / 1024))} KB selected</p>
+                  </div>
+                ) : null}
+
+                {bulkUploading ? (
+                  <div className="flex items-center gap-3 rounded-md border border-blue-100 bg-blue-50 p-3 text-sm font-medium text-blue-800">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Uploading and validating CSV rows.
+                  </div>
+                ) : null}
+
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button onClick={() => copyText("CSV template", bulkCsvTemplate)} type="button" variant="outline">
+                    <Copy className="h-4 w-4" />
+                    Copy CSV Template
+                  </Button>
+                  <Button disabled={bulkUploading || !bulkFile || !effectiveConfig} onClick={uploadBulkCsv} type="button">
+                    {bulkUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+                    {bulkUploading ? "Uploading" : "Upload CSV"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <h2 className="text-base font-semibold text-slate-950">CSV schema</h2>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[760px] text-left text-sm">
+                    <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="p-3">Column</th>
+                        <th className="p-3">Required</th>
+                        <th className="p-3">Validation</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {[
+                        ["customer_name", "Yes", "Full applicant name."],
+                        ["mobile", "Yes", "10 digit Indian mobile number."],
+                        ["email", "Yes", "Valid customer email address."],
+                        ["city", "Yes", "Residence or business city."],
+                        ["loan_amount", "Yes", "Numeric amount within product range."],
+                        ["monthly_income", "Yes", "Numeric monthly income."],
+                        ["pan", "Yes", "ABCDE1234F format."],
+                        ["aadhaar", "Yes", "12 digit Aadhaar number."],
+                      ].map(([column, required, validation]) => (
+                        <tr key={column}>
+                          <td className="p-3 font-mono text-xs text-slate-700">{column}</td>
+                          <td className="p-3 text-slate-700">{required}</td>
+                          <td className="p-3 text-slate-700">{validation}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        ) : (
+          <EmptyState
+            action={
+              isBankJourneyUser ? (
+                <Link href="/dsa/product-setting">
+                  <Button type="button">Open Product Setting</Button>
+                </Link>
+              ) : undefined
+            }
+            description={
+              currentUser.role === "DSA Partner"
+                ? "No active loan products are configured for your DSA yet."
+                : "Configure at least one active DSA product before uploading application batches."
+            }
+            title="No bulk upload products configured"
+          />
+        )
+      ) : null}
+
+      {workspaceTab === "docs" ? <ApiDocumentationPanel onCopy={copyText} /> : null}
+
+      <Modal
+        description="CSV rows accepted for processing are queued for application creation and validation."
+        onClose={() => setBulkResultOpen(false)}
+        open={bulkResultOpen}
+        title="Bulk upload queued"
+        width="max-w-lg"
+      >
+        {bulkResult ? (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 rounded-md border border-emerald-100 bg-emerald-50 p-4 text-emerald-900">
+              <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-700" />
+              <div>
+                <p className="font-semibold">{bulkResult.fileName}</p>
+                <p className="mt-1 text-sm">{bulkResult.acceptedRows} of {bulkResult.totalRows} rows accepted for {bulkResult.product}.</p>
+              </div>
+            </div>
+            <DetailItem label="Requested at" value={bulkResult.requestedAt} />
+            <DetailItem label="Rejected rows" value={bulkResult.rejectedRows} />
+            <div className="flex justify-end">
+              <Button onClick={() => setBulkResultOpen(false)} type="button">Done</Button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }
