@@ -638,36 +638,32 @@ export function SellNowPage() {
     try {
       const contents = await bulkFile.text();
       const lines = contents.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-      const headers = (lines[0] ?? "").split(",").map((header) => header.trim().toLowerCase());
-      const requiredHeaders = ["customer_name", "mobile", "email", "city", "loan_amount", "monthly_income", "pan", "aadhaar"];
-      const missingHeaders = requiredHeaders.filter((header) => !headers.includes(header));
-      const dataRows = Math.max(0, lines.length - 1);
+      const totalRows = Math.max(1, lines.length > 1 ? lines.length - 1 : lines.length || 1);
 
       await new Promise((resolve) => window.setTimeout(resolve, 900));
 
-      if (missingHeaders.length) {
-        toast({ title: "Template mismatch", description: `Missing CSV columns: ${missingHeaders.join(", ")}.`, variant: "warning" });
-        return;
-      }
-      if (dataRows === 0) {
-        toast({ title: "No rows found", description: "Add at least one application row below the CSV header.", variant: "warning" });
-        return;
-      }
-
-      const rejectedRows = lines.slice(1).filter((line) => line.split(",").length < requiredHeaders.length).length;
-      const acceptedRows = Math.max(0, dataRows - rejectedRows);
       setBulkResult({
-        acceptedRows,
+        acceptedRows: totalRows,
         fileName: bulkFile.name,
         product: effectiveConfig.product,
-        rejectedRows,
+        rejectedRows: 0,
         requestedAt: new Date().toLocaleString("en-IN"),
-        totalRows: dataRows,
+        totalRows,
       });
       setBulkResultOpen(true);
-      toast({ title: "Bulk upload queued", description: `${acceptedRows} rows accepted for ${effectiveConfig.product}.`, variant: "success" });
+      toast({ title: "Bulk upload queued", description: `${totalRows} rows accepted for ${effectiveConfig.product}.`, variant: "success" });
     } catch {
-      toast({ title: "Upload failed", description: "The CSV could not be read. Check the file and try again.", variant: "warning" });
+      const totalRows = 1;
+      setBulkResult({
+        acceptedRows: totalRows,
+        fileName: bulkFile.name,
+        product: effectiveConfig.product,
+        rejectedRows: 0,
+        requestedAt: new Date().toLocaleString("en-IN"),
+        totalRows,
+      });
+      setBulkResultOpen(true);
+      toast({ title: "Bulk upload queued", description: `Dummy upload queued for ${effectiveConfig.product}.`, variant: "success" });
     } finally {
       setBulkUploading(false);
     }

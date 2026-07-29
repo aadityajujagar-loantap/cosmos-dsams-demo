@@ -1,18 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { KeyRound, Lock, ShieldCheck, User } from "lucide-react";
+import { KeyRound, Lock, RefreshCw, ShieldCheck, User } from "lucide-react";
 
 import { useToast } from "@/components/ui/toast";
 import { getDemoRoleForCredentials, type SessionRole } from "@/lib/demo-identities";
 import { useMockStore } from "@/lib/store";
 
-const CAPTCHA_CODE = "C7K9Q";
+const CAPTCHA_CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const DUMMY_OTP = "123456";
 const OTP_LENGTH = 6;
 const EMPTY_OTP = Array.from({ length: OTP_LENGTH }, () => "");
+
+function generateCaptcha(length = 5) {
+  return Array.from({ length }, () => CAPTCHA_CHARSET[Math.floor(Math.random() * CAPTCHA_CHARSET.length)]).join("");
+}
 
 export default function LoginPage() {
   const { login, currentUser } = useMockStore();
@@ -22,10 +26,23 @@ export default function LoginPage() {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [captcha, setCaptcha] = useState("");
+  const [captchaCode, setCaptchaCode] = useState("");
   const [step, setStep] = useState<"credentials" | "otp">("credentials");
   const [pendingRole, setPendingRole] = useState<SessionRole | null>(null);
   const [otpDigits, setOtpDigits] = useState<string[]>(EMPTY_OTP);
   const [error, setError] = useState("");
+
+  const refreshCaptcha = useCallback(() => {
+    setCaptchaCode(generateCaptcha());
+    setCaptcha("");
+    setError("");
+  }, []);
+
+  useEffect(() => {
+    refreshCaptcha();
+    const intervalId = window.setInterval(refreshCaptcha, 60_000);
+    return () => window.clearInterval(intervalId);
+  }, [refreshCaptcha]);
 
   useEffect(() => {
     if (currentUser) {
@@ -56,7 +73,7 @@ export default function LoginPage() {
       return;
     }
 
-    if (captcha.trim().toUpperCase() !== CAPTCHA_CODE) {
+    if (!captchaCode || captcha.trim().toUpperCase() !== captchaCode) {
       setError("Captcha does not match.");
       return;
     }
@@ -260,7 +277,7 @@ export default function LoginPage() {
                 <label htmlFor="captcha" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                   Captcha
                 </label>
-                <div className="grid grid-cols-[minmax(0,1fr)_132px] gap-3">
+                <div className="grid grid-cols-[minmax(0,1fr)_132px_44px] gap-3">
                   <div className="relative">
                     <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                     <input
@@ -277,11 +294,19 @@ export default function LoginPage() {
                     />
                   </div>
                   <div
-                    aria-label={`Captcha code ${CAPTCHA_CODE}`}
+                    aria-label={`Captcha code ${captchaCode || "loading"}`}
                     className="flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-base font-black tracking-[0.24em] text-slate-800 shadow-inner"
                   >
-                    {CAPTCHA_CODE}
+                    {captchaCode || "....."}
                   </div>
+                  <button
+                    aria-label="Refresh captcha"
+                    className="flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
+                    onClick={refreshCaptcha}
+                    type="button"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
 
