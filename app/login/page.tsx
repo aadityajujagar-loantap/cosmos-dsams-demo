@@ -26,7 +26,7 @@ export default function LoginPage() {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [captcha, setCaptcha] = useState("");
-  const [captchaCode, setCaptchaCode] = useState(() => generateCaptcha());
+  const [captchaCode, setCaptchaCode] = useState("");
   const [step, setStep] = useState<"credentials" | "otp">("credentials");
   const [pendingRole, setPendingRole] = useState<SessionRole | null>(null);
   const [otpDigits, setOtpDigits] = useState<string[]>(EMPTY_OTP);
@@ -39,6 +39,7 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
+    refreshCaptcha();
     const intervalId = window.setInterval(refreshCaptcha, 60_000);
     return () => window.clearInterval(intervalId);
   }, [refreshCaptcha]);
