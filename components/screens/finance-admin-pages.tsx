@@ -1,21 +1,22 @@
 "use client";
 
+import Link from "next/link";
 import {
   BadgeIndianRupee,
   CheckSquare,
   FileText,
   Plus,
-  Settings,
   Building2,
   Info,
-  BarChart3,
-  TrendingUp,
-  TrendingDown,
+  FileSpreadsheet,
+  GitBranch,
+  UploadCloud,
+  Users,
 } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { BarChartCard, KpiCard, PieChartCard, TrendCard } from "@/components/charts";
-import { ActionPair, PageHeader } from "@/components/module";
+import { ActionPair, DetailGrid, DetailItem, PageHeader } from "@/components/module";
 import { Column, DataTable } from "@/components/ui/data-table";
 import {
   Badge,
@@ -23,27 +24,32 @@ import {
   Card,
   CardContent,
   Field,
+  Input,
   Label,
   Modal,
   Select,
   StatusBadge,
   Tabs,
+  Textarea,
 } from "@/components/ui/primitives";
 import { FieldConfig, RecordForm } from "@/components/ui/record-form";
 import { useMockStore } from "@/lib/store";
 import {
   AuditLog,
   Commission,
+  Dsa,
+  DsaInvoice,
+  DsaInvoiceEvent,
+  DsaInvoiceStatus,
   Notification,
   NotificationStatus,
   PermissionAction,
   Priority,
   Product,
-  SettingItem,
   User,
   UserRole,
 } from "@/lib/types";
-import { compactNumber, formatCurrency, formatDate, makeId } from "@/lib/utils";
+import { compactNumber, formatCurrency, formatDate, makeId, titleCase } from "@/lib/utils";
 
 const products: Product[] = [
   "Personal Loan",
@@ -56,12 +62,65 @@ const products: Product[] = [
 const userRoles: UserRole[] = [
   "Admin",
   "DSA Credit",
+  "Branch Regional Head",
   "Branch User",
   "DSA Partner",
+  "DSA Agent",
   "Customer",
 ];
 
+const managedUserRoles = userRoles.filter((role) => role !== "DSA Partner" && role !== "DSA Agent");
+
 const permissionActions: PermissionAction[] = ["View", "Create", "Edit", "Delete", "Approve"];
+const iracClasses = ["SMA-0", "SMA-1", "SMA-2", "NPA"] as const;
+const IRAC_BASE_DATE = new Date("2026-07-30T14:30:00+05:30");
+
+type IracClass = (typeof iracClasses)[number];
+type IracDpdBucket = "1-30" | "31-60" | "61-90" | "90+";
+
+interface IracLoanAccountRow {
+  accountStatus: string;
+  applicationId: string;
+  applicationRecordId: string;
+  customer: string;
+  daysPastDue: number;
+  dpdBucket: IracDpdBucket;
+  dsaId: string;
+  dsaName: string;
+  dueDate: string;
+  id: string;
+  iracClass: IracClass;
+  loanAccountNumber: string;
+  overdueAmount: number;
+  outstandingAmount: number;
+  product: Product;
+  riskScore: number;
+  statusNote: string;
+}
+
+function iracClassForDpd(daysPastDue: number): IracClass {
+  if (daysPastDue > 90) return "NPA";
+  if (daysPastDue > 60) return "SMA-2";
+  if (daysPastDue > 30) return "SMA-1";
+  return "SMA-0";
+}
+
+function iracBucketForDpd(daysPastDue: number): IracDpdBucket {
+  if (daysPastDue > 90) return "90+";
+  if (daysPastDue > 60) return "61-90";
+  if (daysPastDue > 30) return "31-60";
+  return "1-30";
+}
+
+function iracDateOffset(days: number) {
+  const date = new Date(IRAC_BASE_DATE);
+  date.setDate(date.getDate() + days);
+  return date.toISOString();
+}
+
+function iracClassRank(value: IracClass) {
+  return iracClasses.indexOf(value);
+}
 
 const commissionFields: FieldConfig<Commission>[] = [
   { label: "DSA name", name: "dsaName", required: true },
@@ -77,7 +136,7 @@ const commissionFields: FieldConfig<Commission>[] = [
 const userFields: FieldConfig<User>[] = [
   { label: "Name", name: "name", required: true },
   { label: "Email", name: "email", required: true, type: "email" },
-  { label: "Role", name: "role", options: userRoles, required: true, type: "select" },
+  { label: "Role", name: "role", options: managedUserRoles, required: true, type: "select" },
   { label: "Region", name: "region", required: true },
   { label: "Status", name: "status", options: ["Active", "Invited", "Disabled"], required: true, type: "select" },
 ];
@@ -88,12 +147,7 @@ const notificationFields: FieldConfig<Notification>[] = [
   { label: "Priority", name: "priority", options: ["Low", "Medium", "High", "Critical"], required: true, type: "select" },
   { label: "Status", name: "status", options: ["Unread", "Read", "Archived"], required: true, type: "select" },
   { label: "Category", name: "category", options: ["Workflow", "Risk", "Payout", "System", "Lead"], required: true, type: "select" },
-];
-
-const settingFields: FieldConfig<SettingItem>[] = [
-  { label: "Section", name: "section", options: ["General", "Workflow", "Notifications", "Security", "Branding"], required: true, type: "select" },
-  { label: "Label", name: "label", required: true },
-  { label: "Value", name: "value", required: true },
+  { label: "Target page path", name: "href" },
 ];
 
 function newCommission(value: Partial<Commission>, dsaId: string): Commission {
@@ -112,13 +166,318 @@ function newCommission(value: Partial<Commission>, dsaId: string): Commission {
   };
 }
 
-export function CommissionsPage() {
-  const { createItem, deleteItem, store, updateItem } = useMockStore();
+const invoiceStatuses: DsaInvoiceStatus[] = [
+  "Raised by DSA",
+  "Countered by Bank",
+  "Countered by DSA",
+  "Pending Approval",
+  "Approved",
+  "Rejected",
+];
+
+type FinanceTab = "raise" | "invoices" | "commissions";
+
+function moneyFromInput(value: string) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function makeInvoiceEvent(
+  action: DsaInvoiceEvent["action"],
+  actor: string,
+  party: DsaInvoiceEvent["party"],
+  amount: number,
+  note: string,
+): DsaInvoiceEvent {
+  return {
+    action,
+    actor,
+    amount,
+    at: new Date().toISOString(),
+    id: makeId("inv-event"),
+    note,
+    party,
+  };
+}
+
+function invoiceTotal(grossAmount: number, adjustmentAmount: number, taxAmount: number) {
+  return Math.max(0, grossAmount + taxAmount - adjustmentAmount);
+}
+
+function newDsaInvoice({
+  actor,
+  dsa,
+  grossAmount,
+  adjustmentAmount,
+  month,
+  note,
+  source = "Manual",
+  status = "Raised by DSA",
+  taxAmount,
+  party = "DSA",
+  csvBatchId,
+}: {
+  actor: string;
+  dsa: Dsa;
+  grossAmount: number;
+  adjustmentAmount: number;
+  month: string;
+  note: string;
+  source?: DsaInvoice["source"];
+  status?: DsaInvoiceStatus;
+  taxAmount: number;
+  party?: DsaInvoiceEvent["party"];
+  csvBatchId?: string;
+}): DsaInvoice {
+  const now = new Date().toISOString();
+  const netAmount = invoiceTotal(grossAmount, adjustmentAmount, taxAmount);
+
+  return {
+    adjustmentAmount,
+    createdAt: now,
+    csvBatchId,
+    dsaCode: dsa.code,
+    dsaId: dsa.id,
+    dsaName: dsa.name,
+    grossAmount,
+    history: [makeInvoiceEvent(source === "CSV Upload" ? "CSV Imported" : "Raised", actor, party, netAmount, note)],
+    id: makeId("invoice"),
+    invoiceNumber: `INV-${Date.now().toString().slice(-6)}`,
+    month,
+    netAmount,
+    raisedBy: actor,
+    raisedByRole: party === "DSA" ? "DSA Partner" : party === "DSA Credit" ? "DSA Credit" : "DSA Manager",
+    remarks: note,
+    requestedAmount: netAmount,
+    source,
+    status,
+    taxAmount,
+    updatedAt: now,
+  };
+}
+
+function renderInvoiceTracker(status: DsaInvoiceStatus) {
+  const steps = ["Raised", "Review", "Counter", "Final"] as const;
+  const activeIndex =
+    status === "Raised by DSA"
+      ? 0
+      : status === "Pending Approval"
+        ? 1
+        : status === "Countered by Bank" || status === "Countered by DSA"
+          ? 2
+          : 3;
+
+  return (
+    <div className="flex min-w-52 items-center gap-2">
+      {steps.map((step, index) => (
+        <div className="flex flex-1 items-center gap-2" key={step}>
+          <span
+            className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-bold ${
+              index <= activeIndex ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-400"
+            }`}
+          >
+            {index + 1}
+          </span>
+          <span className={`hidden text-[10px] font-semibold md:inline ${index <= activeIndex ? "text-blue-700" : "text-slate-400"}`}>
+            {step}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function CommissionsPage({
+  initialTab,
+  showTabs = true,
+}: {
+  initialTab?: FinanceTab;
+  showTabs?: boolean;
+} = {}) {
+  const { createItem, deleteItem, store, updateItem, currentUser } = useMockStore();
+  const isDsaUser = currentUser?.role === "DSA Partner";
+  const canReviewInvoices = currentUser?.role === "DSA Manager" || currentUser?.role === "DSA Credit";
+  const resolvedTab: FinanceTab = isDsaUser
+    ? initialTab === "commissions"
+      ? "commissions"
+      : "raise"
+    : initialTab ?? "invoices";
+  const [tab, setTab] = useState<FinanceTab>(resolvedTab);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Commission | null>(null);
+  const [selectedDsaId, setSelectedDsaId] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [viewingInvoice, setViewingInvoice] = useState<DsaInvoice | null>(null);
+  const [counterInvoice, setCounterInvoice] = useState<DsaInvoice | null>(null);
+  const [counterAmount, setCounterAmount] = useState("");
+  const [counterNote, setCounterNote] = useState("");
+  const [raiseMonth, setRaiseMonth] = useState(new Date().toLocaleString("default", { month: "short", year: "numeric" }));
+  const [raiseGross, setRaiseGross] = useState("");
+  const [raiseAdjustment, setRaiseAdjustment] = useState("0");
+  const [raiseTax, setRaiseTax] = useState("0");
+  const [raiseRemarks, setRaiseRemarks] = useState("");
   const defaultDsa = store.dsas.find((d) => d.status === "Active") || store.dsas[0];
+  const sessionDsa = isDsaUser ? store.dsas.find((dsa) => dsa.id === currentUser?.id) : defaultDsa;
+  const allInvoiceRows = useMemo(
+    () =>
+      [...store.dsaInvoices].sort(
+        (left, right) =>
+          new Date(right.updatedAt || right.createdAt).getTime() -
+          new Date(left.updatedAt || left.createdAt).getTime(),
+      ),
+    [store.dsaInvoices],
+  );
+  const scopedInvoices = isDsaUser
+    ? allInvoiceRows.filter((invoice) => invoice.dsaId === currentUser?.id)
+    : allInvoiceRows;
+  const visibleInvoices = scopedInvoices.filter(
+    (invoice) => (!selectedDsaId || invoice.dsaId === selectedDsaId) && (!selectedMonth || invoice.month === selectedMonth),
+  );
+  const invoiceMonths = Array.from(new Set(scopedInvoices.map((invoice) => invoice.month))).sort();
+  const totalInvoiceAmount = visibleInvoices.reduce((sum, item) => sum + item.requestedAmount, 0);
+  const approvedInvoiceAmount = visibleInvoices.reduce((sum, item) => sum + (item.approvedAmount ?? 0), 0);
+  const openInvoiceCount = visibleInvoices.filter((item) => item.status !== "Approved" && item.status !== "Rejected").length;
   const totalPayout = store.commissions.reduce((sum, item) => sum + item.payout, 0);
   const processed = store.commissions.filter((item) => item.status === "Processed").reduce((sum, item) => sum + item.payout, 0);
+  const pageTitle = isDsaUser
+    ? tab === "commissions"
+      ? "My Commissions"
+      : "Raise Invoices"
+    : tab === "commissions"
+      ? "Commission Management"
+      : "Invoice Management";
+  const pageDescription = isDsaUser
+    ? tab === "commissions"
+      ? "Track your commission payout batches."
+      : "Raise payout invoices and track bank approval or counter-invoice status."
+    : tab === "commissions"
+      ? "Create, review, and maintain commission payout batches."
+      : "Review DSA invoices, counter mismatches, and close approvals.";
+
+  useEffect(() => {
+    setTab(resolvedTab);
+  }, [resolvedTab]);
+
+  function notifyInvoice(title: string, body: string, href = "/finance/invoices") {
+    createItem("notifications", {
+      body,
+      category: "Payout",
+      createdAt: new Date().toISOString(),
+      href,
+      id: makeId("note"),
+      priority: "High",
+      status: "Unread",
+      title,
+    });
+  }
+
+  function raiseInvoiceFromForm() {
+    if (!sessionDsa) return;
+
+    const grossAmount = moneyFromInput(raiseGross);
+    const adjustmentAmount = moneyFromInput(raiseAdjustment);
+    const taxAmount = moneyFromInput(raiseTax);
+    if (grossAmount <= 0) return;
+
+    const actor = currentUser?.name ?? sessionDsa.name;
+    const invoice = newDsaInvoice({
+      actor,
+      adjustmentAmount,
+      dsa: sessionDsa,
+      grossAmount,
+      month: raiseMonth,
+      note: raiseRemarks.trim() || "DSA invoice raised for bank review.",
+      party: "DSA",
+      source: "Manual",
+      status: "Raised by DSA",
+      taxAmount,
+    });
+    createItem("dsaInvoices", invoice);
+    notifyInvoice("DSA invoice raised", `${sessionDsa.name} raised ${invoice.invoiceNumber} for ${formatCurrency(invoice.requestedAmount)}.`);
+    setRaiseGross("");
+    setRaiseAdjustment("0");
+    setRaiseTax("0");
+    setRaiseRemarks("");
+  }
+
+  function openCounter(invoice: DsaInvoice) {
+    setCounterInvoice(invoice);
+    setCounterAmount(String(invoice.requestedAmount));
+    setCounterNote("");
+  }
+
+  function saveCounterInvoice() {
+    if (!counterInvoice) return;
+
+    const amount = moneyFromInput(counterAmount);
+    if (amount <= 0) return;
+    const actor = currentUser?.name ?? "DSA";
+    const bankCounter = canReviewInvoices;
+    const party = bankCounter ? (currentUser?.role === "DSA Credit" ? "DSA Credit" : "Super Admin") : "DSA";
+    const note = counterNote.trim() || `${party} countered the invoice amount.`;
+    const event = makeInvoiceEvent("Countered", actor, party, amount, note);
+
+    updateItem("dsaInvoices", counterInvoice.id, {
+      history: [event, ...counterInvoice.history],
+      requestedAmount: amount,
+      remarks: note,
+      status: bankCounter ? "Countered by Bank" : "Countered by DSA",
+      updatedAt: event.at,
+    });
+    notifyInvoice(
+      bankCounter ? "Bank counter invoice raised" : "DSA counter invoice raised",
+      `${counterInvoice.invoiceNumber} was countered at ${formatCurrency(amount)}.`,
+    );
+    setCounterInvoice(null);
+  }
+
+  function closeInvoice(status: "Approved" | "Rejected", invoice: DsaInvoice) {
+    const actor = currentUser?.name ?? "Credit";
+    const amount = invoice.requestedAmount;
+    const event = makeInvoiceEvent(status, actor, currentUser?.role === "DSA Credit" ? "DSA Credit" : "Super Admin", amount, `${status} at ${formatCurrency(amount)}.`);
+    updateItem("dsaInvoices", invoice.id, {
+      approvedAmount: status === "Approved" ? amount : invoice.approvedAmount,
+      history: [event, ...invoice.history],
+      status,
+      updatedAt: event.at,
+    });
+    notifyInvoice(`Invoice ${status.toLowerCase()}`, `${invoice.invoiceNumber} for ${invoice.dsaName} is ${status.toLowerCase()}.`);
+  }
+
+  function handleInvoiceCsv(file?: File) {
+    if (!file) return;
+    const batchId = makeId("csv-invoice");
+    file.text().then((text) => {
+      const [headerLine, ...lines] = text.split(/\r?\n/).filter((line) => line.trim());
+      const headers = headerLine.split(",").map((item) => item.trim());
+      lines.forEach((line) => {
+        const row = Object.fromEntries(line.split(",").map((value, index) => [headers[index], value.trim()]));
+        const dsa = store.dsas.find((item) => item.id === row.dsaId || item.code === row.dsaCode) ?? defaultDsa;
+        if (!dsa) return;
+        const grossAmount = moneyFromInput(row.grossAmount || row.gross || row.amount);
+        const adjustmentAmount = moneyFromInput(row.adjustmentAmount || row.adjustment || "0");
+        const taxAmount = moneyFromInput(row.taxAmount || row.tax || "0");
+        if (grossAmount <= 0) return;
+        createItem(
+          "dsaInvoices",
+          newDsaInvoice({
+            actor: currentUser?.name ?? "CSV Upload",
+            adjustmentAmount,
+            csvBatchId: batchId,
+            dsa,
+            grossAmount,
+            month: row.month || selectedMonth || raiseMonth,
+            note: row.remarks || `Imported from ${file.name}.`,
+            party: "Bank",
+            source: "CSV Upload",
+            status: (invoiceStatuses.includes(row.status as DsaInvoiceStatus) ? row.status : "Pending Approval") as DsaInvoiceStatus,
+            taxAmount,
+          }),
+        );
+      });
+      notifyInvoice("Invoice CSV uploaded", `${file.name} imported as batch ${batchId}.`);
+    });
+  }
 
   const columns: Column<Commission>[] = [
     { cell: (item) => <span className="font-semibold text-slate-950">{item.payoutId}</span>, header: "Payout", key: "payoutId" },
@@ -131,14 +490,158 @@ export function CommissionsPage() {
     { cell: (item) => <StatusBadge status={item.status} />, header: "Status", key: "status" },
   ];
 
-  return (
-    <div>
-      <PageHeader
-        action={<Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" />New Payout</Button>}
-        description="Track DSA earnings, monthly payout status, disbursal-linked commissions, and exception holds."
-        eyebrow="Finance"
-        title="Commission Management"
+  const invoiceColumns: Column<DsaInvoice>[] = [
+    { cell: (item) => <span className="font-semibold text-blue-700">{item.invoiceNumber}</span>, header: "Invoice", key: "invoiceNumber", sortable: true, sortValue: (item) => item.invoiceNumber },
+    { cell: (item) => item.dsaName, header: "DSA", key: "dsaName", sortable: true, sortValue: (item) => item.dsaName },
+    { cell: (item) => item.month, header: "Month", key: "month", sortable: true, sortValue: (item) => item.month },
+    { cell: (item) => formatCurrency(item.requestedAmount), header: "Requested", key: "requestedAmount", sortable: true, sortValue: (item) => item.requestedAmount },
+    { cell: (item) => item.approvedAmount ? formatCurrency(item.approvedAmount) : "-", header: "Approved", key: "approvedAmount" },
+    { cell: (item) => <StatusBadge status={item.status} />, header: "Status", key: "status", sortable: true, sortValue: (item) => item.status },
+    { cell: (item) => renderInvoiceTracker(item.status), header: "Track", key: "track" },
+  ];
+
+  const invoiceDashboard = (
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-3">
+        <KpiCard change="Live" icon={FileSpreadsheet} label="Requested amount" value={formatCurrency(totalInvoiceAmount)} />
+        <KpiCard change="Final" icon={CheckSquare} label="Approved amount" tone="green" value={formatCurrency(approvedInvoiceAmount)} />
+        <KpiCard change="Needs action" icon={GitBranch} label="Open invoices" tone="amber" value={String(openInvoiceCount)} />
+      </div>
+      <Card>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+            <div className="grid w-full gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(180px,260px)_minmax(160px,220px)_auto] lg:items-end">
+              <Field>
+                <Label>DSA</Label>
+                <Select onChange={(event) => setSelectedDsaId(event.target.value)} value={selectedDsaId}>
+                  <option value="">All DSAs</option>
+                  {store.dsas.map((dsa) => (
+                    <option key={dsa.id} value={dsa.id}>{dsa.name} ({dsa.code})</option>
+                  ))}
+                </Select>
+              </Field>
+              <Field>
+                <Label>Month</Label>
+                <Select onChange={(event) => setSelectedMonth(event.target.value)} value={selectedMonth}>
+                  <option value="">All months</option>
+                  {invoiceMonths.map((month) => (
+                    <option key={month} value={month}>{month}</option>
+                  ))}
+                </Select>
+              </Field>
+              {currentUser?.role === "DSA Manager" ? (
+                <Field>
+                  <Label>CSV Upload</Label>
+                  <label className="inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 hover:bg-slate-50">
+                    <UploadCloud className="h-4 w-4" />
+                    Upload CSV
+                    <Input accept=".csv,text/csv" className="hidden" onChange={(event) => {
+                      handleInvoiceCsv(event.target.files?.[0]);
+                      event.target.value = "";
+                    }} type="file" />
+                  </label>
+                </Field>
+              ) : null}
+            </div>
+          </div>
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+            Invoice differences are handled through counter invoices/adjustment notes. The original claim stays in history, and final approval closes the chain.
+          </div>
+        </CardContent>
+      </Card>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <BarChartCard
+          data={visibleInvoices.map((invoice) => ({ name: invoice.invoiceNumber.slice(-6), value: Math.round(invoice.requestedAmount / 1000) }))}
+          dataKey="value"
+          subtitle="Requested invoice amount in thousands"
+          title="Invoice value by claim"
+        />
+        <PieChartCard
+          data={invoiceStatuses.map((status) => ({ name: status.replace(" by ", " "), value: visibleInvoices.filter((invoice) => invoice.status === status).length }))}
+          dataKey="value"
+          subtitle="Current invoice workflow split"
+          title="Invoice status mix"
+        />
+      </div>
+      <DataTable
+        actions={(item) => (
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => setViewingInvoice(item)} size="sm" type="button" variant="outline">Track</Button>
+            {canReviewInvoices && item.status !== "Approved" && item.status !== "Rejected" ? (
+              <>
+                <Button onClick={() => openCounter(item)} size="sm" type="button" variant="secondary">Counter</Button>
+                <Button onClick={() => closeInvoice("Approved", item)} size="sm" type="button">Approve</Button>
+                <Button onClick={() => closeInvoice("Rejected", item)} size="sm" type="button" variant="danger">Reject</Button>
+              </>
+            ) : null}
+          </div>
+        )}
+        columns={invoiceColumns}
+        emptyDescription="Invoices raised by DSAs or imported by CSV will appear here."
+        emptyTitle="No invoices found"
+        items={visibleInvoices}
+        searchKeys={["invoiceNumber", "dsaName", "dsaCode", "month", "status", "remarks"]}
       />
+    </div>
+  );
+
+  const raiseInvoicePanel = (
+    <div className="space-y-6">
+      <Card>
+        <CardContent className="space-y-4">
+          <div>
+            <h3 className="text-sm font-bold text-slate-950">Raise invoice to Cosmos Bank</h3>
+            <p className="mt-1 text-xs text-slate-500">Submit monthly payout claims. Bank/Credit may approve or counter with an adjustment amount.</p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-5">
+            <Field>
+              <Label>Month</Label>
+              <Input onChange={(event) => setRaiseMonth(event.target.value)} value={raiseMonth} />
+            </Field>
+            <Field>
+              <Label>Gross amount</Label>
+              <Input onChange={(event) => setRaiseGross(event.target.value)} type="number" value={raiseGross} />
+            </Field>
+            <Field>
+              <Label>Adjustment / debit note</Label>
+              <Input onChange={(event) => setRaiseAdjustment(event.target.value)} type="number" value={raiseAdjustment} />
+            </Field>
+            <Field>
+              <Label>Tax amount</Label>
+              <Input onChange={(event) => setRaiseTax(event.target.value)} type="number" value={raiseTax} />
+            </Field>
+            <div className="flex items-end">
+              <Button className="w-full" disabled={!sessionDsa || moneyFromInput(raiseGross) <= 0} onClick={raiseInvoiceFromForm} type="button">
+                Raise Invoice
+              </Button>
+            </div>
+          </div>
+          <Field>
+            <Label>Remarks / calculation basis</Label>
+            <Textarea onChange={(event) => setRaiseRemarks(event.target.value)} placeholder="Example: June disbursal commission less prior debit note." value={raiseRemarks} />
+          </Field>
+        </CardContent>
+      </Card>
+      <DataTable
+        actions={(item) => (
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => setViewingInvoice(item)} size="sm" type="button" variant="outline">Track</Button>
+            {item.status === "Countered by Bank" ? (
+              <Button onClick={() => openCounter(item)} size="sm" type="button" variant="secondary">Counter back</Button>
+            ) : null}
+          </div>
+        )}
+        columns={invoiceColumns}
+        emptyDescription="Raise your first monthly invoice from the form above."
+        emptyTitle="No DSA invoices yet"
+        items={visibleInvoices}
+        searchKeys={["invoiceNumber", "month", "status", "remarks", "dsaName"]}
+      />
+    </div>
+  );
+
+  const commissionsPanel = (
+    <>
       <div className="mb-6 grid gap-4 md:grid-cols-3">
         <KpiCard change="+18.2%" icon={BadgeIndianRupee} label="Total payout" value={compactNumber(totalPayout)} />
         <KpiCard change="+9.6%" icon={CheckSquare} label="Processed" tone="green" value={formatCurrency(processed)} />
@@ -168,9 +671,42 @@ export function CommissionsPage() {
       <DataTable
         actions={(item) => <ActionPair onDelete={() => deleteItem("commissions", item.id)} onEdit={() => setEditing(item)} />}
         columns={columns}
-        items={store.commissions}
+        items={isDsaUser ? store.commissions.filter((item) => item.dsaId === currentUser?.id) : store.commissions}
         searchKeys={["payoutId", "dsaName", "month", "product", "status"]}
       />
+    </>
+  );
+
+  return (
+    <div>
+      <PageHeader
+        action={tab === "commissions" && !isDsaUser ? <Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" />New Payout</Button> : undefined}
+        description={pageDescription}
+        eyebrow="Finance"
+        title={pageTitle}
+      />
+      {showTabs ? (
+        <Tabs
+          onChange={(value) => setTab(value as FinanceTab)}
+          tabs={
+            isDsaUser
+              ? [
+                  { label: "Raise Invoices", value: "raise" },
+                  { label: "My Commissions", value: "commissions" },
+                ]
+              : [
+                  { label: "Invoices", value: "invoices" },
+                  { label: "Commissions", value: "commissions" },
+                ]
+          }
+          value={tab}
+        />
+      ) : null}
+      <div className={showTabs ? "mt-6" : "mt-0"}>
+        {tab === "raise" ? raiseInvoicePanel : null}
+        {tab === "invoices" ? invoiceDashboard : null}
+        {tab === "commissions" ? commissionsPanel : null}
+      </div>
       <Modal onClose={() => setCreating(false)} open={creating} title="Create payout">
         <RecordForm<Commission>
           fields={commissionFields}
@@ -203,13 +739,70 @@ export function CommissionsPage() {
           />
         ) : null}
       </Modal>
+      <Modal onClose={() => setViewingInvoice(null)} open={Boolean(viewingInvoice)} title="Invoice status tracker" width="max-w-2xl">
+        {viewingInvoice ? (
+          <div className="space-y-4">
+            <DetailGrid>
+              <DetailItem label="Invoice" value={viewingInvoice.invoiceNumber} />
+              <DetailItem label="DSA" value={viewingInvoice.dsaName} />
+              <DetailItem label="Month" value={viewingInvoice.month} />
+              <DetailItem label="Requested" value={formatCurrency(viewingInvoice.requestedAmount)} />
+              <DetailItem label="Status" value={<StatusBadge status={viewingInvoice.status} />} />
+              <DetailItem label="Source" value={viewingInvoice.source} />
+            </DetailGrid>
+            {renderInvoiceTracker(viewingInvoice.status)}
+            <div className="space-y-3">
+              {viewingInvoice.history.map((event) => (
+                <div className="border-l-2 border-blue-100 pl-3" key={event.id}>
+                  <p className="text-sm font-semibold text-slate-950">{event.action} - {formatCurrency(event.amount)}</p>
+                  <p className="text-xs text-slate-500">{event.actor} / {event.party} - {formatDate(event.at)}</p>
+                  <p className="mt-1 text-sm text-slate-600">{event.note}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+      <Modal onClose={() => setCounterInvoice(null)} open={Boolean(counterInvoice)} title="Raise counter invoice / adjustment" width="max-w-lg">
+        {counterInvoice ? (
+          <div className="space-y-4">
+            <DetailGrid>
+              <DetailItem label="Original invoice" value={counterInvoice.invoiceNumber} />
+              <DetailItem label="Current requested" value={formatCurrency(counterInvoice.requestedAmount)} />
+            </DetailGrid>
+            <Field>
+              <Label>Counter amount</Label>
+              <Input onChange={(event) => setCounterAmount(event.target.value)} type="number" value={counterAmount} />
+            </Field>
+            <Field>
+              <Label>Reason / difference basis</Label>
+              <Textarea onChange={(event) => setCounterNote(event.target.value)} placeholder="Example: payout adjusted for previous debit note or billing mismatch." value={counterNote} />
+            </Field>
+            <div className="flex justify-end gap-2">
+              <Button onClick={() => setCounterInvoice(null)} type="button" variant="secondary">Cancel</Button>
+              <Button disabled={moneyFromInput(counterAmount) <= 0} onClick={saveCounterInvoice} type="button">Save counter</Button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }
 
 export function ReportsPage() {
-  const { store } = useMockStore();
+  const { currentUser, store } = useMockStore();
   const [tab, setTab] = useState("performance");
+  const [auditDsaFilter, setAuditDsaFilter] = useState("");
+  const [auditRoleFilter, setAuditRoleFilter] = useState("");
+  const [auditEntityFilter, setAuditEntityFilter] = useState("");
+  const [auditActionFilter, setAuditActionFilter] = useState("");
+  const [auditFromDate, setAuditFromDate] = useState("");
+  const [auditToDate, setAuditToDate] = useState("");
+  const [iracClassFilter, setIracClassFilter] = useState("");
+  const [iracDsaFilter, setIracDsaFilter] = useState("");
+  const [iracProductFilter, setIracProductFilter] = useState("");
+  const [iracStatusFilter, setIracStatusFilter] = useState("");
+  const isSuperAdmin = currentUser?.role === "DSA Manager";
   const performance = store.dsas.slice(0, 8).map((dsa) => ({
     name: dsa.code,
     value: dsa.approvalRate,
@@ -218,9 +811,9 @@ export function ReportsPage() {
     name: product.replace(" Loan", ""),
     value: store.applications.filter((item) => item.product === product).length,
   }));
-  const rejection = ["Low salary", "Bureau risk", "KYC mismatch", "Duplicate", "Policy"].map((name, index) => ({
+  const rejection = ["Low salary", "Bureau risk", "KYC mismatch", "Duplicate", "Policy"].map((name) => ({
     name,
-    value: [19, 14, 8, 6, 11][index],
+    value: 0,
   }));
 
   // DSA Recovery analysis state and memoized variables
@@ -246,6 +839,270 @@ export function ReportsPage() {
   const totalInvoice = useMemo(() => recoveryRows.reduce((s, r) => s + r.invoiceAmount, 0), [recoveryRows]);
   const totalNpa = useMemo(() => recoveryRows.reduce((s, r) => s + r.npaCases, 0), [recoveryRows]);
   const totalPending = useMemo(() => recoveryRows.reduce((s, r) => s + r.pendingAmount, 0), [recoveryRows]);
+  const iracRows = useMemo<IracLoanAccountRow[]>(() => {
+    const dpdPattern = [8, 17, 26, 34, 46, 58, 64, 73, 88, 96, 124, 157];
+    const statusByClass: Record<IracClass, string> = {
+      "SMA-0": "Servicing Watch",
+      "SMA-1": "Soft Collection",
+      "SMA-2": "Hard Collection",
+      NPA: "Recovery / Legal",
+    };
+    const noteByClass: Record<IracClass, string> = {
+      "SMA-0": "Early warning. Borrower contact and reminder due.",
+      "SMA-1": "Collection follow-up required before bucket migration.",
+      "SMA-2": "High-risk overdue account. Escalate to credit/recovery.",
+      NPA: "Non-performing asset. Legal/recovery workflow required.",
+    };
+
+    return store.applications
+      .filter((application) => application.status !== "Rejected")
+      .map((application, index) => {
+        const seed = Number(application.applicationId.replace(/\D/g, "")) || index + 1;
+        const daysPastDue = dpdPattern[(seed + index) % dpdPattern.length];
+        const iracClass = iracClassForDpd(daysPastDue);
+        const emiAmount = Math.max(7500, Math.round(application.loanAmount / (36 + (seed % 5) * 12)));
+        const overdueInstallments = Math.max(1, Math.ceil(daysPastDue / 30));
+        const outstandingAmount = Math.round(application.loanAmount * (0.48 + (seed % 8) * 0.055));
+        const overdueAmount = Math.min(outstandingAmount, emiAmount * overdueInstallments);
+
+        return {
+          accountStatus: statusByClass[iracClass],
+          applicationId: application.applicationId,
+          applicationRecordId: application.id,
+          customer: application.customer,
+          daysPastDue,
+          dpdBucket: iracBucketForDpd(daysPastDue),
+          dsaId: application.dsaId,
+          dsaName: application.dsaName,
+          dueDate: iracDateOffset(-daysPastDue),
+          id: `irac-${application.id}`,
+          iracClass,
+          loanAccountNumber: `LAN-COS-${String(seed).padStart(6, "0")}`,
+          overdueAmount,
+          outstandingAmount,
+          product: application.product,
+          riskScore: application.riskScore,
+          statusNote: noteByClass[iracClass],
+        };
+      })
+      .sort((left, right) => right.daysPastDue - left.daysPastDue || left.dsaName.localeCompare(right.dsaName));
+  }, [store.applications]);
+  const filteredIracRows = useMemo(
+    () =>
+      iracRows.filter(
+        (row) =>
+          (!iracClassFilter || row.iracClass === iracClassFilter) &&
+          (!iracDsaFilter || row.dsaId === iracDsaFilter) &&
+          (!iracProductFilter || row.product === iracProductFilter) &&
+          (!iracStatusFilter || row.accountStatus === iracStatusFilter),
+      ),
+    [iracClassFilter, iracDsaFilter, iracProductFilter, iracRows, iracStatusFilter],
+  );
+  const iracDsaOptions = useMemo(
+    () => store.dsas.filter((dsa) => iracRows.some((row) => row.dsaId === dsa.id)).sort((left, right) => left.name.localeCompare(right.name)),
+    [iracRows, store.dsas],
+  );
+  const iracAccountStatusOptions = useMemo(
+    () => Array.from(new Set(iracRows.map((row) => row.accountStatus))).sort(),
+    [iracRows],
+  );
+  const iracOutstanding = filteredIracRows.reduce((sum, row) => sum + row.outstandingAmount, 0);
+  const iracOverdue = filteredIracRows.reduce((sum, row) => sum + row.overdueAmount, 0);
+  const iracNpaRows = filteredIracRows.filter((row) => row.iracClass === "NPA");
+  const iracColumns: Column<IracLoanAccountRow>[] = [
+    {
+      cell: (item) => (
+        <div>
+          <Link className="font-semibold text-blue-700 hover:underline" href={`/applications/${item.applicationRecordId}`}>
+            {item.loanAccountNumber}
+          </Link>
+          <p className="text-xs text-slate-500">{item.applicationId} - {item.product}</p>
+        </div>
+      ),
+      header: "Loan Account",
+      key: "loanAccountNumber",
+      sortable: true,
+      sortValue: (item) => item.loanAccountNumber,
+    },
+    {
+      cell: (item) => (
+        <div>
+          <p className="font-medium text-slate-950">{item.customer}</p>
+          <p className="text-xs text-slate-500">{item.dsaName}</p>
+        </div>
+      ),
+      header: "Borrower / DSA",
+      key: "customer",
+      sortable: true,
+      sortValue: (item) => item.customer,
+    },
+    {
+      cell: (item) => <StatusBadge status={item.iracClass} />,
+      header: "IRAC",
+      key: "iracClass",
+      sortable: true,
+      sortValue: (item) => iracClassRank(item.iracClass),
+    },
+    {
+      cell: (item) => (
+        <div>
+          <p className="font-semibold text-slate-950">{item.daysPastDue} DPD</p>
+          <p className="text-xs text-slate-500">Due {formatDate(item.dueDate)}</p>
+        </div>
+      ),
+      header: "Overdue",
+      key: "daysPastDue",
+      sortable: true,
+      sortValue: (item) => item.daysPastDue,
+    },
+    {
+      cell: (item) => (
+        <div className="text-right">
+          <p className="font-semibold text-slate-950">{formatCurrency(item.outstandingAmount)}</p>
+          <p className="text-xs text-rose-600">OD {formatCurrency(item.overdueAmount)}</p>
+        </div>
+      ),
+      header: "Outstanding / OD",
+      key: "outstandingAmount",
+      sortable: true,
+      sortValue: (item) => item.outstandingAmount,
+    },
+    { cell: (item) => item.accountStatus, header: "Collection Status", key: "accountStatus", sortable: true, sortValue: (item) => item.accountStatus },
+    { cell: (item) => item.riskScore, header: "Risk", key: "riskScore", sortable: true, sortValue: (item) => item.riskScore },
+    { cell: (item) => <span className="text-xs text-slate-600">{item.statusNote}</span>, header: "Action Note", key: "statusNote" },
+  ];
+  const auditRows = useMemo(() => {
+    const fromTime = auditFromDate ? new Date(`${auditFromDate}T00:00:00`).getTime() : Number.NEGATIVE_INFINITY;
+    const toTime = auditToDate ? new Date(`${auditToDate}T23:59:59`).getTime() : Number.POSITIVE_INFINITY;
+
+    return store.auditLogs
+      .filter((row) => {
+        const rowTime = new Date(row.at).getTime();
+        const action = row.actionType ?? row.action;
+        return (
+          action !== "Login" &&
+          action !== "Logout" &&
+          (!auditDsaFilter || row.affectedDsaId === auditDsaFilter) &&
+          (!auditRoleFilter || row.actorRole === auditRoleFilter || row.affectedRole === auditRoleFilter) &&
+          (!auditEntityFilter || row.collection === auditEntityFilter || row.entity === auditEntityFilter) &&
+          (!auditActionFilter || row.action === auditActionFilter || row.actionType === auditActionFilter) &&
+          rowTime >= fromTime &&
+          rowTime <= toTime
+        );
+      })
+      .sort((left, right) => new Date(right.at).getTime() - new Date(left.at).getTime());
+  }, [auditActionFilter, auditDsaFilter, auditEntityFilter, auditFromDate, auditRoleFilter, auditToDate, store.auditLogs]);
+  const auditRoleOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          store.auditLogs
+            .filter((row) => !["Login", "Logout"].includes(row.actionType ?? row.action))
+            .flatMap((row) => [row.actorRole, row.affectedRole])
+            .filter(Boolean) as string[],
+        ),
+      ).sort(),
+    [store.auditLogs],
+  );
+  const auditEntityOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          store.auditLogs
+            .filter((row) => !["Login", "Logout"].includes(row.actionType ?? row.action))
+            .map((row) => row.collection ?? row.entity)
+            .filter(Boolean) as string[],
+        ),
+      ).sort(),
+    [store.auditLogs],
+  );
+  const auditActionOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          store.auditLogs
+            .map((row) => row.actionType ?? row.action)
+            .filter((action) => Boolean(action) && action !== "Login" && action !== "Logout"),
+        ),
+      ).sort(),
+    [store.auditLogs],
+  );
+  const auditColumns: Column<AuditLog>[] = [
+    {
+      cell: (item) => (
+        <div>
+          <p className="font-semibold text-slate-950">{formatDate(item.at)}</p>
+          <p className="text-xs text-slate-500">{new Date(item.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
+        </div>
+      ),
+      header: "Time",
+      key: "at",
+      sortable: true,
+      sortValue: (item) => item.at,
+    },
+    {
+      cell: (item) => (
+        <div>
+          <p className="font-semibold text-slate-950">{item.actor}</p>
+          <p className="text-xs text-slate-500">{item.actorRole ?? "Unknown role"}</p>
+        </div>
+      ),
+      header: "Actor / Role",
+      key: "actor",
+      sortable: true,
+      sortValue: (item) => item.actor,
+    },
+    {
+      cell: (item) => (
+        <div>
+          <StatusBadge status={item.actionType ?? item.action} />
+          <p className="mt-1 text-xs text-slate-500">{item.summary ?? `${item.action} ${item.entity}`}</p>
+        </div>
+      ),
+      header: "Activity",
+      key: "action",
+      sortable: true,
+      sortValue: (item) => item.action,
+    },
+    {
+      cell: (item) => (
+        <div>
+          <p className="font-medium text-slate-900">{item.entityName ?? item.entity}</p>
+          <p className="text-xs text-slate-500">{item.entity} {item.entityId ? `- ${item.entityId}` : ""}</p>
+        </div>
+      ),
+      header: "Affected Entity",
+      key: "entity",
+      sortable: true,
+      sortValue: (item) => item.entity,
+    },
+    {
+      cell: (item) => item.affectedDsaName ? (
+        <div>
+          <p className="font-medium text-slate-900">{item.affectedDsaName}</p>
+          <p className="font-mono text-xs text-slate-500">{item.affectedDsaId}</p>
+        </div>
+      ) : (
+        <span className="text-xs text-slate-400">Bank-level</span>
+      ),
+      header: "DSA Scope",
+      key: "affectedDsaName",
+      sortable: true,
+      sortValue: (item) => item.affectedDsaName ?? "",
+    },
+    {
+      cell: (item) => (
+        <div className="max-w-md space-y-1 text-xs text-slate-600">
+          <p><span className="font-semibold text-slate-800">Fields:</span> {item.changedFields?.length ? item.changedFields.join(", ") : "-"}</p>
+          {item.fromValue ? <p><span className="font-semibold text-slate-800">Before:</span> {item.fromValue}</p> : null}
+          {item.toValue ? <p><span className="font-semibold text-slate-800">After:</span> {item.toValue}</p> : null}
+        </div>
+      ),
+      header: "Change Details",
+      key: "summary",
+    },
+    { cell: (item) => <StatusBadge status={item.severity} />, header: "Severity", key: "severity", sortable: true, sortValue: (item) => item.severity },
+  ];
 
   return (
     <div>
@@ -259,6 +1116,8 @@ export function ReportsPage() {
         tabs={[
           { label: "DSA Performance", value: "performance" },
           { label: "DSA Recovery", value: "recovery" },
+          { label: "IRAC Classification", value: "irac" },
+          ...(isSuperAdmin ? [{ label: "Audit Trail", value: "auditTrail" }] : []),
           { label: "Application Volume", value: "volume" },
           { label: "Approval Rate", value: "approval" },
           { label: "Rejection Analysis", value: "rejection" },
@@ -267,7 +1126,192 @@ export function ReportsPage() {
         value={tab}
       />
 
-      {tab === "recovery" ? (
+      {tab === "auditTrail" && isSuperAdmin ? (
+        <div className="mt-6 space-y-6">
+          <div className="grid gap-4 md:grid-cols-4">
+            <KpiCard change="Filtered" icon={FileText} label="Trace events" value={String(auditRows.length)} />
+            <KpiCard change="Unique" icon={Users} label="Actors" tone="slate" value={String(new Set(auditRows.map((row) => row.actor)).size)} />
+            <KpiCard change="Workflow" icon={GitBranch} label="Approvals / flows" tone="blue" value={String(auditRows.filter((row) => (row.actionType ?? row.action).toLowerCase().includes("approval") || (row.actionType ?? row.action).toLowerCase().includes("workflow")).length)} />
+            <KpiCard change="Watch" icon={Info} label="Warnings" tone="amber" value={String(auditRows.filter((row) => row.severity !== "Info").length)} />
+          </div>
+          <Card>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+                <Field>
+                  <Label>DSA</Label>
+                  <Select onChange={(event) => setAuditDsaFilter(event.target.value)} value={auditDsaFilter}>
+                    <option value="">All DSAs / bank-level</option>
+                    {store.dsas.map((dsa) => (
+                      <option key={dsa.id} value={dsa.id}>{dsa.name}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field>
+                  <Label>Role</Label>
+                  <Select onChange={(event) => setAuditRoleFilter(event.target.value)} value={auditRoleFilter}>
+                    <option value="">All roles</option>
+                    {auditRoleOptions.map((role) => (
+                      <option key={role} value={role}>{role}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field>
+                  <Label>Entity</Label>
+                  <Select onChange={(event) => setAuditEntityFilter(event.target.value)} value={auditEntityFilter}>
+                    <option value="">All entities</option>
+                    {auditEntityOptions.map((entity) => (
+                      <option key={entity} value={entity}>{titleCase(String(entity))}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field>
+                  <Label>Action</Label>
+                  <Select onChange={(event) => setAuditActionFilter(event.target.value)} value={auditActionFilter}>
+                    <option value="">All actions</option>
+                    {auditActionOptions.map((action) => (
+                      <option key={action} value={action}>{action}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field>
+                  <Label>From</Label>
+                  <Input onChange={(event) => setAuditFromDate(event.target.value)} type="date" value={auditFromDate} />
+                </Field>
+                <Field>
+                  <Label>To</Label>
+                  <Input onChange={(event) => setAuditToDate(event.target.value)} type="date" value={auditToDate} />
+                </Field>
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  onClick={() => {
+                    setAuditActionFilter("");
+                    setAuditDsaFilter("");
+                    setAuditEntityFilter("");
+                    setAuditFromDate("");
+                    setAuditRoleFilter("");
+                    setAuditToDate("");
+                  }}
+                  type="button"
+                  variant="secondary"
+                >
+                  Clear filters
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+          <DataTable
+            columns={auditColumns}
+            emptyDescription="Run workflow actions, approvals, invoice counters, product changes, document reviews, or DSA lifecycle changes to populate the issue trace."
+            emptyTitle="No audit activity for selected filters"
+            items={auditRows}
+            pageSize={12}
+            searchKeys={[
+              "actor",
+              "actorRole",
+              "action",
+              "actionType",
+              "affectedDsaName",
+              "affectedRole",
+              "entity",
+              "entityName",
+              "summary",
+              "severity",
+            ]}
+          />
+        </div>
+      ) : tab === "irac" ? (
+        <div className="mt-6 space-y-6">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <KpiCard change="Filtered" icon={FileText} label="Loan accounts" value={String(filteredIracRows.length)} />
+            <KpiCard change="Exposure" icon={BadgeIndianRupee} label="Outstanding" tone="slate" value={formatCurrency(iracOutstanding)} />
+            <KpiCard change="Due" icon={Info} label="Overdue amount" tone="amber" value={formatCurrency(iracOverdue)} />
+            <KpiCard change="90+ DPD" icon={GitBranch} label="NPA accounts" tone="amber" value={String(iracNpaRows.length)} />
+          </div>
+
+          <Card>
+            <CardContent className="space-y-4">
+              <div className="flex flex-col gap-1">
+                <h3 className="text-sm font-bold text-slate-900">IRAC Classification</h3>
+                <p className="text-xs text-slate-500">
+                  SMA buckets are generated from days-past-due: SMA-0 up to 30, SMA-1 31-60, SMA-2 61-90, and NPA above 90 DPD.
+                </p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <Field>
+                  <Label>DSA</Label>
+                  <Select onChange={(event) => setIracDsaFilter(event.target.value)} value={iracDsaFilter}>
+                    <option value="">All DSAs</option>
+                    {iracDsaOptions.map((dsa) => (
+                      <option key={dsa.id} value={dsa.id}>{dsa.name}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field>
+                  <Label>IRAC status</Label>
+                  <Select onChange={(event) => setIracClassFilter(event.target.value)} value={iracClassFilter}>
+                    <option value="">All IRAC statuses</option>
+                    {iracClasses.map((status) => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field>
+                  <Label>Product</Label>
+                  <Select onChange={(event) => setIracProductFilter(event.target.value)} value={iracProductFilter}>
+                    <option value="">All products</option>
+                    {products.map((product) => (
+                      <option key={product} value={product}>{product}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field>
+                  <Label>Collection status</Label>
+                  <Select onChange={(event) => setIracStatusFilter(event.target.value)} value={iracStatusFilter}>
+                    <option value="">All statuses</option>
+                    {iracAccountStatusOptions.map((status) => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  onClick={() => {
+                    setIracClassFilter("");
+                    setIracDsaFilter("");
+                    setIracProductFilter("");
+                    setIracStatusFilter("");
+                  }}
+                  type="button"
+                  variant="secondary"
+                >
+                  Clear filters
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <DataTable
+            columns={iracColumns}
+            emptyDescription="No loan accounts match the selected DSA, product, IRAC, collection status, or DPD filters."
+            emptyTitle="No IRAC accounts found"
+            items={filteredIracRows}
+            pageSize={12}
+            searchKeys={[
+              "accountStatus",
+              "applicationId",
+              "customer",
+              "dpdBucket",
+              "dsaName",
+              "iracClass",
+              "loanAccountNumber",
+              "product",
+              "statusNote",
+            ]}
+          />
+        </div>
+      ) : tab === "recovery" ? (
         <div className="mt-6 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
             <div>
@@ -432,7 +1476,7 @@ export function ReportsPage() {
           ) : null}
           {tab === "approval" ? (
             <>
-              <TrendCard data={[42, 49, 55, 58, 61, 64].map((value, index) => ({ name: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"][index], value }))} dataKey="value" subtitle="Portfolio approval movement" title="Approval Rate" type="area" />
+              <TrendCard data={["Jan", "Feb", "Mar", "Apr", "May", "Jun"].map((name) => ({ name, value: 0 }))} dataKey="value" subtitle="Portfolio approval movement" title="Approval Rate" type="area" />
               <Card><CardContent><ReportList rows={[["Auto approved", "31%", "Low risk"], ["Manual approval", "33%", "Credit desk"], ["Rejected", "19%", "Policy"], ["On hold", "17%", "Evidence"]]}/></CardContent></Card>
             </>
           ) : null}
@@ -470,6 +1514,8 @@ function ReportList({ rows }: { rows: string[][] }) {
 export function UsersPage() {
   const { store, updateItem } = useMockStore();
   const [editing, setEditing] = useState<User | null>(null);
+  const visibleUsers = store.users.filter((item) => item.role !== "DSA Partner" && item.role !== "DSA Agent");
+
   const columns: Column<User>[] = [
     { cell: (item) => <span className="font-semibold text-slate-950">{item.name}</span>, header: "User", key: "name", sortable: true, sortValue: (item) => item.name },
     { cell: (item) => item.email, header: "Email", key: "email" },
@@ -480,16 +1526,21 @@ export function UsersPage() {
   ];
 
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
-        description="Maintain the fixed demo accounts, their roles, access status, and regional ownership."
+        description="Maintain internal bank users and customer demo accounts. DSA partners and DSA agents are managed from DSA Management."
         eyebrow="Administration"
         title="User Management"
       />
+
       <DataTable
-        actions={(item) => <ActionPair onEdit={() => setEditing(item)} />}
+        actions={(item) => (
+          <ActionPair
+            onEdit={() => setEditing(item)}
+          />
+        )}
         columns={columns}
-        items={store.users}
+        items={visibleUsers}
         searchKeys={["name", "email", "role", "region", "status"]}
       />
       <Modal onClose={() => setEditing(null)} open={Boolean(editing)} title="Edit user">
@@ -643,6 +1694,7 @@ export function NotificationsPage() {
               body: String(value.body ?? ""),
               category: (value.category as Notification["category"]) || "Workflow",
               createdAt: new Date().toISOString(),
+              href: String(value.href ?? "").trim() || undefined,
               id: makeId("note"),
               priority: (value.priority as Priority) || "Medium",
               status: (value.status as NotificationStatus) || "Unread",
@@ -671,97 +1723,3 @@ export function NotificationsPage() {
   );
 }
 
-export function SettingsPage() {
-  const { createItem, deleteItem, store, updateItem } = useMockStore();
-  const [section, setSection] = useState<SettingItem["section"]>("General");
-  const [creating, setCreating] = useState(false);
-  const [editing, setEditing] = useState<SettingItem | null>(null);
-  const sections: SettingItem["section"][] = ["General", "Workflow", "Notifications", "Security", "Branding"];
-  const visible = store.settings.filter((item) => item.section === section);
-
-  return (
-    <div>
-      <PageHeader
-        action={<Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" />New Setting</Button>}
-        description="Configure general workspace defaults, workflow controls, notification routing, security posture, and branding."
-        eyebrow="Administration"
-        title="Settings"
-      />
-      <div className="grid gap-6 xl:grid-cols-[260px_1fr]">
-        <Card>
-          <CardContent className="space-y-2">
-            {sections.map((item) => (
-              <button
-                className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium ${
-                  section === item ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"
-                }`}
-                key={item}
-                onClick={() => setSection(item)}
-                type="button"
-              >
-                <Settings className="h-4 w-4" />
-                {item}
-              </button>
-            ))}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="space-y-3">
-            {visible.map((item) => (
-              <div className="flex flex-col gap-3 rounded-md border border-slate-100 p-4 md:flex-row md:items-center md:justify-between" key={item.id}>
-                <div>
-                  <p className="font-semibold text-slate-950">{item.label}</p>
-                  <p className="text-sm text-slate-500">{item.value}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <label className="inline-flex items-center gap-2 text-sm text-slate-600">
-                    <input
-                      checked={item.enabled}
-                      className="h-4 w-4 accent-blue-600"
-                      onChange={(event) => updateItem("settings", item.id, { enabled: event.target.checked })}
-                      type="checkbox"
-                    />
-                    Enabled
-                  </label>
-                  <ActionPair onDelete={() => deleteItem("settings", item.id)} onEdit={() => setEditing(item)} />
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-      <Modal onClose={() => setCreating(false)} open={creating} title="Create setting">
-        <RecordForm<SettingItem>
-          fields={settingFields}
-          initialValue={{ section, enabled: true }}
-          onCancel={() => setCreating(false)}
-          onSubmit={(value) => {
-            createItem("settings", {
-              enabled: true,
-              id: makeId("setting"),
-              label: String(value.label ?? "Setting"),
-              section: (value.section as SettingItem["section"]) || section,
-              value: String(value.value ?? ""),
-            });
-            setCreating(false);
-          }}
-          submitLabel="Create setting"
-        />
-      </Modal>
-      <Modal onClose={() => setEditing(null)} open={Boolean(editing)} title="Edit setting">
-        {editing ? (
-          <RecordForm<SettingItem>
-            fields={settingFields}
-            initialValue={editing}
-            onCancel={() => setEditing(null)}
-            onSubmit={(value) => {
-              updateItem("settings", editing.id, value);
-              setEditing(null);
-            }}
-            submitLabel="Save setting"
-          />
-        ) : null}
-      </Modal>
-    </div>
-  );
-}

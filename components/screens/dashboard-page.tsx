@@ -46,9 +46,8 @@ import { buildApplicationJourney } from "@/lib/product-journeys";
 import { getActiveProductConfigs, getUniqueProductConfigs, resolveProductConfig } from "@/lib/product-configs";
 import { compactNumber, formatCurrency, formatDate, makeId } from "@/lib/utils";
 import { Application, Product, Lead } from "@/lib/types";
-import { demoAgentEmail, demoAgentName } from "@/lib/agent-names";
 
-const CUSTOMER_DSA_DISPLAY_NAME = "Cosmos DSA";
+const CUSTOMER_DSA_DISPLAY_NAME = "Assigned DSA";
 
 export function DashboardPage() {
   const { store, currentUser, createItem } = useMockStore();
@@ -81,16 +80,15 @@ export function DashboardPage() {
   const pendingDsas = useMemo(() => {
     if (currentUser?.role === "DSA Credit") {
       return store.dsas.filter(
-        (item) =>
-          item.status === "Pending Credit Approval" ||
-          item.status === "Submitted" ||
-          item.status === "KYC Pending",
+        (item) => item.status === "Pending Credit Approval" || item.status === "KYC Pending",
       );
     }
     if (currentUser?.role === "DSA Manager") {
       return store.dsas.filter(
         (item) =>
           item.status === "Submitted" ||
+          item.status === "Pending Branch Approval" ||
+          item.status === "Pending BRH Approval" ||
           item.status === "KYC Pending" ||
           item.status === "Pending Credit Approval",
       );
@@ -124,33 +122,20 @@ export function DashboardPage() {
       active: branchDsas.filter((item) => item.status === "Active").length,
       blacklisted: branchDsas.filter((item) => item.status === "Blacklisted").length,
       onHold: branchDsas.filter((item) => item.status === "On Hold").length,
-      pendingCredit: branchDsas.filter((item) => item.status === "Pending Credit Approval").length,
+      pendingCredit: branchDsas.filter(
+        (item) =>
+          item.status === "Pending Branch Approval" ||
+          item.status === "Pending BRH Approval" ||
+          item.status === "Pending Credit Approval",
+      ).length,
       total: branchDsas.length,
     }),
     [branchDsas],
   );
 
-  const monthlyOnboarding = [
-    { name: "Jan", value: 7 },
-    { name: "Feb", value: 11 },
-    { name: "Mar", value: 8 },
-    { name: "Apr", value: 14 },
-    { name: "May", value: 10 },
-    { name: "Jun", value: 6 },
-  ];
-
-  const applicationTrend = [
-    { name: "Jan", value: 36 },
-    { name: "Feb", value: 44 },
-    { name: "Mar", value: 52 },
-    { name: "Apr", value: 49 },
-    { name: "May", value: 61 },
-    { name: "Jun", value: 58 },
-  ];
-
   const funnel = [
     { name: "Leads", value: store.leads.length },
-    { name: "Qualified", value: store.leads.filter((item) => item.status === "Qualified").length + 42 },
+    { name: "Qualified", value: store.leads.filter((item) => item.status === "Qualified").length },
     { name: "Applications", value: store.applications.length },
     { name: "Approved", value: stats.approved },
     { name: "Disbursed", value: store.applications.filter((item) => item.status === "Disbursed").length },
@@ -308,7 +293,9 @@ export function DashboardPage() {
       item.dsaName === currentUser.name
     );
     const commissionTotal = partnerCommissions.reduce((sum, item) => sum + item.payout, 0);
-    const agentsCount = store.dsas.filter((item) => item.manager === currentUser.name).length;
+    const agentsCount = store.users.filter(
+      (item) => item.role === "DSA Agent" && item.dsaId === currentUser.id,
+    ).length;
 
     return {
       leadsCount: partnerLeads.length,
@@ -320,8 +307,10 @@ export function DashboardPage() {
 
   const partnerAgents = useMemo(() => {
     if (!currentUser) return [];
-    return store.dsas.filter((item) => item.manager === currentUser.name);
-  }, [store.dsas, currentUser]);
+    return store.users
+      .filter((item) => item.role === "DSA Agent" && item.dsaId === currentUser.id)
+      .sort((left, right) => left.name.localeCompare(right.name));
+  }, [store.users, currentUser]);
 
   const partnerProductConfigs = useMemo(() => {
     if (!currentUser) return [];
@@ -330,14 +319,10 @@ export function DashboardPage() {
       .sort((left, right) => left.product.localeCompare(right.product));
   }, [currentUser, store.dsaProductConfigs]);
 
-  const partnerLeadTrend = [
-    { name: "Jan", value: 4 },
-    { name: "Feb", value: 7 },
-    { name: "Mar", value: 12 },
-    { name: "Apr", value: 9 },
-    { name: "May", value: 15 },
-    { name: "Jun", value: partnerStats.leadsCount || 18 },
-  ];
+  const partnerLeadTrend = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"].map((name) => ({
+    name,
+    value: name === "Jun" ? partnerStats.leadsCount : 0,
+  }));
 
   // ----------------------------------------------------
   // 3. CUSTOMER CALCULATIONS & JOURNEY FORM SUBMISSION
@@ -487,7 +472,7 @@ export function DashboardPage() {
       salary: salary,
       createdAt,
       decisionSummary: deviation
-        ? `Submitted via customer direct portal and sourced by ${dsaName}. BRE deviation raised because ${breDeviation.reasons.join(" ")} Pending approval by Branch User, DSA Credit, or Super Admin.`
+        ? `Submitted via customer direct portal and sourced by ${dsaName}. BRE deviation raised because ${breDeviation.reasons.join(" ")} Pending approval by Branch, BRH, DSA Credit, or Super Admin.`
         : `Successfully submitted via customer direct portal. Sourced by ${dsaName}. Queued for automated BRE rule scoring.`,
       notes: [
         `Customer applied directly, assigning lead sourcing to ${dsaName}.`,
@@ -1253,7 +1238,7 @@ export function DashboardPage() {
           <KpiCard change="+8.2%" icon={Briefcase} label="My Sourced Leads" tone="blue" value={String(partnerStats.leadsCount)} />
           <KpiCard change="+12.0%" icon={ClipboardCheck} label="Active Applications" tone="green" value={String(partnerStats.appsCount)} />
           <KpiCard change="+14.5%" icon={Coins} label="My Commission Earnings" tone="slate" value={formatCurrency(partnerStats.commissionTotal)} />
-          <KpiCard change="+2" icon={Users} label="My Sub-Agent Network" tone="amber" value={String(partnerStats.agentsCount)} />
+          <KpiCard change="+2" icon={Users} label="My Agent Network" tone="amber" value={String(partnerStats.agentsCount)} />
         </div>
 
         {/* Sourcing Trend & Quick Actions */}
@@ -1298,16 +1283,16 @@ export function DashboardPage() {
           </Card>
         </div>
 
-        {/* Sub-Agent Network Directory */}
+        {/* Agent Network Directory */}
         <div className="mt-6">
           <Card className="shadow-md">
             <CardHeader className="flex-row items-center justify-between border-b border-slate-100 pb-4">
               <div>
                 <h2 className="text-base font-bold text-slate-900">Manage My Network</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Partners onboarded and managed by your business</p>
+                <p className="text-xs text-slate-500 mt-0.5">Agents onboarded and managed by your DSA account</p>
               </div>
               <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                {partnerAgents.length} Partners
+                {partnerAgents.length} Agents
               </span>
             </CardHeader>
             <CardContent className="p-0">
@@ -1318,7 +1303,7 @@ export function DashboardPage() {
                       <tr className="bg-slate-50/75 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                         <th className="p-4 pl-6">Agent Name</th>
                         <th className="p-4">Email ID</th>
-                        <th className="p-4">Onboarded</th>
+                        <th className="p-4">Last login</th>
                         <th className="p-4">Status</th>
                         <th className="p-4 text-right pr-6">Profile</th>
                       </tr>
@@ -1326,16 +1311,16 @@ export function DashboardPage() {
                     <tbody className="divide-y divide-slate-100">
                       {partnerAgents.map((agent) => (
                         <tr key={agent.id} className="hover:bg-slate-50/40 transition">
-                          <td className="p-4 pl-6 font-semibold text-slate-800">{demoAgentName(agent.id)}</td>
-                          <td className="p-4 text-slate-600 text-xs">{demoAgentEmail(agent.id)}</td>
-                          <td className="p-4 text-slate-500 text-xs">{formatDate(agent.onboardingDate)}</td>
+                          <td className="p-4 pl-6 font-semibold text-slate-800">{agent.name}</td>
+                          <td className="p-4 text-slate-600 text-xs">{agent.email}</td>
+                          <td className="p-4 text-slate-500 text-xs">{formatDate(agent.lastLogin)}</td>
                           <td className="p-4">
                             <StatusBadge status={agent.status} />
                           </td>
                           <td className="p-4 text-right pr-6">
-                            <Link href={`/dsa/${agent.id}`}>
+                            <Link href="/dsa/management">
                               <button className="inline-flex h-8 px-3 items-center justify-center rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
-                                View
+                                Manage
                               </button>
                             </Link>
                           </td>
@@ -1347,8 +1332,8 @@ export function DashboardPage() {
               ) : (
                 <div className="p-8 text-center text-slate-500">
                   <Users className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm font-semibold text-slate-700">No Network Partners Yet</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Approved partner records assigned to your network will appear here.</p>
+                  <p className="text-sm font-semibold text-slate-700">No Agents Yet</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Agents linked to your DSA will appear here.</p>
                 </div>
               )}
             </CardContent>

@@ -16,13 +16,13 @@ export function PageHeader({
   title: string;
 }) {
   return (
-    <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div className="mb-2.5 flex flex-col gap-1.5 lg:flex-row lg:items-end lg:justify-between">
       <div>
         {eyebrow ? (
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-700">{eyebrow}</p>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-blue-700">{eyebrow}</p>
         ) : null}
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">{title}</h1>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{description}</p>
+        <h1 className="text-lg font-semibold tracking-tight text-slate-950 md:text-xl">{title}</h1>
+        <p className="mt-1 max-w-3xl text-sm leading-5 text-slate-600">{description}</p>
       </div>
       {action}
     </div>
@@ -87,7 +87,7 @@ export function ActionPair({
 }
 
 export function DetailGrid({ children }: { children: ReactNode }) {
-  return <div className="grid gap-4 sm:grid-cols-2">{children}</div>;
+  return <div className="grid gap-3 sm:grid-cols-2">{children}</div>;
 }
 
 export function DetailItem({ label, value }: { label: string; value: ReactNode }) {

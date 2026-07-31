@@ -51,7 +51,7 @@ import {
 } from "@/lib/types";
 import { formatCurrency, formatDate, makeId } from "@/lib/utils";
 
-const CUSTOMER_DSA_DISPLAY_NAME = "Cosmos DSA";
+const CUSTOMER_DSA_DISPLAY_NAME = "Assigned DSA";
 
 const products: Product[] = [
   "Personal Loan",
@@ -91,7 +91,12 @@ const applicationStatuses: ApplicationStatus[] = [
 
 const verificationStatuses: VerificationStatus[] = ["Pending", "In Progress", "Verified", "Failed"];
 const riskBands = ["Low risk (0-64)", "Medium risk (65-78)", "High risk (79+)"];
-const deviationApproverRoles: DeviationApproverRole[] = ["Branch User", "DSA Credit", "DSA Manager"];
+const deviationApproverRoles: DeviationApproverRole[] = [
+  "Branch User",
+  "Branch Regional Head",
+  "DSA Credit",
+  "DSA Manager",
+];
 
 function riskBand(score: number) {
   if (score > 78) return "High risk (79+)";
@@ -108,6 +113,12 @@ function getDeviationApproverRole(role?: string): DeviationApproverRole | null {
 function containsDeviationText(value: string) {
   const normalized = value.toLowerCase();
   return normalized.includes("deviation") || normalized.includes("special-case") || normalized.includes("exception review");
+}
+
+function daysOpenSince(value: string) {
+  const parsed = new Date(value).getTime();
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.floor((Date.now() - parsed) / (24 * 60 * 60 * 1000)));
 }
 
 const leadFields: FieldConfig<Lead>[] = [
@@ -254,16 +265,49 @@ export function LeadsPage() {
       )}
 
       <Drawer onClose={() => setSelected(null)} open={Boolean(selected)} title={selected?.customer ?? "Lead"}>
-        {selected ? (
-          <DetailGrid>
-            <DetailItem label="Lead ID" value={selected.leadId} />
-            <DetailItem label="Status" value={<StatusBadge status={selected.status} />} />
-            <DetailItem label="Product" value={selected.product} />
-            <DetailItem label="Amount" value={formatCurrency(selected.amount)} />
-            <DetailItem label="DSA" value={selected.dsaName} />
-            <DetailItem label="Next action" value={selected.nextAction} />
-          </DetailGrid>
-        ) : null}
+        {selected ? (() => {
+          const linkedApplication = store.applications.find(
+            (application) =>
+              application.dsaId === selected.dsaId &&
+              application.customer === selected.customer &&
+              application.product === selected.product,
+          );
+
+          return (
+            <div className="space-y-4">
+              <DetailGrid>
+                <DetailItem label="Lead ID" value={selected.leadId} />
+                <DetailItem label="Status" value={<StatusBadge status={selected.status} />} />
+                <DetailItem label="Product" value={selected.product} />
+                <DetailItem label="Amount" value={formatCurrency(selected.amount)} />
+                <DetailItem label="DSA" value={selected.dsaName} />
+                <DetailItem label="Next action" value={selected.nextAction} />
+              </DetailGrid>
+              <Card>
+                <CardHeader>
+                  <h2 className="text-sm font-semibold text-slate-950">Lead TAT Timeline</h2>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {[
+                    ["Lead captured", formatDate(selected.createdAt), "Done"],
+                    [`Current status: ${selected.status}`, `${daysOpenSince(selected.createdAt)} day(s) open`, selected.status],
+                    [
+                      linkedApplication ? `Converted to ${linkedApplication.applicationId}` : "Application not created yet",
+                      linkedApplication ? formatDate(linkedApplication.createdAt) : selected.nextAction,
+                      linkedApplication ? linkedApplication.status : "Pending action",
+                    ],
+                  ].map(([title, meta, statusValue]) => (
+                    <div className="border-l-2 border-blue-100 pl-3" key={title}>
+                      <p className="text-sm font-semibold text-slate-950">{title}</p>
+                      <p className="text-xs text-slate-500">{meta}</p>
+                      <p className="mt-1"><StatusBadge status={statusValue} /></p>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
+          );
+        })() : null}
       </Drawer>
 
       <Modal onClose={() => setCreating(false)} open={creating} title="Create lead">
@@ -454,6 +498,9 @@ export function ApplicationDetailPage({ id }: { id: string }) {
   const visibleTimeline = canSeeDeviation
     ? application.timeline
     : application.timeline.filter((item) => !containsDeviationText(`${item.title} ${item.note}`));
+  const currentStageIndex = Math.max(0, applicationStages.indexOf(application.stage));
+  const latestWorkflowAt = visibleTimeline[0]?.at ?? application.createdAt;
+  const tatTargets = [1, 2, 1, 2, 1, 1, 1];
 
   function uploadCustomerDocument(event: FormEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
@@ -743,6 +790,38 @@ export function ApplicationDetailPage({ id }: { id: string }) {
                   {item}
                 </p>
               ))}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <h2 className="text-base font-semibold text-slate-950">Application TAT Tracker</h2>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="rounded-md bg-slate-50 p-3 text-xs text-slate-600">
+                Current stage has been open for {daysOpenSince(latestWorkflowAt)} day(s). Target TAT is {tatTargets[currentStageIndex]} day(s).
+              </div>
+              {applicationStages.map((stage, index) => {
+                const done = index < currentStageIndex || ["Approved", "Rejected", "Disbursed"].includes(application.status);
+                const current = index === currentStageIndex && !done;
+
+                return (
+                  <div className="flex items-start gap-3" key={stage}>
+                    <span
+                      className={`mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-bold ${
+                        done ? "bg-emerald-600 text-white" : current ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-400"
+                      }`}
+                    >
+                      {index + 1}
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-950">{stage}</p>
+                      <p className="text-xs text-slate-500">
+                        Target {tatTargets[index]} day(s) - {done ? "completed" : current ? "in progress" : "pending"}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
             </CardContent>
           </Card>
           <Card>

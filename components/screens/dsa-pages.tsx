@@ -8,6 +8,8 @@ import {
   ClipboardList,
   Download,
   FileText,
+  KeyRound,
+  Plus,
   ShieldCheck,
   TrendingUp,
   UploadCloud,
@@ -24,8 +26,6 @@ import {
   Button,
   Card,
   CardContent,
-  Drawer,
-  EmptyState,
   Field,
   Input,
   Label,
@@ -37,15 +37,15 @@ import {
 import { FieldConfig, RecordForm } from "@/components/ui/record-form";
 import { useToast } from "@/components/ui/toast";
 import { DEMO_USERS } from "@/lib/demo-identities";
+import { generateDsaCredentials } from "@/lib/dsa-credentials";
 import {
   dsaDocumentType,
   isMissingDsaDocumentRecord,
   requiredDsaDocumentGroups,
   requiredDsaDocuments,
 } from "@/lib/dsa-documents";
-import { demoAgentEmail, demoAgentName } from "@/lib/agent-names";
 import { useMockStore } from "@/lib/store";
-import { BusinessType, Dsa, DsaStatus, Product } from "@/lib/types";
+import { BusinessType, Dsa, DsaStatus, Product, User } from "@/lib/types";
 import { formatCurrency, formatDate, generateDsaId, makeId, percent } from "@/lib/utils";
 
 type DsaType = "Independent DSA" | "Exclusive DSA" | "Corporate DSA";
@@ -85,22 +85,19 @@ const INDIA_STATES_CITIES: Record<string, string[]> = {
 
 const INDIA_STATES = Object.keys(INDIA_STATES_CITIES).sort();
 
-const dsaStatuses: DsaStatus[] = [
-  "Draft",
+const queueStatuses: DsaStatus[] = [
   "Submitted",
+  "Pending Branch Approval",
+  "Pending BRH Approval",
   "Pending Credit Approval",
   "KYC Pending",
   "On Hold",
-  "Active",
-  "Suspended",
-  "Rejected",
-  "Blacklisted",
 ];
-
-const queueStatuses: DsaStatus[] = ["Submitted", "KYC Pending", "Pending Credit Approval", "On Hold"];
 const managementStatuses: DsaStatus[] = [
   "Draft",
   "Submitted",
+  "Pending Branch Approval",
+  "Pending BRH Approval",
   "Pending Credit Approval",
   "KYC Pending",
   "On Hold",
@@ -119,11 +116,9 @@ type NetworkPersonRow = {
   id: string;
   leads: number;
   name: string;
+  region: string;
+  status: User["status"];
 };
-
-function isQueueStatus(status: DsaStatus) {
-  return queueStatuses.includes(status);
-}
 
 function activeDsaPatch(dsa: Dsa): Partial<Dsa> {
   return {
@@ -145,6 +140,26 @@ function activeDsaPatch(dsa: Dsa): Partial<Dsa> {
   };
 }
 
+function nextDsaApprovalStatus(role: string | undefined, status: DsaStatus): DsaStatus | null {
+  if (role === "DSA Manager" && queueStatuses.includes(status)) return "Active";
+  if (role === "Branch User" && status === "Pending Branch Approval") return "Pending BRH Approval";
+  if (role === "Branch Regional Head" && status === "Pending BRH Approval") return "Pending Credit Approval";
+  if (
+    role === "DSA Credit" &&
+    (status === "Pending Credit Approval" || status === "Submitted" || status === "KYC Pending")
+  ) {
+    return "Active";
+  }
+  return null;
+}
+
+function dsaApprovalActionLabel(nextStatus: DsaStatus | null) {
+  if (nextStatus === "Active") return "Approve and Activate";
+  if (nextStatus === "Pending BRH Approval") return "Approve to BRH";
+  if (nextStatus === "Pending Credit Approval") return "Approve to Credit";
+  return "Approve";
+}
+
 const dsaFields: FieldConfig<Dsa>[] = [
   { label: "DSA name", name: "name", required: true },
   { label: "Business type", name: "businessType", options: businessTypes, required: true, type: "select" },
@@ -157,6 +172,13 @@ const dsaFields: FieldConfig<Dsa>[] = [
   { label: "State", name: "state", required: true },
   { label: "Pincode", name: "pincode", required: true },
   { label: "Manager", name: "manager", required: true },
+];
+
+const agentFields: FieldConfig<User>[] = [
+  { label: "Name", name: "name", required: true },
+  { label: "Email", name: "email", required: true, type: "email" },
+  { label: "Region", name: "region", required: true },
+  { label: "Status", name: "status", options: ["Active", "Invited", "Disabled"], required: true, type: "select" },
 ];
 
 const initialOnboardingForm = {
@@ -209,9 +231,12 @@ function readOnboardingDraft(): Partial<OnboardingDraft> {
   }
 }
 
-export function DsaOnboardingPage() {
+export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boolean } = {}) {
   const { createItem, currentUser, store } = useMockStore();
   const isBranchOnboarding = currentUser?.role === "Branch User";
+  const isDsaPartnerBlocked = currentUser?.role === "DSA Partner" && !publicEntry;
+  const isDsaSubmittedOnboarding = publicEntry;
+  const isSuperAdminOnboarding = currentUser?.role === "DSA Manager";
   const [initialDraft] = useState(() => readOnboardingDraft());
   const [step, setStep] = useState(() => clampOnboardingStep(initialDraft.step));
   const [dsaType, setDsaType] = useState<DsaType>(() =>
@@ -226,19 +251,31 @@ export function DsaOnboardingPage() {
   const [isPanVerified, setIsPanVerified] = useState(false);
   const [isAbortModalOpen, setIsAbortModalOpen] = useState(false);
   const [submittedDsaId, setSubmittedDsaId] = useState("");
+  const [submittedDsaStatus, setSubmittedDsaStatus] = useState<DsaStatus | "">("");
   const missingRequiredDocuments = requiredDsaDocuments.filter((document) => !uploadedFiles[document.key]);
 
   useEffect(() => {
+    if (isDsaPartnerBlocked) return;
     const draft: OnboardingDraft = { dsaType, form, step, uploadedFiles };
     localStorage.setItem(DSA_ONBOARDING_DRAFT_KEY, JSON.stringify(draft));
-  }, [dsaType, form, step, uploadedFiles]);
+  }, [dsaType, form, isDsaPartnerBlocked, step, uploadedFiles]);
 
-  if (currentUser?.role === "DSA Partner") {
+  if (isDsaPartnerBlocked) {
     return (
-      <EmptyState
-        description="DSA admins cannot onboard partners. Use Sell Now to fill or send configured product journeys for customers."
-        title="DSA onboarding is restricted"
-      />
+      <div>
+        <PageHeader
+          description="Active DSA accounts can manage their own network and applications, but cannot submit another DSA onboarding request from inside the dashboard."
+          eyebrow="DSA onboarding"
+          title="Onboarding restricted"
+        />
+        <Card>
+          <CardContent>
+            <p className="text-sm text-slate-600">
+              New DSA onboarding requests must be submitted from the public login page and approved through the branch, regional, and credit hierarchy.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
@@ -276,8 +313,19 @@ export function DsaOnboardingPage() {
     return Object.keys(nextErrors).length === 0;
   }
 
+  function validatePublicDocuments() {
+    if (!publicEntry || missingRequiredDocuments.length === 0) return true;
+
+    setErrors((current) => ({
+      ...current,
+      ...Object.fromEntries(missingRequiredDocuments.map((document) => [document.key, "Required for public onboarding"])),
+    }));
+    return false;
+  }
+
   function goNext(currentStep: number) {
     if (currentStep > 0 && currentStep < 4 && !validate(currentStep)) return;
+    if (currentStep === 4 && !validatePublicDocuments()) return;
     setErrors({});
     setStep(currentStep + 1);
   }
@@ -304,7 +352,13 @@ export function DsaOnboardingPage() {
   }
 
   function handleSubmit() {
+    if (!validatePublicDocuments()) {
+      setStep(4);
+      return;
+    }
+
     const id = generateDsaId(store.dsas.map((dsa) => dsa.id));
+    const credentials = generateDsaCredentials(store.dsas);
     const submittedAt = new Date().toISOString();
     const hasMissingDocuments = missingRequiredDocuments.length > 0;
     const documentsList = requiredDsaDocuments.map((document) => {
@@ -326,9 +380,20 @@ export function DsaOnboardingPage() {
     });
 
     const managerName =
-      currentUser?.role === "DSA Partner" || currentUser?.role === "Branch User"
+      currentUser?.role === "Branch User"
         ? currentUser.name
+        : publicEntry
+          ? DEMO_USERS.branch.name
         : DEMO_USERS.admin.name;
+    const nextStatus: DsaStatus = hasMissingDocuments
+      ? "On Hold"
+      : isSuperAdminOnboarding
+        ? "Active"
+        : isDsaSubmittedOnboarding
+          ? "Pending Branch Approval"
+          : isBranchOnboarding
+            ? "Pending BRH Approval"
+            : "Pending Credit Approval";
 
     createItem("dsas", {
       address: form.address,
@@ -348,6 +413,8 @@ export function DsaOnboardingPage() {
       email: form.email,
       gst: form.gst,
       id,
+      loginPassword: credentials.loginPassword,
+      loginUsername: credentials.loginUsername,
       manager: managerName,
       mobile: form.mobile,
       monthlyLeads: 0,
@@ -357,10 +424,24 @@ export function DsaOnboardingPage() {
       pincode: form.pincode,
       riskRating: "Low",
       state: form.state,
-      status: hasMissingDocuments ? "On Hold" : isBranchOnboarding ? "Pending Credit Approval" : "Submitted",
+      status: nextStatus,
       tier: "Bronze",
     });
+    createItem("notifications", {
+      body:
+        nextStatus === "Active"
+          ? `${form.name} was onboarded internally and activated by Super Admin.`
+          : `${form.name} submitted a DSA onboarding request. Current status: ${nextStatus}.`,
+      category: "Workflow",
+      createdAt: submittedAt,
+      href: `/dsa/${id}`,
+      id: makeId("note"),
+      priority: "High",
+      status: "Unread",
+      title: "New DSA onboarding submitted",
+    });
     setSubmittedDsaId(id);
+    setSubmittedDsaStatus(nextStatus);
     setStep(6);
   }
 
@@ -373,6 +454,7 @@ export function DsaOnboardingPage() {
     setIsPanVerifying(false);
     setIsAbortModalOpen(false);
     setSubmittedDsaId("");
+    setSubmittedDsaStatus("");
     setStep(0);
     localStorage.removeItem(DSA_ONBOARDING_DRAFT_KEY);
   }
@@ -765,9 +847,13 @@ export function DsaOnboardingPage() {
                 ))}
                 {missingRequiredDocuments.length ? (
                   <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-blue-900">
-                    <p className="font-semibold">Missing documents will move this DSA to On Hold.</p>
+                    <p className="font-semibold">
+                      {publicEntry ? "All mandatory documents are required before public submission." : "Missing documents will move this DSA to On Hold."}
+                    </p>
                     <p className="mt-1 text-xs text-blue-800">
-                      DSA Credit, Branch User, or Super Admin can upload the remaining documents from the on-hold list before approval.
+                      {publicEntry
+                        ? "Upload each required document to continue to bank verification and submit this DSA request."
+                        : "DSA Credit, Branch User, or Super Admin can upload the remaining documents from the on-hold list before approval."}
                     </p>
                   </div>
                 ) : null}
@@ -864,9 +950,13 @@ export function DsaOnboardingPage() {
                   <p className="text-sm text-slate-500 leading-relaxed">
                     {missingRequiredDocuments.length
                       ? "Mandatory documents are missing, so this DSA is now On Hold until the pending documents are uploaded."
-                      : isBranchOnboarding
-                      ? "This application is now waiting with DSA Credit for approval. Track the status from DSA Management."
-                      : "This application is now waiting in Dashboard > Verification Queue for final approval."}
+                      : submittedDsaStatus === "Active"
+                        ? "Super Admin has directly activated this DSA. Credentials are available from the DSA Management list."
+                        : submittedDsaStatus === "Pending Branch Approval"
+                          ? "This application is waiting for Branch approval, then BRH approval, then Credit final approval."
+                          : submittedDsaStatus === "Pending BRH Approval"
+                            ? "This application is waiting for Branch Regional Head approval before Credit final approval."
+                            : "This application is waiting with DSA Credit for final approval."}
                   </p>
                 </div>
 
@@ -896,11 +986,13 @@ export function DsaOnboardingPage() {
                     >
                       Onboard another
                     </Button>
-                    <Link href="/dsa/management" className="flex-1">
-                      <Button type="button" className="w-full text-xs">
-                        View DSA list
-                      </Button>
-                    </Link>
+                    {!publicEntry ? (
+                      <Link href="/dsa/management" className="flex-1">
+                        <Button type="button" className="w-full text-xs">
+                          View DSA list
+                        </Button>
+                      </Link>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -947,8 +1039,8 @@ export function DsaOnboardingPage() {
             <Button onClick={() => setIsAbortModalOpen(false)} type="button" variant="secondary">
               Cancel
             </Button>
-            <Button onClick={resetOnboarding} type="button" className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">
-              Remove and Activate
+            <Button onClick={resetOnboarding} type="button" variant="danger">
+              Abort onboarding
             </Button>
           </div>
         </div>
@@ -1108,20 +1200,143 @@ function DsaRecoveryReports({ dsaId }: { dsaId: string }) {
 }
 
 export function DsaManagementPage() {
-  const { store, updateItem, currentUser } = useMockStore();
+  const { createItem, deleteItem, store, updateItem, currentUser } = useMockStore();
+  const { toast } = useToast();
   const [status, setStatus] = useState("");
   const [editing, setEditing] = useState<Dsa | null>(null);
+  const [creatingAgent, setCreatingAgent] = useState(false);
+  const [editingAgent, setEditingAgent] = useState<User | null>(null);
+  const [credentialDsa, setCredentialDsa] = useState<Dsa | null>(null);
+  const [credentialUsername, setCredentialUsername] = useState("");
+  const [credentialPassword, setCredentialPassword] = useState("");
+  const [credentialError, setCredentialError] = useState("");
   const [managementTab, setManagementTab] = useState("all");
   const router = useRouter();
   const isNetworkPage = currentUser?.role === "DSA Partner";
+  const canManageDsaCredentials = currentUser?.role === "DSA Manager";
+  const ownerDsaId = currentUser?.id ?? "";
+  const agentOwnerDsa = isNetworkPage ? store.dsas.find((item) => item.id === ownerDsaId) ?? null : null;
+  const agentOwnerDsaId = agentOwnerDsa?.id ?? "";
 
   const getDsaApplications = (dsaId: string) =>
     store.applications
       .filter((application) => application.dsaId === dsaId)
       .sort((left, right) => left.product.localeCompare(right.product) || left.applicationId.localeCompare(right.applicationId));
 
+  function openCredentialModal(dsa: Dsa) {
+    setCredentialDsa(dsa);
+    setCredentialUsername(dsa.loginUsername);
+    setCredentialPassword(dsa.loginPassword);
+    setCredentialError("");
+  }
+
+  function closeCredentialModal() {
+    setCredentialDsa(null);
+    setCredentialUsername("");
+    setCredentialPassword("");
+    setCredentialError("");
+  }
+
+  function saveDsaCredentials() {
+    if (!credentialDsa) return;
+
+    const nextUsername = credentialUsername.trim().toLowerCase();
+    const nextPassword = credentialPassword.trim();
+    if (!/^\S+@\S+\.\S+$/.test(nextUsername)) {
+      setCredentialError("Enter a valid login email.");
+      return;
+    }
+    if (nextPassword.length < 8) {
+      setCredentialError("Password must be at least 8 characters.");
+      return;
+    }
+
+    const duplicateDsa = store.dsas.find(
+      (item) => item.id !== credentialDsa.id && item.loginUsername.trim().toLowerCase() === nextUsername,
+    );
+    if (duplicateDsa) {
+      setCredentialError(`Login username is already assigned to ${duplicateDsa.name}.`);
+      return;
+    }
+
+    updateItem("dsas", credentialDsa.id, {
+      loginPassword: nextPassword,
+      loginUsername: nextUsername,
+    });
+    closeCredentialModal();
+  }
+
+  function saveNewAgent(value: Partial<User>) {
+    if (!agentOwnerDsaId) {
+      toast({
+        description: "Select a DSA before creating an agent.",
+        title: "Agent not created",
+        variant: "warning",
+      });
+      return;
+    }
+
+    const email = String(value.email ?? "").trim().toLowerCase();
+    const duplicate = store.users.find((user) => user.email.trim().toLowerCase() === email);
+    if (duplicate) {
+      toast({
+        description: `${email} is already assigned to ${duplicate.name}.`,
+        title: "Duplicate agent email",
+        variant: "warning",
+      });
+      return;
+    }
+
+    createItem("users", {
+      dsaId: agentOwnerDsaId,
+      email,
+      id: makeId("usr-agent"),
+      lastLogin: new Date().toISOString(),
+      name: String(value.name ?? "DSA Agent").trim() || "DSA Agent",
+      region: String(value.region ?? agentOwnerDsa?.name ?? "DSA").trim() || "DSA",
+      role: "DSA Agent",
+      status: (value.status as User["status"]) || "Active",
+    });
+    setCreatingAgent(false);
+  }
+
+  function saveAgentEdit(value: Partial<User>) {
+    if (!editingAgent) return;
+    const dsaId = editingAgent.dsaId ?? agentOwnerDsaId;
+    if (!dsaId) {
+      toast({
+        description: "This agent is not linked to a DSA.",
+        title: "Agent not updated",
+        variant: "warning",
+      });
+      return;
+    }
+
+    const email = String(value.email ?? editingAgent.email).trim().toLowerCase();
+    const duplicate = store.users.find((user) => user.id !== editingAgent.id && user.email.trim().toLowerCase() === email);
+    if (duplicate) {
+      toast({
+        description: `${email} is already assigned to ${duplicate.name}.`,
+        title: "Duplicate agent email",
+        variant: "warning",
+      });
+      return;
+    }
+
+    updateItem("users", editingAgent.id, {
+      ...value,
+      dsaId,
+      email,
+      name: String(value.name ?? editingAgent.name).trim() || editingAgent.name,
+      role: "DSA Agent",
+    });
+    setEditingAgent(null);
+  }
+
   let scopedRows = store.dsas.filter((item) => managementStatuses.includes(item.status));
-  if (currentUser?.role === "DSA Partner" || currentUser?.role === "Branch User") {
+  if (currentUser?.role === "DSA Partner") {
+    scopedRows = scopedRows.filter((item) => item.id === currentUser.id);
+  } else if (currentUser?.role === "Branch User") {
     scopedRows = scopedRows.filter((item) => item.manager === currentUser.name);
   }
   const onHoldRows = scopedRows
@@ -1129,10 +1344,22 @@ export function DsaManagementPage() {
     .sort((left, right) => right.onboardingDate.localeCompare(left.onboardingDate));
   const rows = status ? scopedRows.filter((item) => item.status === status) : scopedRows;
 
-  const networkRows: NetworkPersonRow[] = scopedRows
+  const networkDsaIds = new Set(isNetworkPage ? [ownerDsaId] : scopedRows.map((item) => item.id));
+  const networkRows: NetworkPersonRow[] = store.users
+    .filter((user) => user.role === "DSA Agent" && user.dsaId && networkDsaIds.has(user.dsaId))
+    .map((user) => ({
+      email: user.email,
+      id: user.id,
+      name: user.name,
+      region: user.region,
+      sourceDsaId: user.dsaId ?? "",
+      status: user.status,
+    }))
     .map((item) => {
-      const leads = store.leads.filter((lead) => lead.dsaId === item.id);
-      const applications = getDsaApplications(item.id);
+      const leads = store.leads.filter((lead) => lead.dsaId === item.sourceDsaId && lead.owner === item.name);
+      const applications = store.applications.filter(
+        (application) => application.dsaId === item.sourceDsaId && leads.some((lead) => lead.customer === application.customer),
+      );
       const approvedOrDisbursed = applications.filter(
         (application) => application.status === "Approved" || application.status === "Disbursed",
       ).length;
@@ -1143,10 +1370,12 @@ export function DsaManagementPage() {
         approvedOrDisbursed,
         conversion: applications.length ? (approvedOrDisbursed / applications.length) * 100 : 0,
         disbursed,
-        email: demoAgentEmail(item.id),
+        email: item.email,
         id: item.id,
         leads: leads.length,
-        name: demoAgentName(item.id),
+        name: item.name,
+        region: item.region,
+        status: item.status,
       };
     })
     .sort((left, right) => right.applications - left.applications || right.leads - left.leads || left.name.localeCompare(right.name));
@@ -1154,16 +1383,18 @@ export function DsaManagementPage() {
   const networkColumns: Column<NetworkPersonRow>[] = [
     {
       cell: (item) => (
-        <Link className="font-semibold text-blue-700 hover:underline" href={`/dsa/${item.id}`}>
+        <span className="font-semibold text-slate-950">
           {item.name}
-        </Link>
+        </span>
       ),
-      header: "Partner",
+      header: "Agent",
       key: "name",
       sortable: true,
       sortValue: (item) => item.name,
     },
     { cell: (item) => item.email, header: "Email", key: "email", sortable: true, sortValue: (item) => item.email },
+    { cell: (item) => item.region, header: "Region", key: "region", sortable: true, sortValue: (item) => item.region },
+    { cell: (item) => <StatusBadge status={item.status} />, header: "Status", key: "status", sortable: true, sortValue: (item) => item.status },
     { cell: (item) => item.leads, header: "Leads collected", key: "leads", sortable: true, sortValue: (item) => item.leads },
     {
       cell: (item) => item.applications,
@@ -1182,26 +1413,62 @@ export function DsaManagementPage() {
     { cell: (item) => percent(item.conversion), header: "Conversion", key: "conversion", sortable: true, sortValue: (item) => item.conversion },
   ];
 
+  const agentModals = (
+    <>
+      <Modal onClose={() => setCreatingAgent(false)} open={creatingAgent} title={`Create DSA agent${agentOwnerDsa ? ` - ${agentOwnerDsa.name}` : ""}`}>
+        <RecordForm<User>
+          fields={agentFields}
+          initialValue={{ region: agentOwnerDsa?.name ?? currentUser?.name ?? "DSA", status: "Active" }}
+          onCancel={() => setCreatingAgent(false)}
+          onSubmit={saveNewAgent}
+          submitLabel="Create agent"
+        />
+      </Modal>
+      <Modal onClose={() => setEditingAgent(null)} open={Boolean(editingAgent)} title="Edit DSA agent">
+        {editingAgent ? (
+          <RecordForm<User>
+            fields={agentFields}
+            initialValue={editingAgent}
+            onCancel={() => setEditingAgent(null)}
+            onSubmit={saveAgentEdit}
+            submitLabel="Save agent"
+          />
+        ) : null}
+      </Modal>
+    </>
+  );
+
   if (isNetworkPage) {
     return (
-      <div>
+      <div className="space-y-6">
         <PageHeader
-          description="Partner activity, lead collection, and application sourcing across your network."
+          action={
+            <Button onClick={() => setCreatingAgent(true)} type="button">
+              <Plus className="h-4 w-4" />
+              New Agent
+            </Button>
+          }
+          description="Create DSA Agent users and track lead collection, application sourcing, and conversion across your network."
           eyebrow="Network"
           title="Manage My Network"
         />
         <DataTable
-          actions={(item) => (
-            <Button onClick={() => router.push(`/dsa/${item.id}`)} size="sm" type="button" variant="outline">
-              View
-            </Button>
-          )}
+          actions={(item) => {
+            const agent = store.users.find((user) => user.id === item.id && user.role === "DSA Agent" && user.dsaId === ownerDsaId);
+            return (
+              <ActionPair
+                onDelete={agent ? () => deleteItem("users", agent.id) : undefined}
+                onEdit={agent ? () => setEditingAgent(agent) : undefined}
+              />
+            );
+          }}
           columns={networkColumns}
-          emptyDescription="Partner activity will appear here once leads or applications are collected."
-          emptyTitle="No partners found"
+          emptyDescription="Create your first DSA Agent from this DSA Management page."
+          emptyTitle="No DSA agents found"
           items={networkRows}
-          searchKeys={["name", "email"]}
+          searchKeys={["name", "email", "region", "status"]}
         />
+        {agentModals}
       </div>
     );
   }
@@ -1264,6 +1531,18 @@ export function DsaManagementPage() {
         <DataTable
           actions={(item) => (
             <div className="flex justify-end gap-2">
+              {canManageDsaCredentials ? (
+                <Button
+                  aria-label={`Manage credentials for ${item.name}`}
+                  onClick={() => openCredentialModal(item)}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  <KeyRound className="h-4 w-4" />
+                  Creds
+                </Button>
+              ) : null}
               <Button onClick={() => router.push(`/dsa/${item.id}`)} size="sm" type="button" variant="outline">
                 View
               </Button>
@@ -1294,16 +1573,68 @@ export function DsaManagementPage() {
           />
         ) : null}
       </Modal>
+      {agentModals}
+      <Modal onClose={closeCredentialModal} open={Boolean(credentialDsa)} title="Manage DSA credentials">
+        {credentialDsa ? (
+          <div className="space-y-4">
+            <div className="rounded-md border border-slate-100 bg-slate-50 p-3 text-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-slate-950">{credentialDsa.name}</p>
+                  <p className="font-mono text-xs text-slate-500">{credentialDsa.code}</p>
+                </div>
+                <StatusBadge status={credentialDsa.status} />
+              </div>
+              <p className="mt-2 text-xs text-slate-500">Only Active DSAs can sign in with these credentials.</p>
+            </div>
+            <Field>
+              <Label htmlFor="dsaManagementLoginUsername">Login username</Label>
+              <Input
+                id="dsaManagementLoginUsername"
+                onChange={(event) => {
+                  setCredentialUsername(event.target.value);
+                  setCredentialError("");
+                }}
+                type="email"
+                value={credentialUsername}
+              />
+            </Field>
+            <Field>
+              <Label htmlFor="dsaManagementLoginPassword">Temporary password</Label>
+              <Input
+                id="dsaManagementLoginPassword"
+                onChange={(event) => {
+                  setCredentialPassword(event.target.value);
+                  setCredentialError("");
+                }}
+                type="text"
+                value={credentialPassword}
+              />
+            </Field>
+            {credentialError ? <p className="text-xs font-medium text-rose-600">{credentialError}</p> : null}
+            <div className="flex justify-end gap-2">
+              <Button onClick={closeCredentialModal} type="button" variant="secondary">
+                Cancel
+              </Button>
+              <Button onClick={saveDsaCredentials} type="button">
+                Save credentials
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }
 
 export function DsaProfilePage({ id }: { id: string }) {
-  const { deleteDsaCascade, deleteItem, store, updateItem, currentUser } = useMockStore();
+  const { createItem, deleteDsaCascade, deleteItem, store, updateItem, currentUser } = useMockStore();
   const { toast } = useToast();
   const router = useRouter();
   const [tab, setTab] = useState("performance");
   const [applicationProductFilter, setApplicationProductFilter] = useState("");
+  const [creatingAgent, setCreatingAgent] = useState(false);
+  const [editingAgent, setEditingAgent] = useState<User | null>(null);
   const [approvingDsa, setApprovingDsa] = useState<Dsa | null>(null);
   const [rejectingDsa, setRejectingDsa] = useState<Dsa | null>(null);
   const [rejectionError, setRejectionError] = useState("");
@@ -1319,9 +1650,8 @@ export function DsaProfilePage({ id }: { id: string }) {
 
   const dsa = store.dsas.find((item) => item.id === id) ?? store.dsas[0];
   const missingProfileDocuments = dsa.documents.filter(isMissingDsaDocumentRecord);
-  const canDecideDsa =
-    (currentUser?.role === "DSA Manager" || currentUser?.role === "DSA Credit") &&
-    isQueueStatus(dsa.status);
+  const nextApprovalStatus = nextDsaApprovalStatus(currentUser?.role, dsa.status);
+  const canDecideDsa = Boolean(nextApprovalStatus);
   const canApproveDsa = canDecideDsa && missingProfileDocuments.length === 0;
   const allProductConfigs = store.dsaProductConfigs.filter((config) => config.dsaId === dsa.id);
   const productConfigs = allProductConfigs
@@ -1356,8 +1686,12 @@ export function DsaProfilePage({ id }: { id: string }) {
   const linkedVerificationCount = store.verificationChecks.filter((check) => applicationCodes.has(check.applicationId)).length;
   const linkedApprovalCount = store.approvals.filter((approval) => applicationCodes.has(approval.applicationId)).length;
   const linkedUserCount = store.users.filter(
-    (user) => user.id === dsa.id || user.email === dsa.email || user.name === dsa.name,
+    (user) => user.id === dsa.id || user.dsaId === dsa.id || user.email === dsa.email || user.name === dsa.name,
   ).length;
+  const canManageAgents = currentUser?.role === "DSA Manager" || currentUser?.role === "DSA Credit";
+  const dsaAgents = store.users
+    .filter((user) => user.role === "DSA Agent" && user.dsaId === dsa.id)
+    .sort((left, right) => left.name.localeCompare(right.name));
 
   const commissionTotal = commissions.reduce((sum, item) => sum + item.payout, 0);
   const approvedApplications = applications.filter(
@@ -1390,6 +1724,7 @@ export function DsaProfilePage({ id }: { id: string }) {
   const canLifecycleRoleManageDsa =
     currentUser?.role === "DSA Manager" ||
     currentUser?.role === "DSA Credit" ||
+    currentUser?.role === "Branch Regional Head" ||
     (currentUser?.role === "Branch User" && dsa.manager === currentUser.name);
   const canManageDsaLifecycle = canLifecycleRoleManageDsa && ["Active", "Suspended", "Blacklisted"].includes(dsa.status);
   const canViewDsaLifecycleReason = canLifecycleRoleManageDsa;
@@ -1414,9 +1749,94 @@ export function DsaProfilePage({ id }: { id: string }) {
     setBlacklistingDsa(nextDsa);
   }
 
+  function saveProfileAgent(value: Partial<User>) {
+    const email = String(value.email ?? "").trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      toast({
+        description: "Enter a valid agent email.",
+        title: "Agent not created",
+        variant: "warning",
+      });
+      return;
+    }
+
+    const duplicate = store.users.find((user) => user.email.trim().toLowerCase() === email);
+    if (duplicate) {
+      toast({
+        description: `${email} is already assigned to ${duplicate.name}.`,
+        title: "Duplicate agent email",
+        variant: "warning",
+      });
+      return;
+    }
+
+    createItem("users", {
+      dsaId: dsa.id,
+      email,
+      id: makeId("usr-agent"),
+      lastLogin: new Date().toISOString(),
+      name: String(value.name ?? "DSA Agent").trim() || "DSA Agent",
+      region: String(value.region ?? dsa.name).trim() || dsa.name,
+      role: "DSA Agent",
+      status: (value.status as User["status"]) || "Active",
+    });
+    setCreatingAgent(false);
+  }
+
+  function saveProfileAgentEdit(value: Partial<User>) {
+    if (!editingAgent) return;
+    const email = String(value.email ?? editingAgent.email).trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      toast({
+        description: "Enter a valid agent email.",
+        title: "Agent not updated",
+        variant: "warning",
+      });
+      return;
+    }
+
+    const duplicate = store.users.find((user) => user.id !== editingAgent.id && user.email.trim().toLowerCase() === email);
+    if (duplicate) {
+      toast({
+        description: `${email} is already assigned to ${duplicate.name}.`,
+        title: "Duplicate agent email",
+        variant: "warning",
+      });
+      return;
+    }
+
+    updateItem("users", editingAgent.id, {
+      ...value,
+      dsaId: dsa.id,
+      email,
+      name: String(value.name ?? editingAgent.name).trim() || editingAgent.name,
+      role: "DSA Agent",
+    });
+    setEditingAgent(null);
+  }
+
+  const dsaAgentColumns: Column<User>[] = [
+    {
+      cell: (item) => (
+        <div>
+          <p className="font-semibold text-slate-950">{item.name}</p>
+          <p className="text-xs text-slate-500">{item.id}</p>
+        </div>
+      ),
+      header: "Agent",
+      key: "name",
+      sortable: true,
+      sortValue: (item) => item.name,
+    },
+    { cell: (item) => item.email, header: "Email", key: "email", sortable: true, sortValue: (item) => item.email },
+    { cell: (item) => item.region, header: "Region", key: "region", sortable: true, sortValue: (item) => item.region },
+    { cell: (item) => <StatusBadge status={item.status} />, header: "Status", key: "status", sortable: true, sortValue: (item) => item.status },
+    { cell: (item) => formatDate(item.lastLogin), header: "Last login", key: "lastLogin", sortable: true, sortValue: (item) => item.lastLogin },
+  ];
+
   if (currentUser?.role === "DSA Partner") {
-    const networkPartnerName = demoAgentName(dsa.id);
-    const networkPartnerEmail = demoAgentEmail(dsa.id);
+    const networkPartnerName = dsa.name;
+    const networkPartnerEmail = dsa.loginUsername;
     const conversion = applications.length ? (approvedApplications / applications.length) * 100 : 0;
 
     return (
@@ -1568,7 +1988,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                   title={canApproveDsa ? "Approve DSA" : "Missing mandatory documents"}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1 h-auto"
                 >
-                  Approve
+                  {dsaApprovalActionLabel(nextApprovalStatus)}
                 </Button>
                 <Button
                   onClick={() => setRejectingDsa(dsa)}
@@ -1708,6 +2128,7 @@ export function DsaProfilePage({ id }: { id: string }) {
             { label: "KYC", value: "kyc" },
             { label: "Documents", value: "documents" },
             { label: "Manage Products", value: "products" },
+            ...(canManageAgents ? [{ label: "Manage Agents", value: "agents" }] : []),
             { label: "Applications", value: "apps" },
             { label: "Commission", value: "commission" },
             { label: "Reports", value: "reports" },
@@ -1724,7 +2145,7 @@ export function DsaProfilePage({ id }: { id: string }) {
               <DetailItem label="DSA ID" value={dsa.code} />
               <DetailItem label="Contact person" value={dsa.contactPerson} />
               <DetailItem label="Mobile" value={dsa.mobile} />
-              <DetailItem label="Email" value={currentUser?.email ?? DEMO_USERS.dsa.email} />
+              <DetailItem label="Email" value={dsa.email} />
               <DetailItem label="Address" value={`${dsa.address}, ${dsa.city}, ${dsa.state} ${dsa.pincode}`} />
               <DetailItem label="Bank" value={`${dsa.bank.bankName} · ${dsa.bank.ifsc}`} />
               <DetailItem label="Tier" value={dsa.tier} />
@@ -1871,6 +2292,13 @@ export function DsaProfilePage({ id }: { id: string }) {
                       <div className="mt-3 grid gap-2 text-xs text-slate-500 md:grid-cols-2">
                         <span>URL: {config.loanUrl}</span>
                         <span>Configured: {formatDate(config.configuredAt)}</span>
+                        <span>
+                          Commission:{" "}
+                          {config.ranges.length
+                            ? config.ranges.map((range) => formatCurrency(range.commissionAmount ?? Math.round((range.max * range.rate) / 100))).join(", ")
+                            : "Not configured"}
+                        </span>
+                        <span>Growth rule: current month must beat previous month</span>
                       </div>
                     </div>
                   ))}
@@ -1878,6 +2306,36 @@ export function DsaProfilePage({ id }: { id: string }) {
               ) : (
                 <p className="text-sm text-slate-500">No products configured for this DSA yet.</p>
               )}
+            </div>
+          ) : null}
+          {tab === "agents" && canManageAgents ? (
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Manage Agents</h3>
+                  <p className="text-xs text-slate-500">
+                    Agents listed here are linked only to {dsa.name}. New agents are saved under this DSA.
+                  </p>
+                </div>
+                <Button onClick={() => setCreatingAgent(true)} type="button">
+                  <Plus className="h-4 w-4" />
+                  New Agent
+                </Button>
+              </div>
+              <DataTable
+                actions={(item) => (
+                  <ActionPair
+                    onDelete={() => deleteItem("users", item.id)}
+                    onEdit={() => setEditingAgent(item)}
+                  />
+                )}
+                columns={dsaAgentColumns}
+                emptyDescription="Create an agent from this tab to attach it to this DSA."
+                emptyTitle="No agents under this DSA"
+                items={dsaAgents}
+                pageSize={8}
+                searchKeys={["name", "email", "region", "status"]}
+              />
             </div>
           ) : null}
           {tab === "apps" ? (
@@ -1976,6 +2434,26 @@ export function DsaProfilePage({ id }: { id: string }) {
           ) : null}
         </CardContent>
       </Card>
+      <Modal onClose={() => setCreatingAgent(false)} open={creatingAgent} title={`Create DSA agent - ${dsa.name}`}>
+        <RecordForm<User>
+          fields={agentFields}
+          initialValue={{ region: dsa.name, status: "Active" }}
+          onCancel={() => setCreatingAgent(false)}
+          onSubmit={saveProfileAgent}
+          submitLabel="Create agent"
+        />
+      </Modal>
+      <Modal onClose={() => setEditingAgent(null)} open={Boolean(editingAgent)} title="Edit DSA agent">
+        {editingAgent ? (
+          <RecordForm<User>
+            fields={agentFields}
+            initialValue={editingAgent}
+            onCancel={() => setEditingAgent(null)}
+            onSubmit={saveProfileAgentEdit}
+            submitLabel="Save agent"
+          />
+        ) : null}
+      </Modal>
       <Modal
         description="Confirm this only after KYC, documents, bank details, and business information have been checked."
         onClose={closeDecisionModals}
@@ -1988,11 +2466,11 @@ export function DsaProfilePage({ id }: { id: string }) {
             <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4">
               <p className="text-sm font-semibold text-emerald-900">{approvingDsa.name}</p>
               <p className="mt-1 text-xs text-emerald-800">
-                Approval will move this DSA to DSA Management, remove it from the pending queue, and start platform metrics at zero.
+                Approval will move this DSA to the next hierarchy stage.
               </p>
             </div>
             <DetailGrid>
-              <DetailItem label="New status" value={<StatusBadge status="Active" />} />
+              <DetailItem label="New status" value={<StatusBadge status={nextApprovalStatus ?? approvingDsa.status} />} />
               <DetailItem label="Approval rate" value={percent(0)} />
               <DetailItem label="Monthly lead target" value={0} />
               <DetailItem label="Commission earned" value={formatCurrency(0)} />
@@ -2005,16 +2483,25 @@ export function DsaProfilePage({ id }: { id: string }) {
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
                 type="button"
                 onClick={() => {
-                  updateItem("dsas", approvingDsa.id, activeDsaPatch(approvingDsa));
+                  const nextStatus = nextDsaApprovalStatus(currentUser?.role, approvingDsa.status);
+                  if (!nextStatus) return;
+                  updateItem(
+                    "dsas",
+                    approvingDsa.id,
+                    nextStatus === "Active" ? activeDsaPatch(approvingDsa) : { status: nextStatus },
+                  );
                   toast({
-                    title: "Partner Approved",
-                    description: `${approvingDsa.name} is now active in DSA Management.`,
+                    title: nextStatus === "Active" ? "Partner Activated" : "Partner Approved",
+                    description:
+                      nextStatus === "Active"
+                        ? `${approvingDsa.name} is now active in DSA Management.`
+                        : `${approvingDsa.name} moved to ${nextStatus}.`,
                     variant: "success",
                   });
                   closeDecisionModals();
                 }}
               >
-                Approve and Activate
+                {dsaApprovalActionLabel(nextApprovalStatus)}
               </Button>
             </div>
           </div>

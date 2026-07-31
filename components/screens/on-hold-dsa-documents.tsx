@@ -35,6 +35,7 @@ export function OnHoldDsaDocuments({
   const canUpload =
     currentUser?.role === "DSA Manager" ||
     currentUser?.role === "DSA Credit" ||
+    currentUser?.role === "Branch Regional Head" ||
     currentUser?.role === "Branch User";
 
   function uploadMissingDocument(dsa: Dsa, documentId: string, file?: File) {

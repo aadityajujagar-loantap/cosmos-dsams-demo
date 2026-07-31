@@ -203,7 +203,7 @@ export function createJourneyApplication({
     creditScore,
     customer: applicant.customer,
     decisionSummary: deviation
-      ? `${product} journey submitted for ${dsaName}. BRE deviation raised because ${breDeviation.reasons.join(" ")} Pending approval by Branch User, DSA Credit, or Super Admin.`
+      ? `${product} journey submitted for ${dsaName}. BRE deviation raised because ${breDeviation.reasons.join(" ")} Pending approval by Branch, BRH, DSA Credit, or Super Admin.`
       : `${product} journey submitted through ${source === "Assisted" ? "assisted Sell Now" : "customer self-serve journey"} for ${dsaName}. Queued for BRE and verification review.`,
     ...(deviation ? { deviation } : {}),
     dsaId,

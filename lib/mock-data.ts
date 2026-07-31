@@ -1,24 +1,21 @@
+import seedData from "@/lib/demo-seed-data.json";
+import { DEMO_USERS } from "@/lib/demo-identities";
+import { buildApplicationJourney } from "@/lib/product-journeys";
 import {
-  ApprovalItem,
-  ApprovalStage,
   Application,
-  ApplicationDeviation,
-  ApplicationStage,
-  ApplicationStatus,
+  ApprovalItem,
   AuditLog,
   BreRule,
   BusinessType,
   CibilScoreBand,
   Commission,
   DocumentRecord,
-  DocumentType,
   Dsa,
+  DsaInvoice,
   DsaProductConfig,
   DsaRecovery,
-  DsaStatus,
   GenderFilter,
   Lead,
-  LeadStatus,
   LoanSlab,
   MockStore,
   Notification,
@@ -28,65 +25,16 @@ import {
   User,
   UserRole,
   VerificationCheck,
-  VerificationStatus,
 } from "@/lib/types";
-import { DEMO_USERS, demoActor } from "@/lib/demo-identities";
-import { journeyPath } from "@/lib/journey-links";
-import { buildApplicationJourney } from "@/lib/product-journeys";
-import { seededDsaId } from "@/lib/utils";
 
-const states = [
-  ["Mumbai", "Maharashtra", "400001"],
-  ["Pune", "Maharashtra", "411006"],
-  ["Bengaluru", "Karnataka", "560001"],
-  ["Hyderabad", "Telangana", "500001"],
-  ["Delhi", "Delhi", "110001"],
-  ["Chennai", "Tamil Nadu", "600001"],
-  ["Ahmedabad", "Gujarat", "380001"],
-  ["Jaipur", "Rajasthan", "302001"],
-  ["Kolkata", "West Bengal", "700001"],
-  ["Indore", "Madhya Pradesh", "452001"],
-];
-
-const firstNames = [
-  "Aarav",
-  "Vivaan",
-  "Aditya",
-  "Vihaan",
-  "Arjun",
-  "Sai",
-  "Ishaan",
-  "Reyansh",
-  "Ananya",
-  "Diya",
-  "Myra",
-  "Kavya",
-  "Aanya",
-  "Saanvi",
-  "Naira",
-  "Meera",
-  "Riya",
-  "Tara",
-  "Kabir",
-  "Rohan",
-];
-
-const lastNames = [
-  "Sharma",
-  "Patel",
-  "Iyer",
-  "Kapoor",
-  "Nair",
-  "Mehta",
-  "Reddy",
-  "Gupta",
-  "Kulkarni",
-  "Agarwal",
-  "Bose",
-  "Menon",
-  "Joshi",
-  "Chopra",
-  "Desai",
+const roles: UserRole[] = [
+  "Admin",
+  "DSA Credit",
+  "Branch Regional Head",
+  "Branch User",
+  "DSA Partner",
+  "DSA Agent",
+  "Customer",
 ];
 
 const products: Product[] = [
@@ -97,640 +45,625 @@ const products: Product[] = [
   "Auto Loan",
 ];
 
-const businessTypes: BusinessType[] = [
-  "Sole Proprietor",
-  "Partnership",
-  "LLP",
-  "Private Limited",
-  "Public Limited",
+const BASE_DATE = new Date("2026-07-30T14:30:00+05:30");
+const stateGstCodes: Record<string, string> = {
+  Delhi: "07",
+  Gujarat: "24",
+  Karnataka: "29",
+  Kerala: "32",
+  Maharashtra: "27",
+  "Madhya Pradesh": "23",
+  Punjab: "03",
+  Rajasthan: "08",
+  "Tamil Nadu": "33",
+  Telangana: "36",
+  "Uttar Pradesh": "09",
+  "West Bengal": "19",
+};
+
+type DsaProfile = {
+  businessType: BusinessType;
+  city: string;
+  cityCode: string;
+  contactPerson: string;
+  name: string;
+  pincode: string;
+  state: string;
+  stateCode: string;
+  status: Dsa["status"];
+  tier: Dsa["tier"];
+};
+
+const cosmosDsaProfiles: DsaProfile[] = [
+  { businessType: "Private Limited", city: "Mumbai", cityCode: "MUM", contactPerson: "Aarav Mehta", name: "Aarohi Financial Services Pvt Ltd", pincode: "400001", state: "Maharashtra", stateCode: "MH", status: "Active", tier: "Platinum" },
+  { businessType: "LLP", city: "Pune", cityCode: "PUN", contactPerson: "Nisha Kulkarni", name: "Sahyadri Credit Associates LLP", pincode: "411001", state: "Maharashtra", stateCode: "MH", status: "Active", tier: "Gold" },
+  { businessType: "Partnership", city: "Nagpur", cityCode: "NAG", contactPerson: "Rohit Deshmukh", name: "Vidarbha Loan Connect", pincode: "440001", state: "Maharashtra", stateCode: "MH", status: "Active", tier: "Silver" },
+  { businessType: "Private Limited", city: "Ahmedabad", cityCode: "AHM", contactPerson: "Mehul Shah", name: "Amdavad Capital Partners Pvt Ltd", pincode: "380009", state: "Gujarat", stateCode: "GJ", status: "Active", tier: "Gold" },
+  { businessType: "Sole Proprietor", city: "Surat", cityCode: "SUR", contactPerson: "Krina Patel", name: "Surat Growth Finance", pincode: "395003", state: "Gujarat", stateCode: "GJ", status: "Pending Branch Approval", tier: "Bronze" },
+  { businessType: "Private Limited", city: "Bengaluru", cityCode: "BLR", contactPerson: "Karthik Rao", name: "Namma Finserve Pvt Ltd", pincode: "560001", state: "Karnataka", stateCode: "KA", status: "Active", tier: "Platinum" },
+  { businessType: "LLP", city: "Mysuru", cityCode: "MYS", contactPerson: "Divya Hegde", name: "Mysuru Credit Network LLP", pincode: "570001", state: "Karnataka", stateCode: "KA", status: "Active", tier: "Silver" },
+  { businessType: "Private Limited", city: "Hyderabad", cityCode: "HYD", contactPerson: "Saanvi Reddy", name: "Charminar Loan Services Pvt Ltd", pincode: "500001", state: "Telangana", stateCode: "TS", status: "Active", tier: "Gold" },
+  { businessType: "Sole Proprietor", city: "Warangal", cityCode: "WGL", contactPerson: "Arjun Naik", name: "Kakatiya Finance Desk", pincode: "506002", state: "Telangana", stateCode: "TS", status: "On Hold", tier: "Bronze" },
+  { businessType: "Private Limited", city: "New Delhi", cityCode: "DEL", contactPerson: "Ishaan Malhotra", name: "Capital Bridge DSA Pvt Ltd", pincode: "110001", state: "Delhi", stateCode: "DL", status: "Active", tier: "Gold" },
+  { businessType: "Partnership", city: "Jaipur", cityCode: "JAI", contactPerson: "Mahi Rathore", name: "Pinkcity Credit Hub", pincode: "302001", state: "Rajasthan", stateCode: "RJ", status: "Active", tier: "Silver" },
+  { businessType: "Private Limited", city: "Jodhpur", cityCode: "JOD", contactPerson: "Kabir Singhvi", name: "Marwar Lending Partners Pvt Ltd", pincode: "342001", state: "Rajasthan", stateCode: "RJ", status: "Pending BRH Approval", tier: "Bronze" },
+  { businessType: "LLP", city: "Chennai", cityCode: "CHN", contactPerson: "Ananya Iyer", name: "Marina Retail Finance LLP", pincode: "600001", state: "Tamil Nadu", stateCode: "TN", status: "Active", tier: "Gold" },
+  { businessType: "Private Limited", city: "Coimbatore", cityCode: "CBE", contactPerson: "Vikram Narayanan", name: "Kovai Loan Channels Pvt Ltd", pincode: "641001", state: "Tamil Nadu", stateCode: "TN", status: "Active", tier: "Silver" },
+  { businessType: "Partnership", city: "Kochi", cityCode: "COK", contactPerson: "Neha Menon", name: "Malabar Credit Links", pincode: "682001", state: "Kerala", stateCode: "KL", status: "Active", tier: "Silver" },
+  { businessType: "LLP", city: "Thiruvananthapuram", cityCode: "TRV", contactPerson: "Aditya Nair", name: "Travancore Lending LLP", pincode: "695001", state: "Kerala", stateCode: "KL", status: "Active", tier: "Bronze" },
+  { businessType: "Private Limited", city: "Indore", cityCode: "IDR", contactPerson: "Suhani Jain", name: "Malwa Finance Channels Pvt Ltd", pincode: "452001", state: "Madhya Pradesh", stateCode: "MP", status: "Active", tier: "Gold" },
+  { businessType: "Sole Proprietor", city: "Bhopal", cityCode: "BHO", contactPerson: "Harsh Tiwari", name: "Lakecity Loan Desk", pincode: "462001", state: "Madhya Pradesh", stateCode: "MP", status: "Pending Credit Approval", tier: "Bronze" },
+  { businessType: "Private Limited", city: "Kolkata", cityCode: "KOL", contactPerson: "Riya Banerjee", name: "Hooghly Capital Services Pvt Ltd", pincode: "700001", state: "West Bengal", stateCode: "WB", status: "Active", tier: "Gold" },
+  { businessType: "LLP", city: "Siliguri", cityCode: "SLG", contactPerson: "Debjit Roy", name: "North Bengal Credit LLP", pincode: "734001", state: "West Bengal", stateCode: "WB", status: "Active", tier: "Silver" },
+  { businessType: "Private Limited", city: "Lucknow", cityCode: "LKO", contactPerson: "Prisha Srivastava", name: "Awadh Finserve Pvt Ltd", pincode: "226001", state: "Uttar Pradesh", stateCode: "UP", status: "Active", tier: "Silver" },
+  { businessType: "Partnership", city: "Noida", cityCode: "NOI", contactPerson: "Raghav Bansal", name: "Noida Retail Loan Partners", pincode: "201301", state: "Uttar Pradesh", stateCode: "UP", status: "Active", tier: "Gold" },
+  { businessType: "Private Limited", city: "Ludhiana", cityCode: "LDH", contactPerson: "Simran Gill", name: "Punjab Growth Finance Pvt Ltd", pincode: "141001", state: "Punjab", stateCode: "PB", status: "Active", tier: "Silver" },
+  { businessType: "Sole Proprietor", city: "Amritsar", cityCode: "ASR", contactPerson: "Gurpreet Sandhu", name: "Amritsar Loan Bazaar", pincode: "143001", state: "Punjab", stateCode: "PB", status: "Active", tier: "Bronze" },
+  { businessType: "Private Limited", city: "Vadodara", cityCode: "BDQ", contactPerson: "Hetal Trivedi", name: "Baroda Credit Square Pvt Ltd", pincode: "390001", state: "Gujarat", stateCode: "GJ", status: "Active", tier: "Silver" },
 ];
 
-const dsaStatuses: DsaStatus[] = [
-  "Active",
-  "Active",
-  "On Hold",
-  "KYC Pending",
-  "Submitted",
-  "Pending Credit Approval",
-  "Suspended",
-  "Rejected",
+const customerNames = [
+  "Rohan Sharma",
+  "Priya Nair",
+  "Amit Verma",
+  "Sneha Kapoor",
+  "Kunal Joshi",
+  "Meera Iyer",
+  "Farhan Khan",
+  "Anika Shah",
+  "Dev Patel",
+  "Ritika Sen",
+  "Siddharth Rao",
+  "Ayesha Qureshi",
 ];
 
-const leadStatuses: LeadStatus[] = [
-  "New",
-  "Contacted",
-  "Qualified",
-  "In Progress",
-  "Converted",
-  "Lost",
+const agentFirstNames = [
+  "Aarav",
+  "Nisha",
+  "Rohan",
+  "Meera",
+  "Kabir",
+  "Anika",
+  "Dev",
+  "Riya",
+  "Ishaan",
+  "Saanvi",
+  "Karthik",
+  "Divya",
+  "Arjun",
+  "Neha",
+  "Vikram",
+  "Prisha",
+  "Raghav",
+  "Simran",
+  "Harsh",
+  "Hetal",
 ];
 
-const verificationStatuses: VerificationStatus[] = [
-  "Pending",
-  "In Progress",
-  "Verified",
-  "Failed",
+const agentLastNames = [
+  "Sharma",
+  "Patel",
+  "Rao",
+  "Iyer",
+  "Mehta",
+  "Nair",
+  "Kapoor",
+  "Shah",
+  "Kulkarni",
+  "Reddy",
+  "Singh",
+  "Banerjee",
+  "Joshi",
+  "Gill",
+  "Jain",
+  "Verma",
 ];
 
-const roles: UserRole[] = [
-  "Admin",
-  "DSA Credit",
-  "Branch User",
-  "DSA Partner",
-  "Customer",
-];
-
-const managers = [
-  DEMO_USERS.admin.name,
-  DEMO_USERS.credit.name,
-  DEMO_USERS.branch.name,
-  DEMO_USERS.dsa.name,
-];
-
-const months = [
-  "Jan 2026",
-  "Feb 2026",
-  "Mar 2026",
-  "Apr 2026",
-  "May 2026",
-  "Jun 2026",
-];
-
-function pick<T>(items: T[], index: number) {
-  return items[index % items.length];
-}
-
-function person(index: number) {
-  return `${pick(firstNames, index)} ${pick(lastNames, index * 3)}`;
-}
-
-function isoDay(daysAgo: number) {
-  const date = new Date("2026-06-09T09:00:00+05:30");
+function isoDay(daysAgo: number, hour = 14) {
+  const date = new Date(BASE_DATE);
   date.setDate(date.getDate() - daysAgo);
+  date.setHours(hour, 30, 0, 0);
   return date.toISOString();
 }
 
-function mobile(index: number) {
-  return `9${(843200000 + index * 7919).toString().slice(0, 9)}`;
+function dsaAgentCount(dsaIndex: number) {
+  return 15 + ((dsaIndex * 7 + 3) % 6);
+}
+
+function money(seed: number, min: number, spread: number) {
+  return min + ((seed * 137000) % spread);
+}
+
+function dsaCode(index: number, profile: DsaProfile) {
+  return `COS-DSA-${profile.stateCode}-${profile.cityCode}-${String(index + 1).padStart(3, "0")}`;
 }
 
 function pan(index: number) {
-  const suffix = (1000 + index).toString();
-  return `ABCP${String.fromCharCode(65 + (index % 20))}${suffix}Q`;
+  const prefixes = ["AAROH", "SAHYA", "VIDAR", "AMDAV", "SURAT", "NAMMA", "MYSUR", "CHARM", "KAKAT", "CAPIT"];
+  return `${prefixes[index % prefixes.length]}${String(1000 + index * 37).slice(-4)}${String.fromCharCode(65 + (index % 26))}`;
 }
 
-function aadhaar(index: number) {
-  return `XXXX-XXXX-${(2100 + index * 17).toString().slice(0, 4)}`;
-}
-
-function document(
-  index: number,
-  ownerName: string,
-  type: DocumentType,
-  applicationId?: string,
-  dsaId?: string,
-): DocumentRecord {
-  return {
-    id: `doc-${index}`,
-    applicationId,
-    dsaId,
-    documentId: `DOC-${String(index).padStart(5, "0")}`,
-    fileName: `${type.toLowerCase().replace(" ", "-")}-${index}.pdf`,
-    ownerName,
-    remarks: pick(
-      ["Clean OCR match", "Name mismatch flagged", "Awaiting re-upload", "Verified against source"],
-      index,
-    ),
-    size: `${180 + index * 7} KB`,
-    status: pick(verificationStatuses, index),
-    type,
-    uploadedAt: isoDay(index % 24),
-  };
-}
-
-function timeline(seed: number) {
-  return [
-    {
-      actor: pick(managers, seed),
-      at: isoDay(seed + 6),
-      id: `tl-${seed}-1`,
-      note: "Lead accepted by sales operations and assigned for document collection.",
-      title: "Application created",
-    },
-    {
-      actor: "System BRE",
-      at: isoDay(seed + 4),
-      id: `tl-${seed}-2`,
-      note: "Primary eligibility rules evaluated with bureau and income signals.",
-      title: "BRE check completed",
-    },
-    {
-      actor: pick(["Credit Desk", "Risk Desk", "Ops Desk"], seed),
-      at: isoDay(seed + 2),
-      id: `tl-${seed}-3`,
-      note: "Manual review completed with two open evidence items.",
-      title: "Verification updated",
-    },
-  ];
-}
-
-export function createMockStore(): MockStore {
-  const users: User[] = [
-    {
-      email: DEMO_USERS.admin.email,
-      id: "usr-admin",
-      lastLogin: isoDay(0),
-      name: DEMO_USERS.admin.name,
-      region: "West",
-      role: "Admin",
-      status: "Active",
-    },
-    {
-      email: DEMO_USERS.credit.email,
-      id: "usr-credit",
-      lastLogin: isoDay(1),
-      name: DEMO_USERS.credit.name,
-      region: "West",
-      role: "DSA Credit",
-      status: "Active",
-    },
-    {
-      email: DEMO_USERS.branch.email,
-      id: "usr-branch",
-      lastLogin: isoDay(2),
-      name: DEMO_USERS.branch.name,
-      region: "West",
-      role: "Branch User",
-      status: "Active",
-    },
-    {
-      email: DEMO_USERS.dsa.email,
-      id: "usr-dsa",
-      lastLogin: isoDay(3),
-      name: DEMO_USERS.dsa.name,
-      region: "West",
-      role: "DSA Partner",
-      status: "Active",
-    },
-    {
-      email: DEMO_USERS.user.email,
-      id: "usr-user",
-      lastLogin: isoDay(4),
-      name: DEMO_USERS.user.name,
-      region: "West",
-      role: "Customer",
-      status: "Active",
-    },
-  ];
-
-  const dsas: Dsa[] = Array.from({ length: 56 }, (_, index) => {
-    const city = pick(states, index);
-    const id = seededDsaId(index);
-    const name = `${pick(["Cosmos", "Prime", "Apex", "Nexora", "Credence", "BluePeak"], index)} ${pick(
-      ["Financial Services", "Capital Partners", "Loan Point", "Credit Advisors", "Finserv"],
-      index + 2,
-    )}`;
-    const status = pick(dsaStatuses, index);
-    const dsaDocs = [
-      document(index * 3 + 1, name, "PAN", undefined, id),
-      {
-        ...document(index * 3 + 2, name, "Aadhaar", undefined, id),
-        ...(status === "On Hold"
-          ? {
-              fileName: "Missing - Applicant Aadhaar (Front)",
-              remarks: "Mandatory document missing during onboarding; DSA held before approval.",
-              size: "0 KB",
-              status: "Pending" as const,
-            }
-          : {}),
-      },
-    ];
-
+function createDsas(): Dsa[] {
+  return cosmosDsaProfiles.map((profile, index) => {
+    const branch = index + 1;
+    const code = dsaCode(index, profile);
+    const dsaPan = pan(index);
+    const status = profile.status;
+    const hasHoldDocs = status === "On Hold";
     return {
-      address: `${21 + index}, ${pick(["Market Road", "MG Road", "Ring Road", "Station Road"], index)}`,
-      approvalRate: 42 + ((index * 7) % 48),
+      address: `${profile.name}, ${profile.city} Business District`,
+      approvalRate: 0,
       bank: {
-        accountName: name,
-        accountNumber: `10${index}92837465${index}`,
-        bankName: pick(["HDFC Bank", "ICICI Bank", "Axis Bank", "Kotak Mahindra Bank"], index),
-        ifsc: `CBIN0${String(30000 + index).padStart(6, "0")}`,
+        accountName: profile.name,
+        accountNumber: `1029${String(28374650 + index * 3197).padStart(8, "0")}`,
+        bankName: "Cosmos Co-operative Bank",
+        ifsc: `COSB${String(branch).padStart(7, "0")}`,
       },
-      businessType: pick(businessTypes, index),
-      city: city[0],
-      code: id,
-      commissionEarned: 86000 + index * 9400,
-      contactPerson: person(index),
-      documents: dsaDocs,
-      email: `partner${index + 1}@${name.toLowerCase().replaceAll(" ", "")}.example`,
-      gst: `27${pan(index).slice(0, 10)}1Z${index % 9}`,
-      id,
-      manager:
-        index % 11 === 0
-          ? DEMO_USERS.branch.name
-          : index % 8 === 0
-            ? DEMO_USERS.dsa.name
-            : DEMO_USERS.admin.name,
-      mobile: mobile(index),
-      monthlyLeads: 12 + ((index * 5) % 62),
-      name,
-      onboardingDate: isoDay(index + 6),
-      pan: pan(index),
-      pincode: city[2],
-      riskRating: pick(["Low", "Medium", "High"], index),
-      state: city[1],
+      businessType: profile.businessType,
+      city: profile.city,
+      code,
+      commissionEarned: 0,
+      contactPerson: profile.contactPerson,
+      documents: ["PAN", "Aadhaar", "Bank Statement"].map((type, docIndex) => ({
+        documentId: `DOC-DSA-${String(index + 1).padStart(3, "0")}-${docIndex + 1}`,
+        dsaId: code,
+        fileName: hasHoldDocs && docIndex === 2 ? "Missing - Bank Statement" : `${code}-${type.toLowerCase().replace(/\s+/g, "-")}.pdf`,
+        id: `doc-dsa-${index + 1}-${docIndex + 1}`,
+        ownerName: profile.name,
+        remarks: hasHoldDocs && docIndex === 2 ? "Mandatory document missing; held before approval." : "Verified during DSA empanelment.",
+        size: hasHoldDocs && docIndex === 2 ? "0 KB" : `${230 + index * 7 + docIndex * 18} KB`,
+        status: hasHoldDocs && docIndex === 2 ? "Pending" : "Verified",
+        type: type as DocumentRecord["type"],
+        uploadedAt: isoDay(30 - (index % 12), 11),
+      })),
+      email: `partner${branch}@${profile.cityCode.toLowerCase()}-cosdsa.in`,
+      gst: `${stateGstCodes[profile.state] ?? "27"}${dsaPan}1Z${(index % 9) + 1}`,
+      id: code,
+      loginPassword: `branch${branch}@123`,
+      loginUsername: `cosdsa@branch${branch}.in`,
+      manager: index % 5 === 0 ? DEMO_USERS.admin.name : DEMO_USERS.branch.name,
+      mobile: `88${String(70000000 + index * 7919).slice(-8)}`,
+      monthlyLeads: 0,
+      name: profile.name,
+      onboardingDate: isoDay(45 - (index % 20), 10),
+      pan: dsaPan,
+      pincode: profile.pincode,
+      riskRating: index % 11 === 0 ? "Medium" : "Low",
+      state: profile.state,
       status,
-      tier: pick(["Bronze", "Silver", "Gold", "Platinum"], index),
+      tier: profile.tier,
     };
   });
+}
 
-  const leads: Lead[] = Array.from({ length: 128 }, (_, index) => {
-    const customer = person(index + 30);
-    const dsa = pick(dsas, index);
-    const city = pick(states, index + 4);
-    
-    const isDemoCustomer = index === 4 || index === 10;
-    const finalCustomer = isDemoCustomer ? DEMO_USERS.user.name : customer;
-    const finalMobile = isDemoCustomer ? DEMO_USERS.user.mobile : mobile(index + 100);
-    const finalEmail = isDemoCustomer ? DEMO_USERS.user.email : `${customer.toLowerCase().replace(" ", ".")}@example.com`;
+function createUsers(dsas: Dsa[]): User[] {
+  const internal: User[] = [
+    { email: DEMO_USERS.admin.email, id: "usr-admin", lastLogin: isoDay(0), name: DEMO_USERS.admin.name, region: "Head Office", role: "Admin", status: "Active" },
+    { email: DEMO_USERS.credit.email, id: "usr-credit", lastLogin: isoDay(1), name: DEMO_USERS.credit.name, region: "Credit", role: "DSA Credit", status: "Active" },
+    { email: DEMO_USERS.branch.email, id: "usr-branch", lastLogin: isoDay(2), name: DEMO_USERS.branch.name, region: "West Branch", role: "Branch User", status: "Active" },
+    { email: DEMO_USERS.brh.email, id: "usr-brh", lastLogin: isoDay(2), name: DEMO_USERS.brh.name, region: "West Region", role: "Branch Regional Head", status: "Active" },
+    { email: DEMO_USERS.user.email, id: "usr-user", lastLogin: isoDay(4), name: DEMO_USERS.user.name, region: "Retail", role: "Customer", status: "Active" },
+  ];
+  const partners = dsas.map((dsa) => ({
+    dsaId: dsa.id,
+    email: dsa.loginUsername,
+    id: dsa.id,
+    lastLogin: isoDay(3 + (dsa.id.length % 8)),
+    name: dsa.name,
+    region: dsa.city,
+    role: "DSA Partner" as const,
+    status: dsa.status === "Active" ? "Active" as const : "Invited" as const,
+  }));
+  const agents = dsas.flatMap((dsa, index) =>
+    Array.from({ length: dsaAgentCount(index) }, (_, agentIndex) => {
+      const firstName = agentFirstNames[(index * 3 + agentIndex) % agentFirstNames.length];
+      const lastName = agentLastNames[(index + agentIndex * 2) % agentLastNames.length];
 
-    return {
-      amount: 250000 + ((index * 137000) % 4200000),
-      city: city[0],
-      createdAt: isoDay(index % 48),
-      customer: finalCustomer,
-      dsaId: dsa.id,
-      dsaName: dsa.name,
-      email: finalEmail,
-      id: `lead-${index + 1}`,
-      leadId: `LD-${String(index + 1).padStart(5, "0")}`,
-      mobile: finalMobile,
-      nextAction: pick(
-        ["Collect bank statement", "Schedule verification", "Call back", "Send product quote"],
-        index,
-      ),
-      owner: pick(managers, index),
-      product: pick(products, index),
-      source: pick(["Referral", "Branch", "Website", "DSA Campaign", "Partner"], index),
-      status: pick(leadStatuses, index),
-    };
-  });
+      return {
+        dsaId: dsa.id,
+        email: `agent${agentIndex + 1}.branch${index + 1}@cosdsa.in`,
+        id: `agent-${index + 1}-${agentIndex + 1}`,
+        lastLogin: isoDay(5 + index + agentIndex),
+        name: `${firstName} ${lastName}`,
+        region: dsa.city,
+        role: "DSA Agent" as const,
+        status: dsa.status === "Active" ? "Active" as const : "Invited" as const,
+      };
+    }),
+  );
+  return [...internal, ...partners, ...agents];
+}
 
-  const applications: Application[] = Array.from({ length: 64 }, (_, index) => {
-    const lead = index === 2 ? leads[4] : index === 5 ? leads[10] : pick(leads, index * 2);
-    const score = 52 + ((index * 9) % 46);
-    const salary = 28000 + ((index * 5300) % 180000);
-    const creditScore = 610 + ((index * 17) % 210);
-    const deviationRequired = index === 2 || (index % 17 === 6 && score > 78);
-    const deviationReasons = [
-      creditScore < 700 ? `Bureau score ${creditScore} is below the product policy floor.` : "",
-      salary < 50000 ? `Declared monthly income INR ${salary.toLocaleString("en-IN")} needs exception approval.` : "",
-      score > 78 ? `BRE risk score ${score} crossed the manual-review threshold.` : "",
-    ].filter(Boolean);
-    const deviation: ApplicationDeviation | undefined = deviationRequired
-      ? {
-          id: `dev-${index + 1}`,
-          reasons: deviationReasons.length
-            ? deviationReasons
-            : ["Customer is being considered under a product-specific special-case exception."],
-          requestedAt: isoDay((index % 10) + 1),
-          requestedBy: "Cosmos Auto BRE",
-          required: true,
-          status: "Pending",
-        }
-      : undefined;
-    return {
-      aadhaar: aadhaar(index),
-      applicationId: `APP-${String(index + 1).padStart(5, "0")}`,
-      city: lead.city,
-      createdAt: isoDay(index % 36),
-      creditScore,
-      customer: lead.customer,
-      decisionSummary: deviation
-        ? `BRE deviation raised for special-case review: ${deviation.reasons.join(" ")}`
-        : pick(
-            [
-              "Eligible with standard income documentation.",
-              "Manual review required due to bureau deviation.",
-              "Low risk profile with strong repayment indicators.",
-              "Hold until address verification is closed.",
-            ],
-            index,
-          ),
-      ...(deviation ? { deviation } : {}),
-      dsaId: lead.dsaId,
-      dsaName: lead.dsaName,
-      email: lead.email,
-      id: `app-${index + 1}`,
-      loanAmount: lead.amount,
-      mobile: lead.mobile,
-      journey: buildApplicationJourney(lead.product, index, {
-        city: lead.city,
-        customer: lead.customer,
-        loanAmount: lead.amount,
+function createRolePermissions(): RolePermission[] {
+  return roles.flatMap((role, roleIndex) =>
+    ["Dashboard", "DSA", "Leads", "Applications", "BRE", "Finance", "Admin"].map((module, moduleIndex) => ({
+      id: `role-${roleIndex}-${moduleIndex}`,
+      module,
+      permissions: {
+        Approve: role === "Admin" || role === "DSA Credit",
+        Create: role !== "Customer" && !(role === "DSA Partner" && module === "DSA"),
+        Delete: role === "Admin",
+        Edit: role !== "Customer" && !(role === "DSA Partner" && module === "DSA"),
+        View: role !== "Customer" || module === "Applications",
+      },
+      role,
+    })),
+  );
+}
+
+function createLeads(dsas: Dsa[]): Lead[] {
+  return dsas.flatMap((dsa, dsaIndex) =>
+    Array.from({ length: 4 }, (_, leadIndex) => {
+      const seed = dsaIndex * 4 + leadIndex;
+      const product = products[seed % products.length];
+      const customer = customerNames[seed % customerNames.length];
+      const statuses: Lead["status"][] = ["New", "Contacted", "Qualified", "In Progress", "Converted", "Lost"];
+      return {
+        amount: money(seed + 4, 300000, 7000000),
+        city: dsa.city,
+        createdAt: isoDay((seed % 27) + 1, 9 + (seed % 7)),
+        customer,
+        dsaId: dsa.id,
+        dsaName: dsa.name,
+        email: `${customer.toLowerCase().replace(/\s+/g, ".")}@example.in`,
+        id: `lead-${seed + 1}`,
+        leadId: `LEAD-${String(seed + 1).padStart(5, "0")}`,
+        mobile: `77${String(80000000 + seed * 1739).slice(-8)}`,
+        nextAction: ["Call back", "Collect bank statement", "Schedule document pickup", "Send offer"][seed % 4],
+        owner: dsa.contactPerson,
+        product,
+        source: ["Referral", "Branch", "Website", "DSA Campaign", "Partner"][seed % 5] as Lead["source"],
+        status: statuses[seed % statuses.length],
+      };
+    }),
+  );
+}
+
+function createApplications(dsas: Dsa[]): Application[] {
+  const stages: Application["stage"][] = ["Document Review", "BRE Check", "Credit Underwriting", "Risk Review", "Approval", "Disbursal"];
+  const statuses: Application["status"][] = ["In Review", "Approved", "Disbursed", "On Hold", "Rejected"];
+  return dsas.flatMap((dsa, dsaIndex) =>
+    Array.from({ length: dsa.status === "Active" ? 3 : 1 }, (_, appIndex) => {
+      const seed = dsaIndex * 3 + appIndex;
+      const product = products[(seed + dsaIndex) % products.length];
+      const status = statuses[seed % statuses.length];
+      const stage = status === "Disbursed" ? "Disbursal" : status === "Approved" ? "Approval" : stages[seed % stages.length];
+      const customer = customerNames[(seed + 2) % customerNames.length];
+      const loanAmount = money(seed + 9, 450000, 9200000);
+      const salary = money(seed + 3, 38000, 210000);
+      const creditScore = 642 + ((seed * 23) % 205);
+      return {
+        aadhaar: `XXXX-XXXX-${String(4300 + seed * 17).slice(-4)}`,
+        applicationId: `APP-${String(seed + 1).padStart(5, "0")}`,
+        city: dsa.city,
+        createdAt: isoDay((seed % 33) + 1, 10 + (seed % 5)),
+        creditScore,
+        customer,
+        decisionSummary: `${product} application sourced by ${dsa.name}. Current workflow status: ${status}.`,
+        dsaId: dsa.id,
+        dsaName: dsa.name,
+        email: `${customer.toLowerCase().replace(/\s+/g, ".")}${seed}@example.in`,
+        id: `app-${seed + 1}`,
+        journey: buildApplicationJourney(product, seed, { city: dsa.city, customer, loanAmount, salary }),
+        loanAmount,
+        mobile: `98${String(60000000 + seed * 2129).slice(-8)}`,
+        notes: [`Sourced through ${dsa.city} partner network.`, `BRE score: ${creditScore}.`],
+        pan: pan(seed + 6),
+        product,
+        riskScore: 35 + ((seed * 7) % 56),
         salary,
-      }),
-      notes: deviation
-        ? [
-            `Deviation pending: ${deviation.reasons.join(" ")}`,
-            "Customer requested flexible EMI date.",
-            "DSA confirmed all documents collected.",
-          ]
-        : [
-            "Customer requested flexible EMI date.",
-            "DSA confirmed all documents collected.",
-            "Risk desk asked for one additional clarification.",
-          ],
-      pan: pan(index + 120),
-      product: lead.product,
-      riskScore: score,
-      salary,
-      stage: deviation
-        ? "Risk Review"
-        : pick(
-            [
-              "Lead Capture",
-              "Document Review",
-              "BRE Check",
-              "Credit Underwriting",
-              "Risk Review",
-              "Approval",
-              "Disbursal",
-            ],
-            index,
-          ),
-      status: deviation ? "On Hold" : pick(["Draft", "In Review", "Approved", "Rejected", "Disbursed", "On Hold"], index),
-      timeline: deviation
-        ? [
-            {
-              actor: "Cosmos Auto BRE",
-              at: deviation.requestedAt,
-              id: `tl-dev-${index + 1}`,
-              note: `Deviation routed for approval: ${deviation.reasons.join(" ")}`,
-              title: "BRE deviation raised",
-            },
-            ...timeline(index),
-          ]
-        : timeline(index),
-      verificationStatus: pick(verificationStatuses, index + 1),
-    };
-  });
+        stage,
+        status,
+        timeline: [
+          { actor: dsa.contactPerson, at: isoDay((seed % 20) + 1, 11), id: `tl-${seed}-1`, note: "Application captured through DSA channel.", title: "Application created" },
+          { actor: "Cosmos Auto BRE", at: isoDay(seed % 12, 15), id: `tl-${seed}-2`, note: `Moved to ${stage}.`, title: stage },
+        ],
+        verificationStatus: status === "Rejected" ? "Failed" : status === "Disbursed" || status === "Approved" ? "Verified" : "In Progress",
+      };
+    }),
+  );
+}
 
-  const dsaProductConfigs: DsaProductConfig[] = dsas
+function createDocuments(dsas: Dsa[], applications: Application[]): DocumentRecord[] {
+  const appDocs = applications.flatMap((application, index) =>
+    ["PAN", "Bank Statement"].map((type, docIndex) => ({
+      applicationId: application.applicationId,
+      documentId: `DOC-APP-${String(index + 1).padStart(4, "0")}-${docIndex + 1}`,
+      fileName: `${application.applicationId}-${type.toLowerCase().replace(/\s+/g, "-")}.pdf`,
+      id: `doc-app-${index + 1}-${docIndex + 1}`,
+      ownerName: application.customer,
+      remarks: application.verificationStatus === "Verified" ? "Verified by operations." : "Pending operations review.",
+      size: `${180 + index * 5 + docIndex * 21} KB`,
+      status: application.verificationStatus,
+      type: type as DocumentRecord["type"],
+      uploadedAt: application.createdAt,
+    })),
+  );
+  return [...dsas.flatMap((dsa) => dsa.documents), ...appDocs];
+}
+
+function createVerificationChecks(applications: Application[]): VerificationCheck[] {
+  return applications.map((application, index) => ({
+    applicationId: application.applicationId,
+    assignedTo: index % 3 === 0 ? DEMO_USERS.credit.name : DEMO_USERS.branch.name,
+    checkId: `VER-${String(index + 1).padStart(5, "0")}`,
+    customer: application.customer,
+    dueDate: isoDay(Math.max(0, 4 - (index % 4)), 18),
+    evidence: application.verificationStatus === "Verified" ? "KYC and banking evidence matched." : "Awaiting field confirmation.",
+    id: `verify-${index + 1}`,
+    status: application.verificationStatus,
+    type: ["KYC", "Address", "Employment", "Bank"][index % 4] as VerificationCheck["type"],
+  }));
+}
+
+function createApprovals(applications: Application[]): ApprovalItem[] {
+  return applications
+    .filter((application) => application.status === "In Review" || application.status === "On Hold" || application.status === "Approved")
+    .slice(0, 42)
+    .map((application, index) => ({
+      applicationId: application.applicationId,
+      approver: index % 2 === 0 ? DEMO_USERS.credit.name : DEMO_USERS.brh.name,
+      customer: application.customer,
+      history: [
+        { actor: DEMO_USERS.branch.name, at: application.createdAt, id: `approval-tl-${index + 1}-1`, note: "Maker stage completed.", title: "Maker submitted" },
+      ],
+      id: `approval-${index + 1}`,
+      stage: ["Maker", "Checker", "Risk Review", "Final Approval"][index % 4] as ApprovalItem["stage"],
+      status: application.status === "Approved" ? "Approved" : "Pending",
+      updatedAt: isoDay(index % 16, 12),
+      workflowId: `WF-${String(index + 1).padStart(5, "0")}`,
+    }));
+}
+
+function createProductConfigs(dsas: Dsa[]): DsaProductConfig[] {
+  return dsas
     .filter((dsa) => dsa.status === "Active")
-    .slice(0, 12)
     .flatMap((dsa, dsaIndex) =>
-      products.slice(0, dsaIndex % 3 === 0 ? 2 : 1).map((product, productIndex) => {
-        const id = `dsa-product-${dsaIndex + 1}-${productIndex + 1}`;
+      products.slice(0, 3 + (dsaIndex % 2)).map((product, productIndex) => {
+        const id = `config-${dsaIndex + 1}-${productIndex + 1}`;
         return {
-          bannerName: `${product.toLowerCase().replaceAll(" ", "-")}-banner.png`,
-          commissionType: pick(["Percentage-based", "Tiered"], dsaIndex + productIndex),
-          configuredAt: isoDay(dsaIndex + productIndex),
+          bannerName: `${dsa.city} ${product} Campaign`,
+          commissionType: productIndex % 3 === 0 ? "Percentage-based" : productIndex % 3 === 1 ? "Tiered" : "Fixed-fee",
+          configuredAt: isoDay((dsaIndex + productIndex) % 20, 13),
           configuredBy: DEMO_USERS.admin.name,
           dsaCode: dsa.code,
           dsaId: dsa.id,
           dsaName: dsa.name,
           id,
-          loanUrl: journeyPath(id),
+          loanUrl: `/journey/${id}`,
           product,
           ranges: [
-            {
-              effectiveDate: "2026-06-01",
-              endDate: "2027-06-01",
-              frequency: "Monthly",
-              id: `${product.slice(0, 2).toUpperCase()}-${dsaIndex + 1}-${productIndex + 1}`,
-              max: 3000000 + productIndex * 2000000,
-              min: 500000,
-              rate: 0.5 + productIndex * 0.25,
-            },
+            { effectiveDate: "2026-04-01", endDate: "2027-03-31", frequency: "Monthly", id: `${id}-r1`, max: 2500000, min: 0, rate: 0.75 + productIndex * 0.15 },
+            { effectiveDate: "2026-04-01", endDate: "2027-03-31", frequency: "Monthly", growthRequired: true, id: `${id}-r2`, max: 10000000, min: 2500001, rate: 1.1 + productIndex * 0.2 },
           ],
-          status: "Active" as const,
+          status: "Active",
         };
       }),
     );
+}
 
-  applications.push(
-    ...dsaProductConfigs.slice(0, 14).flatMap((config, configIndex) => {
-      const dsa = dsas.find((item) => item.id === config.dsaId);
-      return [0, 1].map((inner) => {
-        const seed = 300 + configIndex * 2 + inner;
-        const customer = person(seed);
-        const loanAmount = 400000 + ((seed * 91000) % 3200000);
-        const salary = 35000 + ((seed * 3200) % 140000);
-        return {
-          aadhaar: aadhaar(seed),
-          applicationId: `APP-D${String(configIndex * 2 + inner + 1).padStart(4, "0")}`,
-          city: dsa?.city ?? pick(states, seed)[0],
-          createdAt: isoDay(seed % 30),
-          creditScore: 650 + ((seed * 11) % 160),
-          customer,
-          decisionSummary: "Demo product-linked application for DSA profile product filtering.",
-          dsaId: config.dsaId,
-          dsaName: config.dsaName,
-          email: `${customer.toLowerCase().replace(" ", ".")}@example.com`,
-          id: `app-product-demo-${configIndex + 1}-${inner + 1}`,
-          loanAmount,
-          mobile: mobile(seed),
-          journey: buildApplicationJourney(config.product, seed, {
-            city: dsa?.city ?? pick(states, seed)[0],
-            customer,
-            loanAmount,
-            salary,
-          }),
-          notes: [
-            `Application mapped to configured ${config.product}.`,
-            "Dummy record added for DSA profile product filtering.",
-          ],
-          pan: pan(seed),
-          product: config.product,
-          riskScore: 48 + ((seed * 7) % 45),
-          salary,
-          stage: pick(
-            [
-              "Lead Capture",
-              "Document Review",
-              "BRE Check",
-              "Credit Underwriting",
-              "Risk Review",
-              "Approval",
-              "Disbursal",
-            ] as ApplicationStage[],
-            seed,
-          ),
-          status: pick(["Draft", "In Review", "Approved", "Rejected", "Disbursed", "On Hold"] as ApplicationStatus[], seed),
-          timeline: timeline(seed),
-          verificationStatus: pick(verificationStatuses, seed),
-        };
-      });
+function createCommissions(dsas: Dsa[], applications: Application[]): Commission[] {
+  return dsas.flatMap((dsa, dsaIndex) =>
+    ["May 2026", "Jun 2026", "Jul 2026"].map((month, monthIndex) => {
+      const dsaApps = applications.filter((application) => application.dsaId === dsa.id);
+      const disbursed = dsaApps
+        .filter((application) => application.status === "Disbursed" || application.status === "Approved")
+        .reduce((sum, application) => sum + application.loanAmount, 0);
+      const rate = 0.65 + ((dsaIndex + monthIndex) % 5) * 0.18;
+      const payout = Math.round((Math.max(disbursed, 650000 + dsaIndex * 88000) * rate) / 100);
+      return {
+        applications: Math.max(1, dsaApps.length + monthIndex),
+        disbursedAmount: Math.max(disbursed, 650000 + dsaIndex * 88000),
+        dsaId: dsa.id,
+        dsaName: dsa.name,
+        id: `commission-${dsaIndex + 1}-${monthIndex + 1}`,
+        month,
+        payout,
+        payoutId: `PAY-${String(dsaIndex + 1).padStart(3, "0")}-${monthIndex + 1}`,
+        product: products[(dsaIndex + monthIndex) % products.length],
+        rate,
+        status: monthIndex === 2 ? "Pending" : dsaIndex % 7 === 0 ? "Hold" : "Processed",
+      };
     }),
   );
+}
 
-
-  const documents = [
-    ...dsas.flatMap((dsa) => dsa.documents),
-    ...applications.flatMap((application, index) => [
-      document(200 + index * 2, application.customer, "Salary Slip", application.id),
-      document(201 + index * 2, application.customer, "Bank Statement", application.id),
-    ]),
-  ];
-
-  const breRules: BreRule[] = Array.from({ length: 24 }, (_, index) => ({
-    conditions: [
-      {
-        field: pick(["Age", "Salary", "Credit Score", "FOIR", "Loan Amount"], index),
-        id: `cond-${index}-1`,
-        operator: pick([">", ">=", "<=", "="], index),
-        value: pick(["21", "25000", "700", "55", "500000"], index),
-      },
-      {
-        field: pick(["Residence Stability", "Bureau Hit", "Employment Type"], index),
-        id: `cond-${index}-2`,
-        operator: pick([">=", "=", "contains"], index),
-        value: pick(["12 months", "Positive", "Salaried"], index),
-      },
-    ],
-    id: `rule-${index + 1}`,
-    operator: pick(["AND", "OR"], index),
-    outcome: pick(["Auto approve", "Route to risk", "Reject", "Ask for documents"], index),
-    priority: index + 1,
-    product: pick(products, index),
-    ruleCode: `BRE-${String(index + 1).padStart(3, "0")}`,
-    ruleName: pick(
-      [
-        "Age > 21",
-        "Salary > 25000",
-        "Credit Score > 700",
-        "Low FOIR Guardrail",
-        "High Ticket Risk Review",
-      ],
-      index,
-    ),
-    status: pick(["Active", "Active", "Draft", "Inactive"], index),
-    updatedAt: isoDay(index % 18),
-  }));
-
-  const verificationChecks: VerificationCheck[] = applications.flatMap((application, index) =>
-    ["KYC", "Address", "Employment", "Bank"].map((type, inner) => ({
-      applicationId: application.applicationId,
-      assignedTo: pick(users, index + inner).name,
-      checkId: `VER-${String(index * 4 + inner + 1).padStart(5, "0")}`,
-      customer: application.customer,
-      dueDate: isoDay(Math.max(1, 10 - inner - (index % 5))),
-      evidence: pick(
-        ["PAN NSDL match", "Geo-tag pending", "Employer email sent", "Penny drop verified"],
-        inner,
-      ),
-      id: `ver-${index * 4 + inner + 1}`,
-      status: pick(verificationStatuses, index + inner),
-      type: type as VerificationCheck["type"],
-    })),
-  );
-
-  const approvals: ApprovalItem[] = applications.slice(0, 42).map((application, index) => ({
-    applicationId: application.applicationId,
-    approver: pick(users, index + 3).name,
-    customer: application.customer,
-    history: timeline(index + 80),
-    id: `approval-${index + 1}`,
-    stage: pick(["Maker", "Checker", "Risk Review", "Final Approval"] as ApprovalStage[], index),
-    status: pick(["Pending", "Approved", "Returned", "Rejected"], index),
-    updatedAt: isoDay(index % 22),
-    workflowId: `WF-${String(index + 1).padStart(5, "0")}`,
-  }));
-
-  const commissions: Commission[] = Array.from({ length: 78 }, (_, index) => {
-    const dsa = pick(dsas, index);
-    const applicationsCount = 2 + ((index * 3) % 22);
-    const disbursedAmount = 850000 + ((index * 415000) % 18500000);
-    const rate = pick([0.8, 1, 1.2, 1.5, 1.8], index);
+function createDsaInvoices(dsas: Dsa[], commissions: Commission[]): DsaInvoice[] {
+  const statuses: DsaInvoice["status"][] = ["Raised by DSA", "Pending Approval", "Countered by Bank", "Approved", "Rejected"];
+  return dsas.map((dsa, index) => {
+    const grossAmount = commissions.filter((commission) => commission.dsaId === dsa.id).reduce((sum, commission) => sum + commission.payout, 0);
+    const adjustmentAmount = index % 5 === 0 ? 2500 : index % 6 === 0 ? 5000 : 0;
+    const taxAmount = Math.round(grossAmount * 0.18);
+    const requestedAmount = grossAmount - adjustmentAmount + taxAmount;
+    const status = statuses[index % statuses.length];
     return {
-      applications: applicationsCount,
-      disbursedAmount,
+      adjustmentAmount,
+      approvedAmount: status === "Approved" ? requestedAmount : undefined,
+      createdAt: isoDay(index % 18, 16),
+      dsaCode: dsa.code,
       dsaId: dsa.id,
       dsaName: dsa.name,
-      id: `com-${index + 1}`,
-      month: pick(months, index),
-      payout: Math.round((disbursedAmount * rate) / 100),
-      payoutId: `PAY-${String(index + 1).padStart(5, "0")}`,
-      product: pick(products, index),
-      rate,
-      status: pick(["Pending", "Processed", "Hold"], index),
+      grossAmount,
+      history: [
+        {
+          action: "Raised",
+          actor: dsa.contactPerson,
+          amount: requestedAmount,
+          at: isoDay(index % 18, 16),
+          id: `inv-event-${index + 1}-1`,
+          note: "Monthly commission invoice raised for Cosmos review.",
+          party: "DSA",
+        },
+      ],
+      id: `invoice-${index + 1}`,
+      invoiceNumber: `INV-COS-${String(index + 1).padStart(4, "0")}`,
+      month: "Jul 2026",
+      netAmount: grossAmount - adjustmentAmount,
+      raisedBy: dsa.contactPerson,
+      raisedByRole: "DSA Partner",
+      remarks: status === "Approved" ? "Approved after reconciliation." : "Awaiting workflow action.",
+      requestedAmount,
+      source: "Manual",
+      status,
+      taxAmount,
+      updatedAt: isoDay(index % 9, 17),
     };
   });
+}
 
-  const rolePermissions: RolePermission[] = roles.flatMap((role, roleIndex) =>
-    ["Dashboard", "DSA", "Leads", "Applications", "BRE", "Operations", "Finance", "Admin"].map(
-      (module, moduleIndex) => ({
-        id: `role-${roleIndex}-${moduleIndex}`,
-        module,
-        permissions: {
-          Approve: role === "Admin" || role === "DSA Credit" || (role === "DSA Partner" && module === "DSA"),
-          Create:
-            role === "Branch User"
-              ? module === "Dashboard" || module === "DSA"
-              : role !== "Customer" || module === "Leads" || module === "Applications",
-          Delete: role === "Admin",
-          Edit: role !== "Customer" && (role !== "Branch User" || module === "DSA"),
-          View:
-            role === "Admin" ||
-            role === "DSA Credit" ||
-            (role === "Branch User" ? module === "Dashboard" || module === "DSA" : module !== "Admin"),
-        },
-        role,
-      }),
-    ),
+function createRecovery(dsas: Dsa[]): DsaRecovery[] {
+  return dsas.flatMap((dsa, dsaIndex) =>
+    ["Apr 2026", "May 2026", "Jun 2026", "Jul 2026"].map((month, monthIndex) => {
+      const targetAmount = 180000 + dsaIndex * 9000 + monthIndex * 12000;
+      const recoveredAmount = Math.round(targetAmount * (0.72 + ((dsaIndex + monthIndex) % 7) * 0.055));
+      const carryForwardIn = monthIndex === 0 ? 0 : Math.max(0, targetAmount - recoveredAmount);
+      const carryForwardOut = Math.max(0, targetAmount - recoveredAmount);
+      return {
+        carryForwardIn,
+        carryForwardOut,
+        dsaId: dsa.id,
+        dsaName: dsa.name,
+        id: `recovery-${dsaIndex + 1}-${monthIndex + 1}`,
+        invoiceAmount: Math.max(0, recoveredAmount - carryForwardIn),
+        month,
+        npaCases: (dsaIndex + monthIndex) % 5 === 0 ? 1 + (dsaIndex % 3) : 0,
+        pendingAmount: Math.max(0, targetAmount - recoveredAmount),
+        recoveredAmount,
+        targetAmount,
+        totalBilling: recoveredAmount + Math.round(recoveredAmount * 0.12),
+        totalCases: 18 + ((dsaIndex + monthIndex) % 14),
+        zone: dsa.code.split("-")[2] ?? dsa.state,
+      };
+    }),
   );
+}
 
-  const auditLogs: AuditLog[] = Array.from({ length: 42 }, (_, index) => ({
-    action: pick(
-      [
-        "Updated DSA status",
-        "Created loan application",
-        "Approved workflow stage",
-        "Changed BRE rule",
-        "Downloaded audit extract",
-      ],
-      index,
-    ),
-    actor: demoActor(index),
-    at: isoDay(index),
-    entity: pick(["DSA", "Lead", "Application", "BRE Rule", "Commission"], index),
-    id: `audit-${index + 1}`,
-    ipAddress: `10.24.${index % 9}.${32 + index}`,
-    severity: pick(["Info", "Info", "Warning", "Critical"], index),
-  }));
+function createLoanSlabs(): LoanSlab[] {
+  const bands: CibilScoreBand[] = ["Above 800", "751-800", "700-750", "Below 700"];
+  const genders: GenderFilter[] = ["All", "Male", "Female"];
+  return products.flatMap((product, productIndex) =>
+    bands.map((band, bandIndex) => ({
+      cibilScoreBand: band,
+      createdAt: isoDay(productIndex + bandIndex, 10),
+      createdBy: DEMO_USERS.credit.name,
+      gender: genders[(productIndex + bandIndex) % genders.length],
+      id: `slab-${productIndex + 1}-${bandIndex + 1}`,
+      maxLoanAmount: 500000 + productIndex * 850000 + bandIndex * 450000,
+      maxLoanPeriodMonths: 36 + productIndex * 24 + bandIndex * 12,
+      product,
+      roiFixed: 8.85 + productIndex * 0.35 + bandIndex * 0.25,
+      roiFloating: 8.25 + productIndex * 0.3 + bandIndex * 0.2,
+      schemeName: `${product} ${band} Scheme`,
+    })),
+  );
+}
 
-  const notifications: Notification[] = Array.from({ length: 32 }, (_, index) => ({
-    body: pick(
-      [
-        "A high-value application is waiting for risk review.",
-        "A partner uploaded replacement KYC documents.",
-        "Monthly payout batch has exceptions.",
-        "A BRE rule changed from draft to active.",
-      ],
-      index,
-    ),
-    category: pick(["Workflow", "Risk", "Payout", "System", "Lead"], index),
-    createdAt: isoDay(index % 16),
-    id: `note-${index + 1}`,
-    priority: pick(["Low", "Medium", "High", "Critical"], index),
-    status: pick(["Unread", "Read", "Archived"], index),
-    title: pick(
-      ["Approval SLA breached", "Document re-uploaded", "Payout exception", "Rule activated"],
-      index,
-    ),
-  }));
+function createAuditLogs(dsas: Dsa[], applications: Application[], invoices: DsaInvoice[]): AuditLog[] {
+  const rows: AuditLog[] = [
+    ...dsas.slice(0, 16).map((dsa, index) => ({
+      action: dsa.status === "Active" ? "DSA Approval" : "Hierarchy Workflow",
+      actionType: dsa.status === "Active" ? "DSA Approval" : "Hierarchy Workflow",
+      actor: index % 2 === 0 ? DEMO_USERS.branch.name : DEMO_USERS.credit.name,
+      actorId: index % 2 === 0 ? DEMO_USERS.branch.id : DEMO_USERS.credit.id,
+      actorRole: (index % 2 === 0 ? "Branch User" : "DSA Credit") as AuditLog["actorRole"],
+      affectedDsaId: dsa.id,
+      affectedDsaName: dsa.name,
+      at: isoDay(index % 18, 12),
+      changedFields: ["status"],
+      collection: "dsas" as const,
+      entity: "Dsas",
+      entityId: dsa.id,
+      entityName: dsa.name,
+      id: `audit-dsa-${index + 1}`,
+      ipAddress: "10.24.0.91",
+      severity: "Info" as const,
+      summary: `${dsa.name} moved to ${dsa.status}.`,
+      toValue: `status: ${dsa.status}`,
+    })),
+    ...applications.slice(0, 18).map((application, index) => ({
+      action: application.status === "Approved" ? "Application Approval" : "Application Workflow",
+      actionType: application.status === "Approved" ? "Application Approval" : "Application Workflow",
+      actor: DEMO_USERS.credit.name,
+      actorId: DEMO_USERS.credit.id,
+      actorRole: "DSA Credit" as const,
+      affectedDsaId: application.dsaId,
+      affectedDsaName: application.dsaName,
+      at: isoDay(index % 12, 15),
+      changedFields: ["stage", "status"],
+      collection: "applications" as const,
+      entity: "Applications",
+      entityId: application.id,
+      entityName: application.applicationId,
+      id: `audit-app-${index + 1}`,
+      ipAddress: "10.24.0.92",
+      severity: (application.status === "Rejected" ? "Warning" : "Info") as AuditLog["severity"],
+      summary: `${application.applicationId} is ${application.status} at ${application.stage}.`,
+      toValue: `status: ${application.status}`,
+    })),
+    ...invoices.slice(0, 12).map((invoice, index) => ({
+      action: "Invoice Workflow",
+      actionType: "Invoice Workflow",
+      actor: index % 2 === 0 ? DEMO_USERS.admin.name : DEMO_USERS.credit.name,
+      actorId: index % 2 === 0 ? DEMO_USERS.admin.id : DEMO_USERS.credit.id,
+      actorRole: (index % 2 === 0 ? "DSA Manager" : "DSA Credit") as AuditLog["actorRole"],
+      affectedDsaId: invoice.dsaId,
+      affectedDsaName: invoice.dsaName,
+      at: invoice.updatedAt,
+      changedFields: ["status"],
+      collection: "dsaInvoices" as const,
+      entity: "Dsa Invoices",
+      entityId: invoice.id,
+      entityName: invoice.invoiceNumber,
+      id: `audit-invoice-${index + 1}`,
+      ipAddress: "10.24.0.93",
+      severity: (invoice.status === "Rejected" ? "Warning" : "Info") as AuditLog["severity"],
+      summary: `${invoice.invoiceNumber} is ${invoice.status}.`,
+      toValue: `status: ${invoice.status}`,
+    })),
+  ];
+  return rows.sort((left, right) => right.at.localeCompare(left.at));
+}
 
-  const settings: SettingItem[] = [
-    ["General", "Default region", "West", true],
-    ["General", "DSA ID prefix", "COSDSA", true],
-    ["Workflow", "Auto-assign verification", "Enabled", true],
-    ["Workflow", "Final approval threshold", "INR 25,00,000", true],
-    ["Notifications", "Risk alerts", "Instant", true],
-    ["Notifications", "Daily digest", "08:30", true],
-    ["Security", "Session timeout", "30 minutes", true],
-    ["Security", "Maker-checker enforced", "Enabled", true],
-    ["Branding", "Workspace name", "Cosmos DSA Console", true],
-    ["Branding", "Accent color", "Blue", true],
+function createNotifications(dsas: Dsa[], applications: Application[], invoices: DsaInvoice[]): Notification[] {
+  return [
+    {
+      body: `${dsas.filter((dsa) => dsa.status !== "Active").length} DSA onboarding files need hierarchy action.`,
+      category: "Workflow",
+      createdAt: isoDay(0, 9),
+      href: "/dsa/management",
+      id: "note-dsa-queue",
+      priority: "High",
+      status: "Unread",
+      title: "DSA approval queue pending",
+    },
+    {
+      body: `${applications.filter((application) => application.status === "On Hold").length} applications are waiting on document or deviation clearance.`,
+      category: "Risk",
+      createdAt: isoDay(1, 10),
+      href: "/applications",
+      id: "note-app-hold",
+      priority: "Medium",
+      status: "Unread",
+      title: "Application holds need review",
+    },
+    {
+      body: `${invoices.filter((invoice) => !["Approved", "Rejected"].includes(invoice.status)).length} invoices need finance action.`,
+      category: "Payout",
+      createdAt: isoDay(2, 11),
+      href: "/finance/invoices",
+      id: "note-invoice-queue",
+      priority: "High",
+      status: "Unread",
+      title: "Invoice actions pending",
+    },
+  ];
+}
+
+function createSettings(): SettingItem[] {
+  return [
+    ["Branding", "Head bank", seedData.bank.name, true],
+    ["General", "DSA code format", "COS-DSA-<STATE>-<CITY>-###", true],
+    ["Security", "DSA credential pattern", seedData.bank.dsaProgram.credentialStrategy.usernamePattern, true],
   ].map(([section, label, value, enabled], index) => ({
     enabled: enabled as boolean,
     id: `setting-${index + 1}`,
@@ -738,163 +671,46 @@ export function createMockStore(): MockStore {
     section: section as SettingItem["section"],
     value: value as string,
   }));
+}
 
-  // Real-world slab data based on 2025-26 Indian banking market rates
-  // Sources: SBI, HDFC, ICICI, Cosmos Bank published rate cards
-  const loanSlabs: LoanSlab[] = [
-    // ── HOME LOAN — Up to Rs. 35 Lakhs ──────────────────────────────────
-    { id: "slab-hl-1-1", schemeName: "Up to Rs. 35 Lakhs", product: "Home Loan", maxLoanAmount: 3500000, cibilScoreBand: "Above 800", gender: "All", roiFloating: 8.15, roiFixed: 9.20, maxLoanPeriodMonths: 240, createdAt: isoDay(1), createdBy: DEMO_USERS.admin.name },
-    { id: "slab-hl-1-2", schemeName: "Up to Rs. 35 Lakhs", product: "Home Loan", maxLoanAmount: 3500000, cibilScoreBand: "751-800", gender: "All", roiFloating: 8.35, roiFixed: 9.40, maxLoanPeriodMonths: 240, createdAt: isoDay(1), createdBy: DEMO_USERS.admin.name },
-    { id: "slab-hl-1-3", schemeName: "Up to Rs. 35 Lakhs", product: "Home Loan", maxLoanAmount: 3500000, cibilScoreBand: "700-750", gender: "All", roiFloating: 8.55, roiFixed: 9.65, maxLoanPeriodMonths: 240, createdAt: isoDay(1), createdBy: DEMO_USERS.admin.name },
-    { id: "slab-hl-1-4", schemeName: "Up to Rs. 35 Lakhs", product: "Home Loan", maxLoanAmount: 3500000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 9.05, roiFixed: 10.15, maxLoanPeriodMonths: 240, createdAt: isoDay(1), createdBy: DEMO_USERS.admin.name },
-    // ── HOME LOAN — Rs. 35 to Rs. 70 Lakhs ─────────────────────────────
-    { id: "slab-hl-2-1", schemeName: "Rs. 35 to Rs. 70 Lakhs", product: "Home Loan", maxLoanAmount: 7000000, cibilScoreBand: "Above 800", gender: "All", roiFloating: 8.20, roiFixed: 9.25, maxLoanPeriodMonths: 240, createdAt: isoDay(2), createdBy: DEMO_USERS.admin.name },
-    { id: "slab-hl-2-2", schemeName: "Rs. 35 to Rs. 70 Lakhs", product: "Home Loan", maxLoanAmount: 7000000, cibilScoreBand: "751-800", gender: "All", roiFloating: 8.40, roiFixed: 9.45, maxLoanPeriodMonths: 240, createdAt: isoDay(2), createdBy: DEMO_USERS.admin.name },
-    { id: "slab-hl-2-3", schemeName: "Rs. 35 to Rs. 70 Lakhs", product: "Home Loan", maxLoanAmount: 7000000, cibilScoreBand: "700-750", gender: "All", roiFloating: 8.60, roiFixed: 9.70, maxLoanPeriodMonths: 240, createdAt: isoDay(2), createdBy: DEMO_USERS.admin.name },
-    { id: "slab-hl-2-4", schemeName: "Rs. 35 to Rs. 70 Lakhs", product: "Home Loan", maxLoanAmount: 7000000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 9.15, roiFixed: 10.20, maxLoanPeriodMonths: 240, createdAt: isoDay(2), createdBy: DEMO_USERS.admin.name },
-    // ── HOME LOAN — Above Rs. 70 Lakhs ──────────────────────────────────
-    { id: "slab-hl-3-1", schemeName: "Above Rs. 70 Lakhs", product: "Home Loan", maxLoanAmount: 15000000, cibilScoreBand: "Above 800", gender: "All", roiFloating: 8.25, roiFixed: 9.30, maxLoanPeriodMonths: 360, createdAt: isoDay(3), createdBy: DEMO_USERS.admin.name },
-    { id: "slab-hl-3-2", schemeName: "Above Rs. 70 Lakhs", product: "Home Loan", maxLoanAmount: 15000000, cibilScoreBand: "751-800", gender: "All", roiFloating: 8.45, roiFixed: 9.50, maxLoanPeriodMonths: 360, createdAt: isoDay(3), createdBy: DEMO_USERS.admin.name },
-    { id: "slab-hl-3-3", schemeName: "Above Rs. 70 Lakhs", product: "Home Loan", maxLoanAmount: 15000000, cibilScoreBand: "700-750", gender: "All", roiFloating: 8.65, roiFixed: 9.75, maxLoanPeriodMonths: 360, createdAt: isoDay(3), createdBy: DEMO_USERS.admin.name },
-    { id: "slab-hl-3-4", schemeName: "Above Rs. 70 Lakhs", product: "Home Loan", maxLoanAmount: 15000000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 9.25, roiFixed: 10.35, maxLoanPeriodMonths: 360, createdAt: isoDay(3), createdBy: DEMO_USERS.admin.name },
-    // ── LOAN AGAINST PROPERTY — Residential ─────────────────────────────
-    { id: "slab-lap-1-1", schemeName: "Residential LAP", product: "Loan Against Property", maxLoanAmount: 10000000, cibilScoreBand: "Above 800", gender: "All", roiFloating: 9.00, roiFixed: 10.25, maxLoanPeriodMonths: 180, createdAt: isoDay(4), createdBy: DEMO_USERS.credit.name },
-    { id: "slab-lap-1-2", schemeName: "Residential LAP", product: "Loan Against Property", maxLoanAmount: 10000000, cibilScoreBand: "751-800", gender: "All", roiFloating: 9.50, roiFixed: 10.75, maxLoanPeriodMonths: 180, createdAt: isoDay(4), createdBy: DEMO_USERS.credit.name },
-    { id: "slab-lap-1-3", schemeName: "Residential LAP", product: "Loan Against Property", maxLoanAmount: 10000000, cibilScoreBand: "700-750", gender: "All", roiFloating: 10.00, roiFixed: 11.25, maxLoanPeriodMonths: 180, createdAt: isoDay(4), createdBy: DEMO_USERS.credit.name },
-    { id: "slab-lap-1-4", schemeName: "Residential LAP", product: "Loan Against Property", maxLoanAmount: 10000000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 11.00, roiFixed: 12.50, maxLoanPeriodMonths: 180, createdAt: isoDay(4), createdBy: DEMO_USERS.credit.name },
-    // ── LOAN AGAINST PROPERTY — Commercial ──────────────────────────────
-    { id: "slab-lap-2-1", schemeName: "Commercial LAP", product: "Loan Against Property", maxLoanAmount: 20000000, cibilScoreBand: "Above 800", gender: "All", roiFloating: 9.50, roiFixed: 10.75, maxLoanPeriodMonths: 120, createdAt: isoDay(5), createdBy: DEMO_USERS.credit.name },
-    { id: "slab-lap-2-2", schemeName: "Commercial LAP", product: "Loan Against Property", maxLoanAmount: 20000000, cibilScoreBand: "751-800", gender: "All", roiFloating: 10.00, roiFixed: 11.25, maxLoanPeriodMonths: 120, createdAt: isoDay(5), createdBy: DEMO_USERS.credit.name },
-    { id: "slab-lap-2-3", schemeName: "Commercial LAP", product: "Loan Against Property", maxLoanAmount: 20000000, cibilScoreBand: "700-750", gender: "All", roiFloating: 10.75, roiFixed: 12.00, maxLoanPeriodMonths: 120, createdAt: isoDay(5), createdBy: DEMO_USERS.credit.name },
-    { id: "slab-lap-2-4", schemeName: "Commercial LAP", product: "Loan Against Property", maxLoanAmount: 20000000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 12.00, roiFixed: 13.50, maxLoanPeriodMonths: 120, createdAt: isoDay(5), createdBy: DEMO_USERS.credit.name },
-    // ── PERSONAL LOAN — Salaried ─────────────────────────────────────────
-    { id: "slab-pl-1-1", schemeName: "Salaried Gold", product: "Personal Loan", maxLoanAmount: 1500000, cibilScoreBand: "Above 800", gender: "All", roiFloating: 10.50, roiFixed: 11.75, maxLoanPeriodMonths: 60, createdAt: isoDay(6), createdBy: DEMO_USERS.credit.name },
-    { id: "slab-pl-1-2", schemeName: "Salaried Gold", product: "Personal Loan", maxLoanAmount: 1500000, cibilScoreBand: "751-800", gender: "All", roiFloating: 12.00, roiFixed: 13.25, maxLoanPeriodMonths: 60, createdAt: isoDay(6), createdBy: DEMO_USERS.credit.name },
-    { id: "slab-pl-1-3", schemeName: "Salaried Gold", product: "Personal Loan", maxLoanAmount: 1500000, cibilScoreBand: "700-750", gender: "All", roiFloating: 14.50, roiFixed: 15.75, maxLoanPeriodMonths: 60, createdAt: isoDay(6), createdBy: DEMO_USERS.credit.name },
-    { id: "slab-pl-1-4", schemeName: "Salaried Gold", product: "Personal Loan", maxLoanAmount: 1500000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 18.00, roiFixed: 19.50, maxLoanPeriodMonths: 48, createdAt: isoDay(6), createdBy: DEMO_USERS.credit.name },
-    // ── PERSONAL LOAN — Self Employed ────────────────────────────────────
-    { id: "slab-pl-2-1", schemeName: "Self-Employed Premier", product: "Personal Loan", maxLoanAmount: 2500000, cibilScoreBand: "Above 800", gender: "All", roiFloating: 11.00, roiFixed: 12.50, maxLoanPeriodMonths: 60, createdAt: isoDay(7), createdBy: DEMO_USERS.credit.name },
-    { id: "slab-pl-2-2", schemeName: "Self-Employed Premier", product: "Personal Loan", maxLoanAmount: 2500000, cibilScoreBand: "751-800", gender: "All", roiFloating: 13.00, roiFixed: 14.50, maxLoanPeriodMonths: 60, createdAt: isoDay(7), createdBy: DEMO_USERS.credit.name },
-    { id: "slab-pl-2-3", schemeName: "Self-Employed Premier", product: "Personal Loan", maxLoanAmount: 2500000, cibilScoreBand: "700-750", gender: "All", roiFloating: 16.00, roiFixed: 17.50, maxLoanPeriodMonths: 60, createdAt: isoDay(7), createdBy: DEMO_USERS.credit.name },
-    { id: "slab-pl-2-4", schemeName: "Self-Employed Premier", product: "Personal Loan", maxLoanAmount: 2500000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 20.00, roiFixed: 22.00, maxLoanPeriodMonths: 36, createdAt: isoDay(7), createdBy: DEMO_USERS.credit.name },
-    // ── BUSINESS LOAN — MSME ─────────────────────────────────────────────
-    { id: "slab-bl-1-1", schemeName: "MSME Business Loan", product: "Business Loan", maxLoanAmount: 5000000, cibilScoreBand: "Above 800", gender: "All", roiFloating: 10.00, roiFixed: 11.25, maxLoanPeriodMonths: 84, createdAt: isoDay(8), createdBy: DEMO_USERS.admin.name },
-    { id: "slab-bl-1-2", schemeName: "MSME Business Loan", product: "Business Loan", maxLoanAmount: 5000000, cibilScoreBand: "751-800", gender: "All", roiFloating: 11.50, roiFixed: 12.75, maxLoanPeriodMonths: 84, createdAt: isoDay(8), createdBy: DEMO_USERS.admin.name },
-    { id: "slab-bl-1-3", schemeName: "MSME Business Loan", product: "Business Loan", maxLoanAmount: 5000000, cibilScoreBand: "700-750", gender: "All", roiFloating: 13.00, roiFixed: 14.50, maxLoanPeriodMonths: 60, createdAt: isoDay(8), createdBy: DEMO_USERS.admin.name },
-    { id: "slab-bl-1-4", schemeName: "MSME Business Loan", product: "Business Loan", maxLoanAmount: 5000000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 16.00, roiFixed: 18.00, maxLoanPeriodMonths: 48, createdAt: isoDay(8), createdBy: DEMO_USERS.admin.name },
-    // ── BUSINESS LOAN — Larger Enterprises ───────────────────────────────
-    { id: "slab-bl-2-1", schemeName: "Enterprise Growth Loan", product: "Business Loan", maxLoanAmount: 20000000, cibilScoreBand: "Above 800", gender: "All", roiFloating: 9.50, roiFixed: 10.75, maxLoanPeriodMonths: 120, createdAt: isoDay(9), createdBy: DEMO_USERS.admin.name },
-    { id: "slab-bl-2-2", schemeName: "Enterprise Growth Loan", product: "Business Loan", maxLoanAmount: 20000000, cibilScoreBand: "751-800", gender: "All", roiFloating: 10.75, roiFixed: 12.00, maxLoanPeriodMonths: 120, createdAt: isoDay(9), createdBy: DEMO_USERS.admin.name },
-    { id: "slab-bl-2-3", schemeName: "Enterprise Growth Loan", product: "Business Loan", maxLoanAmount: 20000000, cibilScoreBand: "700-750", gender: "All", roiFloating: 12.25, roiFixed: 13.75, maxLoanPeriodMonths: 96, createdAt: isoDay(9), createdBy: DEMO_USERS.admin.name },
-    { id: "slab-bl-2-4", schemeName: "Enterprise Growth Loan", product: "Business Loan", maxLoanAmount: 20000000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 15.00, roiFixed: 17.00, maxLoanPeriodMonths: 72, createdAt: isoDay(9), createdBy: DEMO_USERS.admin.name },
-    // ── AUTO LOAN — New Vehicle ───────────────────────────────────────────
-    { id: "slab-al-1-1", schemeName: "New Vehicle Loan", product: "Auto Loan", maxLoanAmount: 2500000, cibilScoreBand: "Above 800", gender: "All", roiFloating: 7.45, roiFixed: 8.50, maxLoanPeriodMonths: 84, createdAt: isoDay(10), createdBy: DEMO_USERS.credit.name },
-    { id: "slab-al-1-2", schemeName: "New Vehicle Loan", product: "Auto Loan", maxLoanAmount: 2500000, cibilScoreBand: "751-800", gender: "All", roiFloating: 8.00, roiFixed: 9.00, maxLoanPeriodMonths: 84, createdAt: isoDay(10), createdBy: DEMO_USERS.credit.name },
-    { id: "slab-al-1-3", schemeName: "New Vehicle Loan", product: "Auto Loan", maxLoanAmount: 2500000, cibilScoreBand: "700-750", gender: "All", roiFloating: 8.75, roiFixed: 9.75, maxLoanPeriodMonths: 60, createdAt: isoDay(10), createdBy: DEMO_USERS.credit.name },
-    { id: "slab-al-1-4", schemeName: "New Vehicle Loan", product: "Auto Loan", maxLoanAmount: 2500000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 10.25, roiFixed: 11.50, maxLoanPeriodMonths: 60, createdAt: isoDay(10), createdBy: DEMO_USERS.credit.name },
-    // ── AUTO LOAN — Used Vehicle ─────────────────────────────────────────
-    { id: "slab-al-2-1", schemeName: "Pre-Owned Vehicle Loan", product: "Auto Loan", maxLoanAmount: 1000000, cibilScoreBand: "Above 800", gender: "All", roiFloating: 10.50, roiFixed: 11.75, maxLoanPeriodMonths: 60, createdAt: isoDay(11), createdBy: DEMO_USERS.credit.name },
-    { id: "slab-al-2-2", schemeName: "Pre-Owned Vehicle Loan", product: "Auto Loan", maxLoanAmount: 1000000, cibilScoreBand: "751-800", gender: "All", roiFloating: 12.00, roiFixed: 13.25, maxLoanPeriodMonths: 60, createdAt: isoDay(11), createdBy: DEMO_USERS.credit.name },
-    { id: "slab-al-2-3", schemeName: "Pre-Owned Vehicle Loan", product: "Auto Loan", maxLoanAmount: 1000000, cibilScoreBand: "700-750", gender: "All", roiFloating: 14.00, roiFixed: 15.50, maxLoanPeriodMonths: 48, createdAt: isoDay(11), createdBy: DEMO_USERS.credit.name },
-    { id: "slab-al-2-4", schemeName: "Pre-Owned Vehicle Loan", product: "Auto Loan", maxLoanAmount: 1000000, cibilScoreBand: "Below 700", gender: "All", roiFloating: 16.00, roiFixed: 18.00, maxLoanPeriodMonths: 36, createdAt: isoDay(11), createdBy: DEMO_USERS.credit.name },
-  ];
+function withMetrics(dsas: Dsa[], leads: Lead[], applications: Application[], commissions: Commission[]): Dsa[] {
+  return dsas.map((dsa) => {
+    const dsaApplications = applications.filter((application) => application.dsaId === dsa.id);
+    const approvals = dsaApplications.filter((application) => application.status === "Approved" || application.status === "Disbursed").length;
+    return {
+      ...dsa,
+      approvalRate: dsaApplications.length ? Math.round((approvals / dsaApplications.length) * 100) : 0,
+      commissionEarned: commissions.filter((commission) => commission.dsaId === dsa.id).reduce((sum, commission) => sum + commission.payout, 0),
+      monthlyLeads: leads.filter((lead) => lead.dsaId === dsa.id).length,
+    };
+  });
+}
 
-  // ------------------------------------------------------------------
-  // DSA RECOVERY DATA (with carry-forward invoice logic)
-  // Covers 12 months (Jan–Dec 2026) for the first 20 Active DSAs.
-  // Carry-forward: if recovered < target in month N, shortfall is
-  // deducted from month N+1 invoice (carryForwardIn).
-  //
-  // Billing vs Recovered intentionally varied:
-  //   seed % 7 === 0  → full recovery  (billing == recovered, pending = 0)
-  //   seed % 7 === 1  → over-recovery  (billing < recovered, pending = 0)
-  //   otherwise       → partial recovery (billing > recovered, pending > 0)
-  // ------------------------------------------------------------------
-  const recoveryMonths = [
-    "Jan 2026", "Feb 2026", "Mar 2026", "Apr 2026",
-    "May 2026", "Jun 2026", "Jul 2026", "Aug 2026",
-    "Sep 2026", "Oct 2026", "Nov 2026", "Dec 2026",
-  ];
-  const activeDsasForRecovery = dsas.filter((d) => d.status === "Active").slice(0, 20);
-  const zones = ["West", "South", "North", "East", "Central"];
-
-  const dsaRecovery: DsaRecovery[] = [];
-  let recoveryIdCounter = 0;
-
-  for (let di = 0; di < activeDsasForRecovery.length; di++) {
-    const dsa = activeDsasForRecovery[di];
-    const zone = pick(zones, di);
-    let previousCarryForward = 0;
-
-    for (let mi = 0; mi < recoveryMonths.length; mi++) {
-      const seed = di * 100 + mi;
-      const targetAmount = 500000 + ((seed * 137000) % 3500000);
-      // Recovered: sometimes under, sometimes over target
-      const recoverFactor = [0.72, 0.85, 1.0, 1.15, 0.9, 1.05, 0.78, 1.1, 0.95, 1.0, 0.88, 1.08][mi % 12];
-      const baseRecovered = Math.round(targetAmount * recoverFactor);
-      // Add per-DSA variance
-      const recoveredAmount = Math.max(0, baseRecovered + ((seed * 31337) % 200000) - 100000);
-
-      const carryForwardIn = previousCarryForward;
-      const shortfall = Math.max(0, targetAmount - recoveredAmount);
-      const carryForwardOut = shortfall;
-      const invoiceAmount = Math.max(0, recoveredAmount - carryForwardIn);
-
-      const totalCases = 5 + ((seed * 7) % 45);
-
-      // Billing vs Recovery — intentionally varied across three scenarios:
-      let totalBilling: number;
-      if (seed % 7 === 0) {
-        // Full recovery: billing exactly equals recovered (pending = 0)
-        totalBilling = recoveredAmount;
-      } else if (seed % 7 === 1) {
-        // Over-recovery: DSA collected more than billed (pending = 0)
-        totalBilling = Math.round(recoveredAmount * (0.88 + ((seed * 3) % 8) / 100));
-      } else {
-        // Partial recovery: some amount still pending
-        const partialFactor = 1.05 + ((seed * 13) % 22) / 100; // 1.05 – 1.27
-        totalBilling = Math.round(recoveredAmount * partialFactor);
-      }
-      const pendingAmount = Math.max(0, totalBilling - recoveredAmount);
-      const npaCases = Math.floor((seed * 3) % 6);
-
-      dsaRecovery.push({
-        id: `rec-${++recoveryIdCounter}`,
-        dsaId: dsa.id,
-        dsaName: dsa.name,
-        month: recoveryMonths[mi],
-        zone,
-        targetAmount,
-        recoveredAmount,
-        carryForwardIn,
-        carryForwardOut,
-        invoiceAmount,
-        totalCases,
-        totalBilling,
-        pendingAmount,
-        npaCases,
-      });
-
-      previousCarryForward = carryForwardOut;
-    }
-  }
+export function createMockStore(): MockStore {
+  const baseDsas = createDsas();
+  const leads = createLeads(baseDsas);
+  const applications = createApplications(baseDsas);
+  const commissions = createCommissions(baseDsas, applications);
+  const dsas = withMetrics(baseDsas, leads, applications, commissions);
+  const dsaInvoices = createDsaInvoices(dsas, commissions);
 
   return {
     applications,
-    approvals,
-    auditLogs,
-    breRules,
+    approvals: createApprovals(applications),
+    auditLogs: createAuditLogs(dsas, applications, dsaInvoices),
+    breRules: [] as BreRule[],
     commissions,
-    documents,
-    dsaRecovery,
+    documents: createDocuments(dsas, applications),
+    dsaInvoices,
+    dsaProductConfigs: createProductConfigs(dsas),
+    dsaRecovery: createRecovery(dsas),
     dsas,
-    dsaProductConfigs,
     leads,
-    loanSlabs,
-    notifications,
-    roles: rolePermissions,
-    settings,
-    users,
-    verificationChecks,
+    loanSlabs: createLoanSlabs(),
+    notifications: createNotifications(dsas, applications, dsaInvoices),
+    roles: createRolePermissions(),
+    settings: createSettings(),
+    users: createUsers(dsas),
+    verificationChecks: createVerificationChecks(applications),
   };
 }

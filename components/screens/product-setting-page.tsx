@@ -70,7 +70,7 @@ export function ProductSettingPage() {
   const [effectiveDate, setEffectiveDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [frequency, setFrequency] = useState<string>("");
-  const [rate, setRate] = useState<string>("");
+  const [commissionAmount, setCommissionAmount] = useState<string>("");
 
   const [ranges, setRanges] = useState<ProductCommissionRange[]>([]);
 
@@ -131,7 +131,7 @@ export function ProductSettingPage() {
 
     const minVal = parseFloat(minRange);
     const maxVal = parseFloat(maxRange);
-    const rateVal = parseFloat(rate);
+    const amountVal = parseFloat(commissionAmount);
 
     if (isNaN(minVal) || isNaN(maxVal) || minVal < 0 || maxVal <= minVal) {
       toast({
@@ -142,10 +142,10 @@ export function ProductSettingPage() {
       return;
     }
 
-    if (isNaN(rateVal) || rateVal < 0) {
+    if (isNaN(amountVal) || amountVal <= 0) {
       toast({
         title: "Validation Error",
-        description: "Please enter a valid commission rate.",
+        description: "Please enter a valid commission amount.",
         variant: "warning",
       });
       return;
@@ -160,14 +160,17 @@ export function ProductSettingPage() {
       return;
     }
 
+    const bankRateEquivalent = Math.min((amountVal / maxVal) * 100, 0.75);
     const newRange: ProductCommissionRange = {
+      commissionAmount: amountVal,
       id: rangeId,
       min: minVal,
       max: maxVal,
       effectiveDate,
       endDate,
       frequency,
-      rate: rateVal,
+      growthRequired: true,
+      rate: Number(bankRateEquivalent.toFixed(2)),
     };
 
     setRanges([...ranges, newRange]);
@@ -276,6 +279,11 @@ export function ProductSettingPage() {
   };
 
   const activeDsas = store.dsas.filter((d) => d.status === "Active");
+  const selectedDsa = store.dsas.find((dsa) => dsa.id === partner);
+  const productCommissions = store.commissions.filter((commission) => commission.dsaId === partner && commission.product === product);
+  const latestDisbursement = productCommissions[0]?.disbursedAmount ?? 0;
+  const previousDisbursement = productCommissions[1]?.disbursedAmount ?? 0;
+  const growthEligible = latestDisbursement > previousDisbursement;
   const selectedConfig = product && partner
     ? store.dsaProductConfigs.find((config) => config.dsaId === partner && config.product === product)
     : undefined;
@@ -554,16 +562,24 @@ export function ProductSettingPage() {
                   </Field>
 
                   <Field>
-                    <Label htmlFor="rateInput">Commission Rate (%)</Label>
+                    <Label htmlFor="commissionAmountInput">Commission Amount (₹)</Label>
                     <Input
-                      id="rateInput"
+                      id="commissionAmountInput"
                       type="number"
-                      step="0.01"
-                      value={rate}
-                      onChange={(e) => setRate(e.target.value)}
-                      placeholder="e.g. 0.52"
+                      value={commissionAmount}
+                      onChange={(e) => setCommissionAmount(e.target.value)}
+                      placeholder="e.g. 5000"
                     />
                   </Field>
+                </div>
+
+                <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
+                  Commission is stored as a fixed amount and is payable only when the selected DSA&apos;s current disbursement is higher than the previous month.
+                  {selectedDsa ? (
+                    <span className="mt-1 block">
+                      {selectedDsa.name}: current {formatCurrency(latestDisbursement)} vs previous {formatCurrency(previousDisbursement)} - {growthEligible ? "eligible on growth" : "not eligible until growth improves"}.
+                    </span>
+                  ) : null}
                 </div>
 
                 <div className="flex justify-end pt-2">
@@ -588,7 +604,7 @@ export function ProductSettingPage() {
                         <th className="px-4 py-2">Disbursement Range</th>
                         <th className="px-4 py-2 text-center">Dates</th>
                         <th className="px-4 py-2 text-center">Frequency</th>
-                        <th className="px-4 py-2 text-right">Rate (%)</th>
+                        <th className="px-4 py-2 text-right">Commission Amount</th>
                         <th className="px-4 py-2 text-center">Action</th>
                       </tr>
                     </thead>
@@ -604,7 +620,8 @@ export function ProductSettingPage() {
                           </td>
                           <td className="px-4 py-3 text-center">{r.frequency}</td>
                           <td className="px-4 py-3 text-right font-semibold text-blue-700">
-                            {r.rate}%
+                            {formatCurrency(r.commissionAmount ?? Math.round((r.max * r.rate) / 100))}
+                            <span className="block text-[10px] font-medium text-slate-400">Bank eq. {r.rate}%</span>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <button
@@ -635,7 +652,7 @@ export function ProductSettingPage() {
                   onClick={handleConfigureCommission}
                   className="bg-blue-500 hover:bg-blue-600 text-white font-bold h-11 px-6 flex items-center gap-2"
                 >
-                  <Check className="h-5 w-5" /> Configure Loan Product Commission
+                  <Check className="h-5 w-5" /> Configure Loan Product Commission Amount
                 </Button>
               </div>
             </CardContent>

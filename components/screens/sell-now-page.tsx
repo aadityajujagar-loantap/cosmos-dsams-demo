@@ -20,7 +20,7 @@ import {
   Tabs,
 } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
-import { DEMO_USERS } from "@/lib/demo-identities";
+import { DEFAULT_DSA_ID, DEMO_USERS } from "@/lib/demo-identities";
 import { configJourneyUrl } from "@/lib/journey-links";
 import { getActiveProductConfigs } from "@/lib/product-configs";
 import {
@@ -95,7 +95,7 @@ const apiReferenceSections = [
     summary: "Create one application against an active configured product journey.",
     request: JSON.stringify(
       {
-        dsaCode: "COS-DSA-0001",
+        dsaCode: DEFAULT_DSA_ID,
         product: "Personal Loan",
         customer: {
           name: "Aarav Sharma",
@@ -133,7 +133,7 @@ const apiReferenceSections = [
     request: [
       "curl --request POST https://api.cosmosbank.in/dsa/api/v1/applications/bulk-upload \\",
       "  --header 'Authorization: Bearer <token>' \\",
-      "  --header 'X-DSA-Code: COS-DSA-0001' \\",
+      `  --header 'X-DSA-Code: ${DEFAULT_DSA_ID}' \\`,
       "  --form 'product=Personal Loan' \\",
       "  --form 'file=@applications.csv'",
     ].join("\n"),
@@ -157,7 +157,7 @@ const apiReferenceSections = [
     request: [
       "curl --request GET https://api.cosmosbank.in/dsa/api/v1/products \\",
       "  --header 'Authorization: Bearer <token>' \\",
-      "  --header 'X-DSA-Code: COS-DSA-0001'",
+      `  --header 'X-DSA-Code: ${DEFAULT_DSA_ID}'`,
     ].join("\n"),
     response: JSON.stringify(
       {

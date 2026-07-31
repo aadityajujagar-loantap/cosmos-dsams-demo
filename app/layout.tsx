@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Cosmos DSA Console",
-  description: "Enterprise frontend prototype for Direct Selling Agent operations",
+  title: "Cosmos DSAMS Console",
+  description: "Enterprise frontend prototype for Direct Selling Agent management",
 };
 
 export default function RootLayout({

@@ -44,9 +44,9 @@ function padDatePart(value: number, length = 2) {
 
 function formatDsaIdDate(date: Date) {
   return [
-    date.getFullYear(),
     padDatePart(date.getMonth() + 1),
     padDatePart(date.getDate()),
+    date.getFullYear(),
   ].join("");
 }
 
@@ -54,8 +54,6 @@ function formatDsaIdTime(date: Date) {
   return [
     padDatePart(date.getHours()),
     padDatePart(date.getMinutes()),
-    padDatePart(date.getSeconds()),
-    padDatePart(date.getMilliseconds(), 3),
   ].join("");
 }
 
@@ -69,16 +67,16 @@ export function seededDsaId(index: number) {
 
 export function generateDsaId(existingIds: Iterable<string> = []) {
   const reservedIds = new Set(existingIds);
-  let timestamp = Math.max(Date.now(), lastDsaIdTimestamp + 1);
+  let timestamp = Math.max(Date.now(), lastDsaIdTimestamp + 60_000);
   let id = "";
 
   do {
     const date = new Date(timestamp);
     id = formatDsaTimestampId(date);
-    timestamp += 1;
+    timestamp += 60_000;
   } while (reservedIds.has(id));
 
-  lastDsaIdTimestamp = timestamp - 1;
+  lastDsaIdTimestamp = timestamp - 60_000;
   return id;
 }
 

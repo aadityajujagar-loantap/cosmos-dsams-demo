@@ -12,12 +12,15 @@ import {
 
 import { ToastProvider, useToast } from "@/components/ui/toast";
 import {
+  DEFAULT_DSA_ID,
+  DEFAULT_DSA_LOGIN_PASSWORD,
   DemoSessionUser,
   DEMO_USERS,
   getDemoUserByRole,
   isDemoSessionUser,
-  SessionRole,
+  sessionUserFromDsa,
 } from "@/lib/demo-identities";
+import { generateDsaCredentials, makeDsaCredentials } from "@/lib/dsa-credentials";
 import { createMockStore } from "@/lib/mock-data";
 import {
   Application,
@@ -26,9 +29,14 @@ import {
   CollectionName,
   DocumentRecord,
   Dsa,
+  DsaInvoice,
+  DsaInvoiceStatus,
+  DsaProductConfig,
   DsaStatus,
   EntityMap,
   MockStore,
+  Product,
+  User,
   VerificationCheck,
   VerificationStatus,
 } from "@/lib/types";
@@ -48,12 +56,15 @@ interface StoreContextValue {
     patch: Partial<EntityMap[K]>,
   ) => void;
   currentUser: DemoSessionUser | null;
-  login: (role: SessionRole) => void;
+  login: (user: DemoSessionUser) => void;
   logout: () => void;
 }
 
 const StoreContext = createContext<StoreContextValue | undefined>(undefined);
 const STORE_STORAGE_KEY = "cosmos_dsa_store";
+const STORE_SCHEMA_VERSION_KEY = `${STORE_STORAGE_KEY}_schema_version`;
+const STORE_SCHEMA_VERSION = "cosmos-25-dsa-agent-kit-v2";
+const USER_STORAGE_KEY = "cosmos_dsa_user";
 const COLON_DSA_ID_PATTERN = /^COSDSA(\d{8})(\d{2}):(\d{2}):(\d{2}):(\d{3})$/;
 const LEGACY_DSA_ID_PATTERN = /^dsa-(\d+)$/;
 const LEGACY_DSA_CODE_PATTERN = /^DSA-\d+$/;
@@ -130,6 +141,10 @@ function migrateLegacyDsaIds(store: MockStore): MockStore {
         dsaId,
       };
     }),
+    dsaInvoices: (store.dsaInvoices ?? []).map((invoice) => ({
+      ...invoice,
+      dsaId: mapDsaId(invoice.dsaId),
+    })),
     dsas: store.dsas.map((dsa) => {
       const id = mapDsaId(dsa.id);
       return {
@@ -169,45 +184,238 @@ function migrateOnHoldDsaStatuses(store: MockStore): MockStore {
   };
 }
 
+function ensureDsaCredentials(dsa: Dsa, fallbackBranchNumber = 1): Dsa {
+  const fallbackCredentials = makeDsaCredentials(fallbackBranchNumber);
+  const loginUsername = (dsa.loginUsername || dsa.email).trim().toLowerCase();
+  const fallbackPassword =
+    dsa.id === DEFAULT_DSA_ID ? DEFAULT_DSA_LOGIN_PASSWORD : fallbackCredentials.loginPassword;
+  const loginPassword = (dsa.loginPassword || fallbackPassword).trim() || fallbackPassword;
+
+  return {
+    ...dsa,
+    loginPassword,
+    loginUsername,
+  };
+}
+
+function dsaAccountUserStatus(status: DsaStatus): User["status"] {
+  if (status === "Active") return "Active";
+  if (status === "Suspended" || status === "Rejected" || status === "Blacklisted") return "Disabled";
+  return "Invited";
+}
+
+function isDsaPartnerUserForDsa(user: User, dsa: Dsa, previous?: Dsa) {
+  if (user.role !== "DSA Partner") return false;
+  const userEmail = user.email.trim().toLowerCase();
+  return (
+    user.id === dsa.id ||
+    user.dsaId === dsa.id ||
+    userEmail === dsa.loginUsername.trim().toLowerCase() ||
+    userEmail === dsa.email.trim().toLowerCase() ||
+    Boolean(
+      previous &&
+        (user.id === previous.id ||
+          user.dsaId === previous.id ||
+          userEmail === previous.loginUsername.trim().toLowerCase() ||
+          userEmail === previous.email.trim().toLowerCase()),
+    )
+  );
+}
+
+function dsaPartnerUserFromDsa(dsa: Dsa, existing?: User): User {
+  return {
+    dsaId: dsa.id,
+    email: dsa.loginUsername,
+    id: dsa.id,
+    lastLogin: existing?.lastLogin ?? dsa.onboardingDate,
+    name: dsa.name,
+    region: dsa.manager || dsa.city || dsa.state,
+    role: "DSA Partner",
+    status: dsaAccountUserStatus(dsa.status),
+  };
+}
+
+const DEFAULT_DSA_PRODUCTS: Product[] = [
+  "Personal Loan",
+  "Home Loan",
+  "Loan Against Property",
+  "Business Loan",
+  "Auto Loan",
+];
+
+const agentFirstNames = [
+  "Aarav",
+  "Nisha",
+  "Rohan",
+  "Meera",
+  "Kabir",
+  "Anika",
+  "Dev",
+  "Riya",
+  "Ishaan",
+  "Saanvi",
+  "Karthik",
+  "Divya",
+  "Arjun",
+  "Neha",
+  "Vikram",
+  "Prisha",
+  "Raghav",
+  "Simran",
+  "Harsh",
+  "Hetal",
+];
+
+const agentLastNames = [
+  "Sharma",
+  "Patel",
+  "Rao",
+  "Iyer",
+  "Mehta",
+  "Nair",
+  "Kapoor",
+  "Shah",
+  "Kulkarni",
+  "Reddy",
+  "Singh",
+  "Banerjee",
+  "Joshi",
+  "Gill",
+  "Jain",
+  "Verma",
+];
+
+function stableNumber(value: string) {
+  return value.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+}
+
+function dsaAgentTargetCount(dsa: Pick<Dsa, "id">) {
+  return 15 + (stableNumber(dsa.id) % 6);
+}
+
+function dsaAgentStatus(status: DsaStatus): User["status"] {
+  if (status === "Active") return "Active";
+  if (status === "Suspended" || status === "Rejected" || status === "Blacklisted") return "Disabled";
+  return "Invited";
+}
+
+function dsaAgentUserFromDsa(dsa: Dsa, index: number, existing?: User): User {
+  const firstName = agentFirstNames[(stableNumber(dsa.id) + index) % agentFirstNames.length];
+  const lastName = agentLastNames[(stableNumber(dsa.code) + index * 2) % agentLastNames.length];
+  const safeCode = slug(dsa.code || dsa.id);
+
+  return {
+    dsaId: dsa.id,
+    email: existing?.email ?? `agent${index + 1}.${safeCode}@cosdsa.in`,
+    id: existing?.id ?? `usr-agent-${safeCode}-${String(index + 1).padStart(2, "0")}`,
+    lastLogin: existing?.lastLogin ?? dsa.onboardingDate,
+    name: existing?.name ?? `${firstName} ${lastName}`,
+    region: existing?.region ?? (dsa.city || dsa.name),
+    role: "DSA Agent",
+    status: existing?.status ?? dsaAgentStatus(dsa.status),
+  };
+}
+
+function defaultDsaProductConfig(dsa: Dsa, product: Product, index: number): DsaProductConfig {
+  const id = `config-${slug(dsa.id)}-${slug(product)}`;
+
+  return {
+    bannerName: `${dsa.city || dsa.name} ${product} Campaign`,
+    commissionType: index % 3 === 0 ? "Percentage-based" : index % 3 === 1 ? "Tiered" : "Fixed-fee",
+    configuredAt: dsa.onboardingDate,
+    configuredBy: DEMO_USERS.admin.name,
+    dsaCode: dsa.code,
+    dsaId: dsa.id,
+    dsaName: dsa.name,
+    id,
+    loanUrl: journeyPath(id),
+    product,
+    ranges: [
+      {
+        effectiveDate: "2026-04-01",
+        endDate: "2027-03-31",
+        frequency: "Monthly",
+        id: `${id}-r1`,
+        max: 2500000,
+        min: 0,
+        rate: 0.75 + index * 0.15,
+      },
+      {
+        effectiveDate: "2026-04-01",
+        endDate: "2027-03-31",
+        frequency: "Monthly",
+        growthRequired: true,
+        id: `${id}-r2`,
+        max: 10000000,
+        min: 2500001,
+        rate: 1.1 + index * 0.2,
+      },
+    ],
+    status: dsa.status === "Blacklisted" ? "Inactive" : "Active",
+  };
+}
+
+function hydratePersistedStore(persistedStore: Partial<MockStore>, seededStore = createMockStore()): MockStore {
+  const mergedStore = { ...seededStore, ...persistedStore } as MockStore;
+  mergedStore.applications = mergedStore.applications ?? [];
+  mergedStore.roles = mergedStore.roles ?? [];
+  mergedStore.users = mergedStore.users ?? [];
+
+  const existingApplicationIds = new Set(mergedStore.applications.map((item) => item.id));
+  const seededProductDemoApplications = seededStore.applications.filter((item) =>
+    item.id.startsWith("app-product-demo-"),
+  );
+  const existingUserIds = new Set(mergedStore.users.map((item) => item.id));
+  const existingRoleIds = new Set(mergedStore.roles.map((item) => item.id));
+
+  mergedStore.applications = [
+    ...mergedStore.applications,
+    ...seededProductDemoApplications.filter((item) => !existingApplicationIds.has(item.id)),
+  ];
+  mergedStore.users = [
+    ...mergedStore.users,
+    ...seededStore.users.filter((item) => !existingUserIds.has(item.id)),
+  ];
+  mergedStore.roles = [
+    ...mergedStore.roles,
+    ...seededStore.roles.filter((item) => !existingRoleIds.has(item.id)),
+  ];
+
+  return ensureStoreRelationships(ensureApplicationJourneys(migrateOnHoldDsaStatuses(migrateLegacyDsaIds(mergedStore))));
+}
+
 function initialStore(): MockStore {
   const seededStore = createMockStore();
   if (typeof window === "undefined") return ensureStoreRelationships(ensureApplicationJourneys(seededStore));
+
+  const storedVersion = localStorage.getItem(STORE_SCHEMA_VERSION_KEY);
+  if (storedVersion !== STORE_SCHEMA_VERSION) {
+    localStorage.removeItem(STORE_STORAGE_KEY);
+    localStorage.removeItem(USER_STORAGE_KEY);
+    localStorage.setItem(STORE_SCHEMA_VERSION_KEY, STORE_SCHEMA_VERSION);
+    return ensureStoreRelationships(ensureApplicationJourneys(seededStore));
+  }
 
   const stored = localStorage.getItem(STORE_STORAGE_KEY);
   if (!stored) return ensureStoreRelationships(ensureApplicationJourneys(seededStore));
 
   try {
     const persistedStore = JSON.parse(stored) as Partial<MockStore>;
-    const mergedStore = { ...seededStore, ...persistedStore } as MockStore;
-    const existingApplicationIds = new Set(mergedStore.applications.map((item) => item.id));
-    const seededProductDemoApplications = seededStore.applications.filter((item) =>
-      item.id.startsWith("app-product-demo-"),
-    );
-    const existingUserIds = new Set(mergedStore.users.map((item) => item.id));
-    const existingRoleIds = new Set(mergedStore.roles.map((item) => item.id));
+    const hydratedStore = hydratePersistedStore(persistedStore, seededStore);
 
-    mergedStore.applications = [
-      ...mergedStore.applications,
-      ...seededProductDemoApplications.filter((item) => !existingApplicationIds.has(item.id)),
-    ];
-    mergedStore.users = [
-      ...mergedStore.users,
-      ...seededStore.users.filter((item) => !existingUserIds.has(item.id)),
-    ];
-    mergedStore.roles = [
-      ...mergedStore.roles,
-      ...seededStore.roles.filter((item) => !existingRoleIds.has(item.id)),
-    ];
-
-    const migratedStore = migrateOnHoldDsaStatuses(migrateLegacyDsaIds(mergedStore));
-
-    console.log("Mock store: loaded from localStorage. Total DSAs in persisted store:", migratedStore.dsas.length);
-    return ensureStoreRelationships(ensureApplicationJourneys(migratedStore));
+    console.log("Mock store: loaded from localStorage. Total DSAs in persisted store:", hydratedStore.dsas.length);
+    return hydratedStore;
   } catch (err) {
     console.error("Mock store: failed to parse stored JSON. Resetting to seeded store.", err);
     localStorage.removeItem(STORE_STORAGE_KEY);
     return ensureStoreRelationships(ensureApplicationJourneys(seededStore));
   }
+}
+
+function persistStoreSnapshot(nextStore: MockStore) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(STORE_SCHEMA_VERSION_KEY, STORE_SCHEMA_VERSION);
+  localStorage.setItem(STORE_STORAGE_KEY, JSON.stringify(nextStore));
 }
 
 function displayName(item: unknown): string {
@@ -229,25 +437,175 @@ function displayName(item: unknown): string {
   );
 }
 
-function audit(action: string, collection: CollectionName, actor: string): AuditLog {
+type StoreEntity = EntityMap[CollectionName];
+
+function asRecord(item: unknown): Record<string, unknown> {
+  return item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+}
+
+function auditValue(value: unknown): string {
+  if (value === undefined || value === null || value === "") return "-";
+  if (typeof value === "string") return value.length > 90 ? `${value.slice(0, 87)}...` : value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return `${value.length} item${value.length === 1 ? "" : "s"}`;
+  return "object";
+}
+
+function changedFieldNames(previous: unknown, next: unknown) {
+  const before = asRecord(previous);
+  const after = asRecord(next);
+  const keys = Array.from(new Set([...Object.keys(before), ...Object.keys(after)]));
+
+  return keys
+    .filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]))
+    .filter((key) => !["id"].includes(key))
+    .slice(0, 12);
+}
+
+function findAuditDsa(store: MockStore, collection: CollectionName, item: unknown) {
+  const record = asRecord(item);
+
+  if (collection === "dsas") {
+    return {
+      affectedDsaId: String(record.id ?? ""),
+      affectedDsaName: String(record.name ?? ""),
+    };
+  }
+
+  const directDsaId = typeof record.dsaId === "string" ? record.dsaId : "";
+  if (directDsaId) {
+    const dsa = store.dsas.find((row) => row.id === directDsaId);
+    return {
+      affectedDsaId: directDsaId,
+      affectedDsaName: dsa?.name ?? String(record.dsaName ?? ""),
+    };
+  }
+
+  const applicationRef = typeof record.applicationId === "string" ? record.applicationId : "";
+  if (applicationRef) {
+    const application = findApplicationByReference(store, applicationRef);
+    if (application) {
+      return {
+        affectedDsaId: application.dsaId,
+        affectedDsaName: application.dsaName,
+      };
+    }
+  }
+
   return {
-    action,
-    actor,
-    at: new Date().toISOString(),
-    entity: titleCase(collection),
-    id: makeId("audit"),
-    ipAddress: "10.24.0.91",
-    severity: action === "Deleted" ? "Warning" : "Info",
+    affectedDsaId: "",
+    affectedDsaName: "",
   };
 }
 
-type StoreEntity = EntityMap[CollectionName];
+function auditActionType(baseAction: string, collection: CollectionName, previous: unknown, next: unknown) {
+  const before = asRecord(previous);
+  const after = asRecord(next);
+
+  if (baseAction === "Created") {
+    if (collection === "documents") return "Upload";
+    if (collection === "dsaInvoices") return "Invoice Raised";
+    return "Create";
+  }
+  if (baseAction === "Deleted") return "Delete";
+  if (collection === "approvals" && before.status !== after.status) {
+    if (after.status === "Approved") return "Approval";
+    if (after.status === "Rejected") return "Rejection";
+    return "Workflow";
+  }
+  if (collection === "dsas" && before.status !== after.status) {
+    if (after.status === "Active") return "DSA Approval";
+    if (after.status === "Rejected") return "DSA Rejection";
+    if (after.status === "Suspended" || after.status === "Blacklisted") return "DSA Lifecycle";
+    return "Hierarchy Workflow";
+  }
+  if (collection === "applications" && before.status !== after.status) {
+    if (after.status === "Approved") return "Application Approval";
+    if (after.status === "Rejected") return "Application Rejection";
+    if (after.status === "Disbursed") return "Disbursal";
+    return "Application Workflow";
+  }
+  if (collection === "documents" && before.status !== after.status) return "Document Review";
+  if (collection === "dsaInvoices" && before.status !== after.status) return "Invoice Workflow";
+  if (collection === "dsaProductConfigs") return "Product Configuration";
+  if (["loginUsername", "loginPassword"].some((field) => before[field] !== after[field])) return "Credential Change";
+
+  return "Update";
+}
+
+function auditSummary(baseAction: string, collection: CollectionName, item: unknown, previous: unknown, actionType: string) {
+  const changed = changedFieldNames(previous, item);
+  const name = displayName(item);
+  if (baseAction === "Created") return `${name} was created in ${titleCase(collection)}.`;
+  if (baseAction === "Deleted") return `${name} was deleted from ${titleCase(collection)}.`;
+  if (changed.length === 0) return `${name} was updated in ${titleCase(collection)}.`;
+  return `${actionType}: ${name} changed ${changed.join(", ")}.`;
+}
+
+function audit(
+  action: string,
+  collection: CollectionName,
+  actorUser: DemoSessionUser | null,
+  item?: unknown,
+  previous?: unknown,
+  store?: MockStore,
+): AuditLog {
+  const actor = actorUser?.name ?? DEMO_USERS.admin.name;
+  const actorRole = actorUser?.role ?? DEMO_USERS.admin.role;
+  const target = item ?? { id: actorUser?.id, name: actor, role: actorRole };
+  const record = asRecord(target);
+  const changedFields = action === "Updated" ? changedFieldNames(previous, target) : [];
+  const actionType = auditActionType(action, collection, previous, target);
+  const dsaScope = store
+    ? findAuditDsa(store, collection, target)
+    : {
+        affectedDsaId: "",
+        affectedDsaName: "",
+      };
+  const severity =
+    action === "Deleted" ||
+    actionType.includes("Rejection") ||
+    actionType.includes("Lifecycle") ||
+    record.status === "Rejected" ||
+    record.status === "Blacklisted"
+      ? "Warning"
+      : "Info";
+
+  return {
+    action: actionType,
+    actionType,
+    actor,
+    actorId: actorUser?.id,
+    actorRole,
+    at: new Date().toISOString(),
+    affectedDsaId: dsaScope.affectedDsaId || undefined,
+    affectedDsaName: dsaScope.affectedDsaName || undefined,
+    affectedRole:
+      typeof record.role === "string"
+        ? record.role
+        : typeof record.approvedByRole === "string"
+          ? record.approvedByRole
+          : undefined,
+    changedFields,
+    collection,
+    entity: titleCase(collection),
+    entityId: String(record.id ?? record.applicationId ?? record.workflowId ?? record.documentId ?? ""),
+    entityName: displayName(target),
+    fromValue: changedFields.map((key) => `${key}: ${auditValue(asRecord(previous)[key])}`).join(" | ") || undefined,
+    id: makeId("audit"),
+    ipAddress: "10.24.0.91",
+    severity,
+    summary: auditSummary(action, collection, target, previous, actionType),
+    toValue: changedFields.map((key) => `${key}: ${auditValue(record[key])}`).join(" | ") || undefined,
+  };
+}
 
 const REQUIRED_APPLICATION_CHECKS: VerificationCheck["type"][] = ["KYC", "Address", "Employment", "Bank"];
 const DSA_LINKED_COLLECTIONS: CollectionName[] = [
   "applications",
   "commissions",
   "documents",
+  "dsaInvoices",
   "dsaProductConfigs",
   "dsaRecovery",
   "leads",
@@ -255,6 +613,14 @@ const DSA_LINKED_COLLECTIONS: CollectionName[] = [
 const DSA_BLOCKING_STATUSES: DsaStatus[] = ["Suspended", "Rejected", "Blacklisted"];
 const CLOSED_APPLICATION_STATUSES: Application["status"][] = ["Approved", "Rejected", "Disbursed"];
 const DSA_LIFECYCLE_HOLD_PREFIX = "DSA lifecycle hold:";
+const DSA_INVOICE_STATUSES: DsaInvoiceStatus[] = [
+  "Raised by DSA",
+  "Countered by Bank",
+  "Countered by DSA",
+  "Pending Approval",
+  "Approved",
+  "Rejected",
+];
 
 function isDsaLinkedCollection(collection: CollectionName) {
   return DSA_LINKED_COLLECTIONS.includes(collection);
@@ -310,12 +676,58 @@ function findApplicationByReference(store: MockStore, reference?: string | null)
   );
 }
 
+function normalizeDsaInvoice(invoice: DsaInvoice): DsaInvoice {
+  const grossAmount = Number(invoice.grossAmount ?? 0);
+  const adjustmentAmount = Number(invoice.adjustmentAmount ?? 0);
+  const taxAmount = Number(invoice.taxAmount ?? 0);
+  const netAmount = Number(invoice.netAmount ?? Math.max(0, grossAmount + taxAmount - adjustmentAmount));
+  const requestedAmount = Number(invoice.requestedAmount ?? netAmount);
+  const status = DSA_INVOICE_STATUSES.includes(invoice.status) ? invoice.status : "Raised by DSA";
+
+  return {
+    ...invoice,
+    adjustmentAmount,
+    grossAmount,
+    history: Array.isArray(invoice.history) ? invoice.history : [],
+    netAmount,
+    requestedAmount,
+    source: invoice.source ?? "Manual",
+    status,
+    taxAmount,
+    updatedAt: invoice.updatedAt || invoice.createdAt || new Date().toISOString(),
+  };
+}
+
 function normalizeLinkedEntity<K extends CollectionName>(
   store: MockStore,
   collection: K,
   item: EntityMap[K],
 ): { item: EntityMap[K]; blockedReason?: string } {
   const next = { ...(item as unknown as Record<string, unknown>) };
+
+  if (collection === "dsas") {
+    const fallbackCredentials = generateDsaCredentials(
+      store.dsas.filter((dsa) => dsa.id !== String(next.id ?? "")),
+    );
+    next.loginUsername =
+      String(next.loginUsername ?? "").trim().toLowerCase() || fallbackCredentials.loginUsername;
+    next.loginPassword = String(next.loginPassword ?? "").trim() || fallbackCredentials.loginPassword;
+  }
+
+  if (collection === "dsaInvoices") {
+    const status = String(next.status ?? "");
+    next.status = DSA_INVOICE_STATUSES.includes(status as DsaInvoiceStatus) ? status : "Raised by DSA";
+    next.source = next.source === "CSV Upload" ? "CSV Upload" : "Manual";
+    next.grossAmount = Number(next.grossAmount ?? 0);
+    next.adjustmentAmount = Number(next.adjustmentAmount ?? 0);
+    next.taxAmount = Number(next.taxAmount ?? 0);
+    next.netAmount = Number(
+      next.netAmount ?? Math.max(0, Number(next.grossAmount) + Number(next.taxAmount) - Number(next.adjustmentAmount)),
+    );
+    next.requestedAmount = Number(next.requestedAmount ?? next.netAmount);
+    next.updatedAt = String(next.updatedAt ?? next.createdAt ?? new Date().toISOString());
+    if (!Array.isArray(next.history)) next.history = [];
+  }
 
   if ("dsaId" in next && typeof next.dsaId === "string" && next.dsaId.trim()) {
     const dsa = store.dsas.find((row) => row.id === next.dsaId);
@@ -361,40 +773,130 @@ function normalizeLinkedEntity<K extends CollectionName>(
   return { item: next as unknown as EntityMap[K] };
 }
 
-function syncDsaRecordReferences(store: MockStore, previous: Dsa | undefined, dsa: Dsa): MockStore {
+function ensureDsaAgents(store: MockStore, dsa: Dsa): MockStore {
+  const existingAgents = store.users.filter((user) => user.role === "DSA Agent" && user.dsaId === dsa.id);
+  const targetCount = dsaAgentTargetCount(dsa);
+  if (existingAgents.length >= targetCount) return store;
+
+  const existingAgentIds = new Set(existingAgents.map((user) => user.id));
+  const missingAgents = Array.from({ length: targetCount - existingAgents.length }, (_, offset) => {
+    const agentIndex = existingAgents.length + offset;
+    let agent = dsaAgentUserFromDsa(dsa, agentIndex);
+
+    while (store.users.some((user) => user.id === agent.id) || existingAgentIds.has(agent.id)) {
+      agent = { ...agent, id: makeId("usr-agent") };
+    }
+
+    existingAgentIds.add(agent.id);
+    return agent;
+  });
+
   return {
     ...store,
+    users: [...store.users, ...missingAgents],
+  };
+}
+
+function ensureDsaProductConfigs(store: MockStore, dsa: Dsa): MockStore {
+  const existingConfigs = store.dsaProductConfigs.filter((config) => config.dsaId === dsa.id);
+  const syncedConfigs = store.dsaProductConfigs.map((config) =>
+    config.dsaId === dsa.id
+      ? {
+          ...config,
+          dsaCode: dsa.code,
+          dsaName: dsa.name,
+          loanUrl: journeyPath(config.id),
+        }
+      : config,
+  );
+
+  if (existingConfigs.length > 0) {
+    return {
+      ...store,
+      dsaProductConfigs: syncedConfigs,
+    };
+  }
+
+  return {
+    ...store,
+    dsaProductConfigs: [
+      ...syncedConfigs,
+      ...DEFAULT_DSA_PRODUCTS.map((product, index) => defaultDsaProductConfig(dsa, product, index)),
+    ],
+  };
+}
+
+function ensureDsaStarterRecords(store: MockStore, dsa: Dsa): MockStore {
+  return ensureDsaProductConfigs(ensureDsaAgents(store, dsa), dsa);
+}
+
+function syncDsaRecordReferences(
+  store: MockStore,
+  previous: Dsa | undefined,
+  dsa: Dsa,
+  ensureStarterRecords = false,
+): MockStore {
+  const syncedDsa = ensureDsaCredentials(dsa);
+  const existingPartnerUser = store.users.find((user) => isDsaPartnerUserForDsa(user, syncedDsa, previous));
+  const partnerUser = dsaPartnerUserFromDsa(syncedDsa, existingPartnerUser);
+  const shouldSyncAgentStatus = previous ? previous.status !== syncedDsa.status : false;
+  const nextAgentStatus = dsaAgentStatus(syncedDsa.status);
+
+  const referencedStore = {
+    ...store,
     applications: store.applications.map((application) =>
-      application.dsaId === dsa.id ? { ...application, dsaName: dsa.name } : application,
+      application.dsaId === syncedDsa.id ? { ...application, dsaName: syncedDsa.name } : application,
     ),
     commissions: store.commissions.map((commission) =>
-      commission.dsaId === dsa.id ? { ...commission, dsaName: dsa.name } : commission,
+      commission.dsaId === syncedDsa.id ? { ...commission, dsaName: syncedDsa.name } : commission,
     ),
     documents: store.documents.map((document) =>
-      document.dsaId === dsa.id
-        ? { ...document, ownerName: carryDisplayName(document.ownerName, previous?.name, dsa.name) }
+      document.dsaId === syncedDsa.id
+        ? { ...document, ownerName: carryDisplayName(document.ownerName, previous?.name, syncedDsa.name) }
         : document,
     ),
     dsaProductConfigs: store.dsaProductConfigs.map((config) =>
-      config.dsaId === dsa.id ? { ...config, dsaCode: dsa.code, dsaName: dsa.name } : config,
+      config.dsaId === syncedDsa.id ? { ...config, dsaCode: syncedDsa.code, dsaName: syncedDsa.name } : config,
     ),
     dsaRecovery: store.dsaRecovery.map((recovery) =>
-      recovery.dsaId === dsa.id ? { ...recovery, dsaName: dsa.name } : recovery,
+      recovery.dsaId === syncedDsa.id ? { ...recovery, dsaName: syncedDsa.name } : recovery,
+    ),
+    dsaInvoices: store.dsaInvoices.map((invoice) =>
+      invoice.dsaId === syncedDsa.id
+        ? { ...invoice, dsaCode: syncedDsa.code, dsaName: syncedDsa.name }
+        : invoice,
     ),
     dsas: store.dsas.map((row) =>
-      row.id === dsa.id
+      row.id === syncedDsa.id
         ? {
-            ...row,
+            ...syncedDsa,
             documents: row.documents.map((document) => ({
               ...document,
-              dsaId: dsa.id,
-              ownerName: carryDisplayName(document.ownerName, previous?.name, dsa.name),
+              dsaId: syncedDsa.id,
+              ownerName: carryDisplayName(document.ownerName, previous?.name, syncedDsa.name),
             })),
           }
         : row,
     ),
-    leads: store.leads.map((lead) => (lead.dsaId === dsa.id ? { ...lead, dsaName: dsa.name } : lead)),
+    leads: store.leads.map((lead) => (lead.dsaId === syncedDsa.id ? { ...lead, dsaName: syncedDsa.name } : lead)),
+    users: [
+      partnerUser,
+      ...store.users
+        .filter((user) => !isDsaPartnerUserForDsa(user, syncedDsa, previous))
+        .map((user) =>
+          user.role === "DSA Agent" && (user.dsaId === syncedDsa.id || user.dsaId === previous?.id)
+            ? {
+                ...user,
+                dsaId: syncedDsa.id,
+                region: carryDisplayName(user.region, previous?.city || previous?.name, syncedDsa.city || syncedDsa.name),
+                status: shouldSyncAgentStatus ? nextAgentStatus : user.status,
+              }
+            : user,
+        ),
+    ],
   };
+
+  return ensureStarterRecords ? ensureDsaStarterRecords(referencedStore, syncedDsa) : referencedStore;
 }
 
 function syncApplicationReferences(
@@ -714,7 +1216,7 @@ function syncDsaLifecycle(store: MockStore, previousStatus: DsaStatus, dsa: Dsa,
 }
 
 function syncDsaAfterWrite(store: MockStore, previous: Dsa | undefined, dsa: Dsa, actor: string): MockStore {
-  let next = syncDsaRecordReferences(store, previous, dsa);
+  let next = syncDsaRecordReferences(store, previous, dsa, !previous);
   if (previous && previous.status !== dsa.status) {
     next = syncDsaLifecycle(next, previous.status, dsa, actor);
   }
@@ -797,10 +1299,14 @@ function syncAfterDelete(store: MockStore, collection: CollectionName, deleted: 
 }
 
 function ensureStoreRelationships(store: MockStore): MockStore {
-  let next = store;
+  let next = {
+    ...store,
+    dsaInvoices: (store.dsaInvoices ?? []).map(normalizeDsaInvoice),
+    dsas: store.dsas.map((dsa, index) => ensureDsaCredentials(dsa, index + 1)),
+  };
 
   next.dsas.forEach((dsa) => {
-    next = syncDsaRecordReferences(next, undefined, dsa);
+    next = syncDsaRecordReferences(next, undefined, dsa, true);
   });
 
   next.applications.forEach((application) => {
@@ -819,19 +1325,38 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
 
   const [currentUser, setCurrentUser] = useState<DemoSessionUser | null>(() => {
     if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("cosmos_dsa_user");
+      const stored = localStorage.getItem(USER_STORAGE_KEY);
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
           if (isDemoSessionUser(parsed)) {
-            const normalizedUser = getDemoUserByRole(parsed.role);
-            localStorage.setItem("cosmos_dsa_user", JSON.stringify(normalizedUser));
-            return normalizedUser;
+            let sessionUser: DemoSessionUser | null = null;
+
+            if (parsed.role === "DSA Partner") {
+              const dsa = store.dsas.find(
+                (row) =>
+                  row.status === "Active" &&
+                  (row.id === parsed.id ||
+                    row.code === parsed.code ||
+                    row.loginUsername.toLowerCase() === parsed.email.toLowerCase()),
+              );
+              sessionUser = dsa ? sessionUserFromDsa(dsa) : null;
+            } else {
+              sessionUser = getDemoUserByRole(parsed.role);
+            }
+
+            if (!sessionUser) {
+              localStorage.removeItem(USER_STORAGE_KEY);
+              return null;
+            }
+
+            localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(sessionUser));
+            return sessionUser;
           }
-          localStorage.removeItem("cosmos_dsa_user");
+          localStorage.removeItem(USER_STORAGE_KEY);
           return null;
         } catch {
-          localStorage.removeItem("cosmos_dsa_user");
+          localStorage.removeItem(USER_STORAGE_KEY);
           return null;
         }
       }
@@ -840,15 +1365,53 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
-    console.log("Mock store: saving to localStorage. Total DSAs:", store.dsas.length);
-    localStorage.setItem(STORE_STORAGE_KEY, JSON.stringify(store));
+    if (typeof window === "undefined") return;
+
+    const serializedStore = JSON.stringify(store);
+    if (localStorage.getItem(STORE_STORAGE_KEY) !== serializedStore) {
+      console.log("Mock store: saving to localStorage. Total DSAs:", store.dsas.length);
+      localStorage.setItem(STORE_SCHEMA_VERSION_KEY, STORE_SCHEMA_VERSION);
+      localStorage.setItem(STORE_STORAGE_KEY, serializedStore);
+    }
   }, [store]);
 
-  const login = useCallback((role: SessionRole) => {
-    const user = getDemoUserByRole(role);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    function syncStoreFromStorage() {
+      const stored = localStorage.getItem(STORE_STORAGE_KEY);
+      if (!stored) return;
+
+      setStore((current) => {
+        if (JSON.stringify(current) === stored) return current;
+
+        try {
+          const hydratedStore = hydratePersistedStore(JSON.parse(stored) as Partial<MockStore>);
+          return JSON.stringify(current) === JSON.stringify(hydratedStore) ? current : hydratedStore;
+        } catch (err) {
+          console.warn("Mock store: failed to sync external store update.", err);
+          return current;
+        }
+      });
+    }
+
+    function handleStorage(event: StorageEvent) {
+      if (event.key === STORE_STORAGE_KEY) syncStoreFromStorage();
+    }
+
+    window.addEventListener("focus", syncStoreFromStorage);
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener("focus", syncStoreFromStorage);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
+
+  const login = useCallback((user: DemoSessionUser) => {
     setCurrentUser(user);
     if (typeof window !== "undefined") {
-      localStorage.setItem("cosmos_dsa_user", JSON.stringify(user));
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
     }
     toast({
       description: `Logged in as ${user.name} (${user.role})`,
@@ -860,7 +1423,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     setCurrentUser(null);
     if (typeof window !== "undefined") {
-      localStorage.removeItem("cosmos_dsa_user");
+      localStorage.removeItem(USER_STORAGE_KEY);
     }
     toast({
       description: "You have been logged out.",
@@ -894,9 +1457,10 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
           [collection]: [normalized.item, ...current[collection]],
         } as MockStore;
         if (collection !== "auditLogs") {
-          next.auditLogs = [audit("Created", collection, actor), ...current.auditLogs];
+          next.auditLogs = [audit("Created", collection, currentUser, normalized.item, undefined, current), ...current.auditLogs];
         }
         next = syncAfterWrite(next, collection, undefined, normalized.item as StoreEntity, actor, "create");
+        persistStoreSnapshot(next);
         console.log(`Mock store: item created in collection "${collection}":`, normalized.item);
         return next;
       });
@@ -916,7 +1480,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
         variant: "success",
       });
     },
-    [currentUser?.name, toast],
+    [currentUser, toast],
   );
 
   const updateItem = useCallback(
@@ -946,9 +1510,11 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
           [collection]: nextRows,
         } as MockStore;
         if (collection !== "auditLogs") {
-          next.auditLogs = [audit("Updated", collection, actor), ...current.auditLogs];
+          next.auditLogs = [audit("Updated", collection, currentUser, normalized.item, existing, current), ...current.auditLogs];
         }
-        return syncAfterWrite(next, collection, existing as StoreEntity, normalized.item as StoreEntity, actor, "update");
+        const synced = syncAfterWrite(next, collection, existing as StoreEntity, normalized.item as StoreEntity, actor, "update");
+        persistStoreSnapshot(synced);
+        return synced;
       });
 
       if (blockedReason) {
@@ -966,7 +1532,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
         variant: "success",
       });
     },
-    [currentUser?.name, toast],
+    [currentUser, toast],
   );
 
   const deleteItem = useCallback(
@@ -988,9 +1554,11 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
           [collection]: current[collection].filter((item) => item.id !== id),
         } as MockStore;
         if (collection !== "auditLogs") {
-          next.auditLogs = [audit("Deleted", collection, actor), ...current.auditLogs];
+          next.auditLogs = [audit("Deleted", collection, currentUser, existing, existing, current), ...current.auditLogs];
         }
-        return syncAfterDelete(next, collection, existing as StoreEntity, actor);
+        const synced = syncAfterDelete(next, collection, existing as StoreEntity, actor);
+        persistStoreSnapshot(synced);
+        return synced;
       });
 
       if (blockedReason) {
@@ -1008,7 +1576,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
         variant: "warning",
       });
     },
-    [currentUser?.name, toast],
+    [currentUser, toast],
   );
 
   const deleteDsaCascade = useCallback(
@@ -1018,7 +1586,6 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       let found = false;
 
       setStore((current) => {
-        const actor = currentUser?.name ?? DEMO_USERS.admin.name;
         const target = current.dsas.find((item) => item.id === id);
         if (!target) return current;
 
@@ -1029,7 +1596,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
         const targetApplicationIds = new Set(targetApplications.map((item) => item.id));
         const targetApplicationCodes = new Set(targetApplications.map((item) => item.applicationId));
         const targetUsers = current.users.filter(
-          (item) => item.id === id || item.email === target.email || item.name === target.name,
+          (item) => item.id === id || item.dsaId === id || item.email === target.email || item.name === target.name,
         );
         const targetDocuments = current.documents.filter(
           (item) => item.dsaId === id || targetApplicationIds.has(item.applicationId ?? ""),
@@ -1041,6 +1608,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
         const targetConfigs = current.dsaProductConfigs.filter((item) => item.dsaId === id);
         const targetLeads = current.leads.filter((item) => item.dsaId === id);
         const targetCommissions = current.commissions.filter((item) => item.dsaId === id);
+        const targetInvoices = current.dsaInvoices.filter((item) => item.dsaId === id);
 
         removedLinkedRecords =
           targetApplications.length +
@@ -1050,27 +1618,31 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
           targetApprovals.length +
           targetConfigs.length +
           targetLeads.length +
-          targetCommissions.length;
+          targetCommissions.length +
+          targetInvoices.length;
 
-        return {
+        const next = {
           ...current,
           applications: current.applications.filter((item) => item.dsaId !== id),
           approvals: current.approvals.filter((item) => !targetApplicationCodes.has(item.applicationId)),
-          auditLogs: [audit("Deleted", "dsas", actor), ...current.auditLogs],
+          auditLogs: [audit("Deleted", "dsas", currentUser, target, target, current), ...current.auditLogs],
           commissions: current.commissions.filter((item) => item.dsaId !== id),
           documents: current.documents.filter(
             (item) => item.dsaId !== id && !targetApplicationIds.has(item.applicationId ?? ""),
           ),
+          dsaInvoices: current.dsaInvoices.filter((item) => item.dsaId !== id),
           dsaProductConfigs: current.dsaProductConfigs.filter((item) => item.dsaId !== id),
           dsas: current.dsas.filter((item) => item.id !== id),
           leads: current.leads.filter((item) => item.dsaId !== id),
           users: current.users.filter(
-            (item) => item.id !== id && item.email !== target.email && item.name !== target.name,
+            (item) => item.id !== id && item.dsaId !== id && item.email !== target.email && item.name !== target.name,
           ),
           verificationChecks: current.verificationChecks.filter(
             (item) => !targetApplicationCodes.has(item.applicationId),
           ),
         };
+        persistStoreSnapshot(next);
+        return next;
       });
 
       toast({
@@ -1081,11 +1653,21 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
         variant: "warning",
       });
     },
-    [currentUser?.name, toast],
+    [currentUser, toast],
   );
 
   const value = useMemo(
-    () => ({ createItem, deleteDsaCascade, deleteItem, getById, store, updateItem, currentUser, login, logout }),
+    () => ({
+      createItem,
+      deleteDsaCascade,
+      deleteItem,
+      getById,
+      store,
+      updateItem,
+      currentUser,
+      login,
+      logout,
+    }),
     [createItem, deleteDsaCascade, deleteItem, getById, store, updateItem, currentUser, login, logout],
   );
 

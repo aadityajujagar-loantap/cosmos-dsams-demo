@@ -8,6 +8,8 @@ export type BusinessType =
 export type DsaStatus =
   | "Draft"
   | "Submitted"
+  | "Pending Branch Approval"
+  | "Pending BRH Approval"
   | "Pending Credit Approval"
   | "KYC Pending"
   | "On Hold"
@@ -85,8 +87,10 @@ export type ApprovalStatus =
 export type UserRole =
   | "Admin"
   | "DSA Credit"
+  | "Branch Regional Head"
   | "Branch User"
   | "DSA Partner"
+  | "DSA Agent"
   | "Customer";
 
 export type PermissionAction = "View" | "Create" | "Edit" | "Delete" | "Approve";
@@ -113,6 +117,8 @@ export interface Dsa extends Entity {
   contactPerson: string;
   mobile: string;
   email: string;
+  loginUsername: string;
+  loginPassword: string;
   address: string;
   city: string;
   state: string;
@@ -141,6 +147,8 @@ export interface ProductCommissionRange {
   effectiveDate: string;
   endDate: string;
   frequency: string;
+  commissionAmount?: number;
+  growthRequired?: boolean;
   rate: number;
 }
 
@@ -193,7 +201,7 @@ export interface ApplicationJourney {
 }
 
 export type DeviationStatus = "Pending" | "Approved" | "Rejected";
-export type DeviationApproverRole = "Branch User" | "DSA Credit" | "DSA Manager";
+export type DeviationApproverRole = "Branch User" | "Branch Regional Head" | "DSA Credit" | "DSA Manager";
 
 export interface ApplicationDeviation {
   id: string;
@@ -326,6 +334,49 @@ export interface Commission extends Entity {
   status: "Pending" | "Processed" | "Hold";
 }
 
+export type DsaInvoiceStatus =
+  | "Raised by DSA"
+  | "Countered by Bank"
+  | "Countered by DSA"
+  | "Pending Approval"
+  | "Approved"
+  | "Rejected";
+
+export type DsaInvoiceParty = "DSA" | "Bank" | "DSA Credit" | "Super Admin";
+
+export interface DsaInvoiceEvent {
+  id: string;
+  action: "Raised" | "Countered" | "Approved" | "Rejected" | "CSV Imported" | "Commented";
+  actor: string;
+  party: DsaInvoiceParty;
+  amount: number;
+  at: string;
+  note: string;
+}
+
+export interface DsaInvoice extends Entity {
+  invoiceNumber: string;
+  dsaId: string;
+  dsaName: string;
+  dsaCode: string;
+  month: string;
+  grossAmount: number;
+  adjustmentAmount: number;
+  taxAmount: number;
+  netAmount: number;
+  requestedAmount: number;
+  approvedAmount?: number;
+  status: DsaInvoiceStatus;
+  raisedBy: string;
+  raisedByRole: UserRole | "DSA Manager";
+  source: "Manual" | "CSV Upload";
+  csvBatchId?: string;
+  remarks: string;
+  createdAt: string;
+  updatedAt: string;
+  history: DsaInvoiceEvent[];
+}
+
 /**
  * DsaRecovery captures per-DSA per-month recovery metrics.
  * The carry-forward concept: if a DSA recovers less than their target in month N,
@@ -359,6 +410,7 @@ export interface User extends Entity {
   region: string;
   status: "Active" | "Invited" | "Disabled";
   lastLogin: string;
+  dsaId?: string;
 }
 
 export interface RolePermission extends Entity {
@@ -370,9 +422,22 @@ export interface RolePermission extends Entity {
 export interface AuditLog extends Entity {
   at: string;
   actor: string;
+  actorId?: string;
+  actorRole?: UserRole | "DSA Manager";
   action: string;
+  actionType?: string;
+  affectedDsaId?: string;
+  affectedDsaName?: string;
+  affectedRole?: string;
+  changedFields?: string[];
+  collection?: CollectionName;
+  entityId?: string;
+  entityName?: string;
   entity: string;
+  fromValue?: string;
   severity: "Info" | "Warning" | "Critical";
+  summary?: string;
+  toValue?: string;
   ipAddress: string;
 }
 
@@ -383,6 +448,7 @@ export interface Notification extends Entity {
   status: NotificationStatus;
   category: "Workflow" | "Risk" | "Payout" | "System" | "Lead";
   createdAt: string;
+  href?: string;
 }
 
 export interface SettingItem extends Entity {
@@ -403,6 +469,7 @@ export interface MockStore {
   documents: DocumentRecord[];
   approvals: ApprovalItem[];
   commissions: Commission[];
+  dsaInvoices: DsaInvoice[];
   dsaRecovery: DsaRecovery[];
   users: User[];
   roles: RolePermission[];
@@ -424,6 +491,7 @@ export interface EntityMap {
   documents: DocumentRecord;
   approvals: ApprovalItem;
   commissions: Commission;
+  dsaInvoices: DsaInvoice;
   dsaRecovery: DsaRecovery;
   users: User;
   roles: RolePermission;

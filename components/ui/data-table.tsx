@@ -82,8 +82,8 @@ export function DataTable<T extends { id: string }>({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <div className="space-y-3">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div className="relative max-w-md flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <Input
@@ -96,7 +96,7 @@ export function DataTable<T extends { id: string }>({
             value={query}
           />
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {filters.map((filter) => (
             <Select
               aria-label={filter.label}
@@ -132,7 +132,7 @@ export function DataTable<T extends { id: string }>({
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   {columns.map((column) => (
-                    <th className="px-4 py-3 font-semibold" key={column.key}>
+                    <th className="px-2.5 py-1.5 font-semibold" key={column.key}>
                       <button
                         className={cn(
                           "inline-flex items-center gap-1",
@@ -147,18 +147,18 @@ export function DataTable<T extends { id: string }>({
                       </button>
                     </th>
                   ))}
-                  {actions ? <th className="px-4 py-3 text-right font-semibold">Actions</th> : null}
+                  {actions ? <th className="px-2.5 py-1.5 text-right font-semibold">Actions</th> : null}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {visible.map((item) => (
                   <tr className="hover:bg-slate-50/70" key={item.id}>
                     {columns.map((column) => (
-                      <td className="px-4 py-3 align-middle text-slate-700" key={column.key}>
+                      <td className="px-2.5 py-1.5 align-middle text-slate-700" key={column.key}>
                         {column.cell(item)}
                       </td>
                     ))}
-                    {actions ? <td className="px-4 py-3 text-right">{actions(item)}</td> : null}
+                    {actions ? <td className="px-2.5 py-1.5 text-right">{actions(item)}</td> : null}
                   </tr>
                 ))}
               </tbody>

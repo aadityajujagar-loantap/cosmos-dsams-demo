@@ -1,0 +1,132 @@
+{
+  "bank": {
+    "id": "cosmos-head-bank",
+    "name": "Cosmos Co-operative Bank Ltd.",
+    "type": "Head Bank",
+    "dsaProgram": {
+      "idPrefix": "COS-DSA",
+      "idFormat": "COS-DSA-<STATE>-<CITY>-###",
+      "credentialStrategy": {
+        "usernamePattern": "cosdsa@branch[n].in",
+        "passwordPattern": "branch[n]@123",
+        "startingBranchNumber": 1
+      }
+    }
+  },
+  "sessions": {
+    "internalUsers": {
+      "admin": {
+        "email": "admin@cosmosbank.example",
+        "id": "admin",
+        "mobile": "9999999999",
+        "name": "admin",
+        "password": "admin@123",
+        "role": "DSA Manager"
+      },
+      "credit": {
+        "email": "credit@cosmosbank.example",
+        "id": "credit",
+        "mobile": "9999999998",
+        "name": "credit",
+        "password": "credit@123",
+        "role": "DSA Credit"
+      },
+      "brh": {
+        "email": "brh@cosmosbank.example",
+        "id": "brh",
+        "mobile": "9999999996",
+        "name": "brh",
+        "password": "brh@123",
+        "role": "Branch Regional Head"
+      },
+      "branch": {
+        "email": "branch@cosmosbank.example",
+        "id": "branch",
+        "mobile": "9999999997",
+        "name": "branch",
+        "password": "branch@123",
+        "role": "Branch User"
+      },
+      "user": {
+        "email": "user@example.com",
+        "id": "user",
+        "mobile": "7777777777",
+        "name": "user",
+        "password": "user@123",
+        "role": "Customer"
+      }
+    }
+  },
+  "modules": {
+    "dsa": {
+      "seedDsas": [
+        {
+          "branchNumber": 1,
+          "id": "COS-DSA-MH-MUM-001",
+          "code": "COS-DSA-MH-MUM-001",
+          "name": "Aarohi Financial Services Pvt Ltd",
+          "businessProfile": {
+            "businessType": "Private Limited",
+            "pan": "AAROH1000A",
+            "gst": "27AAROH1000A1Z1"
+          },
+          "contact": {
+            "contactPerson": "Aarav Mehta",
+            "mobile": "8870000000",
+            "email": "partner1@mum-cosdsa.in"
+          },
+          "address": {
+            "line1": "Aarohi Financial Services Pvt Ltd, Mumbai Business District",
+            "city": "Mumbai",
+            "state": "Maharashtra",
+            "pincode": "400001"
+          },
+          "settlementBank": {
+            "accountName": "Aarohi Financial Services Pvt Ltd",
+            "accountNumber": "102928374651",
+            "bankName": "Cosmos Co-operative Bank",
+            "ifsc": "COSB0000001"
+          },
+          "credentials": {
+            "loginUsername": "cosdsa@branch1.in",
+            "loginPassword": "branch1@123"
+          },
+          "operations": {
+            "manager": "branch",
+            "status": "Active",
+            "tier": "Platinum",
+            "riskRating": "Low",
+            "onboardingDate": "2026-07-30T14:30:00+05:30"
+          },
+          "metrics": {
+            "monthlyLeads": 0,
+            "approvalRate": 0,
+            "commissionEarned": 0
+          },
+          "documents": []
+        }
+      ]
+    },
+    "sales": {
+      "leads": [],
+      "applications": []
+    },
+    "product": {
+      "dsaProductConfigs": []
+    },
+    "operations": {
+      "documents": [],
+      "verificationChecks": [],
+      "approvals": []
+    },
+    "finance": {
+      "commissions": [],
+      "dsaInvoices": [],
+      "dsaRecovery": []
+    },
+    "admin": {
+      "auditLogs": [],
+      "notifications": []
+    }
+  }
+}

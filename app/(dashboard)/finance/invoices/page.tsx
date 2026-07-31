@@ -1,5 +1,5 @@
 import { CommissionsPage } from "@/components/screens/finance-admin-pages";
 
 export default function Page() {
-  return <CommissionsPage initialTab="commissions" showTabs={false} />;
+  return <CommissionsPage initialTab="invoices" showTabs={false} />;
 }

@@ -57,7 +57,7 @@ export function KpiCard({
   const positive = !change.startsWith("-");
   return (
     <Card>
-      <CardContent className="p-4">
+      <CardContent className="p-3.5">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm text-slate-500">{label}</p>
@@ -75,7 +75,7 @@ export function KpiCard({
             <Icon className="h-5 w-5" />
           </div>
         </div>
-        <p className={cn("mt-4 inline-flex items-center gap-1 text-xs font-medium", positive ? "text-emerald-700" : "text-rose-700")}>
+        <p className={cn("mt-3 inline-flex items-center gap-1 text-xs font-medium", positive ? "text-emerald-700" : "text-rose-700")}>
           {positive ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
           {change} vs last month
         </p>
@@ -103,7 +103,7 @@ export function TrendCard({
         <h2 className="text-base font-semibold text-slate-950">{title}</h2>
         <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
       </CardHeader>
-      <CardContent className="h-72">
+      <CardContent className="h-64">
         <ChartFrame>
           <ResponsiveContainer height="100%" minWidth={0} width="100%">
             {type === "area" ? (
@@ -147,7 +147,7 @@ export function BarChartCard({
         <h2 className="text-base font-semibold text-slate-950">{title}</h2>
         <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
       </CardHeader>
-      <CardContent className="h-72">
+      <CardContent className="h-64">
         <ChartFrame>
           <ResponsiveContainer height="100%" minWidth={0} width="100%">
             <BarChart data={data}>
@@ -181,8 +181,8 @@ export function PieChartCard({
         <h2 className="text-base font-semibold text-slate-950">{title}</h2>
         <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
       </CardHeader>
-      <CardContent className="h-80 flex flex-col justify-between">
-        <div className="h-56">
+      <CardContent className="h-64 flex flex-col justify-between">
+        <div className="h-44">
           <ChartFrame>
             <ResponsiveContainer height="100%" minWidth={0} width="100%">
               <PieChart>
@@ -224,7 +224,7 @@ export function FunnelCard({
         <h2 className="text-base font-semibold text-slate-950">{title}</h2>
         <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
       </CardHeader>
-      <CardContent className="h-72">
+      <CardContent className="h-64">
         <ChartFrame>
           <ResponsiveContainer height="100%" minWidth={0} width="100%">
             <FunnelChart>
