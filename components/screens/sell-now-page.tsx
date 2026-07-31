@@ -30,7 +30,7 @@ import {
 } from "@/lib/product-journeys";
 import { useMockStore } from "@/lib/store";
 import { Application, ApplicationJourney, DsaProductConfig } from "@/lib/types";
-import { formatCurrency } from "@/lib/utils";
+import { commissionDisplayLabel, formatCommissionDisplay, formatCurrency } from "@/lib/utils";
 
 interface ApplicantDraft {
   aadhaar: string;
@@ -944,7 +944,9 @@ export function SellNowPage() {
                       <p className="mt-1 text-xs text-slate-500">
                         {formatCurrency(range.min)} - {formatCurrency(range.max)}
                       </p>
-                      <p className="mt-1 text-xs text-slate-500">{range.rate}% - {range.frequency}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {commissionDisplayLabel(range)}: {formatCommissionDisplay(range)} - {range.frequency}
+                      </p>
                     </div>
                   ))}
                 </CardContent>

@@ -332,6 +332,7 @@ function defaultDsaProductConfig(dsa: Dsa, product: Product, index: number): Dsa
     product,
     ranges: [
       {
+        commissionAmount: 8500 + index * 1500,
         effectiveDate: "2026-04-01",
         endDate: "2027-03-31",
         frequency: "Monthly",
@@ -341,6 +342,7 @@ function defaultDsaProductConfig(dsa: Dsa, product: Product, index: number): Dsa
         rate: 0.75 + index * 0.15,
       },
       {
+        commissionAmount: 22000 + index * 2500,
         effectiveDate: "2026-04-01",
         endDate: "2027-03-31",
         frequency: "Monthly",
@@ -611,6 +613,16 @@ const DSA_LINKED_COLLECTIONS: CollectionName[] = [
   "leads",
 ];
 const DSA_BLOCKING_STATUSES: DsaStatus[] = ["Suspended", "Rejected", "Blacklisted"];
+const DSA_STATUSES_WITHOUT_PRODUCT_CONFIGS: DsaStatus[] = [
+  "Draft",
+  "Submitted",
+  "Pending Branch Approval",
+  "Pending BRH Approval",
+  "Pending Credit Approval",
+  "KYC Pending",
+  "On Hold",
+  "Rejected",
+];
 const CLOSED_APPLICATION_STATUSES: Application["status"][] = ["Approved", "Rejected", "Disbursed"];
 const DSA_LIFECYCLE_HOLD_PREFIX = "DSA lifecycle hold:";
 const DSA_INVOICE_STATUSES: DsaInvoiceStatus[] = [
@@ -628,6 +640,14 @@ function isDsaLinkedCollection(collection: CollectionName) {
 
 function isBlockingDsaStatus(status: DsaStatus) {
   return DSA_BLOCKING_STATUSES.includes(status);
+}
+
+function shouldClearDsaProductConfigs(status: DsaStatus) {
+  return DSA_STATUSES_WITHOUT_PRODUCT_CONFIGS.includes(status);
+}
+
+function canCreateDsaProductConfig(dsa: Dsa) {
+  return dsa.status === "Active";
 }
 
 function isClosedApplicationStatus(status: Application["status"]) {
@@ -683,10 +703,13 @@ function normalizeDsaInvoice(invoice: DsaInvoice): DsaInvoice {
   const netAmount = Number(invoice.netAmount ?? Math.max(0, grossAmount + taxAmount - adjustmentAmount));
   const requestedAmount = Number(invoice.requestedAmount ?? netAmount);
   const status = DSA_INVOICE_STATUSES.includes(invoice.status) ? invoice.status : "Raised by DSA";
+  const approvedAmount =
+    status === "Approved" ? Number(invoice.approvedAmount ?? requestedAmount) : invoice.approvedAmount;
 
   return {
     ...invoice,
     adjustmentAmount,
+    approvedAmount,
     grossAmount,
     history: Array.isArray(invoice.history) ? invoice.history : [],
     netAmount,
@@ -738,6 +761,12 @@ function normalizeLinkedEntity<K extends CollectionName>(
       };
     }
     if (dsa) {
+      if (collection === "dsaProductConfigs" && !canCreateDsaProductConfig(dsa)) {
+        return {
+          blockedReason: `Cannot save product configuration because ${dsa.name} is ${dsa.status}. Loan products can be created only after verification and onboarding.`,
+          item,
+        };
+      }
       if ("dsaName" in next) next.dsaName = dsa.name;
       if ("dsaCode" in next) next.dsaCode = dsa.code;
     }
@@ -798,6 +827,15 @@ function ensureDsaAgents(store: MockStore, dsa: Dsa): MockStore {
 }
 
 function ensureDsaProductConfigs(store: MockStore, dsa: Dsa): MockStore {
+  if (shouldClearDsaProductConfigs(dsa.status)) {
+    return {
+      ...store,
+      dsaProductConfigs: store.dsaProductConfigs.filter((config) => config.dsaId !== dsa.id),
+    };
+  }
+
+  if (!canCreateDsaProductConfig(dsa)) return store;
+
   const existingConfigs = store.dsaProductConfigs.filter((config) => config.dsaId === dsa.id);
   const syncedConfigs = store.dsaProductConfigs.map((config) =>
     config.dsaId === dsa.id
@@ -827,7 +865,8 @@ function ensureDsaProductConfigs(store: MockStore, dsa: Dsa): MockStore {
 }
 
 function ensureDsaStarterRecords(store: MockStore, dsa: Dsa): MockStore {
-  return ensureDsaProductConfigs(ensureDsaAgents(store, dsa), dsa);
+  const withAgents = ensureDsaAgents(store, dsa);
+  return ensureDsaProductConfigs(withAgents, dsa);
 }
 
 function syncDsaRecordReferences(
@@ -855,9 +894,11 @@ function syncDsaRecordReferences(
         ? { ...document, ownerName: carryDisplayName(document.ownerName, previous?.name, syncedDsa.name) }
         : document,
     ),
-    dsaProductConfigs: store.dsaProductConfigs.map((config) =>
-      config.dsaId === syncedDsa.id ? { ...config, dsaCode: syncedDsa.code, dsaName: syncedDsa.name } : config,
-    ),
+    dsaProductConfigs: store.dsaProductConfigs
+      .filter((config) => config.dsaId !== syncedDsa.id || !shouldClearDsaProductConfigs(syncedDsa.status))
+      .map((config) =>
+        config.dsaId === syncedDsa.id ? { ...config, dsaCode: syncedDsa.code, dsaName: syncedDsa.name } : config,
+      ),
     dsaRecovery: store.dsaRecovery.map((recovery) =>
       recovery.dsaId === syncedDsa.id ? { ...recovery, dsaName: syncedDsa.name } : recovery,
     ),
@@ -1216,7 +1257,7 @@ function syncDsaLifecycle(store: MockStore, previousStatus: DsaStatus, dsa: Dsa,
 }
 
 function syncDsaAfterWrite(store: MockStore, previous: Dsa | undefined, dsa: Dsa, actor: string): MockStore {
-  let next = syncDsaRecordReferences(store, previous, dsa, !previous);
+  let next = syncDsaRecordReferences(store, previous, dsa, !previous || dsa.status === "Active");
   if (previous && previous.status !== dsa.status) {
     next = syncDsaLifecycle(next, previous.status, dsa, actor);
   }
@@ -1354,6 +1395,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
 
       // Save to shared store API
       fetch("/api/store", {
+        cache: "no-store",
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: serializedStore,
@@ -1367,14 +1409,16 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     async function syncStoreFromStorage() {
       // 1. Sync from server
       try {
-        const res = await fetch("/api/store");
+        const res = await fetch("/api/store", { cache: "no-store" });
         if (res.ok) {
           const serverData = await res.json();
           if (serverData) {
             setStore((current) => {
-              if (JSON.stringify(current) === JSON.stringify(serverData)) return current;
-              localStorage.setItem(STORE_STORAGE_KEY, JSON.stringify(serverData));
-              return serverData;
+              const hydratedServerData = hydratePersistedStore(serverData);
+              const serializedServerData = JSON.stringify(hydratedServerData);
+              if (JSON.stringify(current) === serializedServerData) return current;
+              localStorage.setItem(STORE_STORAGE_KEY, serializedServerData);
+              return hydratedServerData;
             });
             return;
           }

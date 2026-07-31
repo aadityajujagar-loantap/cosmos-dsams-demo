@@ -287,6 +287,26 @@ function renderInvoiceTracker(status: DsaInvoiceStatus) {
   );
 }
 
+function isDsaForSession(
+  dsa: Dsa,
+  user: { code?: string; email?: string; id?: string } | null | undefined,
+) {
+  const userEmail = user?.email?.trim().toLowerCase() ?? "";
+
+  return (
+    dsa.id === user?.id ||
+    dsa.code === user?.code ||
+    dsa.loginUsername.trim().toLowerCase() === userEmail ||
+    dsa.email.trim().toLowerCase() === userEmail
+  );
+}
+
+function isInvoiceForDsa(invoice: DsaInvoice, dsa: Dsa | undefined) {
+  if (!dsa) return false;
+
+  return invoice.dsaId === dsa.id || invoice.dsaCode === dsa.code || invoice.dsaName === dsa.name;
+}
+
 export function CommissionsPage({
   initialTab,
   showTabs = true,
@@ -317,7 +337,7 @@ export function CommissionsPage({
   const [raiseTax, setRaiseTax] = useState("0");
   const [raiseRemarks, setRaiseRemarks] = useState("");
   const defaultDsa = store.dsas.find((d) => d.status === "Active") || store.dsas[0];
-  const sessionDsa = isDsaUser ? store.dsas.find((dsa) => dsa.id === currentUser?.id) : defaultDsa;
+  const sessionDsa = isDsaUser ? store.dsas.find((dsa) => isDsaForSession(dsa, currentUser)) : defaultDsa;
   const activeDsas = useMemo(() => store.dsas.filter((d) => d.status === "Active"), [store.dsas]);
   const commissionFormFields = useMemo(() => {
     return commissionFields.map((field) => {
@@ -341,7 +361,7 @@ export function CommissionsPage({
     [store.dsaInvoices],
   );
   const scopedInvoices = isDsaUser
-    ? allInvoiceRows.filter((invoice) => invoice.dsaId === currentUser?.id)
+    ? allInvoiceRows.filter((invoice) => isInvoiceForDsa(invoice, sessionDsa))
     : allInvoiceRows;
   const visibleInvoices = scopedInvoices.filter(
     (invoice) => (!selectedDsaId || invoice.dsaId === selectedDsaId) && (!selectedMonth || invoice.month === selectedMonth),

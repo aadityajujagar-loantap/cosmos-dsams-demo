@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import type { ProductCommissionRange } from "@/lib/types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -11,6 +12,30 @@ export function formatCurrency(value: number) {
     maximumFractionDigits: 0,
     style: "currency",
   }).format(value);
+}
+
+type CommissionRangeDisplay = Pick<ProductCommissionRange, "commissionAmount" | "max" | "min" | "rate">;
+
+function formatCommissionRateValue(rate: number) {
+  return `${Number(rate.toFixed(2)).toString()}%`;
+}
+
+export function usesCommissionAmount(range: Pick<ProductCommissionRange, "max" | "min">) {
+  return Number(range.max) > Number(range.min);
+}
+
+export function commissionDisplayLabel(range: Pick<ProductCommissionRange, "max" | "min">) {
+  return usesCommissionAmount(range) ? "Commission Amount" : "Commission Rate";
+}
+
+export function formatCommissionDisplay(range: CommissionRangeDisplay) {
+  if (usesCommissionAmount(range)) {
+    const fallbackAmount = Math.round((Number(range.max) * Number(range.rate || 0)) / 100);
+    const amount = Number(range.commissionAmount ?? fallbackAmount);
+    return amount > 0 ? formatCurrency(amount) : "-";
+  }
+
+  return formatCommissionRateValue(Number(range.rate || 0));
 }
 
 export function formatDate(value: string) {

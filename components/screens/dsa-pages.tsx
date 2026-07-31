@@ -46,7 +46,7 @@ import {
 } from "@/lib/dsa-documents";
 import { useMockStore } from "@/lib/store";
 import { BusinessType, Dsa, DsaStatus, Product, User } from "@/lib/types";
-import { formatCurrency, formatDate, generateDsaId, makeId, percent } from "@/lib/utils";
+import { formatCommissionDisplay, formatCurrency, formatDate, generateDsaId, makeId, percent } from "@/lib/utils";
 
 type DsaType = "Independent DSA" | "Exclusive DSA" | "Corporate DSA";
 type UploadedFileMeta = { name: string; size: string };
@@ -1660,7 +1660,7 @@ export function DsaProfilePage({ id }: { id: string }) {
   const canApproveDsa = canDecideDsa && missingProfileDocuments.length === 0;
   const allProductConfigs = store.dsaProductConfigs.filter((config) => config.dsaId === dsa.id);
   const productConfigs = allProductConfigs
-    .filter((config) => config.status === "Active")
+    .filter((config) => dsa.status === "Active" && config.status === "Active")
     .sort((left, right) => left.product.localeCompare(right.product));
   const configuredProducts = productConfigs.map((config) => config.product);
 
@@ -2374,7 +2374,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                   <h3 className="text-sm font-bold text-slate-900">Configured Products</h3>
                   <p className="text-xs text-slate-500">Products configured here drive the Applications tab product filter.</p>
                 </div>
-                {currentUser?.role === "DSA Manager" ? (
+                {currentUser?.role === "DSA Manager" && dsa.status === "Active" ? (
                   <Link href="/dsa/product-setting">
                     <Button size="sm" type="button" variant="outline">
                       Add product
@@ -2438,7 +2438,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                         <span>
                           Commission:{" "}
                           {config.ranges.length
-                            ? config.ranges.map((range) => formatCurrency(range.commissionAmount ?? Math.round((range.max * range.rate) / 100))).join(", ")
+                            ? config.ranges.map((range) => formatCommissionDisplay(range)).join(", ")
                             : "Not configured"}
                         </span>
                         <span>Growth rule: current month must beat previous month</span>
@@ -2447,7 +2447,11 @@ export function DsaProfilePage({ id }: { id: string }) {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-slate-500">No products configured for this DSA yet.</p>
+                <p className="text-sm text-slate-500">
+                  {dsa.status === "Active"
+                    ? "No products configured for this DSA yet."
+                    : "Loan products will be available only after this DSA is verified and onboarded."}
+                </p>
               )}
             </div>
           ) : null}
