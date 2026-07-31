@@ -88,6 +88,36 @@ export function ProductSettingPage() {
     };
   }, [bannerPreviewUrl]);
 
+  useEffect(() => {
+    if (product && partner) {
+      const config = store.dsaProductConfigs.find(
+        (c) => c.dsaId === partner && c.product === product,
+      );
+      if (config) {
+        setRanges(config.ranges || []);
+        const slab = store.loanSlabs.find(s => s.product === product);
+        setScheme(slab?.schemeName || "");
+        if (config.bannerName) {
+          setBannerName(config.bannerName);
+          setHasBanner(true);
+        } else {
+          setHasBanner(false);
+          setBannerName("");
+        }
+      } else {
+        setRanges([]);
+        setScheme("");
+        setHasBanner(false);
+        setBannerName("");
+      }
+    } else {
+      setRanges([]);
+      setScheme("");
+      setHasBanner(false);
+      setBannerName("");
+    }
+  }, [product, partner, store.dsaProductConfigs, store.loanSlabs]);
+
   const canConfigureProducts = currentUser?.role === "DSA Manager" || currentUser?.role === "DSA Credit";
 
   if (!canConfigureProducts) {

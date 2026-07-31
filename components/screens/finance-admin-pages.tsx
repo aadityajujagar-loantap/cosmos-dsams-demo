@@ -318,6 +318,19 @@ export function CommissionsPage({
   const [raiseRemarks, setRaiseRemarks] = useState("");
   const defaultDsa = store.dsas.find((d) => d.status === "Active") || store.dsas[0];
   const sessionDsa = isDsaUser ? store.dsas.find((dsa) => dsa.id === currentUser?.id) : defaultDsa;
+  const activeDsas = useMemo(() => store.dsas.filter((d) => d.status === "Active"), [store.dsas]);
+  const commissionFormFields = useMemo(() => {
+    return commissionFields.map((field) => {
+      if (field.name === "dsaName") {
+        return {
+          ...field,
+          options: activeDsas.map((d) => d.name),
+          type: "select" as const,
+        };
+      }
+      return field;
+    });
+  }, [activeDsas]);
   const allInvoiceRows = useMemo(
     () =>
       [...store.dsaInvoices].sort(
@@ -627,7 +640,35 @@ export function CommissionsPage({
           <div className="flex justify-end gap-2">
             <Button onClick={() => setViewingInvoice(item)} size="sm" type="button" variant="outline">Track</Button>
             {item.status === "Countered by Bank" ? (
-              <Button onClick={() => openCounter(item)} size="sm" type="button" variant="secondary">Counter back</Button>
+              <>
+                <Button onClick={() => openCounter(item)} size="sm" type="button" variant="secondary">Counter back</Button>
+                <Button
+                  onClick={() => {
+                    const actor = currentUser?.name ?? sessionDsa?.name ?? "Partner";
+                    const event = {
+                      action: "Approved" as const,
+                      actor,
+                      amount: item.requestedAmount,
+                      at: new Date().toISOString(),
+                      id: makeId("inv-event"),
+                      note: "DSA accepted the bank counter proposal.",
+                      party: "DSA" as const,
+                    };
+                    updateItem("dsaInvoices", item.id, {
+                      approvedAmount: item.requestedAmount,
+                      history: [event, ...item.history],
+                      status: "Approved",
+                      updatedAt: event.at,
+                    });
+                    notifyInvoice("Invoice counter accepted", `${item.invoiceNumber} counter-proposal accepted by ${actor}.`);
+                  }}
+                  size="sm"
+                  type="button"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-3 py-1.5 h-auto flex items-center justify-center"
+                >
+                  Accept Proposal
+                </Button>
+              </>
             ) : null}
           </div>
         )}
@@ -709,11 +750,12 @@ export function CommissionsPage({
       </div>
       <Modal onClose={() => setCreating(false)} open={creating} title="Create payout">
         <RecordForm<Commission>
-          fields={commissionFields}
+          fields={commissionFormFields}
           initialValue={{ dsaName: defaultDsa.name, month: "Jun 2026", product: "Personal Loan", status: "Pending" }}
           onCancel={() => setCreating(false)}
           onSubmit={(value) => {
-            createItem("commissions", newCommission(value, defaultDsa.id));
+            const matchedDsa = activeDsas.find((d) => d.name === value.dsaName) ?? defaultDsa;
+            createItem("commissions", newCommission(value, matchedDsa.id));
             setCreating(false);
           }}
           submitLabel="Create payout"
@@ -722,12 +764,15 @@ export function CommissionsPage({
       <Modal onClose={() => setEditing(null)} open={Boolean(editing)} title="Edit payout">
         {editing ? (
           <RecordForm<Commission>
-            fields={commissionFields}
+            fields={commissionFormFields}
             initialValue={editing}
             onCancel={() => setEditing(null)}
             onSubmit={(value) => {
+              const matchedDsa = store.dsas.find((d) => d.name === value.dsaName);
               updateItem("commissions", editing.id, {
                 ...value,
+                dsaId: matchedDsa?.id ?? editing.dsaId,
+                dsaName: matchedDsa?.name ?? value.dsaName ?? editing.dsaName,
                 applications: Number(value.applications ?? editing.applications),
                 disbursedAmount: Number(value.disbursedAmount ?? editing.disbursedAmount),
                 payout: Number(value.payout ?? editing.payout),

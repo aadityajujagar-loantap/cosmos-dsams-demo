@@ -13,6 +13,7 @@ import {
   UploadCloud,
   ShieldAlert,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 
 import { KpiCard } from "@/components/charts";
@@ -25,6 +26,7 @@ import {
   CardContent,
   CardHeader,
   Drawer,
+  EmptyState,
   Field,
   Input,
   Label,
@@ -172,6 +174,22 @@ export function LeadsPage() {
     );
   }
   const defaultDsa = store.dsas.find((d) => d.status === "Active") || store.dsas[0];
+  const activeDsas = store.dsas.filter((d) => d.status === "Active");
+  const isDsaPartner = currentUser?.role === "DSA Partner";
+
+  const leadFormFields = useMemo(() => {
+    const baseFields = [...leadFields];
+    if (!isDsaPartner) {
+      baseFields.unshift({
+        label: "Sourcing DSA",
+        name: "dsaName",
+        options: activeDsas.map((d) => d.name),
+        required: true,
+        type: "select",
+      });
+    }
+    return baseFields;
+  }, [isDsaPartner, activeDsas]);
 
   const columns: Column<Lead>[] = [
     {
@@ -264,7 +282,7 @@ export function LeadsPage() {
         </div>
       )}
 
-      <Drawer onClose={() => setSelected(null)} open={Boolean(selected)} title={selected?.customer ?? "Lead"}>
+      <Modal onClose={() => setSelected(null)} open={Boolean(selected)} title={selected?.customer ?? "Lead"} width="max-w-xl">
         {selected ? (() => {
           const linkedApplication = store.applications.find(
             (application) =>
@@ -308,11 +326,11 @@ export function LeadsPage() {
             </div>
           );
         })() : null}
-      </Drawer>
+      </Modal>
 
       <Modal onClose={() => setCreating(false)} open={creating} title="Create lead">
         <RecordForm<Lead>
-          fields={leadFields}
+          fields={leadFormFields}
           initialValue={{
             owner: currentUser?.name ?? DEMO_USERS.admin.name,
             product: "Personal Loan",
@@ -321,8 +339,9 @@ export function LeadsPage() {
           }}
           onCancel={() => setCreating(false)}
           onSubmit={(value) => {
-            const dsaId = currentUser?.role === "DSA Partner" ? (currentUser.id || defaultDsa.id) : defaultDsa.id;
-            const dsaName = currentUser?.role === "DSA Partner" ? currentUser.name : defaultDsa.name;
+            const matchedDsa = activeDsas.find((d) => d.name === value.dsaName) ?? defaultDsa;
+            const dsaId = isDsaPartner ? (currentUser.id || defaultDsa.id) : matchedDsa.id;
+            const dsaName = isDsaPartner ? currentUser.name : matchedDsa.name;
             createItem("leads", newLead(value, dsaId, dsaName));
             setCreating(false);
           }}
@@ -350,6 +369,7 @@ export function LeadsPage() {
 
 export function ApplicationsPage() {
   const { deleteItem, store, currentUser } = useMockStore();
+  const router = useRouter();
   const [status, setStatus] = useState("");
   const [productFilter, setProductFilter] = useState("");
   const [dsaTypeFilter, setDsaTypeFilter] = useState("");
@@ -449,7 +469,7 @@ export function ApplicationsPage() {
         actions={(item) => (
           <ActionPair
             onDelete={() => deleteItem("applications", item.id)}
-            onView={() => window.location.assign(`/applications/${item.id}`)}
+            onView={() => router.push(`/applications/${item.id}`)}
           />
         )}
         columns={columns}
@@ -469,11 +489,30 @@ export function ApplicationsPage() {
 
 export function ApplicationDetailPage({ id }: { id: string }) {
   const { createItem, store, updateItem, currentUser } = useMockStore();
-  const application = store.applications.find((item) => item.id === id) ?? store.applications[0];
   const [note, setNote] = useState("");
   const [isDeviationModalOpen, setIsDeviationModalOpen] = useState(false);
   const [deviationInboxText, setDeviationInboxText] = useState("");
   const [deviationInboxError, setDeviationInboxError] = useState("");
+
+  const activeApp = store.applications.find((item) => item.id === id);
+
+  if (!activeApp) {
+    return (
+      <div>
+        <Link className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-blue-700" href="/applications">
+          <ArrowLeft className="h-4 w-4" />
+          Back to applications
+        </Link>
+        <EmptyState
+          title="Application not found"
+          description={`The loan application with ID "${id}" could not be found or has been deleted.`}
+        />
+      </div>
+    );
+  }
+
+  const application = activeApp;
+  const canVerifyDocuments = currentUser?.role === "DSA Manager" || currentUser?.role === "DSA Credit";
   const documents = store.documents.filter((item) => item.applicationId === application.id);
   const isCustomerApplication = currentUser?.role === "Customer" && application.customer === currentUser.name;
   const visibleDsaName = currentUser?.role === "Customer" ? CUSTOMER_DSA_DISPLAY_NAME : application.dsaName;
@@ -747,12 +786,39 @@ export function ApplicationDetailPage({ id }: { id: string }) {
             <CardContent className="grid gap-3 md:grid-cols-2">
               {documents.map((doc) => (
                 <div className="rounded-md border border-slate-100 p-3" key={doc.id}>
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-slate-950">{doc.type}</p>
-                      <p className="text-xs text-slate-500">{doc.fileName}</p>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-slate-950">{doc.type}</p>
+                        <p className="text-xs text-slate-500">{doc.fileName}</p>
+                      </div>
+                      <StatusBadge status={doc.status} />
                     </div>
-                    <StatusBadge status={doc.status} />
+                    {canVerifyDocuments && doc.status !== "Verified" && doc.status !== "Failed" ? (
+                      <div className="flex justify-end gap-2 pt-1">
+                        <Button
+                          onClick={() => {
+                            updateItem("documents", doc.id, { status: "Verified", remarks: `Verified by ${currentUser?.name}` });
+                          }}
+                          size="sm"
+                          type="button"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-2 py-0.5 h-auto"
+                        >
+                          Verify
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            updateItem("documents", doc.id, { status: "Failed", remarks: `Rejected by ${currentUser?.name}` });
+                          }}
+                          size="sm"
+                          type="button"
+                          variant="danger"
+                          className="font-semibold text-xs px-2 py-0.5 h-auto"
+                        >
+                          Fail
+                        </Button>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ))}

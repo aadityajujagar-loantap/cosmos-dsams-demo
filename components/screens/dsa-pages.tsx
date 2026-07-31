@@ -1648,6 +1648,11 @@ export function DsaProfilePage({ id }: { id: string }) {
   const [lifecycleReason, setLifecycleReason] = useState("");
   const [lifecycleReasonError, setLifecycleReasonError] = useState("");
 
+  const [viewingInvoice, setViewingInvoice] = useState<any>(null);
+  const [counterInvoice, setCounterInvoice] = useState<any>(null);
+  const [counterAmount, setCounterAmount] = useState("");
+  const [counterNote, setCounterNote] = useState("");
+
   const dsa = store.dsas.find((item) => item.id === id) ?? store.dsas[0];
   const missingProfileDocuments = dsa.documents.filter(isMissingDsaDocumentRecord);
   const nextApprovalStatus = nextDsaApprovalStatus(currentUser?.role, dsa.status);
@@ -1729,12 +1734,111 @@ export function DsaProfilePage({ id }: { id: string }) {
   const canManageDsaLifecycle = canLifecycleRoleManageDsa && ["Active", "Suspended", "Blacklisted"].includes(dsa.status);
   const canViewDsaLifecycleReason = canLifecycleRoleManageDsa;
   const canDeleteDsa = currentUser?.role === "DSA Manager";
+  const isBankUser = currentUser?.role !== "DSA Partner" && currentUser?.role !== "Customer";
 
   function closeLifecycleModals() {
     setDeactivatingDsa(null);
     setBlacklistingDsa(null);
     setLifecycleReason("");
     setLifecycleReasonError("");
+  }
+
+  function makeInvoiceEvent(
+    action: any,
+    actor: string,
+    party: any,
+    amount: number,
+    note: string,
+  ): any {
+    return {
+      action,
+      actor,
+      amount,
+      at: new Date().toISOString(),
+      id: makeId("inv-event"),
+      note,
+      party,
+    };
+  }
+
+  function openCounter(invoice: any) {
+    setCounterInvoice(invoice);
+    setCounterAmount(String(invoice.requestedAmount));
+    setCounterNote("");
+  }
+
+  function submitCounter() {
+    if (!counterInvoice) return;
+    const amount = Number(counterAmount);
+    if (isNaN(amount) || amount <= 0) return;
+
+    const isBank = currentUser?.role !== "DSA Partner" && currentUser?.role !== "Customer";
+    const actor = currentUser?.name ?? dsa.name;
+    const party = isBank ? "Bank" as const : "DSA" as const;
+    const note = counterNote.trim() || `${party} countered the invoice amount.`;
+    const event = makeInvoiceEvent("Countered", actor, party, amount, note);
+
+    updateItem("dsaInvoices", counterInvoice.id, {
+      history: [event, ...counterInvoice.history],
+      requestedAmount: amount,
+      remarks: note,
+      status: isBank ? "Countered by Bank" : "Countered by DSA",
+      updatedAt: event.at,
+    });
+    setCounterInvoice(null);
+  }
+
+  function closeInvoice(status: "Approved" | "Rejected", invoice: any) {
+    const actor = currentUser?.name ?? "Credit";
+    const amount = invoice.requestedAmount;
+    const event = makeInvoiceEvent(
+      status,
+      actor,
+      currentUser?.role === "DSA Credit" ? "DSA Credit" : "Super Admin",
+      amount,
+      `${status} at ${formatCurrency(amount)}.`
+    );
+    updateItem("dsaInvoices", invoice.id, {
+      approvedAmount: status === "Approved" ? amount : invoice.approvedAmount,
+      history: [event, ...invoice.history],
+      status,
+      updatedAt: event.at,
+    });
+  }
+
+  function renderInvoiceTracker(status: any) {
+    const steps = ["Raised", "Review", "Counter", "Final"] as const;
+    const activeIndex =
+      status === "Raised by DSA"
+        ? 0
+        : status === "Pending Approval"
+          ? 1
+          : status === "Countered by Bank" || status === "Countered by DSA"
+            ? 2
+            : 3;
+
+    return (
+      <div className="flex items-center gap-1.5 text-[11px] font-bold">
+        {steps.map((step, idx) => {
+          const isPast = idx < activeIndex;
+          const isCurrent = idx === activeIndex;
+          return (
+            <span
+              className={`rounded-full px-2 py-0.5 ${
+                isPast
+                  ? "bg-blue-100 text-blue-700"
+                  : isCurrent
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-100 text-slate-400"
+              }`}
+              key={step}
+            >
+              {idx + 1} {step}
+            </span>
+          );
+        })}
+      </div>
+    );
   }
 
   function openDeactivationModal(nextDsa: Dsa) {
@@ -2164,12 +2268,51 @@ export function DsaProfilePage({ id }: { id: string }) {
             <div className="grid gap-4 lg:grid-cols-2">
               {dsa.documents.map((doc) => (
                 <div className="rounded-lg border border-slate-200 p-4" key={doc.id}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-slate-950">{doc.type}</p>
-                      <p className="text-sm text-slate-500">{doc.fileName}</p>
+                  <div className="flex flex-col gap-2 w-full">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-slate-950">{doc.type}</p>
+                        <p className="text-sm text-slate-500">{doc.fileName}</p>
+                      </div>
+                      <StatusBadge status={doc.status} />
                     </div>
-                    <StatusBadge status={doc.status} />
+                    {isBankUser && doc.status !== "Verified" && doc.status !== "Failed" ? (
+                      <div className="flex justify-end gap-2 pt-1 border-t border-slate-100 mt-2">
+                        <Button
+                          onClick={() => {
+                            const updatedDocs = dsa.documents.map(d => d.id === doc.id ? { ...d, status: "Verified" as const, remarks: `Verified by ${currentUser?.name}` } : d);
+                            updateItem("dsas", dsa.id, { documents: updatedDocs });
+                            toast({
+                              title: "Document Verified",
+                              description: `${doc.type} has been verified successfully.`,
+                              variant: "success",
+                            });
+                          }}
+                          size="sm"
+                          type="button"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-2 py-0.5 h-auto"
+                        >
+                          Verify
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            const updatedDocs = dsa.documents.map(d => d.id === doc.id ? { ...d, status: "Failed" as const, remarks: `Rejected by ${currentUser?.name}` } : d);
+                            updateItem("dsas", dsa.id, { documents: updatedDocs });
+                            toast({
+                              title: "Document Rejected",
+                              description: `${doc.type} has been marked as failed/rejected.`,
+                              variant: "warning",
+                            });
+                          }}
+                          size="sm"
+                          type="button"
+                          variant="danger"
+                          className="font-semibold text-xs px-2 py-0.5 h-auto"
+                        >
+                          Fail
+                        </Button>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ))}
@@ -2388,9 +2531,46 @@ export function DsaProfilePage({ id }: { id: string }) {
                   onClick={() => {
                     const month = new Date().toLocaleString("default", { month: "short", year: "numeric" });
                     const total = commissions.reduce((sum, c) => sum + c.payout, 0);
+                    const tax = Math.round(total * 0.18);
+                    const net = total + tax;
+                    const invoiceNum = `INV-${Date.now().toString().slice(-6)}`;
+                    
+                    const invoice = {
+                      id: `inv-${Date.now()}`,
+                      invoiceNumber: invoiceNum,
+                      dsaId: dsa.id,
+                      dsaName: dsa.name,
+                      dsaCode: dsa.code,
+                      month,
+                      grossAmount: total,
+                      adjustmentAmount: 0,
+                      taxAmount: tax,
+                      netAmount: net,
+                      requestedAmount: net,
+                      status: "Raised by DSA" as const,
+                      raisedBy: currentUser?.name ?? dsa.contactPerson,
+                      raisedByRole: (currentUser?.role ?? "DSA Partner") as any,
+                      source: "Manual" as const,
+                      remarks: `Auto-generated monthly invoice for ${month} from Commission Payouts.`,
+                      createdAt: new Date().toISOString(),
+                      updatedAt: new Date().toISOString(),
+                      history: [
+                        {
+                          id: `event-${Date.now()}`,
+                          action: "Raised" as const,
+                          actor: currentUser?.name ?? dsa.contactPerson,
+                          party: "DSA" as const,
+                          amount: net,
+                          at: new Date().toISOString(),
+                          note: "Invoice generated from commission payout records.",
+                        }
+                      ]
+                    };
+
+                    createItem("dsaInvoices", invoice);
                     toast({
                       title: "Invoice Generated & Sent",
-                      description: `Monthly invoice for ${month} (${formatCurrency(total)}) has been generated and dispatched to ${dsa.email}.`,
+                      description: `Monthly invoice for ${month} (${formatCurrency(net)}) has been generated and dispatched to ${dsa.email}.`,
                       variant: "success",
                     });
                   }}
@@ -2414,6 +2594,68 @@ export function DsaProfilePage({ id }: { id: string }) {
               ) : (
                 <p className="text-sm text-slate-500">No commission records found for this DSA yet.</p>
               )}
+
+              <hr className="my-6 border-slate-200" />
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Raised Invoices</h3>
+                  <p className="text-xs text-slate-500">Invoices raised and their processing stages.</p>
+                </div>
+              </div>
+              <DataTable
+                actions={(item) => (
+                  <div className="flex justify-end gap-2">
+                    <Button onClick={() => setViewingInvoice(item)} size="sm" type="button" variant="outline">Track</Button>
+                    {isBankUser && item.status !== "Approved" && item.status !== "Rejected" ? (
+                      <>
+                        <Button onClick={() => openCounter(item)} size="sm" type="button" variant="secondary">Counter</Button>
+                        <Button onClick={() => closeInvoice("Approved", item)} size="sm" type="button">Approve</Button>
+                        <Button onClick={() => closeInvoice("Rejected", item)} size="sm" type="button" variant="danger">Reject</Button>
+                      </>
+                    ) : null}
+                    {!isBankUser && item.status === "Countered by Bank" ? (
+                      <>
+                        <Button onClick={() => openCounter(item)} size="sm" type="button" variant="secondary">Counter back</Button>
+                        <Button
+                          onClick={() => {
+                            const actor = currentUser?.name ?? dsa.name;
+                            const event = makeInvoiceEvent(
+                              "Approved",
+                              actor,
+                              "DSA",
+                              item.requestedAmount,
+                              "DSA accepted the bank counter proposal."
+                            );
+                            updateItem("dsaInvoices", item.id, {
+                              approvedAmount: item.requestedAmount,
+                              history: [event, ...item.history],
+                              status: "Approved",
+                              updatedAt: event.at,
+                            });
+                          }}
+                          size="sm"
+                          type="button"
+                          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-3 py-1.5 h-auto flex items-center justify-center"
+                        >
+                          Accept Proposal
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
+                )}
+                columns={[
+                  { cell: (item) => <span className="font-semibold text-blue-700">{item.invoiceNumber}</span>, header: "Invoice", key: "invoiceNumber" },
+                  { cell: (item) => item.month, header: "Month", key: "month" },
+                  { cell: (item) => formatCurrency(item.requestedAmount), header: "Requested", key: "requestedAmount" },
+                  { cell: (item) => item.approvedAmount ? formatCurrency(item.approvedAmount) : "-", header: "Approved", key: "approvedAmount" },
+                  { cell: (item) => <StatusBadge status={item.status} />, header: "Status", key: "status" },
+                  { cell: (item) => renderInvoiceTracker(item.status), header: "Track", key: "track" },
+                ]}
+                emptyDescription="No invoices generated or raised for this DSA yet."
+                emptyTitle="No invoices found"
+                items={store.dsaInvoices.filter((invoice) => invoice.dsaId === dsa.id)}
+                searchKeys={["invoiceNumber", "month", "status", "remarks"]}
+              />
             </div>
           ) : null}
           {tab === "audit" ? (
@@ -2563,7 +2805,7 @@ export function DsaProfilePage({ id }: { id: string }) {
 
       <Modal
         onClose={() => setViewingLifecycleReason(null)}
-        open={Boolean(viewingLifecycleReason && canViewDsaLifecycleReason)}
+        open={Boolean(viewingLifecycleReason && canViewDsaLifecycleReason && viewingLifecycleReason.statusReason)}
         title={`${viewingLifecycleReason?.statusReasonAction ?? viewingLifecycleReason?.status ?? "Lifecycle"} reason`}
         width="max-w-md"
       >
@@ -2830,6 +3072,69 @@ export function DsaProfilePage({ id }: { id: string }) {
             >
               Remove and Activate
             </Button>
+          </div>
+        </div>
+      </Modal>
+      <Modal onClose={() => setViewingInvoice(null)} open={Boolean(viewingInvoice)} title="Invoice status tracker" width="max-w-2xl">
+        {viewingInvoice ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between border-b pb-2">
+              <div>
+                <p className="text-sm font-bold text-slate-950">{viewingInvoice.invoiceNumber}</p>
+                <p className="text-xs text-slate-500">{viewingInvoice.month} · Requested by {viewingInvoice.raisedBy}</p>
+              </div>
+              <StatusBadge status={viewingInvoice.status} />
+            </div>
+            <div className="space-y-1.5">
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Current status</p>
+              {renderInvoiceTracker(viewingInvoice.status)}
+            </div>
+            <div className="space-y-1.5">
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Activity logs</p>
+              <div className="divide-y divide-slate-100 rounded-md border border-slate-150 bg-white">
+                {viewingInvoice.history.map((event: any, idx: number) => (
+                  <div className="p-3 text-xs" key={event.id || idx}>
+                    <div className="flex items-center justify-between font-semibold text-slate-900">
+                      <span>{event.action} by {event.party}</span>
+                      <span>{formatCurrency(event.amount)}</span>
+                    </div>
+                    <p className="text-slate-500 mt-1">{event.actor} · {formatDate(event.at)}</p>
+                    {event.note ? <p className="mt-1 text-slate-700 italic border-l-2 border-slate-200 pl-2 bg-slate-50/50 p-1">{event.note}</p> : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-end pt-2">
+              <Button onClick={() => setViewingInvoice(null)} type="button" variant="secondary">Close</Button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal onClose={() => setCounterInvoice(null)} open={Boolean(counterInvoice)} title="Counter invoice claim" width="max-w-md">
+        <div className="space-y-4">
+          <Field>
+            <Label>Original claim</Label>
+            <p className="text-sm font-semibold text-slate-900">{counterInvoice ? formatCurrency(counterInvoice.requestedAmount) : "-"}</p>
+          </Field>
+          <Field>
+            <Label htmlFor="counterValue">Counter amount (gross net payout)</Label>
+            <Input id="counterValue" onChange={(event) => setCounterAmount(event.target.value)} type="number" value={counterAmount} />
+          </Field>
+          <Field>
+            <Label htmlFor="counterNote">Counter remarks / basis</Label>
+            <textarea
+              id="counterNote"
+              rows={3}
+              className="w-full rounded-md border border-slate-200 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              value={counterNote}
+              onChange={(event) => setCounterNote(event.target.value)}
+              placeholder="Provide reason for countering this invoice claim."
+            />
+          </Field>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button onClick={() => setCounterInvoice(null)} type="button" variant="secondary">Cancel</Button>
+            <Button onClick={submitCounter} type="button">Submit Counter</Button>
           </div>
         </div>
       </Modal>

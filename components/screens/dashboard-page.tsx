@@ -133,13 +133,25 @@ export function DashboardPage() {
     [branchDsas],
   );
 
-  const funnel = [
-    { name: "Leads", value: store.leads.length },
-    { name: "Qualified", value: store.leads.filter((item) => item.status === "Qualified").length },
-    { name: "Applications", value: store.applications.length },
-    { name: "Approved", value: stats.approved },
-    { name: "Disbursed", value: store.applications.filter((item) => item.status === "Disbursed").length },
-  ];
+  const funnel = useMemo(() => {
+    const isDsaPartner = currentUser?.role === "DSA Partner";
+    const partnerLeads = isDsaPartner
+      ? store.leads.filter((item) => item.dsaId === currentUser?.id || item.dsaName === currentUser?.name)
+      : store.leads;
+    const partnerApps = isDsaPartner
+      ? store.applications.filter((item) => item.dsaId === currentUser?.id || item.dsaName === currentUser?.name)
+      : store.applications;
+    
+    const approved = partnerApps.filter((item) => item.status === "Approved" || item.status === "Disbursed");
+    
+    return [
+      { name: "Leads", value: partnerLeads.length },
+      { name: "Qualified", value: partnerLeads.filter((item) => item.status === "Qualified").length },
+      { name: "Applications", value: partnerApps.length },
+      { name: "Approved", value: approved.length },
+      { name: "Disbursed", value: partnerApps.filter((item) => item.status === "Disbursed").length },
+    ];
+  }, [store.leads, store.applications, currentUser, stats.approved]);
 
   // ----------------------------------------------------
   // RECOVERY ANALYTICS STATE & COMPUTATIONS

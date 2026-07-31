@@ -1330,28 +1330,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
         try {
           const parsed = JSON.parse(stored);
           if (isDemoSessionUser(parsed)) {
-            let sessionUser: DemoSessionUser | null = null;
-
-            if (parsed.role === "DSA Partner") {
-              const dsa = store.dsas.find(
-                (row) =>
-                  row.status === "Active" &&
-                  (row.id === parsed.id ||
-                    row.code === parsed.code ||
-                    row.loginUsername.toLowerCase() === parsed.email.toLowerCase()),
-              );
-              sessionUser = dsa ? sessionUserFromDsa(dsa) : null;
-            } else {
-              sessionUser = getDemoUserByRole(parsed.role);
-            }
-
-            if (!sessionUser) {
-              localStorage.removeItem(USER_STORAGE_KEY);
-              return null;
-            }
-
-            localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(sessionUser));
-            return sessionUser;
+            return parsed;
           }
           localStorage.removeItem(USER_STORAGE_KEY);
           return null;
@@ -1372,13 +1351,39 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       console.log("Mock store: saving to localStorage. Total DSAs:", store.dsas.length);
       localStorage.setItem(STORE_SCHEMA_VERSION_KEY, STORE_SCHEMA_VERSION);
       localStorage.setItem(STORE_STORAGE_KEY, serializedStore);
+
+      // Save to shared store API
+      fetch("/api/store", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: serializedStore,
+      }).catch((err) => console.warn("Mock store: failed to save to server API", err));
     }
   }, [store]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    function syncStoreFromStorage() {
+    async function syncStoreFromStorage() {
+      // 1. Sync from server
+      try {
+        const res = await fetch("/api/store");
+        if (res.ok) {
+          const serverData = await res.json();
+          if (serverData) {
+            setStore((current) => {
+              if (JSON.stringify(current) === JSON.stringify(serverData)) return current;
+              localStorage.setItem(STORE_STORAGE_KEY, JSON.stringify(serverData));
+              return serverData;
+            });
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn("Mock store: failed to sync from server API on focus/mount", err);
+      }
+
+      // 2. Fall back to localStorage
       const stored = localStorage.getItem(STORE_STORAGE_KEY);
       if (!stored) return;
 
@@ -1386,7 +1391,8 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
         if (JSON.stringify(current) === stored) return current;
 
         try {
-          const hydratedStore = hydratePersistedStore(JSON.parse(stored) as Partial<MockStore>);
+          const parsed = JSON.parse(stored) as Partial<MockStore>;
+          const hydratedStore = hydratePersistedStore(parsed);
           return JSON.stringify(current) === JSON.stringify(hydratedStore) ? current : hydratedStore;
         } catch (err) {
           console.warn("Mock store: failed to sync external store update.", err);
@@ -1399,10 +1405,17 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       if (event.key === STORE_STORAGE_KEY) syncStoreFromStorage();
     }
 
+    // Run initial sync
+    syncStoreFromStorage();
+
+    // Background poll every 3 seconds to keep side-by-side session windows synced dynamically
+    const intervalId = setInterval(syncStoreFromStorage, 3000);
+
     window.addEventListener("focus", syncStoreFromStorage);
     window.addEventListener("storage", handleStorage);
 
     return () => {
+      clearInterval(intervalId);
       window.removeEventListener("focus", syncStoreFromStorage);
       window.removeEventListener("storage", handleStorage);
     };
@@ -1431,6 +1444,31 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       variant: "warning",
     });
   }, [toast]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!currentUser) return;
+
+    if (currentUser.role === "DSA Partner") {
+      const dsa = store.dsas.find(
+        (row) =>
+          row.id === currentUser.id ||
+          row.code === currentUser.code ||
+          row.loginUsername.toLowerCase() === currentUser.email.toLowerCase()
+      );
+      if (dsa) {
+        if (dsa.status !== "Active") {
+          logout();
+        } else {
+          const updated = sessionUserFromDsa(dsa);
+          if (JSON.stringify(currentUser) !== JSON.stringify(updated)) {
+            setCurrentUser(updated);
+            localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updated));
+          }
+        }
+      }
+    }
+  }, [store.dsas, currentUser, logout]);
 
   const getById = useCallback(
     <K extends CollectionName>(collection: K, id: string) =>
