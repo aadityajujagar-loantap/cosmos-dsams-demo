@@ -1452,14 +1452,10 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     // Run initial sync
     syncStoreFromStorage();
 
-    // Background poll every 3 seconds to keep side-by-side session windows synced dynamically
-    const intervalId = setInterval(syncStoreFromStorage, 3000);
-
     window.addEventListener("focus", syncStoreFromStorage);
     window.addEventListener("storage", handleStorage);
 
     return () => {
-      clearInterval(intervalId);
       window.removeEventListener("focus", syncStoreFromStorage);
       window.removeEventListener("storage", handleStorage);
     };
