@@ -159,7 +159,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [navOpenGroup, setNavOpenGroup] = useState<string | null>();
   const [readNotificationsVersion, setReadNotificationsVersion] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
-  const { store, currentUser, logout } = useMockStore();
+  const { store, currentUser, logout, hasPermission } = useMockStore();
 
   const mounted = useIsClient();
 
@@ -179,14 +179,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     const readScope = encodeURIComponent(`${currentUser.role}:${currentUser.id}:${currentUser.email}:${currentUser.code ?? ""}`);
     const key = `${READ_NOTIFICATIONS_STORAGE_KEY}_${readScope}`;
     const stored = localStorage.getItem(key);
-    if (!stored) return [];
-
-    try {
-      const parsed = JSON.parse(stored);
-      return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
-    } catch {
-      return [];
-    }
+    return stored ? JSON.parse(stored) : [];
   }, [currentUser, mounted, readNotificationsVersion]);
 
   const navGroups = useMemo<NavGroup[]>(() => {
@@ -238,6 +231,9 @@ export function AppShell({ children }: { children: ReactNode }) {
                   { href: "/administration/users", icon: Users, label: "User Management" },
                   { href: "/administration/roles", icon: ShieldCheck, label: "Roles & Permissions" },
                   { href: "/administration/audit-logs", icon: FileText, label: "Audit Logs" },
+                  ...(hasPermission("maker_requests.view")
+                    ? [{ href: "/administration/maker-requests", icon: ClipboardCheck, label: "Maker Requests" }]
+                    : []),
                 ],
                 label: "Administration",
               },

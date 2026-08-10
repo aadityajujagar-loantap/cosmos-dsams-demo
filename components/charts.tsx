@@ -105,7 +105,7 @@ export function TrendCard({
       </CardHeader>
       <CardContent className="h-64">
         <ChartFrame>
-          <ResponsiveContainer height="100%" minWidth={0} width="100%">
+          <ResponsiveContainer height="100%" minWidth={0} width="100%" initialDimension={{ width: 100, height: 100 }}>
             {type === "area" ? (
               <AreaChart data={data}>
                 <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
@@ -149,7 +149,7 @@ export function BarChartCard({
       </CardHeader>
       <CardContent className="h-64">
         <ChartFrame>
-          <ResponsiveContainer height="100%" minWidth={0} width="100%">
+          <ResponsiveContainer height="100%" minWidth={0} width="100%" initialDimension={{ width: 100, height: 100 }}>
             <BarChart data={data}>
               <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="name" stroke="#64748b" tickLine={false} />
@@ -184,7 +184,7 @@ export function PieChartCard({
       <CardContent className="h-64 flex flex-col justify-between">
         <div className="h-44">
           <ChartFrame>
-            <ResponsiveContainer height="100%" minWidth={0} width="100%">
+            <ResponsiveContainer height="100%" minWidth={0} width="100%" initialDimension={{ width: 100, height: 100 }}>
               <PieChart>
                 <Pie data={data} dataKey={dataKey} innerRadius={42} outerRadius={72} paddingAngle={3}>
                   {data.map((_, index) => (
@@ -226,7 +226,7 @@ export function FunnelCard({
       </CardHeader>
       <CardContent className="h-64">
         <ChartFrame>
-          <ResponsiveContainer height="100%" minWidth={0} width="100%">
+          <ResponsiveContainer height="100%" minWidth={0} width="100%" initialDimension={{ width: 100, height: 100 }}>
             <FunnelChart>
               <Tooltip />
               <Funnel data={data} dataKey="value" isAnimationActive nameKey="name">

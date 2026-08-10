@@ -11,6 +11,8 @@ import {
 } from "react";
 
 import { ToastProvider, useToast } from "@/components/ui/toast";
+import { authService } from "@/services/authService";
+import { authApi } from "@/apis/auth";
 import {
   DEFAULT_DSA_ID,
   DEFAULT_DSA_LOGIN_PASSWORD,
@@ -56,8 +58,10 @@ interface StoreContextValue {
     patch: Partial<EntityMap[K]>,
   ) => void;
   currentUser: DemoSessionUser | null;
-  login: (user: DemoSessionUser) => void;
+  login: (session: any, user: DemoSessionUser) => void;
   logout: () => void;
+  hasPermission: (permission: string) => boolean;
+  hasRole: (role: string | string[]) => boolean;
 }
 
 const StoreContext = createContext<StoreContextValue | undefined>(undefined);
@@ -1452,20 +1456,17 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     // Run initial sync
     syncStoreFromStorage();
 
-    // Background poll every 3 seconds to keep side-by-side session windows synced dynamically
-    const intervalId = setInterval(syncStoreFromStorage, 3000);
-
     window.addEventListener("focus", syncStoreFromStorage);
     window.addEventListener("storage", handleStorage);
 
     return () => {
-      clearInterval(intervalId);
       window.removeEventListener("focus", syncStoreFromStorage);
       window.removeEventListener("storage", handleStorage);
     };
   }, []);
 
-  const login = useCallback((user: DemoSessionUser) => {
+  const login = useCallback((session: any, user: DemoSessionUser) => {
+    authService.startSession(session);
     setCurrentUser(user);
     if (typeof window !== "undefined") {
       localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
@@ -1478,6 +1479,10 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
   }, [toast]);
 
   const logout = useCallback(() => {
+    // Revoke Sanctum access token on the Laravel backend
+    authApi.logout().catch((err) => console.warn("Backend logout request failed:", err));
+
+    authService.endSession();
     setCurrentUser(null);
     if (typeof window !== "undefined") {
       localStorage.removeItem(USER_STORAGE_KEY);
@@ -1488,6 +1493,14 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       variant: "warning",
     });
   }, [toast]);
+
+  const hasPermission = useCallback((permission: string) => {
+    return authService.hasPermission(permission);
+  }, []);
+
+  const hasRole = useCallback((role: string | string[]) => {
+    return authService.hasRole(role);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1749,8 +1762,10 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       currentUser,
       login,
       logout,
+      hasPermission,
+      hasRole,
     }),
-    [createItem, deleteDsaCascade, deleteItem, getById, store, updateItem, currentUser, login, logout],
+    [createItem, deleteDsaCascade, deleteItem, getById, store, updateItem, currentUser, login, logout, hasPermission, hasRole],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

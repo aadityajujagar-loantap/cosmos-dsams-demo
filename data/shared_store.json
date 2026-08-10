@@ -9606,122 +9606,6 @@
   ],
   "auditLogs": [
     {
-      "action": "Create",
-      "actionType": "Create",
-      "actor": "Charminar Loan Services Pvt Ltd",
-      "actorId": "COS-DSA-TS-HYD-008",
-      "actorRole": "DSA Partner",
-      "at": "2026-07-31T09:57:28.368Z",
-      "changedFields": [],
-      "collection": "notifications",
-      "entity": "Notifications",
-      "entityId": "note-ms8rqvda-vfht8",
-      "entityName": "DSA counter invoice raised",
-      "id": "audit-ms8rqvg0-hg62z",
-      "ipAddress": "10.24.0.91",
-      "severity": "Info",
-      "summary": "DSA counter invoice raised was created in Notifications."
-    },
-    {
-      "action": "Invoice Workflow",
-      "actionType": "Invoice Workflow",
-      "actor": "Charminar Loan Services Pvt Ltd",
-      "actorId": "COS-DSA-TS-HYD-008",
-      "actorRole": "DSA Partner",
-      "at": "2026-07-31T09:57:28.249Z",
-      "affectedDsaId": "COS-DSA-TS-HYD-008",
-      "affectedDsaName": "Charminar Loan Services Pvt Ltd",
-      "changedFields": [
-        "history",
-        "remarks",
-        "requestedAmount",
-        "status",
-        "updatedAt"
-      ],
-      "collection": "dsaInvoices",
-      "entity": "DsaInvoices",
-      "entityId": "invoice-8",
-      "entityName": "invoice-8",
-      "fromValue": "history: 1 item | remarks: Awaiting workflow action. | requestedAmount: 389961 | status: Countered by Bank | updatedAt: 2026-07-23T12:00:00.000Z",
-      "id": "audit-ms8rqvcp-lrbzs",
-      "ipAddress": "10.24.0.91",
-      "severity": "Info",
-      "summary": "Invoice Workflow: invoice-8 changed history, remarks, requestedAmount, status, updatedAt.",
-      "toValue": "history: 2 items | remarks: coutnering back. reasons | requestedAmount: 3899610 | status: Countered by DSA | updatedAt: 2026-07-31T09:57:28.247Z"
-    },
-    {
-      "action": "Create",
-      "actionType": "Create",
-      "actor": "Aarohi Financial Services Pvt Ltd",
-      "actorId": "COS-DSA-MH-MUM-001",
-      "actorRole": "DSA Partner",
-      "at": "2026-07-31T07:42:46.304Z",
-      "changedFields": [],
-      "collection": "notifications",
-      "entity": "Notifications",
-      "entityId": "note-ms8mxna4-vk97x",
-      "entityName": "DSA invoice raised",
-      "id": "audit-ms8mxna8-lb9mw",
-      "ipAddress": "10.24.0.91",
-      "severity": "Info",
-      "summary": "DSA invoice raised was created in Notifications."
-    },
-    {
-      "action": "Invoice Raised",
-      "actionType": "Invoice Raised",
-      "actor": "Aarohi Financial Services Pvt Ltd",
-      "actorId": "COS-DSA-MH-MUM-001",
-      "actorRole": "DSA Partner",
-      "at": "2026-07-31T07:42:46.298Z",
-      "affectedDsaId": "COS-DSA-MH-MUM-001",
-      "affectedDsaName": "Aarohi Financial Services Pvt Ltd",
-      "changedFields": [],
-      "collection": "dsaInvoices",
-      "entity": "DsaInvoices",
-      "entityId": "invoice-ms8mxna2-mw0er",
-      "entityName": "invoice-ms8mxna2-mw0er",
-      "id": "audit-ms8mxna2-3yf33",
-      "ipAddress": "10.24.0.91",
-      "severity": "Info",
-      "summary": "invoice-ms8mxna2-mw0er was created in DsaInvoices."
-    },
-    {
-      "action": "Create",
-      "actionType": "Create",
-      "actor": "Aarohi Financial Services Pvt Ltd",
-      "actorId": "COS-DSA-MH-MUM-001",
-      "actorRole": "DSA Partner",
-      "at": "2026-07-31T07:42:00.069Z",
-      "changedFields": [],
-      "collection": "notifications",
-      "entity": "Notifications",
-      "entityId": "note-ms8mwnlt-wuk7v",
-      "entityName": "DSA invoice raised",
-      "id": "audit-ms8mwnlx-z07jk",
-      "ipAddress": "10.24.0.91",
-      "severity": "Info",
-      "summary": "DSA invoice raised was created in Notifications."
-    },
-    {
-      "action": "Invoice Raised",
-      "actionType": "Invoice Raised",
-      "actor": "Aarohi Financial Services Pvt Ltd",
-      "actorId": "COS-DSA-MH-MUM-001",
-      "actorRole": "DSA Partner",
-      "at": "2026-07-31T07:42:00.055Z",
-      "affectedDsaId": "COS-DSA-MH-MUM-001",
-      "affectedDsaName": "Aarohi Financial Services Pvt Ltd",
-      "changedFields": [],
-      "collection": "dsaInvoices",
-      "entity": "DsaInvoices",
-      "entityId": "invoice-ms8mwnlh-91kub",
-      "entityName": "invoice-ms8mwnlh-91kub",
-      "id": "audit-ms8mwnlk-tpjai",
-      "ipAddress": "10.24.0.91",
-      "severity": "Info",
-      "summary": "invoice-ms8mwnlh-91kub was created in DsaInvoices."
-    },
-    {
       "action": "Invoice Workflow",
       "actionType": "Invoice Workflow",
       "actor": "admin",
@@ -14242,6 +14126,46 @@
   ],
   "dsaInvoices": [
     {
+      "adjustmentAmount": 0,
+      "createdAt": "2026-07-23T11:00:00.000Z",
+      "dsaCode": "COS-DSA-TS-HYD-008",
+      "dsaId": "COS-DSA-TS-HYD-008",
+      "dsaName": "Charminar Loan Services Pvt Ltd",
+      "grossAmount": 330475,
+      "history": [
+        {
+          "action": "Countered",
+          "actor": "Charminar Loan Services Pvt Ltd",
+          "amount": 3899610,
+          "at": "2026-07-31T09:57:28.247Z",
+          "id": "inv-event-ms8rqvcn-dukyu",
+          "note": "coutnering back. reasons",
+          "party": "DSA"
+        },
+        {
+          "action": "Raised",
+          "actor": "Saanvi Reddy",
+          "amount": 389961,
+          "at": "2026-07-23T11:00:00.000Z",
+          "id": "inv-event-8-1",
+          "note": "Monthly commission invoice raised for Cosmos review.",
+          "party": "DSA"
+        }
+      ],
+      "id": "invoice-8",
+      "invoiceNumber": "INV-COS-0008",
+      "month": "Jul 2026",
+      "netAmount": 330475,
+      "raisedBy": "Saanvi Reddy",
+      "raisedByRole": "DSA Partner",
+      "remarks": "coutnering back. reasons",
+      "requestedAmount": 3899610,
+      "source": "Manual",
+      "status": "Countered by DSA",
+      "taxAmount": 59486,
+      "updatedAt": "2026-07-31T09:57:28.247Z"
+    },
+    {
       "adjustmentAmount": 45845,
       "createdAt": "2026-07-31T07:42:46.298Z",
       "dsaCode": "COS-DSA-MH-MUM-001",
@@ -14336,265 +14260,6 @@
     },
     {
       "adjustmentAmount": 0,
-      "createdAt": "2026-07-29T11:00:00.000Z",
-      "dsaCode": "COS-DSA-MH-PUN-002",
-      "dsaId": "COS-DSA-MH-PUN-002",
-      "dsaName": "Sahyadri Credit Associates LLP",
-      "grossAmount": 22361,
-      "history": [
-        {
-          "action": "Raised",
-          "actor": "Nisha Kulkarni",
-          "amount": 26386,
-          "at": "2026-07-29T11:00:00.000Z",
-          "id": "inv-event-2-1",
-          "note": "Monthly commission invoice raised for Cosmos review.",
-          "party": "DSA"
-        }
-      ],
-      "id": "invoice-2",
-      "invoiceNumber": "INV-COS-0002",
-      "month": "Jul 2026",
-      "netAmount": 22361,
-      "raisedBy": "Nisha Kulkarni",
-      "raisedByRole": "DSA Partner",
-      "remarks": "Awaiting workflow action.",
-      "requestedAmount": 26386,
-      "source": "Manual",
-      "status": "Pending Approval",
-      "taxAmount": 4025,
-      "updatedAt": "2026-07-29T12:00:00.000Z"
-    },
-    {
-      "adjustmentAmount": 0,
-      "createdAt": "2026-07-28T11:00:00.000Z",
-      "dsaCode": "COS-DSA-MH-NAG-003",
-      "dsaId": "COS-DSA-MH-NAG-003",
-      "dsaName": "Vidarbha Loan Connect",
-      "grossAmount": 183748,
-      "history": [
-        {
-          "action": "Raised",
-          "actor": "Rohit Deshmukh",
-          "amount": 216823,
-          "at": "2026-07-28T11:00:00.000Z",
-          "id": "inv-event-3-1",
-          "note": "Monthly commission invoice raised for Cosmos review.",
-          "party": "DSA"
-        }
-      ],
-      "id": "invoice-3",
-      "invoiceNumber": "INV-COS-0003",
-      "month": "Jul 2026",
-      "netAmount": 183748,
-      "raisedBy": "Rohit Deshmukh",
-      "raisedByRole": "DSA Partner",
-      "remarks": "Awaiting workflow action.",
-      "requestedAmount": 216823,
-      "source": "Manual",
-      "status": "Countered by Bank",
-      "taxAmount": 33075,
-      "updatedAt": "2026-07-28T12:00:00.000Z"
-    },
-    {
-      "adjustmentAmount": 0,
-      "approvedAmount": 120831,
-      "createdAt": "2026-07-27T11:00:00.000Z",
-      "dsaCode": "COS-DSA-GJ-AHM-004",
-      "dsaId": "COS-DSA-GJ-AHM-004",
-      "dsaName": "Amdavad Capital Partners Pvt Ltd",
-      "grossAmount": 102399,
-      "history": [
-        {
-          "action": "Raised",
-          "actor": "Mehul Shah",
-          "amount": 120831,
-          "at": "2026-07-27T11:00:00.000Z",
-          "id": "inv-event-4-1",
-          "note": "Monthly commission invoice raised for Cosmos review.",
-          "party": "DSA"
-        }
-      ],
-      "id": "invoice-4",
-      "invoiceNumber": "INV-COS-0004",
-      "month": "Jul 2026",
-      "netAmount": 102399,
-      "raisedBy": "Mehul Shah",
-      "raisedByRole": "DSA Partner",
-      "remarks": "Approved after reconciliation.",
-      "requestedAmount": 120831,
-      "source": "Manual",
-      "status": "Approved",
-      "taxAmount": 18432,
-      "updatedAt": "2026-07-27T12:00:00.000Z"
-    },
-    {
-      "adjustmentAmount": 0,
-      "createdAt": "2026-07-26T11:00:00.000Z",
-      "dsaCode": "COS-DSA-GJ-SUR-005",
-      "dsaId": "COS-DSA-GJ-SUR-005",
-      "dsaName": "Surat Growth Finance",
-      "grossAmount": 94820,
-      "history": [
-        {
-          "action": "Raised",
-          "actor": "Krina Patel",
-          "amount": 111888,
-          "at": "2026-07-26T11:00:00.000Z",
-          "id": "inv-event-5-1",
-          "note": "Monthly commission invoice raised for Cosmos review.",
-          "party": "DSA"
-        }
-      ],
-      "id": "invoice-5",
-      "invoiceNumber": "INV-COS-0005",
-      "month": "Jul 2026",
-      "netAmount": 94820,
-      "raisedBy": "Krina Patel",
-      "raisedByRole": "DSA Partner",
-      "remarks": "Awaiting workflow action.",
-      "requestedAmount": 111888,
-      "source": "Manual",
-      "status": "Rejected",
-      "taxAmount": 17068,
-      "updatedAt": "2026-07-26T12:00:00.000Z"
-    },
-    {
-      "adjustmentAmount": 2500,
-      "createdAt": "2026-07-25T11:00:00.000Z",
-      "dsaCode": "COS-DSA-KA-BLR-006",
-      "dsaId": "COS-DSA-KA-BLR-006",
-      "dsaName": "Namma Finserve Pvt Ltd",
-      "grossAmount": 196387,
-      "history": [
-        {
-          "action": "Raised",
-          "actor": "Karthik Rao",
-          "amount": 229237,
-          "at": "2026-07-25T11:00:00.000Z",
-          "id": "inv-event-6-1",
-          "note": "Monthly commission invoice raised for Cosmos review.",
-          "party": "DSA"
-        }
-      ],
-      "id": "invoice-6",
-      "invoiceNumber": "INV-COS-0006",
-      "month": "Jul 2026",
-      "netAmount": 193887,
-      "raisedBy": "Karthik Rao",
-      "raisedByRole": "DSA Partner",
-      "remarks": "Awaiting workflow action.",
-      "requestedAmount": 229237,
-      "source": "Manual",
-      "status": "Raised by DSA",
-      "taxAmount": 35350,
-      "updatedAt": "2026-07-25T12:00:00.000Z"
-    },
-    {
-      "adjustmentAmount": 5000,
-      "createdAt": "2026-07-24T11:00:00.000Z",
-      "dsaCode": "COS-DSA-KA-MYS-007",
-      "dsaId": "COS-DSA-KA-MYS-007",
-      "dsaName": "Mysuru Credit Network LLP",
-      "grossAmount": 35693,
-      "history": [
-        {
-          "action": "Raised",
-          "actor": "Divya Hegde",
-          "amount": 37118,
-          "at": "2026-07-24T11:00:00.000Z",
-          "id": "inv-event-7-1",
-          "note": "Monthly commission invoice raised for Cosmos review.",
-          "party": "DSA"
-        }
-      ],
-      "id": "invoice-7",
-      "invoiceNumber": "INV-COS-0007",
-      "month": "Jul 2026",
-      "netAmount": 30693,
-      "raisedBy": "Divya Hegde",
-      "raisedByRole": "DSA Partner",
-      "remarks": "Awaiting workflow action.",
-      "requestedAmount": 37118,
-      "source": "Manual",
-      "status": "Pending Approval",
-      "taxAmount": 6425,
-      "updatedAt": "2026-07-24T12:00:00.000Z"
-    },
-    {
-      "adjustmentAmount": 0,
-      "createdAt": "2026-07-23T11:00:00.000Z",
-      "dsaCode": "COS-DSA-TS-HYD-008",
-      "dsaId": "COS-DSA-TS-HYD-008",
-      "dsaName": "Charminar Loan Services Pvt Ltd",
-      "grossAmount": 330475,
-      "history": [
-        {
-          "action": "Countered",
-          "actor": "Charminar Loan Services Pvt Ltd",
-          "amount": 3899610,
-          "at": "2026-07-31T09:57:28.247Z",
-          "id": "inv-event-ms8rqvcn-dukyu",
-          "note": "coutnering back. reasons",
-          "party": "DSA"
-        },
-        {
-          "action": "Raised",
-          "actor": "Saanvi Reddy",
-          "amount": 389961,
-          "at": "2026-07-23T11:00:00.000Z",
-          "id": "inv-event-8-1",
-          "note": "Monthly commission invoice raised for Cosmos review.",
-          "party": "DSA"
-        }
-      ],
-      "id": "invoice-8",
-      "invoiceNumber": "INV-COS-0008",
-      "month": "Jul 2026",
-      "netAmount": 330475,
-      "raisedBy": "Saanvi Reddy",
-      "raisedByRole": "DSA Partner",
-      "remarks": "coutnering back. reasons",
-      "requestedAmount": 3899610,
-      "source": "Manual",
-      "status": "Countered by DSA",
-      "taxAmount": 59486,
-      "updatedAt": "2026-07-31T09:57:28.247Z"
-    },
-    {
-      "adjustmentAmount": 0,
-      "approvedAmount": 51288,
-      "createdAt": "2026-07-22T11:00:00.000Z",
-      "dsaCode": "COS-DSA-TS-WGL-009",
-      "dsaId": "COS-DSA-TS-WGL-009",
-      "dsaName": "Kakatiya Finance Desk",
-      "grossAmount": 43464,
-      "history": [
-        {
-          "action": "Raised",
-          "actor": "Arjun Naik",
-          "amount": 51288,
-          "at": "2026-07-22T11:00:00.000Z",
-          "id": "inv-event-9-1",
-          "note": "Monthly commission invoice raised for Cosmos review.",
-          "party": "DSA"
-        }
-      ],
-      "id": "invoice-9",
-      "invoiceNumber": "INV-COS-0009",
-      "month": "Jul 2026",
-      "netAmount": 43464,
-      "raisedBy": "Arjun Naik",
-      "raisedByRole": "DSA Partner",
-      "remarks": "Approved after reconciliation.",
-      "requestedAmount": 51288,
-      "source": "Manual",
-      "status": "Approved",
-      "taxAmount": 7824,
-      "updatedAt": "2026-07-22T12:00:00.000Z"
-    },
-    {
-      "adjustmentAmount": 0,
       "createdAt": "2026-07-21T11:00:00.000Z",
       "dsaCode": "COS-DSA-DL-DEL-010",
       "dsaId": "COS-DSA-DL-DEL-010",
@@ -14623,255 +14288,6 @@
       "status": "Rejected",
       "taxAmount": 27610,
       "updatedAt": "2026-07-30T12:00:00.000Z"
-    },
-    {
-      "adjustmentAmount": 2500,
-      "createdAt": "2026-07-20T11:00:00.000Z",
-      "dsaCode": "COS-DSA-RJ-JAI-011",
-      "dsaId": "COS-DSA-RJ-JAI-011",
-      "dsaName": "Pinkcity Credit Hub",
-      "grossAmount": 298726,
-      "history": [
-        {
-          "action": "Raised",
-          "actor": "Mahi Rathore",
-          "amount": 349997,
-          "at": "2026-07-20T11:00:00.000Z",
-          "id": "inv-event-11-1",
-          "note": "Monthly commission invoice raised for Cosmos review.",
-          "party": "DSA"
-        }
-      ],
-      "id": "invoice-11",
-      "invoiceNumber": "INV-COS-0011",
-      "month": "Jul 2026",
-      "netAmount": 296226,
-      "raisedBy": "Mahi Rathore",
-      "raisedByRole": "DSA Partner",
-      "remarks": "Awaiting workflow action.",
-      "requestedAmount": 349997,
-      "source": "Manual",
-      "status": "Raised by DSA",
-      "taxAmount": 53771,
-      "updatedAt": "2026-07-29T12:00:00.000Z"
-    },
-    {
-      "adjustmentAmount": 0,
-      "createdAt": "2026-07-19T11:00:00.000Z",
-      "dsaCode": "COS-DSA-RJ-JOD-012",
-      "dsaId": "COS-DSA-RJ-JOD-012",
-      "dsaName": "Marwar Lending Partners Pvt Ltd",
-      "grossAmount": 49025,
-      "history": [
-        {
-          "action": "Raised",
-          "actor": "Kabir Singhvi",
-          "amount": 57850,
-          "at": "2026-07-19T11:00:00.000Z",
-          "id": "inv-event-12-1",
-          "note": "Monthly commission invoice raised for Cosmos review.",
-          "party": "DSA"
-        }
-      ],
-      "id": "invoice-12",
-      "invoiceNumber": "INV-COS-0012",
-      "month": "Jul 2026",
-      "netAmount": 49025,
-      "raisedBy": "Kabir Singhvi",
-      "raisedByRole": "DSA Partner",
-      "remarks": "Awaiting workflow action.",
-      "requestedAmount": 57850,
-      "source": "Manual",
-      "status": "Pending Approval",
-      "taxAmount": 8825,
-      "updatedAt": "2026-07-28T12:00:00.000Z"
-    },
-    {
-      "adjustmentAmount": 5000,
-      "createdAt": "2026-07-18T11:00:00.000Z",
-      "dsaCode": "COS-DSA-TN-CHN-013",
-      "dsaId": "COS-DSA-TN-CHN-013",
-      "dsaName": "Marina Retail Finance LLP",
-      "grossAmount": 477202,
-      "history": [
-        {
-          "action": "Raised",
-          "actor": "Ananya Iyer",
-          "amount": 558098,
-          "at": "2026-07-18T11:00:00.000Z",
-          "id": "inv-event-13-1",
-          "note": "Monthly commission invoice raised for Cosmos review.",
-          "party": "DSA"
-        }
-      ],
-      "id": "invoice-13",
-      "invoiceNumber": "INV-COS-0013",
-      "month": "Jul 2026",
-      "netAmount": 472202,
-      "raisedBy": "Ananya Iyer",
-      "raisedByRole": "DSA Partner",
-      "remarks": "Awaiting workflow action.",
-      "requestedAmount": 558098,
-      "source": "Manual",
-      "status": "Countered by Bank",
-      "taxAmount": 85896,
-      "updatedAt": "2026-07-27T12:00:00.000Z"
-    },
-    {
-      "adjustmentAmount": 0,
-      "approvedAmount": 276509,
-      "createdAt": "2026-07-17T11:00:00.000Z",
-      "dsaCode": "COS-DSA-TN-CBE-014",
-      "dsaId": "COS-DSA-TN-CBE-014",
-      "dsaName": "Kovai Loan Channels Pvt Ltd",
-      "grossAmount": 234330,
-      "history": [
-        {
-          "action": "Raised",
-          "actor": "Vikram Narayanan",
-          "amount": 276509,
-          "at": "2026-07-17T11:00:00.000Z",
-          "id": "inv-event-14-1",
-          "note": "Monthly commission invoice raised for Cosmos review.",
-          "party": "DSA"
-        }
-      ],
-      "id": "invoice-14",
-      "invoiceNumber": "INV-COS-0014",
-      "month": "Jul 2026",
-      "netAmount": 234330,
-      "raisedBy": "Vikram Narayanan",
-      "raisedByRole": "DSA Partner",
-      "remarks": "Approved after reconciliation.",
-      "requestedAmount": 276509,
-      "source": "Manual",
-      "status": "Approved",
-      "taxAmount": 42179,
-      "updatedAt": "2026-07-26T12:00:00.000Z"
-    },
-    {
-      "adjustmentAmount": 0,
-      "createdAt": "2026-07-16T11:00:00.000Z",
-      "dsaCode": "COS-DSA-KL-COK-015",
-      "dsaId": "COS-DSA-KL-COK-015",
-      "dsaName": "Malabar Credit Links",
-      "grossAmount": 211955,
-      "history": [
-        {
-          "action": "Raised",
-          "actor": "Neha Menon",
-          "amount": 250107,
-          "at": "2026-07-16T11:00:00.000Z",
-          "id": "inv-event-15-1",
-          "note": "Monthly commission invoice raised for Cosmos review.",
-          "party": "DSA"
-        }
-      ],
-      "id": "invoice-15",
-      "invoiceNumber": "INV-COS-0015",
-      "month": "Jul 2026",
-      "netAmount": 211955,
-      "raisedBy": "Neha Menon",
-      "raisedByRole": "DSA Partner",
-      "remarks": "Awaiting workflow action.",
-      "requestedAmount": 250107,
-      "source": "Manual",
-      "status": "Rejected",
-      "taxAmount": 38152,
-      "updatedAt": "2026-07-25T12:00:00.000Z"
-    },
-    {
-      "adjustmentAmount": 2500,
-      "createdAt": "2026-07-15T11:00:00.000Z",
-      "dsaCode": "COS-DSA-KL-TRV-016",
-      "dsaId": "COS-DSA-KL-TRV-016",
-      "dsaName": "Travancore Lending LLP",
-      "grossAmount": 401065,
-      "history": [
-        {
-          "action": "Raised",
-          "actor": "Aditya Nair",
-          "amount": 470757,
-          "at": "2026-07-15T11:00:00.000Z",
-          "id": "inv-event-16-1",
-          "note": "Monthly commission invoice raised for Cosmos review.",
-          "party": "DSA"
-        }
-      ],
-      "id": "invoice-16",
-      "invoiceNumber": "INV-COS-0016",
-      "month": "Jul 2026",
-      "netAmount": 398565,
-      "raisedBy": "Aditya Nair",
-      "raisedByRole": "DSA Partner",
-      "remarks": "Awaiting workflow action.",
-      "requestedAmount": 470757,
-      "source": "Manual",
-      "status": "Raised by DSA",
-      "taxAmount": 72192,
-      "updatedAt": "2026-07-24T12:00:00.000Z"
-    },
-    {
-      "adjustmentAmount": 0,
-      "createdAt": "2026-07-14T11:00:00.000Z",
-      "dsaCode": "COS-DSA-MP-IDR-017",
-      "dsaId": "COS-DSA-MP-IDR-017",
-      "dsaName": "Malwa Finance Channels Pvt Ltd",
-      "grossAmount": 62357,
-      "history": [
-        {
-          "action": "Raised",
-          "actor": "Suhani Jain",
-          "amount": 73581,
-          "at": "2026-07-14T11:00:00.000Z",
-          "id": "inv-event-17-1",
-          "note": "Monthly commission invoice raised for Cosmos review.",
-          "party": "DSA"
-        }
-      ],
-      "id": "invoice-17",
-      "invoiceNumber": "INV-COS-0017",
-      "month": "Jul 2026",
-      "netAmount": 62357,
-      "raisedBy": "Suhani Jain",
-      "raisedByRole": "DSA Partner",
-      "remarks": "Awaiting workflow action.",
-      "requestedAmount": 73581,
-      "source": "Manual",
-      "status": "Pending Approval",
-      "taxAmount": 11224,
-      "updatedAt": "2026-07-23T12:00:00.000Z"
-    },
-    {
-      "adjustmentAmount": 0,
-      "createdAt": "2026-07-13T11:00:00.000Z",
-      "dsaCode": "COS-DSA-MP-BHO-018",
-      "dsaId": "COS-DSA-MP-BHO-018",
-      "dsaName": "Lakecity Loan Desk",
-      "grossAmount": 309519,
-      "history": [
-        {
-          "action": "Raised",
-          "actor": "Harsh Tiwari",
-          "amount": 365232,
-          "at": "2026-07-13T11:00:00.000Z",
-          "id": "inv-event-18-1",
-          "note": "Monthly commission invoice raised for Cosmos review.",
-          "party": "DSA"
-        }
-      ],
-      "id": "invoice-18",
-      "invoiceNumber": "INV-COS-0018",
-      "month": "Jul 2026",
-      "netAmount": 309519,
-      "raisedBy": "Harsh Tiwari",
-      "raisedByRole": "DSA Partner",
-      "remarks": "Awaiting workflow action.",
-      "requestedAmount": 365232,
-      "source": "Manual",
-      "status": "Countered by Bank",
-      "taxAmount": 55713,
-      "updatedAt": "2026-07-22T12:00:00.000Z"
     },
     {
       "adjustmentAmount": 5000,
@@ -14908,6 +14324,68 @@
     {
       "adjustmentAmount": 0,
       "createdAt": "2026-07-29T11:00:00.000Z",
+      "dsaCode": "COS-DSA-MH-PUN-002",
+      "dsaId": "COS-DSA-MH-PUN-002",
+      "dsaName": "Sahyadri Credit Associates LLP",
+      "grossAmount": 22361,
+      "history": [
+        {
+          "action": "Raised",
+          "actor": "Nisha Kulkarni",
+          "amount": 26386,
+          "at": "2026-07-29T11:00:00.000Z",
+          "id": "inv-event-2-1",
+          "note": "Monthly commission invoice raised for Cosmos review.",
+          "party": "DSA"
+        }
+      ],
+      "id": "invoice-2",
+      "invoiceNumber": "INV-COS-0002",
+      "month": "Jul 2026",
+      "netAmount": 22361,
+      "raisedBy": "Nisha Kulkarni",
+      "raisedByRole": "DSA Partner",
+      "remarks": "Awaiting workflow action.",
+      "requestedAmount": 26386,
+      "source": "Manual",
+      "status": "Pending Approval",
+      "taxAmount": 4025,
+      "updatedAt": "2026-07-29T12:00:00.000Z"
+    },
+    {
+      "adjustmentAmount": 2500,
+      "createdAt": "2026-07-20T11:00:00.000Z",
+      "dsaCode": "COS-DSA-RJ-JAI-011",
+      "dsaId": "COS-DSA-RJ-JAI-011",
+      "dsaName": "Pinkcity Credit Hub",
+      "grossAmount": 298726,
+      "history": [
+        {
+          "action": "Raised",
+          "actor": "Mahi Rathore",
+          "amount": 349997,
+          "at": "2026-07-20T11:00:00.000Z",
+          "id": "inv-event-11-1",
+          "note": "Monthly commission invoice raised for Cosmos review.",
+          "party": "DSA"
+        }
+      ],
+      "id": "invoice-11",
+      "invoiceNumber": "INV-COS-0011",
+      "month": "Jul 2026",
+      "netAmount": 296226,
+      "raisedBy": "Mahi Rathore",
+      "raisedByRole": "DSA Partner",
+      "remarks": "Awaiting workflow action.",
+      "requestedAmount": 349997,
+      "source": "Manual",
+      "status": "Raised by DSA",
+      "taxAmount": 53771,
+      "updatedAt": "2026-07-29T12:00:00.000Z"
+    },
+    {
+      "adjustmentAmount": 0,
+      "createdAt": "2026-07-29T11:00:00.000Z",
       "dsaCode": "COS-DSA-WB-SLG-020",
       "dsaId": "COS-DSA-WB-SLG-020",
       "dsaName": "North Bengal Credit LLP",
@@ -14935,6 +14413,68 @@
       "status": "Rejected",
       "taxAmount": 48694,
       "updatedAt": "2026-07-29T12:00:00.000Z"
+    },
+    {
+      "adjustmentAmount": 0,
+      "createdAt": "2026-07-28T11:00:00.000Z",
+      "dsaCode": "COS-DSA-MH-NAG-003",
+      "dsaId": "COS-DSA-MH-NAG-003",
+      "dsaName": "Vidarbha Loan Connect",
+      "grossAmount": 183748,
+      "history": [
+        {
+          "action": "Raised",
+          "actor": "Rohit Deshmukh",
+          "amount": 216823,
+          "at": "2026-07-28T11:00:00.000Z",
+          "id": "inv-event-3-1",
+          "note": "Monthly commission invoice raised for Cosmos review.",
+          "party": "DSA"
+        }
+      ],
+      "id": "invoice-3",
+      "invoiceNumber": "INV-COS-0003",
+      "month": "Jul 2026",
+      "netAmount": 183748,
+      "raisedBy": "Rohit Deshmukh",
+      "raisedByRole": "DSA Partner",
+      "remarks": "Awaiting workflow action.",
+      "requestedAmount": 216823,
+      "source": "Manual",
+      "status": "Countered by Bank",
+      "taxAmount": 33075,
+      "updatedAt": "2026-07-28T12:00:00.000Z"
+    },
+    {
+      "adjustmentAmount": 0,
+      "createdAt": "2026-07-19T11:00:00.000Z",
+      "dsaCode": "COS-DSA-RJ-JOD-012",
+      "dsaId": "COS-DSA-RJ-JOD-012",
+      "dsaName": "Marwar Lending Partners Pvt Ltd",
+      "grossAmount": 49025,
+      "history": [
+        {
+          "action": "Raised",
+          "actor": "Kabir Singhvi",
+          "amount": 57850,
+          "at": "2026-07-19T11:00:00.000Z",
+          "id": "inv-event-12-1",
+          "note": "Monthly commission invoice raised for Cosmos review.",
+          "party": "DSA"
+        }
+      ],
+      "id": "invoice-12",
+      "invoiceNumber": "INV-COS-0012",
+      "month": "Jul 2026",
+      "netAmount": 49025,
+      "raisedBy": "Kabir Singhvi",
+      "raisedByRole": "DSA Partner",
+      "remarks": "Awaiting workflow action.",
+      "requestedAmount": 57850,
+      "source": "Manual",
+      "status": "Pending Approval",
+      "taxAmount": 8825,
+      "updatedAt": "2026-07-28T12:00:00.000Z"
     },
     {
       "adjustmentAmount": 2500,
@@ -14966,6 +14506,69 @@
       "status": "Raised by DSA",
       "taxAmount": 10802,
       "updatedAt": "2026-07-28T12:00:00.000Z"
+    },
+    {
+      "adjustmentAmount": 0,
+      "approvedAmount": 120831,
+      "createdAt": "2026-07-27T11:00:00.000Z",
+      "dsaCode": "COS-DSA-GJ-AHM-004",
+      "dsaId": "COS-DSA-GJ-AHM-004",
+      "dsaName": "Amdavad Capital Partners Pvt Ltd",
+      "grossAmount": 102399,
+      "history": [
+        {
+          "action": "Raised",
+          "actor": "Mehul Shah",
+          "amount": 120831,
+          "at": "2026-07-27T11:00:00.000Z",
+          "id": "inv-event-4-1",
+          "note": "Monthly commission invoice raised for Cosmos review.",
+          "party": "DSA"
+        }
+      ],
+      "id": "invoice-4",
+      "invoiceNumber": "INV-COS-0004",
+      "month": "Jul 2026",
+      "netAmount": 102399,
+      "raisedBy": "Mehul Shah",
+      "raisedByRole": "DSA Partner",
+      "remarks": "Approved after reconciliation.",
+      "requestedAmount": 120831,
+      "source": "Manual",
+      "status": "Approved",
+      "taxAmount": 18432,
+      "updatedAt": "2026-07-27T12:00:00.000Z"
+    },
+    {
+      "adjustmentAmount": 5000,
+      "createdAt": "2026-07-18T11:00:00.000Z",
+      "dsaCode": "COS-DSA-TN-CHN-013",
+      "dsaId": "COS-DSA-TN-CHN-013",
+      "dsaName": "Marina Retail Finance LLP",
+      "grossAmount": 477202,
+      "history": [
+        {
+          "action": "Raised",
+          "actor": "Ananya Iyer",
+          "amount": 558098,
+          "at": "2026-07-18T11:00:00.000Z",
+          "id": "inv-event-13-1",
+          "note": "Monthly commission invoice raised for Cosmos review.",
+          "party": "DSA"
+        }
+      ],
+      "id": "invoice-13",
+      "invoiceNumber": "INV-COS-0013",
+      "month": "Jul 2026",
+      "netAmount": 472202,
+      "raisedBy": "Ananya Iyer",
+      "raisedByRole": "DSA Partner",
+      "remarks": "Awaiting workflow action.",
+      "requestedAmount": 558098,
+      "source": "Manual",
+      "status": "Countered by Bank",
+      "taxAmount": 85896,
+      "updatedAt": "2026-07-27T12:00:00.000Z"
     },
     {
       "adjustmentAmount": 0,
@@ -15001,6 +14604,69 @@
     {
       "adjustmentAmount": 0,
       "createdAt": "2026-07-26T11:00:00.000Z",
+      "dsaCode": "COS-DSA-GJ-SUR-005",
+      "dsaId": "COS-DSA-GJ-SUR-005",
+      "dsaName": "Surat Growth Finance",
+      "grossAmount": 94820,
+      "history": [
+        {
+          "action": "Raised",
+          "actor": "Krina Patel",
+          "amount": 111888,
+          "at": "2026-07-26T11:00:00.000Z",
+          "id": "inv-event-5-1",
+          "note": "Monthly commission invoice raised for Cosmos review.",
+          "party": "DSA"
+        }
+      ],
+      "id": "invoice-5",
+      "invoiceNumber": "INV-COS-0005",
+      "month": "Jul 2026",
+      "netAmount": 94820,
+      "raisedBy": "Krina Patel",
+      "raisedByRole": "DSA Partner",
+      "remarks": "Awaiting workflow action.",
+      "requestedAmount": 111888,
+      "source": "Manual",
+      "status": "Rejected",
+      "taxAmount": 17068,
+      "updatedAt": "2026-07-26T12:00:00.000Z"
+    },
+    {
+      "adjustmentAmount": 0,
+      "approvedAmount": 276509,
+      "createdAt": "2026-07-17T11:00:00.000Z",
+      "dsaCode": "COS-DSA-TN-CBE-014",
+      "dsaId": "COS-DSA-TN-CBE-014",
+      "dsaName": "Kovai Loan Channels Pvt Ltd",
+      "grossAmount": 234330,
+      "history": [
+        {
+          "action": "Raised",
+          "actor": "Vikram Narayanan",
+          "amount": 276509,
+          "at": "2026-07-17T11:00:00.000Z",
+          "id": "inv-event-14-1",
+          "note": "Monthly commission invoice raised for Cosmos review.",
+          "party": "DSA"
+        }
+      ],
+      "id": "invoice-14",
+      "invoiceNumber": "INV-COS-0014",
+      "month": "Jul 2026",
+      "netAmount": 234330,
+      "raisedBy": "Vikram Narayanan",
+      "raisedByRole": "DSA Partner",
+      "remarks": "Approved after reconciliation.",
+      "requestedAmount": 276509,
+      "source": "Manual",
+      "status": "Approved",
+      "taxAmount": 42179,
+      "updatedAt": "2026-07-26T12:00:00.000Z"
+    },
+    {
+      "adjustmentAmount": 0,
+      "createdAt": "2026-07-26T11:00:00.000Z",
       "dsaCode": "COS-DSA-PB-LDH-023",
       "dsaId": "COS-DSA-PB-LDH-023",
       "dsaName": "Punjab Growth Finance Pvt Ltd",
@@ -15028,6 +14694,68 @@
       "status": "Countered by Bank",
       "taxAmount": 20480,
       "updatedAt": "2026-07-26T12:00:00.000Z"
+    },
+    {
+      "adjustmentAmount": 2500,
+      "createdAt": "2026-07-25T11:00:00.000Z",
+      "dsaCode": "COS-DSA-KA-BLR-006",
+      "dsaId": "COS-DSA-KA-BLR-006",
+      "dsaName": "Namma Finserve Pvt Ltd",
+      "grossAmount": 196387,
+      "history": [
+        {
+          "action": "Raised",
+          "actor": "Karthik Rao",
+          "amount": 229237,
+          "at": "2026-07-25T11:00:00.000Z",
+          "id": "inv-event-6-1",
+          "note": "Monthly commission invoice raised for Cosmos review.",
+          "party": "DSA"
+        }
+      ],
+      "id": "invoice-6",
+      "invoiceNumber": "INV-COS-0006",
+      "month": "Jul 2026",
+      "netAmount": 193887,
+      "raisedBy": "Karthik Rao",
+      "raisedByRole": "DSA Partner",
+      "remarks": "Awaiting workflow action.",
+      "requestedAmount": 229237,
+      "source": "Manual",
+      "status": "Raised by DSA",
+      "taxAmount": 35350,
+      "updatedAt": "2026-07-25T12:00:00.000Z"
+    },
+    {
+      "adjustmentAmount": 0,
+      "createdAt": "2026-07-16T11:00:00.000Z",
+      "dsaCode": "COS-DSA-KL-COK-015",
+      "dsaId": "COS-DSA-KL-COK-015",
+      "dsaName": "Malabar Credit Links",
+      "grossAmount": 211955,
+      "history": [
+        {
+          "action": "Raised",
+          "actor": "Neha Menon",
+          "amount": 250107,
+          "at": "2026-07-16T11:00:00.000Z",
+          "id": "inv-event-15-1",
+          "note": "Monthly commission invoice raised for Cosmos review.",
+          "party": "DSA"
+        }
+      ],
+      "id": "invoice-15",
+      "invoiceNumber": "INV-COS-0015",
+      "month": "Jul 2026",
+      "netAmount": 211955,
+      "raisedBy": "Neha Menon",
+      "raisedByRole": "DSA Partner",
+      "remarks": "Awaiting workflow action.",
+      "requestedAmount": 250107,
+      "source": "Manual",
+      "status": "Rejected",
+      "taxAmount": 38152,
+      "updatedAt": "2026-07-25T12:00:00.000Z"
     },
     {
       "adjustmentAmount": 0,
@@ -15064,6 +14792,68 @@
     {
       "adjustmentAmount": 5000,
       "createdAt": "2026-07-24T11:00:00.000Z",
+      "dsaCode": "COS-DSA-KA-MYS-007",
+      "dsaId": "COS-DSA-KA-MYS-007",
+      "dsaName": "Mysuru Credit Network LLP",
+      "grossAmount": 35693,
+      "history": [
+        {
+          "action": "Raised",
+          "actor": "Divya Hegde",
+          "amount": 37118,
+          "at": "2026-07-24T11:00:00.000Z",
+          "id": "inv-event-7-1",
+          "note": "Monthly commission invoice raised for Cosmos review.",
+          "party": "DSA"
+        }
+      ],
+      "id": "invoice-7",
+      "invoiceNumber": "INV-COS-0007",
+      "month": "Jul 2026",
+      "netAmount": 30693,
+      "raisedBy": "Divya Hegde",
+      "raisedByRole": "DSA Partner",
+      "remarks": "Awaiting workflow action.",
+      "requestedAmount": 37118,
+      "source": "Manual",
+      "status": "Pending Approval",
+      "taxAmount": 6425,
+      "updatedAt": "2026-07-24T12:00:00.000Z"
+    },
+    {
+      "adjustmentAmount": 2500,
+      "createdAt": "2026-07-15T11:00:00.000Z",
+      "dsaCode": "COS-DSA-KL-TRV-016",
+      "dsaId": "COS-DSA-KL-TRV-016",
+      "dsaName": "Travancore Lending LLP",
+      "grossAmount": 401065,
+      "history": [
+        {
+          "action": "Raised",
+          "actor": "Aditya Nair",
+          "amount": 470757,
+          "at": "2026-07-15T11:00:00.000Z",
+          "id": "inv-event-16-1",
+          "note": "Monthly commission invoice raised for Cosmos review.",
+          "party": "DSA"
+        }
+      ],
+      "id": "invoice-16",
+      "invoiceNumber": "INV-COS-0016",
+      "month": "Jul 2026",
+      "netAmount": 398565,
+      "raisedBy": "Aditya Nair",
+      "raisedByRole": "DSA Partner",
+      "remarks": "Awaiting workflow action.",
+      "requestedAmount": 470757,
+      "source": "Manual",
+      "status": "Raised by DSA",
+      "taxAmount": 72192,
+      "updatedAt": "2026-07-24T12:00:00.000Z"
+    },
+    {
+      "adjustmentAmount": 5000,
+      "createdAt": "2026-07-24T11:00:00.000Z",
       "dsaCode": "COS-DSA-GJ-BDQ-025",
       "dsaId": "COS-DSA-GJ-BDQ-025",
       "dsaName": "Baroda Credit Square Pvt Ltd",
@@ -15091,6 +14881,100 @@
       "status": "Rejected",
       "taxAmount": 14169,
       "updatedAt": "2026-07-24T12:00:00.000Z"
+    },
+    {
+      "adjustmentAmount": 0,
+      "createdAt": "2026-07-14T11:00:00.000Z",
+      "dsaCode": "COS-DSA-MP-IDR-017",
+      "dsaId": "COS-DSA-MP-IDR-017",
+      "dsaName": "Malwa Finance Channels Pvt Ltd",
+      "grossAmount": 62357,
+      "history": [
+        {
+          "action": "Raised",
+          "actor": "Suhani Jain",
+          "amount": 73581,
+          "at": "2026-07-14T11:00:00.000Z",
+          "id": "inv-event-17-1",
+          "note": "Monthly commission invoice raised for Cosmos review.",
+          "party": "DSA"
+        }
+      ],
+      "id": "invoice-17",
+      "invoiceNumber": "INV-COS-0017",
+      "month": "Jul 2026",
+      "netAmount": 62357,
+      "raisedBy": "Suhani Jain",
+      "raisedByRole": "DSA Partner",
+      "remarks": "Awaiting workflow action.",
+      "requestedAmount": 73581,
+      "source": "Manual",
+      "status": "Pending Approval",
+      "taxAmount": 11224,
+      "updatedAt": "2026-07-23T12:00:00.000Z"
+    },
+    {
+      "adjustmentAmount": 0,
+      "approvedAmount": 51288,
+      "createdAt": "2026-07-22T11:00:00.000Z",
+      "dsaCode": "COS-DSA-TS-WGL-009",
+      "dsaId": "COS-DSA-TS-WGL-009",
+      "dsaName": "Kakatiya Finance Desk",
+      "grossAmount": 43464,
+      "history": [
+        {
+          "action": "Raised",
+          "actor": "Arjun Naik",
+          "amount": 51288,
+          "at": "2026-07-22T11:00:00.000Z",
+          "id": "inv-event-9-1",
+          "note": "Monthly commission invoice raised for Cosmos review.",
+          "party": "DSA"
+        }
+      ],
+      "id": "invoice-9",
+      "invoiceNumber": "INV-COS-0009",
+      "month": "Jul 2026",
+      "netAmount": 43464,
+      "raisedBy": "Arjun Naik",
+      "raisedByRole": "DSA Partner",
+      "remarks": "Approved after reconciliation.",
+      "requestedAmount": 51288,
+      "source": "Manual",
+      "status": "Approved",
+      "taxAmount": 7824,
+      "updatedAt": "2026-07-22T12:00:00.000Z"
+    },
+    {
+      "adjustmentAmount": 0,
+      "createdAt": "2026-07-13T11:00:00.000Z",
+      "dsaCode": "COS-DSA-MP-BHO-018",
+      "dsaId": "COS-DSA-MP-BHO-018",
+      "dsaName": "Lakecity Loan Desk",
+      "grossAmount": 309519,
+      "history": [
+        {
+          "action": "Raised",
+          "actor": "Harsh Tiwari",
+          "amount": 365232,
+          "at": "2026-07-13T11:00:00.000Z",
+          "id": "inv-event-18-1",
+          "note": "Monthly commission invoice raised for Cosmos review.",
+          "party": "DSA"
+        }
+      ],
+      "id": "invoice-18",
+      "invoiceNumber": "INV-COS-0018",
+      "month": "Jul 2026",
+      "netAmount": 309519,
+      "raisedBy": "Harsh Tiwari",
+      "raisedByRole": "DSA Partner",
+      "remarks": "Awaiting workflow action.",
+      "requestedAmount": 365232,
+      "source": "Manual",
+      "status": "Countered by Bank",
+      "taxAmount": 55713,
+      "updatedAt": "2026-07-22T12:00:00.000Z"
     }
   ],
   "dsaProductConfigs": [
@@ -15107,6 +14991,7 @@
       "product": "Personal Loan",
       "ranges": [
         {
+          "commissionAmount": 6000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15116,6 +15001,7 @@
           "rate": 0.75
         },
         {
+          "commissionAmount": 18000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15141,6 +15027,7 @@
       "product": "Home Loan",
       "ranges": [
         {
+          "commissionAmount": 6750,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15150,6 +15037,7 @@
           "rate": 0.9
         },
         {
+          "commissionAmount": 19200,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15175,6 +15063,7 @@
       "product": "Loan Against Property",
       "ranges": [
         {
+          "commissionAmount": 7500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15184,6 +15073,7 @@
           "rate": 1.05
         },
         {
+          "commissionAmount": 20400,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15209,6 +15099,7 @@
       "product": "Personal Loan",
       "ranges": [
         {
+          "commissionAmount": 6250,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15218,6 +15109,7 @@
           "rate": 0.75
         },
         {
+          "commissionAmount": 18500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15243,6 +15135,7 @@
       "product": "Home Loan",
       "ranges": [
         {
+          "commissionAmount": 7000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15252,6 +15145,7 @@
           "rate": 0.9
         },
         {
+          "commissionAmount": 19700,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15277,6 +15171,7 @@
       "product": "Loan Against Property",
       "ranges": [
         {
+          "commissionAmount": 7750,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15286,6 +15181,7 @@
           "rate": 1.05
         },
         {
+          "commissionAmount": 20900,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15311,6 +15207,7 @@
       "product": "Business Loan",
       "ranges": [
         {
+          "commissionAmount": 8500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15320,6 +15217,7 @@
           "rate": 1.2
         },
         {
+          "commissionAmount": 22100,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15345,6 +15243,7 @@
       "product": "Personal Loan",
       "ranges": [
         {
+          "commissionAmount": 6500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15354,6 +15253,7 @@
           "rate": 0.75
         },
         {
+          "commissionAmount": 19000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15379,6 +15279,7 @@
       "product": "Home Loan",
       "ranges": [
         {
+          "commissionAmount": 7250,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15388,6 +15289,7 @@
           "rate": 0.9
         },
         {
+          "commissionAmount": 20200,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15413,6 +15315,7 @@
       "product": "Loan Against Property",
       "ranges": [
         {
+          "commissionAmount": 8000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15422,6 +15325,7 @@
           "rate": 1.05
         },
         {
+          "commissionAmount": 21400,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15447,6 +15351,7 @@
       "product": "Personal Loan",
       "ranges": [
         {
+          "commissionAmount": 6750,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15456,6 +15361,7 @@
           "rate": 0.75
         },
         {
+          "commissionAmount": 19500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15481,6 +15387,7 @@
       "product": "Home Loan",
       "ranges": [
         {
+          "commissionAmount": 7500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15490,6 +15397,7 @@
           "rate": 0.9
         },
         {
+          "commissionAmount": 20700,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15515,6 +15423,7 @@
       "product": "Loan Against Property",
       "ranges": [
         {
+          "commissionAmount": 8250,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15524,6 +15433,7 @@
           "rate": 1.05
         },
         {
+          "commissionAmount": 21900,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15549,6 +15459,7 @@
       "product": "Business Loan",
       "ranges": [
         {
+          "commissionAmount": 9000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15558,6 +15469,7 @@
           "rate": 1.2
         },
         {
+          "commissionAmount": 23100,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15583,6 +15495,7 @@
       "product": "Personal Loan",
       "ranges": [
         {
+          "commissionAmount": 7000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15592,6 +15505,7 @@
           "rate": 0.75
         },
         {
+          "commissionAmount": 20000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15617,6 +15531,7 @@
       "product": "Home Loan",
       "ranges": [
         {
+          "commissionAmount": 7750,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15626,6 +15541,7 @@
           "rate": 0.9
         },
         {
+          "commissionAmount": 21200,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15651,6 +15567,7 @@
       "product": "Loan Against Property",
       "ranges": [
         {
+          "commissionAmount": 8500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15660,6 +15577,7 @@
           "rate": 1.05
         },
         {
+          "commissionAmount": 22400,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15685,6 +15603,7 @@
       "product": "Personal Loan",
       "ranges": [
         {
+          "commissionAmount": 7250,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15694,6 +15613,7 @@
           "rate": 0.75
         },
         {
+          "commissionAmount": 20500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15719,6 +15639,7 @@
       "product": "Home Loan",
       "ranges": [
         {
+          "commissionAmount": 8000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15728,6 +15649,7 @@
           "rate": 0.9
         },
         {
+          "commissionAmount": 21700,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15753,6 +15675,7 @@
       "product": "Loan Against Property",
       "ranges": [
         {
+          "commissionAmount": 8750,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15762,6 +15685,7 @@
           "rate": 1.05
         },
         {
+          "commissionAmount": 22900,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15787,6 +15711,7 @@
       "product": "Business Loan",
       "ranges": [
         {
+          "commissionAmount": 9500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15796,6 +15721,7 @@
           "rate": 1.2
         },
         {
+          "commissionAmount": 24100,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15821,6 +15747,7 @@
       "product": "Personal Loan",
       "ranges": [
         {
+          "commissionAmount": 7500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15830,6 +15757,7 @@
           "rate": 0.75
         },
         {
+          "commissionAmount": 21000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15855,6 +15783,7 @@
       "product": "Home Loan",
       "ranges": [
         {
+          "commissionAmount": 8250,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15864,6 +15793,7 @@
           "rate": 0.9
         },
         {
+          "commissionAmount": 22200,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15889,6 +15819,7 @@
       "product": "Loan Against Property",
       "ranges": [
         {
+          "commissionAmount": 9000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15898,6 +15829,7 @@
           "rate": 1.05
         },
         {
+          "commissionAmount": 23400,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15923,6 +15855,7 @@
       "product": "Personal Loan",
       "ranges": [
         {
+          "commissionAmount": 7750,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15932,6 +15865,7 @@
           "rate": 0.75
         },
         {
+          "commissionAmount": 21500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15957,6 +15891,7 @@
       "product": "Home Loan",
       "ranges": [
         {
+          "commissionAmount": 8500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15966,6 +15901,7 @@
           "rate": 0.9
         },
         {
+          "commissionAmount": 22700,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -15991,6 +15927,7 @@
       "product": "Loan Against Property",
       "ranges": [
         {
+          "commissionAmount": 9250,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16000,6 +15937,7 @@
           "rate": 1.05
         },
         {
+          "commissionAmount": 23900,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16025,6 +15963,7 @@
       "product": "Business Loan",
       "ranges": [
         {
+          "commissionAmount": 10000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16034,6 +15973,7 @@
           "rate": 1.2
         },
         {
+          "commissionAmount": 25100,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16059,6 +15999,7 @@
       "product": "Personal Loan",
       "ranges": [
         {
+          "commissionAmount": 8000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16068,6 +16009,7 @@
           "rate": 0.75
         },
         {
+          "commissionAmount": 22000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16093,6 +16035,7 @@
       "product": "Home Loan",
       "ranges": [
         {
+          "commissionAmount": 8750,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16102,6 +16045,7 @@
           "rate": 0.9
         },
         {
+          "commissionAmount": 23200,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16127,6 +16071,7 @@
       "product": "Loan Against Property",
       "ranges": [
         {
+          "commissionAmount": 9500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16136,6 +16081,7 @@
           "rate": 1.05
         },
         {
+          "commissionAmount": 24400,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16161,6 +16107,7 @@
       "product": "Personal Loan",
       "ranges": [
         {
+          "commissionAmount": 8250,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16170,6 +16117,7 @@
           "rate": 0.75
         },
         {
+          "commissionAmount": 22500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16195,6 +16143,7 @@
       "product": "Home Loan",
       "ranges": [
         {
+          "commissionAmount": 9000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16204,6 +16153,7 @@
           "rate": 0.9
         },
         {
+          "commissionAmount": 23700,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16229,6 +16179,7 @@
       "product": "Loan Against Property",
       "ranges": [
         {
+          "commissionAmount": 9750,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16238,6 +16189,7 @@
           "rate": 1.05
         },
         {
+          "commissionAmount": 24900,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16263,6 +16215,7 @@
       "product": "Business Loan",
       "ranges": [
         {
+          "commissionAmount": 10500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16272,6 +16225,7 @@
           "rate": 1.2
         },
         {
+          "commissionAmount": 26100,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16297,6 +16251,7 @@
       "product": "Personal Loan",
       "ranges": [
         {
+          "commissionAmount": 8500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16306,6 +16261,7 @@
           "rate": 0.75
         },
         {
+          "commissionAmount": 23000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16331,6 +16287,7 @@
       "product": "Home Loan",
       "ranges": [
         {
+          "commissionAmount": 9250,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16340,6 +16297,7 @@
           "rate": 0.9
         },
         {
+          "commissionAmount": 24200,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16365,6 +16323,7 @@
       "product": "Loan Against Property",
       "ranges": [
         {
+          "commissionAmount": 10000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16374,6 +16333,7 @@
           "rate": 1.05
         },
         {
+          "commissionAmount": 25400,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16399,6 +16359,7 @@
       "product": "Personal Loan",
       "ranges": [
         {
+          "commissionAmount": 8750,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16408,6 +16369,7 @@
           "rate": 0.75
         },
         {
+          "commissionAmount": 23500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16433,6 +16395,7 @@
       "product": "Home Loan",
       "ranges": [
         {
+          "commissionAmount": 9500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16442,6 +16405,7 @@
           "rate": 0.9
         },
         {
+          "commissionAmount": 24700,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16467,6 +16431,7 @@
       "product": "Loan Against Property",
       "ranges": [
         {
+          "commissionAmount": 10250,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16476,6 +16441,7 @@
           "rate": 1.05
         },
         {
+          "commissionAmount": 25900,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16501,6 +16467,7 @@
       "product": "Business Loan",
       "ranges": [
         {
+          "commissionAmount": 11000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16510,6 +16477,7 @@
           "rate": 1.2
         },
         {
+          "commissionAmount": 27100,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16535,6 +16503,7 @@
       "product": "Personal Loan",
       "ranges": [
         {
+          "commissionAmount": 9000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16544,6 +16513,7 @@
           "rate": 0.75
         },
         {
+          "commissionAmount": 24000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16569,6 +16539,7 @@
       "product": "Home Loan",
       "ranges": [
         {
+          "commissionAmount": 9750,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16578,6 +16549,7 @@
           "rate": 0.9
         },
         {
+          "commissionAmount": 25200,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16603,6 +16575,7 @@
       "product": "Loan Against Property",
       "ranges": [
         {
+          "commissionAmount": 10500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16612,6 +16585,7 @@
           "rate": 1.05
         },
         {
+          "commissionAmount": 26400,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16637,6 +16611,7 @@
       "product": "Personal Loan",
       "ranges": [
         {
+          "commissionAmount": 9250,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16646,6 +16621,7 @@
           "rate": 0.75
         },
         {
+          "commissionAmount": 24500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16671,6 +16647,7 @@
       "product": "Home Loan",
       "ranges": [
         {
+          "commissionAmount": 10000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16680,6 +16657,7 @@
           "rate": 0.9
         },
         {
+          "commissionAmount": 25700,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16705,6 +16683,7 @@
       "product": "Loan Against Property",
       "ranges": [
         {
+          "commissionAmount": 10750,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16714,6 +16693,7 @@
           "rate": 1.05
         },
         {
+          "commissionAmount": 26900,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16739,6 +16719,7 @@
       "product": "Business Loan",
       "ranges": [
         {
+          "commissionAmount": 11500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16748,6 +16729,7 @@
           "rate": 1.2
         },
         {
+          "commissionAmount": 28100,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16773,6 +16755,7 @@
       "product": "Personal Loan",
       "ranges": [
         {
+          "commissionAmount": 9500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16782,6 +16765,7 @@
           "rate": 0.75
         },
         {
+          "commissionAmount": 25000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16807,6 +16791,7 @@
       "product": "Home Loan",
       "ranges": [
         {
+          "commissionAmount": 10250,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16816,6 +16801,7 @@
           "rate": 0.9
         },
         {
+          "commissionAmount": 26200,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16841,6 +16827,7 @@
       "product": "Loan Against Property",
       "ranges": [
         {
+          "commissionAmount": 11000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16850,6 +16837,7 @@
           "rate": 1.05
         },
         {
+          "commissionAmount": 27400,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16875,6 +16863,7 @@
       "product": "Personal Loan",
       "ranges": [
         {
+          "commissionAmount": 9750,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16884,6 +16873,7 @@
           "rate": 0.75
         },
         {
+          "commissionAmount": 25500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16909,6 +16899,7 @@
       "product": "Home Loan",
       "ranges": [
         {
+          "commissionAmount": 10500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16918,6 +16909,7 @@
           "rate": 0.9
         },
         {
+          "commissionAmount": 26700,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16943,6 +16935,7 @@
       "product": "Loan Against Property",
       "ranges": [
         {
+          "commissionAmount": 11250,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16952,6 +16945,7 @@
           "rate": 1.05
         },
         {
+          "commissionAmount": 27900,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16977,6 +16971,7 @@
       "product": "Business Loan",
       "ranges": [
         {
+          "commissionAmount": 12000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -16986,6 +16981,7 @@
           "rate": 1.2
         },
         {
+          "commissionAmount": 29100,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17011,6 +17007,7 @@
       "product": "Personal Loan",
       "ranges": [
         {
+          "commissionAmount": 10000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17020,6 +17017,7 @@
           "rate": 0.75
         },
         {
+          "commissionAmount": 26000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17045,6 +17043,7 @@
       "product": "Home Loan",
       "ranges": [
         {
+          "commissionAmount": 10750,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17054,6 +17053,7 @@
           "rate": 0.9
         },
         {
+          "commissionAmount": 27200,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17079,6 +17079,7 @@
       "product": "Loan Against Property",
       "ranges": [
         {
+          "commissionAmount": 11500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17088,6 +17089,7 @@
           "rate": 1.05
         },
         {
+          "commissionAmount": 28400,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17113,6 +17115,7 @@
       "product": "Personal Loan",
       "ranges": [
         {
+          "commissionAmount": 10250,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17122,6 +17125,7 @@
           "rate": 0.75
         },
         {
+          "commissionAmount": 26500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17147,6 +17151,7 @@
       "product": "Home Loan",
       "ranges": [
         {
+          "commissionAmount": 11000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17156,6 +17161,7 @@
           "rate": 0.9
         },
         {
+          "commissionAmount": 27700,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17181,6 +17187,7 @@
       "product": "Loan Against Property",
       "ranges": [
         {
+          "commissionAmount": 11750,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17190,6 +17197,7 @@
           "rate": 1.05
         },
         {
+          "commissionAmount": 28900,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17215,6 +17223,7 @@
       "product": "Business Loan",
       "ranges": [
         {
+          "commissionAmount": 12500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17224,6 +17233,7 @@
           "rate": 1.2
         },
         {
+          "commissionAmount": 30100,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17249,6 +17259,7 @@
       "product": "Personal Loan",
       "ranges": [
         {
+          "commissionAmount": 10500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17258,6 +17269,7 @@
           "rate": 0.75
         },
         {
+          "commissionAmount": 27000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17283,6 +17295,7 @@
       "product": "Home Loan",
       "ranges": [
         {
+          "commissionAmount": 11250,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17292,6 +17305,7 @@
           "rate": 0.9
         },
         {
+          "commissionAmount": 28200,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17317,6 +17331,7 @@
       "product": "Loan Against Property",
       "ranges": [
         {
+          "commissionAmount": 12000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17326,6 +17341,7 @@
           "rate": 1.05
         },
         {
+          "commissionAmount": 29400,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17351,6 +17367,7 @@
       "product": "Personal Loan",
       "ranges": [
         {
+          "commissionAmount": 10750,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17360,6 +17377,7 @@
           "rate": 0.75
         },
         {
+          "commissionAmount": 27500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17385,6 +17403,7 @@
       "product": "Home Loan",
       "ranges": [
         {
+          "commissionAmount": 11500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17394,6 +17413,7 @@
           "rate": 0.9
         },
         {
+          "commissionAmount": 28700,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17419,6 +17439,7 @@
       "product": "Loan Against Property",
       "ranges": [
         {
+          "commissionAmount": 12250,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17428,6 +17449,7 @@
           "rate": 1.05
         },
         {
+          "commissionAmount": 29900,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17453,6 +17475,7 @@
       "product": "Business Loan",
       "ranges": [
         {
+          "commissionAmount": 13000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17462,6 +17485,7 @@
           "rate": 1.2
         },
         {
+          "commissionAmount": 31100,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17487,6 +17511,7 @@
       "product": "Personal Loan",
       "ranges": [
         {
+          "commissionAmount": 11000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17496,6 +17521,7 @@
           "rate": 0.75
         },
         {
+          "commissionAmount": 28000,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17521,6 +17547,7 @@
       "product": "Home Loan",
       "ranges": [
         {
+          "commissionAmount": 11750,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17530,6 +17557,7 @@
           "rate": 0.9
         },
         {
+          "commissionAmount": 29200,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17555,6 +17583,7 @@
       "product": "Loan Against Property",
       "ranges": [
         {
+          "commissionAmount": 12500,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -17564,6 +17593,7 @@
           "rate": 1.05
         },
         {
+          "commissionAmount": 30400,
           "effectiveDate": "2026-04-01",
           "endDate": "2027-03-31",
           "frequency": "Monthly",
@@ -22871,36 +22901,6 @@
     }
   ],
   "notifications": [
-    {
-      "body": "INV-COS-0008 was countered at ₹38,99,610.",
-      "category": "Payout",
-      "createdAt": "2026-07-31T09:57:28.270Z",
-      "href": "/finance/invoices",
-      "id": "note-ms8rqvda-vfht8",
-      "priority": "High",
-      "status": "Unread",
-      "title": "DSA counter invoice raised"
-    },
-    {
-      "body": "Aarohi Financial Services Pvt Ltd raised INV-766298 for ₹1,56,66,187.",
-      "category": "Payout",
-      "createdAt": "2026-07-31T07:42:46.300Z",
-      "href": "/finance/invoices",
-      "id": "note-ms8mxna4-vk97x",
-      "priority": "High",
-      "status": "Unread",
-      "title": "DSA invoice raised"
-    },
-    {
-      "body": "Aarohi Financial Services Pvt Ltd raised INV-720053 for ₹1,37,40,259.",
-      "category": "Payout",
-      "createdAt": "2026-07-31T07:42:00.065Z",
-      "href": "/finance/invoices",
-      "id": "note-ms8mwnlt-wuk7v",
-      "priority": "High",
-      "status": "Unread",
-      "title": "DSA invoice raised"
-    },
     {
       "body": "4 DSA onboarding files need hierarchy action.",
       "category": "Workflow",
