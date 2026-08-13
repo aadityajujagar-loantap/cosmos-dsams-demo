@@ -8,15 +8,22 @@ import { KeyRound, Lock, RefreshCw, ShieldCheck, User } from "lucide-react";
 import { DsaOnboardingPage } from "@/components/screens/dsa-pages";
 import { Modal } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
-import {
-  type DemoSessionUser,
-  type SessionRole,
-} from "@/lib/demo-identities";
 import { useMockStore } from "@/lib/store";
 import { authApi } from "@/apis/auth";
 
 const OTP_LENGTH = 6;
 const EMPTY_OTP = Array.from({ length: OTP_LENGTH }, () => "");
+
+function authErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === "object" && "data" in error) {
+    const data = (error as { data?: { message?: unknown; error?: unknown } }).data;
+    if (typeof data?.message === "string") return data.message;
+    if (typeof data?.error === "string") return data.error;
+  }
+
+  if (error instanceof Error) return error.message;
+  return fallback;
+}
 
 export default function LoginPage() {
   const { login, currentUser } = useMockStore();
@@ -47,8 +54,8 @@ export default function LoginPage() {
       } else {
         setError(response.message);
       }
-    } catch (err: any) {
-      setError(err.message || "Failed to load CAPTCHA");
+    } catch (err: unknown) {
+      setError(authErrorMessage(err, "Failed to load CAPTCHA"));
     }
   }, []);
 
@@ -119,8 +126,8 @@ export default function LoginPage() {
         });
         refreshCaptcha();
       }
-    } catch (err: any) {
-      const errMsg = err.data?.message || err.message || "Login failed";
+    } catch (err: unknown) {
+      const errMsg = authErrorMessage(err, "Login failed");
       setError(errMsg);
       toast({
         title: "Login Failed",
@@ -198,28 +205,7 @@ export default function LoginPage() {
       });
 
       if (response.status === "0") {
-        const session = response.respData;
-        const roleNames = session.roles.map((r) => r.name);
-        
-        let mappedRole: SessionRole = "Customer";
-        if (roleNames.includes("super_admin") || roleNames.includes("admin") || roleNames.includes("checker")) {
-          mappedRole = "DSA Manager";
-        } else if (roleNames.includes("maker")) {
-          mappedRole = "Branch User";
-        } else if (roleNames.includes("user")) {
-          mappedRole = "Customer";
-        }
-
-        const mappedUser: DemoSessionUser = {
-          id: String(session.user.id),
-          name: session.user.name,
-          email: session.user.email,
-          mobile: session.user.phone || "",
-          role: mappedRole,
-          code: session.user.branch_code || "",
-        };
-
-        login(session, mappedUser);
+        login(response.respData);
       } else {
         setError(response.message);
         toast({
@@ -229,10 +215,11 @@ export default function LoginPage() {
         });
         resetOtp();
       }
-    } catch (err: any) {
-      setError(err.data?.message || err.message || "OTP verification failed");
+    } catch (err: unknown) {
+      const errMsg = authErrorMessage(err, "OTP verification failed");
+      setError(errMsg);
       toast({
-        description: err.data?.message || err.message || "Verification failed",
+        description: errMsg,
         title: "OTP verification failed",
         variant: "warning",
       });

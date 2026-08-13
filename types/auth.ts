@@ -1,13 +1,13 @@
 export interface Permission {
   id: number;
   name: string;
-  description?: string;
+  description?: string | null;
 }
 
 export interface Role {
   id: number;
   name: string;
-  description?: string;
+  description?: string | null;
   permissions?: Permission[];
 }
 
@@ -15,11 +15,19 @@ export interface User {
   id: number;
   name: string;
   email: string;
-  ticket_no: string;
-  phone?: string;
-  branch_code?: string;
-  zone_code?: string;
-  deactivated_at?: string;
+  ticket_no?: string | null;
+  phone?: string | null;
+  branch_role_id?: string | null;
+  branch_code?: string | null;
+  zone_code?: string | null;
+  deactivated_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  roles?: Role[];
+}
+
+export interface RolesPermissionsData {
+  roles: Role[];
 }
 
 export interface AuthSession {

@@ -191,11 +191,12 @@ export function Modal({
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
+    <div className="fixed -inset-1 z-40 flex items-center justify-center p-5" style={{ outline: 'none' }}>
       <button
         aria-label="Close modal overlay"
         className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm"
         onClick={onClose}
+        style={{ outline: 'none', border: 'none', boxShadow: 'none' }}
         type="button"
       />
       <div
@@ -205,8 +206,9 @@ export function Modal({
         )}
         role="dialog"
         aria-modal="true"
+        style={{ outline: 'none' }}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-3">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100" style={{ padding: '20px 24px' }}>
           <div>
             <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
             {description ? <p className="mt-1 text-sm text-slate-500">{description}</p> : null}
@@ -215,7 +217,7 @@ export function Modal({
             <X className="h-4 w-4" />
           </Button>
         </div>
-        <div className="max-h-[calc(92vh-88px)] overflow-auto p-3">{children}</div>
+        <div className="max-h-[calc(92vh-140px)] overflow-auto" style={{ padding: '24px' }}>{children}</div>
       </div>
     </div>
   );
@@ -245,15 +247,16 @@ export function Drawer({
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-40">
+    <div className="fixed -inset-1 z-40" style={{ outline: 'none' }}>
       <button
         aria-label="Close drawer overlay"
         className="absolute inset-0 bg-slate-950/35"
         onClick={onClose}
+        style={{ outline: 'none', border: 'none', boxShadow: 'none' }}
         type="button"
       />
-      <aside className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col border-l border-slate-200 bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-3">
+      <aside className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col border-l border-slate-200 bg-white shadow-2xl" style={{ outline: 'none' }}>
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100" style={{ padding: '20px 24px' }}>
           <div>
             <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
             {description ? <p className="mt-1 text-sm text-slate-500">{description}</p> : null}
@@ -262,7 +265,7 @@ export function Drawer({
             <X className="h-4 w-4" />
           </Button>
         </div>
-        <div className="flex-1 overflow-auto p-3">{children}</div>
+        <div className="flex-1 overflow-auto" style={{ padding: '24px' }}>{children}</div>
       </aside>
     </div>
   );

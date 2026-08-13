@@ -23,6 +23,7 @@ import {
 import { ReactNode, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { Button, Input, Modal } from "@/components/ui/primitives";
+import { UserAccountModal } from "@/components/user-account-modal";
 import { useMockStore } from "@/lib/store";
 import type { MockStore, Notification } from "@/lib/types";
 import { cn, formatDate, initials } from "@/lib/utils";
@@ -658,9 +659,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               </button>
               <div className="relative">
                 <button
-                  aria-expanded={profileOpen}
+                  aria-haspopup="dialog"
                   className="flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 pr-3 text-left text-sm hover:bg-slate-50"
-                  onClick={() => setProfileOpen((current) => !current)}
+                  onClick={() => setProfileOpen(true)}
                   type="button"
                 >
                   <span className="grid h-7 w-7 place-items-center rounded-md bg-slate-900 text-xs font-semibold text-white">
@@ -672,24 +673,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                   </span>
                   <ChevronDown className="h-4 w-4 text-slate-400" />
                 </button>
-                {profileOpen ? (
-                  <div className="absolute right-0 top-12 z-30 w-56 rounded-lg border border-slate-200 bg-white p-2 shadow-xl">
-                    <div className="border-b border-slate-100 px-3 py-2">
-                      <p className="text-sm font-semibold text-slate-950">{currentUser.name}</p>
-                      <p className="text-xs text-slate-500 truncate">{currentUser.email || currentUser.code || "Active Session"}</p>
-                    </div>
-                    <button
-                      onClick={() => {
-                        setProfileOpen(false);
-                        logout();
-                        router.push("/login");
-                      }}
-                      className="mt-1 w-full text-left block rounded-md px-3 py-2 text-sm text-rose-600 font-semibold hover:bg-rose-50 hover:text-rose-700 transition"
-                    >
-                      Sign Out
-                    </button>
-                  </div>
-                ) : null}
               </div>
             </div>
           </div>
@@ -825,6 +808,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           )}
         </div>
       </Modal>
+      <UserAccountModal
+        fallbackUser={currentUser}
+        onClose={() => setProfileOpen(false)}
+        onSignOut={() => {
+          setProfileOpen(false);
+          logout();
+          router.push("/login");
+        }}
+        open={profileOpen}
+      />
     </div>
   );
 }

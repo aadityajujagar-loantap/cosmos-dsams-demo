@@ -1,6 +1,6 @@
 import { request } from "./client";
 import type { ApiResponse } from "@/types/api";
-import type { AuthSession } from "@/types/auth";
+import type { AuthSession, RolesPermissionsData, User } from "@/types/auth";
 
 export interface CaptchaData {
   captcha_key: string;
@@ -57,6 +57,26 @@ export const authApi = {
   logout: (): Promise<{ message: string }> => {
     return request<{ message: string }>("/logout", {
       method: "POST",
+    });
+  },
+
+  /**
+   * Fetch the authenticated backend user backing the current token
+   */
+  getCurrentUser: (): Promise<User> => {
+    return request<User>("/user", {
+      method: "GET",
+      cache: "no-store",
+    });
+  },
+
+  /**
+   * Fetch the authenticated user's backend roles and permissions
+   */
+  getRolesPermissions: (): Promise<ApiResponse<RolesPermissionsData>> => {
+    return request<ApiResponse<RolesPermissionsData>>("/user/roles-permissions", {
+      method: "GET",
+      cache: "no-store",
     });
   },
 };
