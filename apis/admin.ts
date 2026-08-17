@@ -1,4 +1,4 @@
-import { request } from "./client";
+﻿import { request } from "./client";
 import type { MakerRequest, MakerRequestActionType, MakerRequestStatus } from "@/types/makerChecker";
 import type { Permission, Role, User, BranchRole } from "@/types/auth";
 import type { ActivityLog } from "@/types/activityLog";
@@ -365,7 +365,7 @@ export const adminApi = {
     });
   },
 
-  // ── DSA Dropdowns ────────────────────────────────────────────────────────
+  // â”€â”€ DSA Dropdowns â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   getStatesDropdown: async (): Promise<BackendResponse<StateOption[]>> => {
     return request<BackendResponse<StateOption[]>>("/states/dropdown", { method: "GET" });
   },
@@ -390,7 +390,7 @@ export const adminApi = {
     return request<BackendResponse<RegionOption[]>>("/regions/dropdown", { method: "GET" });
   },
 
-  // ── DSA CRUD ─────────────────────────────────────────────────────────────
+  // â”€â”€ DSA CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   getDsas: async (params?: {
     search?: string;
     onboarding_status?: string;
@@ -439,7 +439,7 @@ export const adminApi = {
     });
   },
 
-  // ── DSA Agreements ────────────────────────────────────────────────────────
+  // â”€â”€ DSA Agreements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   generateDsaAgreement: async (idOrCode: number | string): Promise<BackendResponse<any>> => {
     return request<BackendResponse<any>>(`/dsas/${idOrCode}/agreements/generate`, {
       method: "POST",
@@ -464,7 +464,7 @@ export const adminApi = {
     });
   },
 
-  // ── DSA Documents ─────────────────────────────────────────────────────────
+  // â”€â”€ DSA Documents â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   getDsaDocuments: async (idOrCode: number | string): Promise<BackendResponse<DsaDocument[]>> => {
     return request<BackendResponse<DsaDocument[]>>(`/dsas/${idOrCode}/documents`, {
       method: "GET",
@@ -510,7 +510,7 @@ export const adminApi = {
     });
   },
 
-  // ── Product Management ──
+  // â”€â”€ Product Management â”€â”€
   getProducts: async (): Promise<BackendResponse<LoanProduct[]>> => {
     return request<BackendResponse<LoanProduct[]>>("/v1/loan-products", { method: "GET" });
   },
@@ -618,7 +618,7 @@ export const adminApi = {
     return request<BackendResponse<{ product: LoanProduct; schemes: { id: number; name: string; slabs: SchemeSlab[] }[] }>>(`/v1/loan-products/${productId}/slabs`, { method: "GET" });
   },
 
-  // ── Branch Role CRUD ──
+  // â”€â”€ Branch Role CRUD â”€â”€
   getBranchRoles: async (params?: { search?: string; page?: number; per_page?: number }): Promise<PaginatedResponse<BranchRole>> => {
     const response = await request<ApiEnvelope<PaginatedResponse<BranchRole>>>(
       `/admin/branch-roles${compactParams(params)}`,
@@ -653,5 +653,321 @@ export const adminApi = {
     });
     return response;
   },
-};
 
+  // ── User Branch Mappings ──────────────────────────────────────────────────
+
+  /**
+   * List all user-branch mappings (paginated)
+   */
+  getUserBranchMappings: async (params?: {
+    search?: string;
+    user_id?: number;
+    branch_code?: string;
+    per_page?: number;
+    page?: number;
+  }): Promise<PaginatedResponse<import("@/types/auth").UserBranchMapping>> => {
+    const response = await request<ApiEnvelope<PaginatedResponse<import("@/types/auth").UserBranchMapping>>>(
+      `/admin/user-branch-mappings${compactParams(params)}`,
+      { method: "GET" }
+    );
+    return response.data;
+  },
+
+  /**
+   * Create a single user-branch mapping
+   */
+  createUserBranchMapping: async (payload: {
+    user_id: number;
+    branch_code: string;
+  }): Promise<import("@/types/auth").UserBranchMapping> => {
+    const response = await request<ApiEnvelope<import("@/types/auth").UserBranchMapping>>(
+      "/admin/user-branch-mappings",
+      { method: "POST", body: JSON.stringify(payload) }
+    );
+    return response.data;
+  },
+
+  /**
+   * Bulk assign multiple branches to a user (comma-separated branch_codes)
+   */
+  bulkAssignBranches: async (payload: {
+    user_id: number;
+    branch_codes: string;
+  }): Promise<import("@/types/auth").BulkAssignResult> => {
+    const response = await request<ApiEnvelope<import("@/types/auth").BulkAssignResult>>(
+      "/admin/user-branch-mappings/bulk",
+      { method: "POST", body: JSON.stringify(payload) }
+    );
+    return response.data;
+  },
+
+  /**
+   * Upload CSV for batch user-branch mapping import
+   */
+  uploadBranchMappingCsv: async (file: File): Promise<import("@/types/auth").CsvUploadResult> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await request<ApiEnvelope<import("@/types/auth").CsvUploadResult>>(
+      "/admin/user-branch-mappings/upload-csv",
+      { method: "POST", body: formData, headers: { "Content-Type": "" } }
+    );
+    return response.data;
+  },
+
+  /**
+   * Delete a user-branch mapping (soft delete)
+   */
+  deleteUserBranchMapping: async (id: number): Promise<{ message?: string }> => {
+    return request<{ message?: string }>(`/admin/user-branch-mappings/${id}`, {
+      method: "DELETE",
+    });
+  },
+
+  /**
+   * Get all branches assigned to a specific user
+   */
+  getUserBranches: async (userId: number): Promise<import("@/types/auth").UserBranchMapping[]> => {
+    const response = await request<ApiEnvelope<import("@/types/auth").UserBranchMapping[]>>(
+      `/admin/user-branch-mappings/user/${userId}`,
+      { method: "GET" }
+    );
+    return response.data;
+  },
+
+  /**
+   * Get all users assigned to a specific branch
+   */
+  getBranchUsers: async (branchCode: string): Promise<import("@/types/auth").UserBranchMapping[]> => {
+    const response = await request<ApiEnvelope<import("@/types/auth").UserBranchMapping[]>>(
+      `/admin/user-branch-mappings/branch/${branchCode}`,
+      { method: "GET" }
+    );
+    return response.data;
+  },
+
+  // ── Region APIs ──────────────────────────────────────────────────────────
+
+  getRegions: async (params?: { search?: string; page?: number; per_page?: number }): Promise<PaginatedResponse<import("@/types/auth").RegionItem>> => {
+    const response = await request<ApiEnvelope<PaginatedResponse<import("@/types/auth").RegionItem>>>(
+      `/admin/regions${compactParams(params)}`,
+      { method: "GET" }
+    );
+    return response.data;
+  },
+
+  getRegionDetail: async (regionCode: string): Promise<import("@/types/auth").RegionItem> => {
+    const response = await request<ApiEnvelope<import("@/types/auth").RegionItem>>(`/admin/regions/${regionCode}`, {
+      method: "GET",
+    });
+    return response.data;
+  },
+
+  createRegion: async (payload: { region_code: string; region_name: string }): Promise<import("@/types/auth").RegionItem | MakerCheckerActionResponse> => {
+    const response = await request<ApiEnvelope<import("@/types/auth").RegionItem> | MakerCheckerActionResponse>("/admin/regions", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return unwrapMutation<import("@/types/auth").RegionItem>(response);
+  },
+
+  updateRegion: async (regionCode: string, payload: Partial<{ region_code: string; region_name: string }>): Promise<import("@/types/auth").RegionItem | MakerCheckerActionResponse> => {
+    const response = await request<ApiEnvelope<import("@/types/auth").RegionItem> | MakerCheckerActionResponse>(`/admin/regions/${regionCode}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+    return unwrapMutation<import("@/types/auth").RegionItem>(response);
+  },
+
+  deleteRegion: async (regionCode: string): Promise<{ message?: string } | MakerCheckerActionResponse> => {
+    const response = await request<{ message?: string } | MakerCheckerActionResponse>(`/admin/regions/${regionCode}`, {
+      method: "DELETE",
+    });
+    return response;
+  },
+
+  getAdminRegionsDropdown: async (): Promise<BackendResponse<RegionOption[]>> => {
+    return request<BackendResponse<RegionOption[]>>("/admin/regions/dropdown", { method: "GET" });
+  },
+
+  // ── Sub-Region APIs ───────────────────────────────────────────────────────
+
+  getSubRegions: async (params?: { search?: string; region_code?: string; page?: number; per_page?: number }): Promise<PaginatedResponse<import("@/types/auth").SubRegionItem>> => {
+    const response = await request<ApiEnvelope<PaginatedResponse<import("@/types/auth").SubRegionItem>>>(
+      `/admin/sub-regions${compactParams(params)}`,
+      { method: "GET" }
+    );
+    return response.data;
+  },
+
+  getSubRegionDetail: async (subRegionCode: string): Promise<import("@/types/auth").SubRegionItem> => {
+    const response = await request<ApiEnvelope<import("@/types/auth").SubRegionItem>>(`/admin/sub-regions/${subRegionCode}`, {
+      method: "GET",
+    });
+    return response.data;
+  },
+
+  createSubRegion: async (payload: { sub_region_code: string; sub_region_name: string; region_code: string }): Promise<import("@/types/auth").SubRegionItem | MakerCheckerActionResponse> => {
+    const response = await request<ApiEnvelope<import("@/types/auth").SubRegionItem> | MakerCheckerActionResponse>("/admin/sub-regions", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return unwrapMutation<import("@/types/auth").SubRegionItem>(response);
+  },
+
+  updateSubRegion: async (subRegionCode: string, payload: Partial<{ sub_region_code: string; sub_region_name: string; region_code: string }>): Promise<import("@/types/auth").SubRegionItem | MakerCheckerActionResponse> => {
+    const response = await request<ApiEnvelope<import("@/types/auth").SubRegionItem> | MakerCheckerActionResponse>(`/admin/sub-regions/${subRegionCode}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+    return unwrapMutation<import("@/types/auth").SubRegionItem>(response);
+  },
+
+  deleteSubRegion: async (subRegionCode: string): Promise<{ message?: string } | MakerCheckerActionResponse> => {
+    const response = await request<{ message?: string } | MakerCheckerActionResponse>(`/admin/sub-regions/${subRegionCode}`, {
+      method: "DELETE",
+    });
+    return response;
+  },
+
+  getAdminSubRegionsDropdown: async (): Promise<BackendResponse<SubRegionOption[]>> => {
+    return request<BackendResponse<SubRegionOption[]>>("/admin/sub-regions/dropdown", { method: "GET" });
+  },
+
+  // ── State APIs ─────────────────────────────────────────────────────────────
+
+  getStates: async (params?: { search?: string; page?: number; per_page?: number }): Promise<PaginatedResponse<import("@/types/auth").StateItem>> => {
+    const response = await request<ApiEnvelope<PaginatedResponse<import("@/types/auth").StateItem>>>(
+      `/admin/states${compactParams(params)}`,
+      { method: "GET" }
+    );
+    return response.data;
+  },
+
+  getStateDetail: async (stateCode: string): Promise<import("@/types/auth").StateItem> => {
+    const response = await request<ApiEnvelope<import("@/types/auth").StateItem>>(`/admin/states/${stateCode}`, {
+      method: "GET",
+    });
+    return response.data;
+  },
+
+  createState: async (payload: { state_code: string; state_name: string }): Promise<import("@/types/auth").StateItem | MakerCheckerActionResponse> => {
+    const response = await request<ApiEnvelope<import("@/types/auth").StateItem> | MakerCheckerActionResponse>("/admin/states", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return unwrapMutation<import("@/types/auth").StateItem>(response);
+  },
+
+  updateState: async (stateCode: string, payload: Partial<{ state_code: string; state_name: string }>): Promise<import("@/types/auth").StateItem | MakerCheckerActionResponse> => {
+    const response = await request<ApiEnvelope<import("@/types/auth").StateItem> | MakerCheckerActionResponse>(`/admin/states/${stateCode}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+    return unwrapMutation<import("@/types/auth").StateItem>(response);
+  },
+
+  deleteState: async (stateCode: string): Promise<{ message?: string } | MakerCheckerActionResponse> => {
+    const response = await request<{ message?: string } | MakerCheckerActionResponse>(`/admin/states/${stateCode}`, {
+      method: "DELETE",
+    });
+    return response;
+  },
+
+  getAdminStatesDropdown: async (): Promise<BackendResponse<StateOption[]>> => {
+    return request<BackendResponse<StateOption[]>>("/admin/states/dropdown", { method: "GET" });
+  },
+
+  // ── District APIs ──────────────────────────────────────────────────────────
+
+  getDistricts: async (params?: { search?: string; state_code?: string; page?: number; per_page?: number }): Promise<PaginatedResponse<import("@/types/auth").DistrictItem>> => {
+    const response = await request<ApiEnvelope<PaginatedResponse<import("@/types/auth").DistrictItem>>>(
+      `/admin/districts${compactParams(params)}`,
+      { method: "GET" }
+    );
+    return response.data;
+  },
+
+  getDistrictDetail: async (districtCode: string): Promise<import("@/types/auth").DistrictItem> => {
+    const response = await request<ApiEnvelope<import("@/types/auth").DistrictItem>>(`/admin/districts/${districtCode}`, {
+      method: "GET",
+    });
+    return response.data;
+  },
+
+  createDistrict: async (payload: { district_code: string; district_name: string; state_code: string }): Promise<import("@/types/auth").DistrictItem | MakerCheckerActionResponse> => {
+    const response = await request<ApiEnvelope<import("@/types/auth").DistrictItem> | MakerCheckerActionResponse>("/admin/districts", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return unwrapMutation<import("@/types/auth").DistrictItem>(response);
+  },
+
+  updateDistrict: async (districtCode: string, payload: Partial<{ district_code: string; district_name: string; state_code: string }>): Promise<import("@/types/auth").DistrictItem | MakerCheckerActionResponse> => {
+    const response = await request<ApiEnvelope<import("@/types/auth").DistrictItem> | MakerCheckerActionResponse>(`/admin/districts/${districtCode}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+    return unwrapMutation<import("@/types/auth").DistrictItem>(response);
+  },
+
+  deleteDistrict: async (districtCode: string): Promise<{ message?: string } | MakerCheckerActionResponse> => {
+    const response = await request<{ message?: string } | MakerCheckerActionResponse>(`/admin/districts/${districtCode}`, {
+      method: "DELETE",
+    });
+    return response;
+  },
+
+  getAdminDistrictsDropdown: async (): Promise<BackendResponse<DistrictOption[]>> => {
+    return request<BackendResponse<DistrictOption[]>>("/admin/districts/dropdown", { method: "GET" });
+  },
+
+  // ── Branch APIs & Sync ─────────────────────────────────────────────────────
+
+  getBranches: async (params?: { search?: string; region_code?: string; sub_region_code?: string; district_code?: string; page?: number; per_page?: number }): Promise<PaginatedResponse<import("@/types/auth").BranchItem>> => {
+    const response = await request<ApiEnvelope<PaginatedResponse<import("@/types/auth").BranchItem>>>(
+      `/admin/branches${compactParams(params)}`,
+      { method: "GET" }
+    );
+    return response.data;
+  },
+
+  getBranchDetail: async (branchCode: string): Promise<import("@/types/auth").BranchItem> => {
+    const response = await request<ApiEnvelope<import("@/types/auth").BranchItem>>(`/admin/branches/${branchCode}`, {
+      method: "GET",
+    });
+    return response.data;
+  },
+
+  createBranch: async (payload: { branch_code: string; branch_name: string; branch_number?: string; region_code: string; sub_region_code: string; district_code?: string }): Promise<import("@/types/auth").BranchItem | MakerCheckerActionResponse> => {
+    const response = await request<ApiEnvelope<import("@/types/auth").BranchItem> | MakerCheckerActionResponse>("/admin/branches", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return unwrapMutation<import("@/types/auth").BranchItem>(response);
+  },
+
+  updateBranch: async (branchCode: string, payload: Partial<{ branch_code: string; branch_name: string; branch_number?: string; region_code: string; sub_region_code: string; district_code: string }>): Promise<import("@/types/auth").BranchItem | MakerCheckerActionResponse> => {
+    const response = await request<ApiEnvelope<import("@/types/auth").BranchItem> | MakerCheckerActionResponse>(`/admin/branches/${branchCode}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+    return unwrapMutation<import("@/types/auth").BranchItem>(response);
+  },
+
+  deleteBranch: async (branchCode: string): Promise<{ message?: string } | MakerCheckerActionResponse> => {
+    const response = await request<{ message?: string } | MakerCheckerActionResponse>(`/admin/branches/${branchCode}`, {
+      method: "DELETE",
+    });
+    return response;
+  },
+
+  getAdminBranchesDropdown: async (): Promise<BackendResponse<BranchOption[]>> => {
+    return request<BackendResponse<BranchOption[]>>("/admin/branches/dropdown", { method: "GET" });
+  },
+
+  syncBranches: async (): Promise<BackendResponse<import("@/types/auth").BranchSyncResult>> => {
+    return request<BackendResponse<import("@/types/auth").BranchSyncResult>>("/admin/branches/sync", {
+      method: "POST",
+    });
+  },
+};

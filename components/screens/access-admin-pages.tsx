@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Edit,
   Plus,
@@ -1096,3 +1096,670 @@ export function BranchRolesPage() {
   );
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UserBranchMappingsPage
+// ─────────────────────────────────────────────────────────────────────────────
+
+import type {
+  UserBranchMapping,
+  BulkAssignResult,
+  CsvUploadResult,
+} from "@/types/auth";
+
+type UbmRow = UserBranchMapping & { id: string };
+
+function toUbmRow(m: UserBranchMapping): UbmRow {
+  return { ...m, id: String(m.id) };
+}
+
+export function UserBranchMappingsPage() {
+  const { toast } = useToast();
+
+  // ── data ──────────────────────────────────────────────────────────────────
+  const [mappings, setMappings] = useState<UserBranchMapping[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [totalPages, setTotalPages] = useState(1);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // ── modals ────────────────────────────────────────────────────────────────
+  const [createOpen, setCreateOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [csvOpen, setCsvOpen] = useState(false);
+
+  // ── create single form ────────────────────────────────────────────────────
+  const [createForm, setCreateForm] = useState({ user_id: "", branch_code: "" });
+  const [creating, setCreating] = useState(false);
+
+  // ── bulk assign form ──────────────────────────────────────────────────────
+  const [bulkForm, setBulkForm] = useState({ user_id: "", branch_codes: "" });
+  const [bulking, setBulking] = useState(false);
+  const [bulkResult, setBulkResult] = useState<BulkAssignResult | null>(null);
+
+  // ── csv upload ────────────────────────────────────────────────────────────
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvUploading, setCsvUploading] = useState(false);
+  const [csvResult, setCsvResult] = useState<CsvUploadResult | null>(null);
+  const [csvDragging, setCsvDragging] = useState(false);
+
+  // ── user branches side panel ──────────────────────────────────────────────
+  const [panelUser, setPanelUser] = useState<{ id: number; name: string } | null>(null);
+  const [panelMappings, setPanelMappings] = useState<UserBranchMapping[]>([]);
+  const [panelLoading, setPanelLoading] = useState(false);
+
+  // ── load ──────────────────────────────────────────────────────────────────
+  const loadMappings = useCallback(
+    async (page = 1, search = "") => {
+      setLoading(true);
+      try {
+        const result = await adminApi.getUserBranchMappings({
+          page,
+          per_page: 20,
+          ...(search.trim() ? { search: search.trim() } : {}),
+        });
+        setMappings(result.data);
+        setTotalPages(result.last_page ?? 1);
+        setCurrentPage(result.current_page ?? 1);
+      } catch (err: any) {
+        toast({
+          title: "Failed to load mappings",
+          description: err.message ?? "Network error",
+          variant: "warning",
+        });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [toast]
+  );
+
+  useEffect(() => {
+    loadMappings(1, searchQuery);
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadMappings(1, searchQuery);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── delete ────────────────────────────────────────────────────────────────
+  async function handleDelete(mapping: UserBranchMapping) {
+    if (
+      !confirm(
+        `Remove mapping of user "${mapping.user?.name ?? mapping.user_id}" from branch "${mapping.branch?.branch_name ?? mapping.branch_code}"?`
+      )
+    )
+      return;
+    try {
+      await adminApi.deleteUserBranchMapping(mapping.id);
+      toast({ title: "Mapping deleted", variant: "success" });
+      await loadMappings(currentPage, searchQuery);
+    } catch (err: any) {
+      toast({ title: "Delete failed", description: err.message, variant: "warning" });
+    }
+  }
+
+  // ── create single ─────────────────────────────────────────────────────────
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!createForm.user_id || !createForm.branch_code.trim()) return;
+    setCreating(true);
+    try {
+      await adminApi.createUserBranchMapping({
+        user_id: Number(createForm.user_id),
+        branch_code: createForm.branch_code.trim(),
+      });
+      toast({ title: "Mapping created successfully", variant: "success" });
+      setCreateOpen(false);
+      setCreateForm({ user_id: "", branch_code: "" });
+      await loadMappings(1, searchQuery);
+    } catch (err: any) {
+      toast({ title: "Failed to create mapping", description: err.message, variant: "warning" });
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  // ── bulk assign ───────────────────────────────────────────────────────────
+  async function handleBulk(e: React.FormEvent) {
+    e.preventDefault();
+    if (!bulkForm.user_id || !bulkForm.branch_codes.trim()) return;
+    setBulking(true);
+    setBulkResult(null);
+    try {
+      const result = await adminApi.bulkAssignBranches({
+        user_id: Number(bulkForm.user_id),
+        branch_codes: bulkForm.branch_codes.trim(),
+      });
+      setBulkResult(result);
+      toast({
+        title: "Bulk assignment completed",
+        description: `${result.summary.created_count} created, ${result.summary.skipped_count} skipped, ${result.summary.error_count} errors`,
+        variant: "success",
+      });
+      await loadMappings(1, searchQuery);
+    } catch (err: any) {
+      toast({ title: "Bulk assignment failed", description: err.message, variant: "warning" });
+    } finally {
+      setBulking(false);
+    }
+  }
+
+  // ── csv upload ────────────────────────────────────────────────────────────
+  async function handleCsvUpload(e: React.FormEvent) {
+    e.preventDefault();
+    if (!csvFile) return;
+    setCsvUploading(true);
+    setCsvResult(null);
+    try {
+      const result = await adminApi.uploadBranchMappingCsv(csvFile);
+      setCsvResult(result);
+      toast({
+        title: "CSV upload completed",
+        description: `${result.summary.created_count} created, ${result.summary.skipped_count} skipped, ${result.summary.error_count} errors`,
+        variant: "success",
+      });
+      await loadMappings(1, searchQuery);
+    } catch (err: any) {
+      toast({ title: "CSV upload failed", description: err.message, variant: "warning" });
+    } finally {
+      setCsvUploading(false);
+    }
+  }
+
+  // ── user branches panel ───────────────────────────────────────────────────
+  async function openUserPanel(mapping: UserBranchMapping) {
+    const userId = mapping.user_id;
+    const userName = mapping.user?.name ?? `User #${userId}`;
+    setPanelUser({ id: userId, name: userName });
+    setPanelMappings([]);
+    setPanelLoading(true);
+    try {
+      const data = await adminApi.getUserBranches(userId);
+      setPanelMappings(data);
+    } catch (err: any) {
+      toast({ title: "Failed to load user branches", description: err.message, variant: "warning" });
+    } finally {
+      setPanelLoading(false);
+    }
+  }
+
+  // ── table columns ─────────────────────────────────────────────────────────
+  const tableData: UbmRow[] = useMemo(() => mappings.map(toUbmRow), [mappings]);
+
+  const columns: Column<UbmRow>[] = [
+    {
+      key: "user",
+      header: "User",
+      sortable: true,
+      sortValue: (r) => r.user?.name ?? String(r.user_id),
+      cell: (r) => (
+        <div>
+          <button
+            className="text-sm font-semibold text-blue-700 hover:underline text-left"
+            onClick={() => openUserPanel(r)}
+            type="button"
+          >
+            {r.user?.name ?? `User #${r.user_id}`}
+          </button>
+          <p className="text-xs text-slate-500">{r.user?.email ?? ""}</p>
+        </div>
+      ),
+      exportValue: (r) => r.user?.name ?? String(r.user_id),
+    },
+    {
+      key: "branch_code",
+      header: "Branch Code",
+      sortable: true,
+      sortValue: (r) => r.branch_code,
+      cell: (r) => (
+        <span className="font-mono font-semibold text-slate-800">{r.branch_code}</span>
+      ),
+    },
+    {
+      key: "branch",
+      header: "Branch Name",
+      sortable: true,
+      sortValue: (r) => r.branch?.branch_name ?? "",
+      cell: (r) => (
+        <span className="text-slate-700">{r.branch?.branch_name ?? "—"}</span>
+      ),
+      exportValue: (r) => r.branch?.branch_name ?? "",
+    },
+    {
+      key: "created_by",
+      header: "Created By",
+      cell: (r) => <span className="text-slate-500 text-xs">{r.created_by ?? "—"}</span>,
+    },
+    {
+      key: "created_at",
+      header: "Created At",
+      cell: (r) =>
+        r.created_at ? (
+          <span className="text-slate-500 text-xs">
+            {new Date(r.created_at).toLocaleDateString()}
+          </span>
+        ) : (
+          <span className="text-slate-400 text-xs">—</span>
+        ),
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <PageHeader
+        title="User Branch Mappings"
+        description="Assign users to branches. A user can be mapped to multiple branches."
+      >
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => { setCsvFile(null); setCsvResult(null); setCsvOpen(true); }} variant="outline" type="button">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            Upload CSV
+          </Button>
+          <Button onClick={() => { setBulkResult(null); setBulkForm({ user_id: "", branch_codes: "" }); setBulkOpen(true); }} variant="outline" type="button">
+            <Plus className="h-4 w-4" />
+            Bulk Assign
+          </Button>
+          <Button onClick={() => { setCreateForm({ user_id: "", branch_code: "" }); setCreateOpen(true); }} type="button">
+            <Plus className="h-4 w-4" />
+            Add Mapping
+          </Button>
+        </div>
+      </PageHeader>
+
+      {/* Stats bar */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {[
+          { label: "Total Mappings", value: mappings.length > 0 ? `${mappings.length}+` : "0" },
+          { label: "Page", value: `${currentPage} / ${totalPages}` },
+        ].map((stat) => (
+          <Card key={stat.label}>
+            <CardContent className="py-3">
+              <p className="text-2xl font-bold text-slate-900">{stat.value}</p>
+              <p className="text-xs text-slate-500">{stat.label}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Search bar */}
+      <div className="flex gap-2">
+        <div className="relative flex-1 max-w-md">
+          <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 111 11a6 6 0 0116 0z" />
+          </svg>
+          <Input
+            className="pl-9"
+            placeholder="Search by user name, email or branch code…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <Button
+          onClick={() => loadMappings(currentPage, searchQuery)}
+          variant="outline"
+          type="button"
+          size="sm"
+        >
+          <RotateCcw className="h-4 w-4" />
+          Refresh
+        </Button>
+      </div>
+
+      {/* Table */}
+      <Card>
+        <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center py-16 text-slate-500 text-sm">
+              Loading mappings…
+            </div>
+          ) : (
+            <>
+              <DataTable
+                columns={columns}
+                items={tableData}
+                searchKeys={["branch_code"]}
+                emptyTitle="No mappings found"
+                emptyDescription="Create a mapping to assign a user to a branch."
+                emptyAction={
+                  <Button onClick={() => setCreateOpen(true)} type="button">
+                    <Plus className="h-4 w-4" />
+                    Add Mapping
+                  </Button>
+                }
+                actions={(row) => (
+                  <Button
+                    onClick={() => handleDelete(row)}
+                    size="sm"
+                    type="button"
+                    variant="danger"
+                    title="Remove mapping"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              />
+
+              {/* Backend pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 mt-3">
+                  <Button
+                    disabled={currentPage <= 1}
+                    onClick={() => { const p = currentPage - 1; setCurrentPage(p); loadMappings(p, searchQuery); }}
+                    size="sm"
+                    variant="outline"
+                    type="button"
+                  >
+                    ← Prev
+                  </Button>
+                  <span className="text-sm text-slate-500 min-w-20 text-center">
+                    {currentPage} / {totalPages}
+                  </span>
+                  <Button
+                    disabled={currentPage >= totalPages}
+                    onClick={() => { const p = currentPage + 1; setCurrentPage(p); loadMappings(p, searchQuery); }}
+                    size="sm"
+                    variant="outline"
+                    type="button"
+                  >
+                    Next →
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Create Single Mapping Modal ────────────────────────────────────── */}
+      <Modal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="Add User Branch Mapping"
+        description="Assign a single user to a single branch."
+        width="max-w-md"
+      >
+        <form className="space-y-5" onSubmit={handleCreate}>
+          <Field>
+            <Label>User ID</Label>
+            <Input
+              type="number"
+              min={1}
+              required
+              placeholder="e.g. 5"
+              value={createForm.user_id}
+              onChange={(e) => setCreateForm((f) => ({ ...f, user_id: e.target.value }))}
+            />
+            <p className="text-xs text-slate-500 mt-1">Enter the numeric user ID to assign.</p>
+          </Field>
+          <Field>
+            <Label>Branch Code</Label>
+            <Input
+              required
+              placeholder="e.g. BR001"
+              maxLength={20}
+              value={createForm.branch_code}
+              onChange={(e) => setCreateForm((f) => ({ ...f, branch_code: e.target.value }))}
+            />
+            <p className="text-xs text-slate-500 mt-1">Must match an existing branch code.</p>
+          </Field>
+          <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+            <Button onClick={() => setCreateOpen(false)} type="button" variant="secondary">
+              Cancel
+            </Button>
+            <Button disabled={creating} type="submit">
+              {creating ? "Saving…" : "Save Mapping"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* ── Bulk Assign Modal ──────────────────────────────────────────────── */}
+      <Modal
+        open={bulkOpen}
+        onClose={() => { setBulkOpen(false); setBulkResult(null); }}
+        title="Bulk Assign Branches"
+        description="Assign multiple branches to a single user at once."
+        width="max-w-lg"
+      >
+        <form className="space-y-5" onSubmit={handleBulk}>
+          <Field>
+            <Label>User ID</Label>
+            <Input
+              type="number"
+              min={1}
+              required
+              placeholder="e.g. 5"
+              value={bulkForm.user_id}
+              onChange={(e) => setBulkForm((f) => ({ ...f, user_id: e.target.value }))}
+            />
+          </Field>
+          <Field>
+            <Label>Branch Codes (comma-separated)</Label>
+            <Textarea
+              required
+              placeholder="BR001,BR002,BR003"
+              rows={3}
+              value={bulkForm.branch_codes}
+              onChange={(e) => setBulkForm((f) => ({ ...f, branch_codes: e.target.value }))}
+            />
+            <p className="text-xs text-slate-500 mt-1">Separate branch codes with commas. Duplicates are automatically skipped.</p>
+          </Field>
+
+          {bulkResult && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
+              <p className="text-sm font-semibold text-slate-800">Result Summary</p>
+              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="rounded-md bg-emerald-50 border border-emerald-100 p-2">
+                  <p className="text-xl font-bold text-emerald-700">{bulkResult.summary.created_count}</p>
+                  <p className="text-emerald-600">Created</p>
+                </div>
+                <div className="rounded-md bg-amber-50 border border-amber-100 p-2">
+                  <p className="text-xl font-bold text-amber-700">{bulkResult.summary.skipped_count}</p>
+                  <p className="text-amber-600">Skipped</p>
+                </div>
+                <div className="rounded-md bg-rose-50 border border-rose-100 p-2">
+                  <p className="text-xl font-bold text-rose-700">{bulkResult.summary.error_count}</p>
+                  <p className="text-rose-600">Errors</p>
+                </div>
+              </div>
+              {bulkResult.errors.length > 0 && (
+                <div className="rounded border border-rose-200 bg-rose-50 p-2">
+                  <p className="text-xs font-semibold text-rose-700 mb-1">Errors:</p>
+                  <ul className="text-xs text-rose-600 space-y-0.5 list-disc pl-4">
+                    {bulkResult.errors.map((e, i) => <li key={i}>{e}</li>)}
+                  </ul>
+                </div>
+              )}
+              {bulkResult.skipped.length > 0 && (
+                <div className="rounded border border-amber-200 bg-amber-50 p-2">
+                  <p className="text-xs font-semibold text-amber-700 mb-1">Skipped (already mapped):</p>
+                  <p className="text-xs text-amber-600">{bulkResult.skipped.join(", ")}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+            <Button onClick={() => { setBulkOpen(false); setBulkResult(null); }} type="button" variant="secondary">
+              Close
+            </Button>
+            <Button disabled={bulking} type="submit">
+              {bulking ? "Assigning…" : "Assign Branches"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* ── CSV Upload Modal ───────────────────────────────────────────────── */}
+      <Modal
+        open={csvOpen}
+        onClose={() => { setCsvOpen(false); setCsvResult(null); setCsvFile(null); }}
+        title="Upload CSV Mapping"
+        description="Import user-branch mappings in bulk via CSV file."
+        width="max-w-lg"
+      >
+        <form className="space-y-5" onSubmit={handleCsvUpload}>
+          {/* Drop zone */}
+          <div
+            className={`relative rounded-xl border-2 border-dashed p-8 text-center transition ${
+              csvDragging ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-slate-50 hover:border-slate-300"
+            }`}
+            onDragOver={(e) => { e.preventDefault(); setCsvDragging(true); }}
+            onDragLeave={() => setCsvDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setCsvDragging(false);
+              const f = e.dataTransfer.files[0];
+              if (f) setCsvFile(f);
+            }}
+          >
+            <svg className="mx-auto h-10 w-10 text-slate-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            {csvFile ? (
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-slate-800">{csvFile.name}</p>
+                <p className="text-xs text-slate-500">{(csvFile.size / 1024).toFixed(1)} KB</p>
+                <button
+                  type="button"
+                  className="text-xs text-rose-500 hover:underline"
+                  onClick={() => setCsvFile(null)}
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <div>
+                <p className="text-sm text-slate-600 mb-1">Drag & drop your CSV here or</p>
+                <label className="cursor-pointer text-sm font-medium text-blue-600 hover:underline">
+                  browse to upload
+                  <input
+                    type="file"
+                    accept=".csv,.txt"
+                    className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) setCsvFile(f); }}
+                  />
+                </label>
+                <p className="text-xs text-slate-400 mt-2">CSV or TXT • max 2 MB</p>
+              </div>
+            )}
+          </div>
+
+          {/* Format hint */}
+          <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <p className="text-xs font-semibold text-slate-700 mb-1">Expected CSV format:</p>
+            <pre className="text-xs text-slate-500 font-mono">user_id,branch_code{"\n"}5,BR001{"\n"}5,BR002{"\n"}6,BR001</pre>
+          </div>
+
+          {/* Result */}
+          {csvResult && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
+              <p className="text-sm font-semibold text-slate-800">Upload Result</p>
+              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="rounded-md bg-emerald-50 border border-emerald-100 p-2">
+                  <p className="text-xl font-bold text-emerald-700">{csvResult.summary.created_count}</p>
+                  <p className="text-emerald-600">Created</p>
+                </div>
+                <div className="rounded-md bg-amber-50 border border-amber-100 p-2">
+                  <p className="text-xl font-bold text-amber-700">{csvResult.summary.skipped_count}</p>
+                  <p className="text-amber-600">Skipped</p>
+                </div>
+                <div className="rounded-md bg-rose-50 border border-rose-100 p-2">
+                  <p className="text-xl font-bold text-rose-700">{csvResult.summary.error_count}</p>
+                  <p className="text-rose-600">Errors</p>
+                </div>
+              </div>
+              {csvResult.errors.length > 0 && (
+                <div className="rounded border border-rose-200 bg-rose-50 p-2 max-h-32 overflow-y-auto">
+                  <p className="text-xs font-semibold text-rose-700 mb-1">Errors:</p>
+                  <ul className="text-xs text-rose-600 space-y-0.5 list-disc pl-4">
+                    {csvResult.errors.map((e, i) => <li key={i}>{e}</li>)}
+                  </ul>
+                </div>
+              )}
+              {csvResult.skipped.length > 0 && (
+                <div className="rounded border border-amber-200 bg-amber-50 p-2 max-h-20 overflow-y-auto">
+                  <p className="text-xs font-semibold text-amber-700 mb-1">Skipped:</p>
+                  <ul className="text-xs text-amber-600 space-y-0.5 list-disc pl-4">
+                    {csvResult.skipped.map((s, i) => <li key={i}>{s}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+            <Button
+              onClick={() => { setCsvOpen(false); setCsvResult(null); setCsvFile(null); }}
+              type="button"
+              variant="secondary"
+            >
+              Close
+            </Button>
+            <Button disabled={!csvFile || csvUploading} type="submit">
+              {csvUploading ? "Uploading…" : "Upload & Import"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* ── User Branches Panel ────────────────────────────────────────────── */}
+      <Modal
+        open={Boolean(panelUser)}
+        onClose={() => { setPanelUser(null); setPanelMappings([]); }}
+        title={panelUser ? `Branches for: ${panelUser.name}` : "User Branches"}
+        description="All branch assignments for this user."
+        width="max-w-lg"
+      >
+        {panelLoading ? (
+          <div className="flex items-center justify-center py-10 text-slate-500 text-sm">
+            Loading branches…
+          </div>
+        ) : panelMappings.length === 0 ? (
+          <EmptyState title="No branches assigned" description="This user has no branch mappings." />
+        ) : (
+          <div className="space-y-2">
+            {panelMappings.map((m) => (
+              <div
+                key={m.id}
+                className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-slate-900 font-mono">{m.branch_code}</p>
+                  <p className="text-xs text-slate-500">{m.branch?.branch_name ?? "—"}</p>
+                </div>
+                <Button
+                  onClick={async () => {
+                    await handleDelete(m);
+                    if (panelUser) {
+                      const data = await adminApi.getUserBranches(panelUser.id);
+                      setPanelMappings(data);
+                    }
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="danger"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex justify-end pt-4 border-t border-slate-100 mt-4">
+          <Button onClick={() => { setPanelUser(null); setPanelMappings([]); }} type="button" variant="secondary">
+            Close
+          </Button>
+        </div>
+      </Modal>
+    </div>
+  );
+}

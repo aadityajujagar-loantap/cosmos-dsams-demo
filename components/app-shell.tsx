@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import Image from "next/image";
@@ -11,7 +11,7 @@ import {
   FileText,
   LayoutDashboard,
   LineChart,
-  Menu,
+  Menu, MapPin,
   Search,
   Send,
   Settings,
@@ -232,6 +232,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                   { href: "/administration/users", icon: Users, label: "User Management" },
                   { href: "/administration/roles", icon: ShieldCheck, label: "Roles & Permissions" },
                   { href: "/administration/branch-roles", icon: ShieldCheck, label: "Branch Roles" },
+                  { href: "/administration/user-branch-mappings", icon: Users, label: "User Branch Mappings" },
+                  { href: "/administration/location-hierarchy", icon: MapPin, label: "Location Hierarchy" },
                   { href: "/administration/audit-logs", icon: FileText, label: "Audit Logs" },
                   ...(hasPermission("maker_requests.view")
                     ? [{ href: "/administration/maker-requests", icon: ClipboardCheck, label: "Maker Requests" }]
@@ -332,7 +334,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           href: `/dsa/${item.id}`,
           kind: "DSA",
           label: item.name,
-          meta: `${item.code} · ${item.pan}`,
+          meta: `${item.code} Â· ${item.pan}`,
         })),
       ...searchableApplications
         .filter((item) =>
@@ -343,8 +345,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         .map((item) => ({
           href: `/applications/${item.id}`,
           kind: "Application",
-          label: `${item.applicationId} · ${item.customer}`,
-          meta: `${item.product} · ${item.status}`,
+          label: `${item.applicationId} Â· ${item.customer}`,
+          meta: `${item.product} Â· ${item.status}`,
         })),
     ].slice(0, 10);
   }, [currentUser, globalQuery, store.applications, store.dsas]);
@@ -822,3 +824,5 @@ export function AppShell({ children }: { children: ReactNode }) {
     </div>
   );
 }
+
+
