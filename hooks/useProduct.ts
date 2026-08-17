@@ -175,6 +175,24 @@ export function useProduct() {
     }
   }, [toast]);
 
+  const fetchAllProductSlabs = useCallback(async (params?: { search?: string; status?: string }) => {
+    setLoading(true);
+    try {
+      const response = await adminApi.getAllProductSlabs(params);
+      return response.data;
+    } catch (err) {
+      console.error("Failed to load all product slabs:", err);
+      toast({
+        title: "Load Failed",
+        description: errorMessage(err, "Failed to load product slabs."),
+        variant: "warning",
+      });
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
   return {
     loading,
     actionLoading,
@@ -187,6 +205,7 @@ export function useProduct() {
     fetchSchemes,
     fetchSchemeParameters,
     fetchSchemeSlabs,
+    fetchAllProductSlabs,
     createProduct,
     createSchemeSlab,
     updateSchemeSlab,

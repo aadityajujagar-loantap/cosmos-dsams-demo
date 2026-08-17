@@ -82,22 +82,20 @@ function SlabsTab() {
       const prodRes = await adminApi.getProductsList();
       setProducts(prodRes.data);
       
+      const response = await adminApi.getAllProductSlabs();
+      const productsWithSlabs = response.data || [];
       const allSlabs: LoanSlab[] = [];
-      for (const prod of prodRes.data) {
-        try {
-          const slabsRes = await adminApi.getProductMasterSlabs(prod.id);
-          const masterData = (slabsRes as any).data || slabsRes;
-          const schemesData = masterData?.schemes || [];
-          schemesData.forEach((sch: any) => {
-            const slabsData = sch.slabs || [];
-            slabsData.forEach((sl: any) => {
-              allSlabs.push(mapBackendSlabToFrontend(sl, sch.name, prod.name));
-            });
+
+      productsWithSlabs.forEach((prod: any) => {
+        const schemesData = prod.schemes || [];
+        schemesData.forEach((sch: any) => {
+          const slabsData = sch.slabs || [];
+          slabsData.forEach((sl: any) => {
+            allSlabs.push(mapBackendSlabToFrontend(sl, sch.name, prod.name));
           });
-        } catch (e) {
-          console.error(`Failed to load slabs for product ${prod.id}:`, e);
-        }
-      }
+        });
+      });
+
       setSlabsList(allSlabs);
     } catch (e) {
       console.error("Failed to load products/slabs:", e);

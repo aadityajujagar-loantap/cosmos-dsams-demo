@@ -404,26 +404,26 @@ export const adminApi = {
     sort_by?: string;
     sort_order?: string;
   }): Promise<BackendResponse<DsaListResponse>> => {
-    return request<BackendResponse<DsaListResponse>>(`/dsas${compactParams(params)}`, {
+    return request<BackendResponse<DsaListResponse>>(`/v1/dsas${compactParams(params)}`, {
       method: "GET",
     });
   },
 
   getDsaDetail: async (idOrCode: number | string): Promise<BackendResponse<Dsa & { related_users?: any[] }>> => {
-    return request<BackendResponse<Dsa & { related_users?: any[] }>>(`/dsas/${idOrCode}`, {
+    return request<BackendResponse<Dsa & { related_users?: any[] }>>(`/v1/dsas/${idOrCode}`, {
       method: "GET",
     });
   },
 
   createDsa: async (payload: Partial<Dsa>): Promise<BackendResponse<Dsa>> => {
-    return request<BackendResponse<Dsa>>("/dsas-create", {
+    return request<BackendResponse<Dsa>>("/v1/dsas-create", {
       method: "POST",
       body: JSON.stringify(payload),
     });
   },
 
   updateDsaProfile: async (idOrCode: number | string, payload: Partial<Dsa> & { action?: string; remarks?: string }): Promise<BackendResponse<Dsa>> => {
-    return request<BackendResponse<Dsa>>(`/dsas/${idOrCode}/update-profile`, {
+    return request<BackendResponse<Dsa>>(`/v1/dsas/${idOrCode}/update-profile`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
@@ -433,7 +433,7 @@ export const adminApi = {
     idOrCode: number | string,
     payload: { onboarding_status?: string; operational_status?: string; reason: string }
   ): Promise<BackendResponse<Dsa>> => {
-    return request<BackendResponse<Dsa>>(`/dsas/${idOrCode}/update-status`, {
+    return request<BackendResponse<Dsa>>(`/v1/dsas/${idOrCode}/update-status`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
@@ -441,13 +441,13 @@ export const adminApi = {
 
   // â”€â”€ DSA Agreements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   generateDsaAgreement: async (idOrCode: number | string): Promise<BackendResponse<any>> => {
-    return request<BackendResponse<any>>(`/dsas/${idOrCode}/agreements/generate`, {
+    return request<BackendResponse<any>>(`/v1/dsas/${idOrCode}/agreements/generate`, {
       method: "POST",
     });
   },
 
   downloadDsaAgreement: async (idOrCode: number | string): Promise<BackendResponse<{ file_url: string; agreement_status: string }>> => {
-    return request<BackendResponse<{ file_url: string; agreement_status: string }>>(`/dsas/${idOrCode}/agreements/download`, {
+    return request<BackendResponse<{ file_url: string; agreement_status: string }>>(`/v1/dsas/${idOrCode}/agreements/download`, {
       method: "GET",
     });
   },
@@ -455,7 +455,7 @@ export const adminApi = {
   uploadSignedAgreement: async (idOrCode: number | string, file: File): Promise<BackendResponse<any>> => {
     const formData = new FormData();
     formData.append("signed_agreement", file);
-    return request<BackendResponse<any>>(`/dsas/${idOrCode}/agreements/upload-signed`, {
+    return request<BackendResponse<any>>(`/v1/dsas/${idOrCode}/agreements/upload-signed`, {
       method: "POST",
       body: formData,
       headers: {
@@ -466,7 +466,7 @@ export const adminApi = {
 
   // â”€â”€ DSA Documents â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   getDsaDocuments: async (idOrCode: number | string): Promise<BackendResponse<DsaDocument[]>> => {
-    return request<BackendResponse<DsaDocument[]>>(`/dsas/${idOrCode}/documents`, {
+    return request<BackendResponse<DsaDocument[]>>(`/v1/dsas/${idOrCode}/documents`, {
       method: "GET",
     });
   },
@@ -481,7 +481,7 @@ export const adminApi = {
     if (payload.owner_name) {
       formData.append("owner_name", payload.owner_name);
     }
-    return request<BackendResponse<DsaDocument>>(`/dsas/${idOrCode}/documents`, {
+    return request<BackendResponse<DsaDocument>>(`/v1/dsas/${idOrCode}/documents`, {
       method: "POST",
       body: formData,
       headers: {
@@ -494,7 +494,7 @@ export const adminApi = {
     idOrCode: number | string,
     payload: { document_id: number; status: string; remarks?: string }
   ): Promise<BackendResponse<any>> => {
-    return request<BackendResponse<any>>(`/dsas/${idOrCode}/documents/update-status`, {
+    return request<BackendResponse<any>>(`/v1/dsas/${idOrCode}/documents/update-status`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
@@ -504,7 +504,7 @@ export const adminApi = {
     idOrCode: number | string,
     payload: { document_id: number }
   ): Promise<BackendResponse<any>> => {
-    return request<BackendResponse<any>>(`/dsas/${idOrCode}/documents/delete`, {
+    return request<BackendResponse<any>>(`/v1/dsas/${idOrCode}/documents/delete`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
@@ -616,6 +616,10 @@ export const adminApi = {
 
   getProductMasterSlabs: async (productId: number): Promise<BackendResponse<{ product: LoanProduct; schemes: { id: number; name: string; slabs: SchemeSlab[] }[] }>> => {
     return request<BackendResponse<{ product: LoanProduct; schemes: { id: number; name: string; slabs: SchemeSlab[] }[] }>>(`/v1/loan-products/${productId}/slabs`, { method: "GET" });
+  },
+
+  getAllProductSlabs: async (params?: { search?: string; status?: string }): Promise<BackendResponse<LoanProduct[]>> => {
+    return request<BackendResponse<LoanProduct[]>>(`/v1/loan-products/slabs${compactParams(params)}`, { method: "GET" });
   },
 
   // â”€â”€ Branch Role CRUD â”€â”€
