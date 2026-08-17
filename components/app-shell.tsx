@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import Image from "next/image";
@@ -615,6 +615,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             height={40}
             priority
             src="/logo-dsasm-cosmos.png"
+            unoptimized
             width={220}
           />
         </div>
@@ -701,6 +702,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 height={40}
                 priority
                 src="/logo-dsasm-cosmos.png"
+                unoptimized
                 width={210}
               />
             </div>
