@@ -229,7 +229,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           ? [
               {
                 items: [
-                  { href: "/administration/users", icon: Users, label: "User Management" },
+
+
+                  { href: "/administration/users", icon: Users, label: "User Management" },
                   { href: "/administration/roles", icon: ShieldCheck, label: "Roles & Permissions" },
                   { href: "/administration/branch-roles", icon: ShieldCheck, label: "Branch Roles" },
                   { href: "/administration/user-branch-mappings", icon: Users, label: "User Branch Mappings" },
@@ -612,7 +614,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             className="h-10 w-auto max-w-[220px]"
             height={40}
             priority
-            src="/logo-dsasm-cosmos.svg"
+            src="/logo-dsasm-cosmos.png"
             width={220}
           />
         </div>
@@ -698,7 +700,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 className="h-10 w-auto max-w-[210px]"
                 height={40}
                 priority
-                src="/logo-dsasm-cosmos.svg"
+                src="/logo-dsasm-cosmos.png"
                 width={210}
               />
             </div>
