@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useMockStore } from "@/lib/store";
+import { useProduct } from "@/hooks/useProduct";
 import { useToast } from "@/components/ui/toast";
 import { PageHeader } from "@/components/module";
 import {
@@ -19,8 +20,6 @@ import { commissionDisplayLabel, formatCommissionDisplay, formatCurrency, makeId
 import { DEMO_USERS } from "@/lib/demo-identities";
 import { journeyUrl } from "@/lib/journey-links";
 import { Product, ProductCommissionRange } from "@/lib/types";
-
-const loanProducts: Product[] = ["Home Loan", "Personal Loan", "Loan Against Property", "Business Loan", "Auto Loan"];
 
 // Required documents per product and borrower type
 const REQUIRED_DOCS: Record<string, { salaried: string[]; selfEmployed: string[] }> = {
@@ -57,6 +56,7 @@ function productDefaults(product: string) {
 export function ProductSettingPage() {
   const { store, createItem, updateItem, currentUser } = useMockStore();
   const { toast } = useToast();
+  const { products, fetchProducts, schemes, fetchSchemes } = useProduct();
 
   const [product, setProduct] = useState<Product | "">("");
   const [partner, setPartner] = useState<string>("");
@@ -83,6 +83,10 @@ export function ProductSettingPage() {
   const bannerInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  useEffect(() => {
     return () => {
       if (bannerPreviewUrl) URL.revokeObjectURL(bannerPreviewUrl);
     };
@@ -95,8 +99,6 @@ export function ProductSettingPage() {
       );
       if (config) {
         setRanges(config.ranges || []);
-        const slab = store.loanSlabs.find(s => s.product === product);
-        setScheme(slab?.schemeName || "");
         if (config.bannerName) {
           setBannerName(config.bannerName);
           setHasBanner(true);
@@ -106,17 +108,15 @@ export function ProductSettingPage() {
         }
       } else {
         setRanges([]);
-        setScheme("");
         setHasBanner(false);
         setBannerName("");
       }
     } else {
       setRanges([]);
-      setScheme("");
       setHasBanner(false);
       setBannerName("");
     }
-  }, [product, partner, store.dsaProductConfigs, store.loanSlabs]);
+  }, [product, partner, store.dsaProductConfigs]);
 
   const canConfigureProducts = currentUser?.role === "DSA Manager" || currentUser?.role === "DSA Credit";
 
@@ -142,12 +142,15 @@ export function ProductSettingPage() {
     setScheme(""); // reset scheme when product changes
     setRangeId((current) => current || `${code}_Commission_${(ranges.length + 1).toString().padStart(2, "0")}`);
     setBannerName((current) => current || `${url}_banner.png`);
+
+    const prodObj = products.find((p) => p.name === nextProduct);
+    if (prodObj) {
+      fetchSchemes(prodObj.id);
+    }
   };
 
-  // Schemes available for the selected product (derived from loan slabs)
-  const schemesForProduct = product
-    ? [...new Set(store.loanSlabs.filter((s) => s.product === product).map((s) => s.schemeName))]
-    : [];
+  // Schemes available for the selected product (derived from backend schemes)
+  const schemesForProduct = schemes.map((s) => s.name);
 
   const handleAddRange = () => {
     if (!rangeId.trim()) {
@@ -310,7 +313,7 @@ export function ProductSettingPage() {
     });
   };
 
-  const activeDsas = store.dsas.filter((d) => d.status === "Active");
+  const activeDsas = store.dsas.filter((d: any) => d.status === "Active" || d.operational_status === "ACTIVE" || d.onboarding_status === "APPROVED");
   const selectedDsa = store.dsas.find((dsa) => dsa.id === partner);
   const productCommissions = store.commissions.filter((commission) => commission.dsaId === partner && commission.product === product);
   const latestDisbursement = productCommissions[0]?.disbursedAmount ?? 0;
@@ -486,8 +489,8 @@ export function ProductSettingPage() {
                     onChange={(e) => handleProductChange(e.target.value as Product | "")}
                   >
                     <option value="">Select product</option>
-                    {loanProducts.map((p) => (
-                      <option key={p} value={p}>{p}</option>
+                    {products.map((p) => (
+                      <option key={p.id} value={p.name}>{p.name}</option>
                     ))}
                   </Select>
                 </Field>

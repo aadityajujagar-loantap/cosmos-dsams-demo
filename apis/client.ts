@@ -11,12 +11,18 @@ export async function request<T = any>(
 ): Promise<T> {
   const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
 
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
+  const isFormData = options.body instanceof FormData;
+
+  const headers: Record<string, string> = {
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
     "Accept": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...(options.headers || {}),
+    ...(options.headers as any || {}),
   };
+
+  if (headers["Content-Type"] === "") {
+    delete headers["Content-Type"];
+  }
 
   const response = await fetch(`${BASE_URL}/${endpoint.replace(/^\//, "")}`, {
     ...options,

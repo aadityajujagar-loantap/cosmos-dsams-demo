@@ -12,6 +12,10 @@ import {
   GitBranch,
   UploadCloud,
   Users,
+  RefreshCw,
+  Eye,
+  X,
+  ClipboardCheck,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -23,6 +27,8 @@ import {
   Button,
   Card,
   CardContent,
+  CardHeader,
+  EmptyState,
   Field,
   Input,
   Label,
@@ -34,6 +40,8 @@ import {
 } from "@/components/ui/primitives";
 import { FieldConfig, RecordForm } from "@/components/ui/record-form";
 import { useMockStore } from "@/lib/store";
+import { useActivityLogs } from "@/hooks/useActivityLogs";
+import type { ActivityLog } from "@/types/activityLog";
 import {
   AuditLog,
   Commission,
@@ -1692,28 +1700,270 @@ export function RolesPage() {
 }
 
 export function AuditLogsPage() {
-  const { deleteItem, store } = useMockStore();
-  const columns: Column<AuditLog>[] = [
-    { cell: (item) => formatDate(item.at), header: "Time", key: "at", sortable: true, sortValue: (item) => item.at },
-    { cell: (item) => item.actor, header: "Actor", key: "actor" },
-    { cell: (item) => item.action, header: "Action", key: "action" },
-    { cell: (item) => item.entity, header: "Entity", key: "entity" },
-    { cell: (item) => <StatusBadge status={item.severity} />, header: "Severity", key: "severity" },
-    { cell: (item) => item.ipAddress, header: "IP", key: "ipAddress" },
-  ];
+  const {
+    logs,
+    selectedLog,
+    pagination,
+    loading,
+    detailLoading,
+    fetchLogs,
+    fetchLogDetail,
+    setSelectedLog,
+  } = useActivityLogs();
+
+  const [actionFilter, setActionFilter] = useState("");
+  const [groupFilter, setGroupFilter] = useState("");
+  const [page, setPage] = useState(1);
+
+  const requestParams = useMemo(
+    () => ({
+      action: actionFilter || undefined,
+      group: groupFilter.trim() || undefined,
+      page,
+      per_page: 10,
+    }),
+    [actionFilter, groupFilter, page]
+  );
+
+  useEffect(() => {
+    fetchLogs(requestParams);
+  }, [fetchLogs, requestParams]);
+
+  useEffect(() => {
+    setSelectedLog(null);
+  }, [actionFilter, groupFilter, setSelectedLog]);
+
+  const handleRefresh = () => {
+    fetchLogs(requestParams);
+  };
+
+  const openLog = (log: ActivityLog) => {
+    setSelectedLog(log);
+    fetchLogDetail(log.id);
+  };
+
   return (
-    <div>
-      <PageHeader
-        description="Searchable enterprise audit trail for changes to partners, workflows, rules, payouts, and access."
-        eyebrow="Administration"
-        title="Audit Logs"
-      />
-      <DataTable
-        actions={(item) => <ActionPair onDelete={() => deleteItem("auditLogs", item.id)} />}
-        columns={columns}
-        items={store.auditLogs}
-        searchKeys={["actor", "action", "entity", "severity", "ipAddress"]}
-      />
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <PageHeader
+          description="Searchable enterprise audit trail for changes to partners, workflows, rules, payouts, and access."
+          eyebrow="Administration"
+          title="Audit Logs"
+        />
+        <Button disabled={loading} onClick={handleRefresh} type="button" variant="outline">
+          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+          Refresh
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-3 border-b border-slate-200 pb-3">
+        <div className="ml-auto grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-[180px_180px]">
+          <Input
+            aria-label="Filter by module"
+            onChange={(event) => {
+              setGroupFilter(event.target.value);
+              setPage(1);
+            }}
+            placeholder="Filter by Module"
+            value={groupFilter}
+          />
+          <Select
+            aria-label="Filter by action"
+            onChange={(event) => {
+              setActionFilter(event.target.value);
+              setPage(1);
+            }}
+            value={actionFilter}
+          >
+            <option value="">All actions</option>
+            <option value="viewed">Viewed</option>
+            <option value="created">Created</option>
+            <option value="updated">Updated</option>
+            <option value="deleted">Deleted</option>
+            <option value="failed">Failed</option>
+            <option value="maker_submitted">Maker Submitted</option>
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_400px]">
+        <Card className="lg:min-h-[500px]">
+          <CardContent className="p-0">
+            {loading ? (
+              <div className="flex items-center justify-center py-20">
+                <span className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" />
+              </div>
+            ) : logs.length === 0 ? (
+              <div className="px-6 py-12">
+                <EmptyState
+                  description="Change filters or refresh to load backend activity logs."
+                  title="No audit logs found"
+                />
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500">
+                      <th className="p-4">Actor</th>
+                      <th className="p-4">Action</th>
+                      <th className="p-4">Module</th>
+                      <th className="p-4">IP Address</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4">Time</th>
+                      <th className="p-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {logs.map((log) => (
+                      <tr
+                        className={`cursor-pointer transition hover:bg-slate-50 ${
+                          selectedLog?.id === log.id ? "bg-blue-50/50 hover:bg-blue-50" : ""
+                        }`}
+                        key={log.id}
+                        onClick={() => openLog(log)}
+                      >
+                        <td className="p-4">
+                          <div>
+                            <p className="font-semibold text-slate-950">{log.user?.name || "System"}</p>
+                            <p className="text-[10px] text-slate-500">{log.user?.email || ""}</p>
+                          </div>
+                        </td>
+                        <td className="p-4 capitalize">
+                          <span className="font-medium">{log.action.replace(/_/g, " ")}</span>
+                        </td>
+                        <td className="p-4 capitalize text-slate-700">
+                          {log.group.replace(/_/g, " ")}
+                        </td>
+                        <td className="p-4 font-mono text-xs text-slate-500">
+                          {log.ip_address}
+                        </td>
+                        <td className="p-4">
+                          <Badge tone={log.status_code >= 400 ? "rose" : log.status_code >= 300 ? "amber" : "green"}>
+                            {log.status_code}
+                          </Badge>
+                        </td>
+                        <td className="p-4 text-slate-500">
+                          {formatDate(log.created_at)}
+                        </td>
+                        <td className="p-4 text-right" onClick={(event) => event.stopPropagation()}>
+                          <Button aria-label="View log details" onClick={() => openLog(log)} size="sm" type="button" variant="ghost">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+          <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
+            <span>
+              Page {pagination.page} of {pagination.lastPage} · {pagination.total} total
+            </span>
+            <div className="flex gap-2">
+              <Button disabled={loading || page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))} size="sm" type="button" variant="outline">
+                Previous
+              </Button>
+              <Button disabled={loading || page >= pagination.lastPage} onClick={() => setPage((current) => current + 1)} size="sm" type="button" variant="outline">
+                Next
+              </Button>
+            </div>
+          </div>
+        </Card>
+
+        {selectedLog ? (
+          <Card className="sticky top-6">
+            <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-900">Log Details</h3>
+                <p className="mt-0.5 text-xs text-slate-500">Log ID: {selectedLog.id}</p>
+              </div>
+              <Button aria-label="Close details" onClick={() => setSelectedLog(null)} size="icon" type="button" variant="ghost">
+                <X className="h-4 w-4" />
+              </Button>
+            </CardHeader>
+            <CardContent className="max-h-[650px] space-y-4 overflow-y-auto p-4 text-xs">
+              {detailLoading ? (
+                <div className="flex items-center gap-2 rounded-md border border-blue-100 bg-blue-50 p-3 text-blue-700">
+                  <span className="h-4 w-4 animate-spin rounded-full border-b-2 border-blue-600" />
+                  Loading log detail
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Module</span>
+                  <span className="mt-0.5 block text-sm font-semibold text-slate-900 capitalize">{selectedLog.group.replace(/_/g, " ")}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Action</span>
+                  <span className="mt-0.5 block text-sm font-semibold text-slate-900 capitalize">{selectedLog.action.replace(/_/g, " ")}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Actor</span>
+                  <span className="mt-0.5 block text-sm font-semibold text-slate-900">{selectedLog.user?.name || "System"}</span>
+                  <span className="block text-slate-500">{selectedLog.user?.email || ""}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Status Code</span>
+                  <span className="mt-1 block">
+                    <Badge tone={selectedLog.status_code >= 400 ? "rose" : selectedLog.status_code >= 300 ? "amber" : "green"}>
+                      {selectedLog.status_code}
+                    </Badge>
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-1 rounded-md border border-slate-100 bg-slate-50 p-3 text-slate-800">
+                <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Request Information</span>
+                <div className="mt-1.5 space-y-1 font-mono text-[10px]">
+                  <p><span className="font-bold text-slate-600">Method:</span> {selectedLog.request_method}</p>
+                  <p className="break-all"><span className="font-bold text-slate-600">URL:</span> {selectedLog.request_url}</p>
+                  <p><span className="font-bold text-slate-600">Route Name:</span> {selectedLog.route_name || "-"}</p>
+                  <p><span className="font-bold text-slate-600">IP:</span> {selectedLog.ip_address}</p>
+                  <p className="break-all"><span className="font-bold text-slate-600">User Agent:</span> {selectedLog.user_agent || "-"}</p>
+                </div>
+              </div>
+
+              {selectedLog.old_data || selectedLog.new_data ? (
+                <div className="space-y-3">
+                  <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Data Snapshots</span>
+                  {selectedLog.old_data && (
+                    <div className="space-y-1">
+                      <span className="block text-[9px] font-bold uppercase text-slate-500">Before Change</span>
+                      <pre className="max-h-44 overflow-x-auto rounded-md border border-slate-100 bg-slate-50 p-2 text-[10px] font-mono text-slate-800">
+                        {JSON.stringify(selectedLog.old_data, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                  {selectedLog.new_data && (
+                    <div className="space-y-1">
+                      <span className="block text-[9px] font-bold uppercase text-blue-600">After Change</span>
+                      <pre className="max-h-44 overflow-x-auto rounded-md border border-blue-50 bg-blue-50/20 p-2 text-[10px] font-mono text-blue-950">
+                        {JSON.stringify(selectedLog.new_data, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="hidden sticky top-6 lg:block">
+            <CardContent className="space-y-3 py-20 text-center">
+              <ClipboardCheck className="mx-auto h-8 w-8 text-slate-300" />
+              <div>
+                <p className="text-sm font-bold text-slate-800">Select a log entry</p>
+                <p className="mx-auto mt-1 max-w-[220px] text-xs text-slate-500">
+                  Select an audit log row to view HTTP request details, user agent, and full database JSON payload changes.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,35 @@
 import { request } from "./client";
 import type { MakerRequest, MakerRequestActionType, MakerRequestStatus } from "@/types/makerChecker";
 import type { Permission, Role, User } from "@/types/auth";
+import type { ActivityLog } from "@/types/activityLog";
+import type {
+  Dsa,
+  DsaDocument,
+  StateOption,
+  DistrictOption,
+  BranchOption,
+  SubRegionOption,
+  RegionOption,
+} from "@/types/dsa";
+import type { LoanProduct, LoanScheme, SchemeParameter, SchemeSlab } from "@/types/product";
+
+export interface BackendResponse<T> {
+  status: string;
+  message?: string;
+  status_code?: number;
+  data: T;
+}
+
+export interface DsaListResponse {
+  items: Dsa[];
+  pagination: {
+    total: number;
+    count: number;
+    per_page: number;
+    current_page: number;
+    total_pages: number;
+  };
+}
 
 export interface PaginatedResponse<T> {
   current_page: number;
@@ -307,5 +336,285 @@ export const adminApi = {
     return request<{ message?: string }>(`/admin/permissions/${id}`, {
       method: "DELETE",
     });
+  },
+
+  /**
+   * Get paginated activity logs (Audit Trail)
+   */
+  getActivityLogs: async (params?: {
+    user_id?: number;
+    action?: string;
+    group?: string;
+    date_from?: string;
+    date_to?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<PaginatedResponse<ActivityLog>> => {
+    return request<PaginatedResponse<ActivityLog>>(
+      `/admin/activity-logs${compactParams(params)}`,
+      { method: "GET" }
+    );
+  },
+
+  /**
+   * Fetch single activity log detail
+   */
+  getActivityLogDetail: async (id: number): Promise<ActivityLog> => {
+    return request<ActivityLog>(`/admin/activity-logs/${id}`, {
+      method: "GET",
+    });
+  },
+
+  // ── DSA Dropdowns ────────────────────────────────────────────────────────
+  getStatesDropdown: async (): Promise<BackendResponse<StateOption[]>> => {
+    return request<BackendResponse<StateOption[]>>("/states/dropdown", { method: "GET" });
+  },
+
+  getDistrictsDropdown: async (stateCode: string): Promise<BackendResponse<DistrictOption[]>> => {
+    return request<BackendResponse<DistrictOption[]>>(`/districts/dropdown?state_code=${stateCode}`, {
+      method: "GET",
+    });
+  },
+
+  getBranchesDropdown: async (districtCode: string): Promise<BackendResponse<BranchOption[]>> => {
+    return request<BackendResponse<BranchOption[]>>(`/branches/dropdown?district_code=${districtCode}`, {
+      method: "GET",
+    });
+  },
+
+  getSubRegionsDropdown: async (): Promise<BackendResponse<SubRegionOption[]>> => {
+    return request<BackendResponse<SubRegionOption[]>>("/sub-regions/dropdown", { method: "GET" });
+  },
+
+  getRegionsDropdown: async (): Promise<BackendResponse<RegionOption[]>> => {
+    return request<BackendResponse<RegionOption[]>>("/regions/dropdown", { method: "GET" });
+  },
+
+  // ── DSA CRUD ─────────────────────────────────────────────────────────────
+  getDsas: async (params?: {
+    search?: string;
+    onboarding_status?: string;
+    operational_status?: string;
+    tier?: string;
+    city?: string;
+    state?: string;
+    business_type?: string;
+    per_page?: number;
+    page?: number;
+    sort_by?: string;
+    sort_order?: string;
+  }): Promise<BackendResponse<DsaListResponse>> => {
+    return request<BackendResponse<DsaListResponse>>(`/dsas${compactParams(params)}`, {
+      method: "GET",
+    });
+  },
+
+  getDsaDetail: async (idOrCode: number | string): Promise<BackendResponse<Dsa & { related_users?: any[] }>> => {
+    return request<BackendResponse<Dsa & { related_users?: any[] }>>(`/dsas/${idOrCode}`, {
+      method: "GET",
+    });
+  },
+
+  createDsa: async (payload: Partial<Dsa>): Promise<BackendResponse<Dsa>> => {
+    return request<BackendResponse<Dsa>>("/dsas-create", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateDsaProfile: async (idOrCode: number | string, payload: Partial<Dsa> & { action?: string; remarks?: string }): Promise<BackendResponse<Dsa>> => {
+    return request<BackendResponse<Dsa>>(`/dsas/${idOrCode}/update-profile`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateDsaStatus: async (
+    idOrCode: number | string,
+    payload: { onboarding_status?: string; operational_status?: string; reason: string }
+  ): Promise<BackendResponse<Dsa>> => {
+    return request<BackendResponse<Dsa>>(`/dsas/${idOrCode}/update-status`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  // ── DSA Agreements ────────────────────────────────────────────────────────
+  generateDsaAgreement: async (idOrCode: number | string): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/dsas/${idOrCode}/agreements/generate`, {
+      method: "POST",
+    });
+  },
+
+  downloadDsaAgreement: async (idOrCode: number | string): Promise<BackendResponse<{ file_url: string; agreement_status: string }>> => {
+    return request<BackendResponse<{ file_url: string; agreement_status: string }>>(`/dsas/${idOrCode}/agreements/download`, {
+      method: "GET",
+    });
+  },
+
+  uploadSignedAgreement: async (idOrCode: number | string, file: File): Promise<BackendResponse<any>> => {
+    const formData = new FormData();
+    formData.append("signed_agreement", file);
+    return request<BackendResponse<any>>(`/dsas/${idOrCode}/agreements/upload-signed`, {
+      method: "POST",
+      body: formData,
+      headers: {
+        "Content-Type": "",
+      },
+    });
+  },
+
+  // ── DSA Documents ─────────────────────────────────────────────────────────
+  getDsaDocuments: async (idOrCode: number | string): Promise<BackendResponse<DsaDocument[]>> => {
+    return request<BackendResponse<DsaDocument[]>>(`/dsas/${idOrCode}/documents`, {
+      method: "GET",
+    });
+  },
+
+  uploadDsaDocument: async (
+    idOrCode: number | string,
+    payload: { file: File; document_type: string; owner_name?: string }
+  ): Promise<BackendResponse<DsaDocument>> => {
+    const formData = new FormData();
+    formData.append("file", payload.file);
+    formData.append("document_type", payload.document_type);
+    if (payload.owner_name) {
+      formData.append("owner_name", payload.owner_name);
+    }
+    return request<BackendResponse<DsaDocument>>(`/dsas/${idOrCode}/documents`, {
+      method: "POST",
+      body: formData,
+      headers: {
+        "Content-Type": "",
+      },
+    });
+  },
+
+  updateDsaDocumentStatus: async (
+    idOrCode: number | string,
+    payload: { document_id: number; status: string; remarks?: string }
+  ): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/dsas/${idOrCode}/documents/update-status`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteDsaDocument: async (
+    idOrCode: number | string,
+    payload: { document_id: number }
+  ): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/dsas/${idOrCode}/documents/delete`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  // ── Product Management ──
+  getProducts: async (): Promise<BackendResponse<LoanProduct[]>> => {
+    return request<BackendResponse<LoanProduct[]>>("/v1/loan-products", { method: "GET" });
+  },
+
+  getProductsList: async (): Promise<BackendResponse<LoanProduct[]>> => {
+    return request<BackendResponse<LoanProduct[]>>("/loan-products-list", { method: "GET" });
+  },
+
+  getProductDetail: async (id: number): Promise<BackendResponse<LoanProduct>> => {
+    return request<BackendResponse<LoanProduct>>(`/v1/loan-products/${id}`, { method: "GET" });
+  },
+
+  createProduct: async (payload: Partial<LoanProduct> & { maker_comment?: string }): Promise<BackendResponse<LoanProduct>> => {
+    return request<BackendResponse<LoanProduct>>("/v1/loan-products", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateProduct: async (id: number, payload: Partial<LoanProduct> & { maker_comment?: string }): Promise<BackendResponse<LoanProduct>> => {
+    return request<BackendResponse<LoanProduct>>(`/v1/loan-products/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  archiveProduct: async (id: number, payload?: { maker_comment?: string }): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/loan-products/${id}/archive`, {
+      method: "POST",
+      body: JSON.stringify(payload ?? {}),
+    });
+  },
+
+  deleteProduct: async (id: number): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/loan-products/${id}`, { method: "DELETE" });
+  },
+
+  getSchemes: async (productId: number): Promise<BackendResponse<LoanScheme[]>> => {
+    return request<BackendResponse<LoanScheme[]>>(`/v1/loan-products/${productId}/schemes`, { method: "GET" });
+  },
+
+  createScheme: async (productId: number, payload: Partial<LoanScheme> & { maker_comment?: string }): Promise<BackendResponse<LoanScheme>> => {
+    return request<BackendResponse<LoanScheme>>(`/v1/loan-products/${productId}/schemes`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getSchemeDetail: async (schemeId: number): Promise<BackendResponse<LoanScheme>> => {
+    return request<BackendResponse<LoanScheme>>(`/v1/schemes/${schemeId}`, { method: "GET" });
+  },
+
+  updateScheme: async (schemeId: number, payload: Partial<LoanScheme> & { maker_comment?: string }): Promise<BackendResponse<LoanScheme>> => {
+    return request<BackendResponse<LoanScheme>>(`/v1/schemes/${schemeId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteScheme: async (schemeId: number): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/schemes/${schemeId}`, { method: "DELETE" });
+  },
+
+  getSchemeParameters: async (schemeId: number): Promise<BackendResponse<SchemeParameter>> => {
+    return request<BackendResponse<SchemeParameter>>(`/v1/schemes/${schemeId}/parameters`, { method: "GET" });
+  },
+
+  upsertSchemeParameters: async (schemeId: number, payload: Partial<SchemeParameter> & { maker_comment?: string }): Promise<BackendResponse<SchemeParameter>> => {
+    return request<BackendResponse<SchemeParameter>>(`/v1/schemes/${schemeId}/parameters`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getSchemeSlabs: async (schemeId: number): Promise<BackendResponse<SchemeSlab[]>> => {
+    return request<BackendResponse<SchemeSlab[]>>(`/v1/schemes/${schemeId}/slabs`, { method: "GET" });
+  },
+
+  createSchemeSlab: async (schemeId: number, payload: Partial<SchemeSlab> & { maker_comment?: string }): Promise<BackendResponse<SchemeSlab>> => {
+    return request<BackendResponse<SchemeSlab>>(`/v1/schemes/${schemeId}/slabs`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateSchemeSlab: async (slabId: number, payload: Partial<SchemeSlab> & { maker_comment?: string }): Promise<BackendResponse<SchemeSlab>> => {
+    return request<BackendResponse<SchemeSlab>>(`/v1/slabs/${slabId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteSchemeSlab: async (slabId: number): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/slabs/${slabId}`, { method: "DELETE" });
+  },
+
+  bulkStoreSchemeSlabs: async (schemeId: number, payload: { slabs: Partial<SchemeSlab>[]; maker_comment?: string }): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/schemes/${schemeId}/slabs/bulk`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getProductMasterSlabs: async (productId: number): Promise<BackendResponse<{ product: LoanProduct; schemes: { id: number; name: string; slabs: SchemeSlab[] }[] }>> => {
+    return request<BackendResponse<{ product: LoanProduct; schemes: { id: number; name: string; slabs: SchemeSlab[] }[] }>>(`/v1/loan-products/${productId}/slabs`, { method: "GET" });
   },
 };

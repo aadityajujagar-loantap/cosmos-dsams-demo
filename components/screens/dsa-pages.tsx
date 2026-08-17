@@ -15,8 +15,9 @@ import {
   UploadCloud,
   BarChart3,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { adminApi } from "@/apis/admin";
 
 import { BarChartCard, KpiCard, TrendCard } from "@/components/charts";
 import { ActionPair, DetailGrid, DetailItem, PageHeader } from "@/components/module";
@@ -26,6 +27,7 @@ import {
   Button,
   Card,
   CardContent,
+  EmptyState,
   Field,
   Input,
   Label,
@@ -45,6 +47,7 @@ import {
   requiredDsaDocuments,
 } from "@/lib/dsa-documents";
 import { useMockStore } from "@/lib/store";
+import { useDsa } from "@/hooks/useDsa";
 import { BusinessType, Dsa, DsaStatus, Product, User } from "@/lib/types";
 import { formatCommissionDisplay, formatCurrency, formatDate, generateDsaId, makeId, percent } from "@/lib/utils";
 
@@ -66,25 +69,6 @@ const businessTypes: BusinessType[] = [
   "Public Limited",
 ];
 
-// India states and their major cities for onboarding dropdowns
-const INDIA_STATES_CITIES: Record<string, string[]> = {
-  "Andhra Pradesh": ["Visakhapatnam", "Vijayawada", "Guntur", "Tirupati"],
-  "Delhi": ["New Delhi", "Dwarka", "Rohini", "Lajpat Nagar"],
-  "Gujarat": ["Ahmedabad", "Surat", "Vadodara", "Rajkot"],
-  "Karnataka": ["Bengaluru", "Mysuru", "Mangaluru", "Hubballi"],
-  "Kerala": ["Thiruvananthapuram", "Kochi", "Kozhikode", "Thrissur"],
-  "Madhya Pradesh": ["Bhopal", "Indore", "Gwalior", "Jabalpur"],
-  "Maharashtra": ["Mumbai", "Pune", "Nagpur", "Nashik", "Thane"],
-  "Punjab": ["Amritsar", "Ludhiana", "Jalandhar", "Patiala"],
-  "Rajasthan": ["Jaipur", "Jodhpur", "Udaipur", "Kota"],
-  "Tamil Nadu": ["Chennai", "Coimbatore", "Madurai", "Salem"],
-  "Telangana": ["Hyderabad", "Warangal", "Nizamabad", "Karimnagar"],
-  "Uttar Pradesh": ["Lucknow", "Kanpur", "Agra", "Varanasi", "Noida"],
-  "West Bengal": ["Kolkata", "Howrah", "Durgapur", "Siliguri"],
-};
-
-const INDIA_STATES = Object.keys(INDIA_STATES_CITIES).sort();
-
 const queueStatuses: DsaStatus[] = [
   "Submitted",
   "Pending Branch Approval",
@@ -93,6 +77,7 @@ const queueStatuses: DsaStatus[] = [
   "KYC Pending",
   "On Hold",
 ];
+
 const managementStatuses: DsaStatus[] = [
   "Draft",
   "Submitted",
@@ -232,7 +217,18 @@ function readOnboardingDraft(): Partial<OnboardingDraft> {
 }
 
 export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boolean } = {}) {
-  const { createItem, currentUser, store } = useMockStore();
+  const { currentUser, store } = useMockStore();
+  const {
+    createDsa,
+    uploadDsaDocument,
+    states,
+    districts,
+    fetchStatesDropdown,
+    fetchDistrictsDropdown,
+    setDistricts,
+    actionLoading,
+  } = useDsa();
+
   const isBranchOnboarding = currentUser?.role === "Branch User";
   const isDsaPartnerBlocked = currentUser?.role === "DSA Partner" && !publicEntry;
   const isDsaSubmittedOnboarding = publicEntry;
@@ -243,6 +239,22 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
     isDsaType(initialDraft.dsaType) ? initialDraft.dsaType : "Independent DSA",
   );
   const [form, setForm] = useState(() => ({ ...initialOnboardingForm, ...initialDraft.form }));
+
+  useEffect(() => {
+    fetchStatesDropdown();
+  }, [fetchStatesDropdown]);
+
+  // Load districts when state changes
+  const handleStateChange = async (stateName: string) => {
+    update("state", stateName);
+    update("city", "");
+    setDistricts([]);
+    
+    const stateObj = states.find((s) => s.state_name === stateName);
+    if (stateObj) {
+      await fetchDistrictsDropdown(stateObj.state_code);
+    }
+  };
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [uploadedFiles, setUploadedFiles] = useState<Record<string, UploadedFileMeta>>(
     () => initialDraft.uploadedFiles ?? {},
@@ -340,6 +352,7 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
     setUploadedFiles((current) => ({
       ...current,
       [key]: {
+        file,
         name: file.name,
         size: formatFileSize(file.size),
       },
@@ -351,98 +364,49 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
     });
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!validatePublicDocuments()) {
       setStep(4);
       return;
     }
 
-    const id = generateDsaId(store.dsas.map((dsa) => dsa.id));
-    const credentials = generateDsaCredentials(store.dsas);
-    const submittedAt = new Date().toISOString();
-    const hasMissingDocuments = missingRequiredDocuments.length > 0;
-    const documentsList = requiredDsaDocuments.map((document) => {
-      const file = uploadedFiles[document.key];
-
-      return {
-        id: makeId("doc"),
-        documentId: `DOC-${Math.floor(10000 + Math.random() * 90000)}`,
-        ownerName: form.name,
-        type: dsaDocumentType(document.key),
-        fileName: file?.name ?? `Missing - ${document.label}`,
-        size: file?.size ?? "0 KB",
-        status: "Pending" as const,
-        uploadedAt: submittedAt,
-        remarks: file
-          ? "Uploaded via onboarding portal"
-          : "Mandatory document missing during onboarding; DSA held before approval.",
-      };
-    });
-
-    const managerName =
-      currentUser?.role === "Branch User"
-        ? currentUser.name
-        : publicEntry
-          ? DEMO_USERS.branch.name
-        : DEMO_USERS.admin.name;
-    const nextStatus: DsaStatus = hasMissingDocuments
-      ? "On Hold"
-      : isSuperAdminOnboarding
-        ? "Active"
-        : isDsaSubmittedOnboarding
-          ? "Pending Branch Approval"
-          : isBranchOnboarding
-            ? "Pending BRH Approval"
-            : "Pending Credit Approval";
-
-    createItem("dsas", {
-      address: form.address,
-      approvalRate: 0,
-      bank: {
-        accountName: form.accountName,
-        accountNumber: form.accountNumber,
-        bankName: form.bankName,
-        ifsc: form.ifsc,
-      },
-      businessType: form.businessType as BusinessType,
-      city: form.city,
-      code: id,
-      commissionEarned: 0,
-      contactPerson: form.contactPerson,
-      documents: documentsList,
-      email: form.email,
-      gst: form.gst,
-      id,
-      loginPassword: credentials.loginPassword,
-      loginUsername: credentials.loginUsername,
-      manager: managerName,
-      mobile: form.mobile,
-      monthlyLeads: 0,
+    const payload = {
       name: form.name,
-      onboardingDate: submittedAt,
+      business_type: form.businessType,
       pan: form.pan,
-      pincode: form.pincode,
-      riskRating: "Low",
+      gst: form.gst || null,
+      contact_person: form.contactPerson,
+      mobile: form.mobile,
+      email: form.email,
+      address: form.address,
+      city: form.city,
       state: form.state,
-      status: nextStatus,
-      tier: "Bronze",
-    });
-    createItem("notifications", {
-      body:
-        nextStatus === "Active"
-          ? `${form.name} was onboarded internally and activated by Super Admin.`
-          : `${form.name} submitted a DSA onboarding request. Current status: ${nextStatus}.`,
-      category: "Workflow",
-      createdAt: submittedAt,
-      href: `/dsa/${id}`,
-      id: makeId("note"),
-      priority: "High",
-      status: "Unread",
-      title: "New DSA onboarding submitted",
-    });
-    setSubmittedDsaId(id);
-    setSubmittedDsaStatus(nextStatus);
+      pincode: form.pincode,
+      account_name: form.accountName,
+      account_number: form.accountNumber,
+      ifsc: form.ifsc,
+      bank_name: form.bankName,
+    };
+
+    const dsaObj = await createDsa(payload);
+    if (!dsaObj) return;
+
+    // Upload files if any
+    for (const key of Object.keys(uploadedFiles)) {
+      const fileMeta = uploadedFiles[key] as any;
+      if (fileMeta?.file) {
+        await uploadDsaDocument(dsaObj.id, {
+          file: fileMeta.file,
+          document_type: dsaDocumentType(key),
+          owner_name: form.name,
+        });
+      }
+    }
+
+    setSubmittedDsaId(dsaObj.code);
+    setSubmittedDsaStatus(dsaObj.onboarding_status as DsaStatus);
     setStep(6);
+    localStorage.removeItem(DSA_ONBOARDING_DRAFT_KEY);
   }
 
   function resetOnboarding() {
@@ -782,29 +746,26 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
                     <Select
                       id="stateSelect"
                       value={form.state}
-                      onChange={(e) => {
-                        update("state", e.target.value);
-                        update("city", "");
-                      }}
+                      onChange={(e) => handleStateChange(e.target.value)}
                     >
                       <option value="">Select state</option>
-                      {INDIA_STATES.map((s) => (
-                        <option key={s} value={s}>{s}</option>
+                      {states.map((s) => (
+                        <option key={s.state_code} value={s.state_name}>{s.state_name}</option>
                       ))}
                     </Select>
                     {errors.state ? <p className="text-xs font-medium text-rose-600 mt-1">{errors.state}</p> : null}
                   </Field>
                   <Field>
-                    <Label htmlFor="citySelect">City</Label>
+                    <Label htmlFor="citySelect">City / District</Label>
                     <Select
                       id="citySelect"
                       value={form.city}
                       onChange={(e) => update("city", e.target.value)}
                       disabled={!form.state}
                     >
-                      <option value="">{form.state ? "Select city" : "Select state first"}</option>
-                      {(INDIA_STATES_CITIES[form.state] ?? []).map((c) => (
-                        <option key={c} value={c}>{c}</option>
+                      <option value="">{form.state ? "Select city/district" : "Select state first"}</option>
+                      {districts.map((d) => (
+                        <option key={d.district_code} value={d.district_name}>{d.district_name}</option>
                       ))}
                     </Select>
                     {errors.city ? <p className="text-xs font-medium text-rose-600 mt-1">{errors.city}</p> : null}
@@ -1201,12 +1162,24 @@ function DsaRecoveryReports({ dsaId }: { dsaId: string }) {
 
 export function DsaManagementPage() {
   const { createItem, deleteItem, store, updateItem, currentUser } = useMockStore();
+  const {
+    dsas,
+    listLoading,
+    pagination,
+    dsaListError,
+    fetchDsas,
+    updateDsaProfile,
+    actionLoading,
+  } = useDsa();
+
   const { toast } = useToast();
   const [status, setStatus] = useState("");
-  const [editing, setEditing] = useState<Dsa | null>(null);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [editing, setEditing] = useState<any | null>(null);
   const [creatingAgent, setCreatingAgent] = useState(false);
   const [editingAgent, setEditingAgent] = useState<User | null>(null);
-  const [credentialDsa, setCredentialDsa] = useState<Dsa | null>(null);
+  const [credentialDsa, setCredentialDsa] = useState<any | null>(null);
   const [credentialUsername, setCredentialUsername] = useState("");
   const [credentialPassword, setCredentialPassword] = useState("");
   const [credentialError, setCredentialError] = useState("");
@@ -1218,15 +1191,73 @@ export function DsaManagementPage() {
   const agentOwnerDsa = isNetworkPage ? store.dsas.find((item) => item.id === ownerDsaId) ?? null : null;
   const agentOwnerDsaId = agentOwnerDsa?.id ?? "";
 
-  const getDsaApplications = (dsaId: string) =>
-    store.applications
-      .filter((application) => application.dsaId === dsaId)
-      .sort((left, right) => left.product.localeCompare(right.product) || left.applicationId.localeCompare(right.applicationId));
+  const [onHoldDsas, setOnHoldDsas] = useState<any[]>([]);
 
-  function openCredentialModal(dsa: Dsa) {
+  const getBackendStatusParams = (statusVal: string) => {
+    if (!statusVal) return {};
+    const normalized = statusVal.toLowerCase();
+    if (["active", "suspended", "blacklisted"].includes(normalized)) {
+      return { operational_status: statusVal.toUpperCase() };
+    }
+    if (normalized === "draft") return { onboarding_status: "DRAFT" };
+    if (normalized === "submitted") return { onboarding_status: "SUBMITTED" };
+    if (normalized.includes("branch")) return { onboarding_status: "DOCUMENT_VERIFICATION" };
+    if (normalized.includes("brh")) return { onboarding_status: "COMPLIANCE_CHECK" };
+    if (normalized.includes("credit")) return { onboarding_status: "PENDING_APPROVAL" };
+    if (normalized.includes("kyc")) return { onboarding_status: "COMPLIANCE_CHECK" };
+    return { onboarding_status: statusVal.toUpperCase() };
+  };
+
+  const fetchParams = useMemo(() => {
+    const statusParams = getBackendStatusParams(status);
+    return {
+      search: search.trim() || undefined,
+      ...statusParams,
+      page,
+      per_page: 10,
+    };
+  }, [search, status, page]);
+
+  useEffect(() => {
+    if (isNetworkPage) return;
+    fetchDsas(fetchParams);
+  }, [fetchDsas, fetchParams, isNetworkPage]);
+
+  useEffect(() => {
+    if (isNetworkPage) return;
+    if (dsaListError) {
+      setOnHoldDsas([]);
+      return;
+    }
+    if (pagination.total === 0) {
+      setOnHoldDsas([]);
+      return;
+    }
+    async function loadOnHold() {
+      try {
+        const response = await adminApi.getDsas({ onboarding_status: "ON_HOLD", per_page: 50 });
+        setOnHoldDsas(response.data.items);
+      } catch {
+        setOnHoldDsas([]);
+      }
+    }
+    loadOnHold();
+  }, [dsas, dsaListError, isNetworkPage, pagination.total]);
+
+  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSearch(event.target.value);
+    setPage(1);
+  };
+
+  const handleStatusChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setStatus(event.target.value);
+    setPage(1);
+  };
+
+  function openCredentialModal(dsa: any) {
     setCredentialDsa(dsa);
-    setCredentialUsername(dsa.loginUsername);
-    setCredentialPassword(dsa.loginPassword);
+    setCredentialUsername(dsa.login_username || "");
+    setCredentialPassword("");
     setCredentialError("");
   }
 
@@ -1237,7 +1268,7 @@ export function DsaManagementPage() {
     setCredentialError("");
   }
 
-  function saveDsaCredentials() {
+  async function saveDsaCredentials() {
     if (!credentialDsa) return;
 
     const nextUsername = credentialUsername.trim().toLowerCase();
@@ -1251,19 +1282,15 @@ export function DsaManagementPage() {
       return;
     }
 
-    const duplicateDsa = store.dsas.find(
-      (item) => item.id !== credentialDsa.id && item.loginUsername.trim().toLowerCase() === nextUsername,
-    );
-    if (duplicateDsa) {
-      setCredentialError(`Login username is already assigned to ${duplicateDsa.name}.`);
-      return;
-    }
+    const updated = await updateDsaProfile(credentialDsa.id, {
+      login_username: nextUsername,
+      login_password: nextPassword,
+    } as any);
 
-    updateItem("dsas", credentialDsa.id, {
-      loginPassword: nextPassword,
-      loginUsername: nextUsername,
-    });
-    closeCredentialModal();
+    if (updated) {
+      fetchDsas(fetchParams);
+      closeCredentialModal();
+    }
   }
 
   function saveNewAgent(value: Partial<User>) {
@@ -1277,47 +1304,61 @@ export function DsaManagementPage() {
     }
 
     const email = String(value.email ?? "").trim().toLowerCase();
-    const duplicate = store.users.find((user) => user.email.trim().toLowerCase() === email);
-    if (duplicate) {
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
       toast({
-        description: `${email} is already assigned to ${duplicate.name}.`,
-        title: "Duplicate agent email",
+        description: "Enter a valid agent email address.",
+        title: "Invalid email",
+        variant: "warning",
+      });
+      return;
+    }
+
+    const duplicateUser = store.users.find(
+      (user) => user.email.trim().toLowerCase() === email,
+    );
+    if (duplicateUser) {
+      toast({
+        description: `User is already registered: ${duplicateUser.name} (${duplicateUser.role}).`,
+        title: "Conflict detected",
         variant: "warning",
       });
       return;
     }
 
     createItem("users", {
+      ...value,
       dsaId: agentOwnerDsaId,
       email,
-      id: makeId("usr-agent"),
-      lastLogin: new Date().toISOString(),
-      name: String(value.name ?? "DSA Agent").trim() || "DSA Agent",
-      region: String(value.region ?? agentOwnerDsa?.name ?? "DSA").trim() || "DSA",
+      id: makeId("user"),
+      name: String(value.name ?? "").trim(),
       role: "DSA Agent",
+      region: String(value.region ?? agentOwnerDsa?.name ?? "DSA").trim() || "DSA",
       status: (value.status as User["status"]) || "Active",
-    });
+    } as any);
     setCreatingAgent(false);
   }
 
   function saveAgentEdit(value: Partial<User>) {
     if (!editingAgent) return;
+
+    const email = String(value.email ?? editingAgent.email).trim().toLowerCase();
     const dsaId = editingAgent.dsaId ?? agentOwnerDsaId;
-    if (!dsaId) {
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
       toast({
-        description: "This agent is not linked to a DSA.",
-        title: "Agent not updated",
+        description: "Enter a valid agent email address.",
+        title: "Invalid email",
         variant: "warning",
       });
       return;
     }
 
-    const email = String(value.email ?? editingAgent.email).trim().toLowerCase();
-    const duplicate = store.users.find((user) => user.id !== editingAgent.id && user.email.trim().toLowerCase() === email);
-    if (duplicate) {
+    const duplicateUser = store.users.find(
+      (user) => user.id !== editingAgent.id && user.email.trim().toLowerCase() === email,
+    );
+    if (duplicateUser) {
       toast({
-        description: `${email} is already assigned to ${duplicate.name}.`,
-        title: "Duplicate agent email",
+        description: `Email is already assigned to ${duplicateUser.name} (${duplicateUser.role}).`,
+        title: "Conflict detected",
         variant: "warning",
       });
       return;
@@ -1342,7 +1383,6 @@ export function DsaManagementPage() {
   const onHoldRows = scopedRows
     .filter((item) => item.status === "On Hold")
     .sort((left, right) => right.onboardingDate.localeCompare(left.onboardingDate));
-  const rows = status ? scopedRows.filter((item) => item.status === status) : scopedRows;
 
   const networkDsaIds = new Set(isNetworkPage ? [ownerDsaId] : scopedRows.map((item) => item.id));
   const networkRows: NetworkPersonRow[] = store.users
@@ -1473,90 +1513,159 @@ export function DsaManagementPage() {
     );
   }
 
-  const columns: Column<Dsa>[] = [
-    {
-      cell: (item) => (
-        <Link className="font-semibold text-blue-700 hover:underline" href={`/dsa/${item.id}`}>
-          {item.name}
-        </Link>
-      ),
-      header: "Partner",
-      key: "name",
-      sortable: true,
-      sortValue: (item) => item.name,
-    },
-    {
-      cell: (item) => <span className="font-mono text-xs text-slate-600">{item.code}</span>,
-      header: "DSA ID",
-      key: "code",
-      sortable: true,
-      sortValue: (item) => item.code,
-    },
-    { cell: (item) => <StatusBadge status={item.status} />, header: "Status", key: "status" },
-    {
-      cell: (item) => store.leads.filter((lead) => lead.dsaId === item.id).length,
-      header: "Leads",
-      key: "leads",
-      sortable: true,
-      sortValue: (item) => store.leads.filter((lead) => lead.dsaId === item.id).length,
-    },
-    {
-      cell: (item) => getDsaApplications(item.id).length,
-      header: "Applications",
-      key: "applications",
-      sortable: true,
-      sortValue: (item) => getDsaApplications(item.id).length,
-    },
-    { cell: (item) => percent(item.approvalRate), header: "Approval", key: "approvalRate", sortable: true, sortValue: (item) => item.approvalRate },
-  ];
-
   return (
-    <div>
-      <div className="mb-5">
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <PageHeader
+          description="Manage registered partner entities, verify bank details, and execute agreement signing workflows."
+          eyebrow="Administration"
+          title="DSA Management"
+        />
+      </div>
+
+      <div>
         <Tabs
           onChange={setManagementTab}
           tabs={[
             { label: "All DSAs", value: "all" },
-            { label: `On Hold (${onHoldRows.length})`, value: "onHold" },
+            { label: `On Hold (${onHoldDsas.length})`, value: "onHold" },
           ]}
           value={managementTab}
         />
       </div>
+
       {managementTab === "onHold" ? (
         <OnHoldDsaDocuments
           description="Upload remaining mandatory documents here. A DSA stays On Hold until every missing document is uploaded."
-          dsas={onHoldRows}
+          dsas={onHoldDsas as any[]}
         />
       ) : (
-        <DataTable
-          actions={(item) => (
-            <div className="flex justify-end gap-2">
-              {canManageDsaCredentials ? (
-                <Button
-                  aria-label={`Manage credentials for ${item.name}`}
-                  onClick={() => openCredentialModal(item)}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  <KeyRound className="h-4 w-4" />
-                  Creds
-                </Button>
-              ) : null}
-              <Button onClick={() => router.push(`/dsa/${item.id}`)} size="sm" type="button" variant="outline">
-                View
+        <Card className="min-h-[500px]">
+          <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-slate-100 bg-slate-50/50">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <Input
+                aria-label="Search partners"
+                onChange={handleSearchChange}
+                placeholder="Search by name, code, pan, city..."
+                value={search}
+                className="w-full sm:w-[300px]"
+              />
+              <Select
+                aria-label="Filter by status"
+                onChange={handleStatusChange}
+                value={status}
+                className="w-full sm:w-[200px]"
+              >
+                <option value="">All statuses</option>
+                {managementStatuses.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </Select>
+            </div>
+            <span className="text-xs text-slate-500 font-medium">
+              Found {pagination.total} partners
+            </span>
+          </div>
+          <CardContent className="p-0">
+            {listLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <span className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" />
+              </div>
+            ) : dsaListError ? (
+              <div className="px-6 py-12">
+                <EmptyState
+                  action={
+                    <Button onClick={() => fetchDsas(fetchParams)} type="button" variant="outline">
+                      Retry DSA API
+                    </Button>
+                  }
+                  description={dsaListError}
+                  title="DSA API unavailable"
+                />
+              </div>
+            ) : dsas.length === 0 ? (
+              <div className="px-6 py-12 text-center">
+                <p className="text-sm font-bold text-slate-800">No partner DSAs found</p>
+                <p className="mt-1 text-xs text-slate-500">Try changing your search keywords or filters.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-bold uppercase tracking-wider text-slate-500">
+                      <th className="p-4">Partner</th>
+                      <th className="p-4">DSA ID</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4">Location</th>
+                      <th className="p-4">Approval Rate</th>
+                      <th className="p-4">Commission</th>
+                      <th className="p-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {dsas.map((item) => (
+                      <tr className="hover:bg-slate-50/50 transition cursor-pointer" key={item.id} onClick={() => router.push(`/dsa/${item.id}`)}>
+                        <td className="p-4">
+                          <div>
+                            <p className="font-semibold text-blue-700 hover:underline">{item.name}</p>
+                            <p className="text-[10px] text-slate-500">{item.contact_person} · {item.email}</p>
+                          </div>
+                        </td>
+                        <td className="p-4 font-mono text-xs text-slate-600">
+                          {item.code}
+                        </td>
+                        <td className="p-4">
+                          <StatusBadge status={item.onboarding_status} />
+                        </td>
+                        <td className="p-4 text-slate-700 text-xs">
+                          {item.city}, {item.state}
+                        </td>
+                        <td className="p-4 font-medium text-slate-700">
+                          {percent(item.approval_rate || 0)}
+                        </td>
+                        <td className="p-4 font-semibold text-slate-900">
+                          {formatCurrency(item.commission_earned || 0)}
+                        </td>
+                        <td className="p-4 text-right" onClick={(event) => event.stopPropagation()}>
+                          <div className="flex justify-end gap-2">
+                            {canManageDsaCredentials ? (
+                              <Button
+                                aria-label={`Manage credentials for ${item.name}`}
+                                onClick={() => openCredentialModal(item as any)}
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                              >
+                                <KeyRound className="h-4 w-4 mr-1.5" />
+                                Creds
+                              </Button>
+                            ) : null}
+                            <Button onClick={() => setEditing(item as any)} size="sm" type="button" variant="secondary">
+                              Edit
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+          <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
+            <span>
+              Page {pagination.currentPage} of {pagination.totalPages} · {pagination.total} total
+            </span>
+            <div className="flex gap-2">
+              <Button disabled={listLoading || page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))} size="sm" type="button" variant="outline">
+                Previous
               </Button>
-              <Button onClick={() => setEditing(item)} size="sm" type="button" variant="secondary">
-                Edit
+              <Button disabled={listLoading || page >= pagination.totalPages} onClick={() => setPage((current) => current + 1)} size="sm" type="button" variant="outline">
+                Next
               </Button>
             </div>
-          )}
-          columns={columns}
-          emptyDescription="Approved DSAs appear here after verification. Change filters if you are looking for an existing partner."
-          filters={[{ label: "status", onChange: setStatus, options: managementStatuses, value: status }]}
-          items={rows}
-          searchKeys={["name", "code", "pan", "mobile", "email", "city"]}
-        />
+          </div>
+        </Card>
       )}
 
       <Modal onClose={() => setEditing(null)} open={Boolean(editing)} title="Edit DSA">
@@ -1565,9 +1674,12 @@ export function DsaManagementPage() {
             fields={dsaFields}
             initialValue={editing}
             onCancel={() => setEditing(null)}
-            onSubmit={(value) => {
-              updateItem("dsas", editing.id, value);
-              setEditing(null);
+            onSubmit={async (value) => {
+              const updated = await updateDsaProfile(editing.id, value as any);
+              if (updated) {
+                fetchDsas(fetchParams);
+                setEditing(null);
+              }
             }}
             submitLabel="Save DSA"
           />
@@ -1581,43 +1693,41 @@ export function DsaManagementPage() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-semibold text-slate-950">{credentialDsa.name}</p>
-                  <p className="font-mono text-xs text-slate-500">{credentialDsa.code}</p>
+                  <p className="text-xs text-slate-500">{credentialDsa.code}</p>
                 </div>
-                <StatusBadge status={credentialDsa.status} />
+                <StatusBadge status={credentialDsa.onboarding_status} />
               </div>
-              <p className="mt-2 text-xs text-slate-500">Only Active DSAs can sign in with these credentials.</p>
             </div>
-            <Field>
-              <Label htmlFor="dsaManagementLoginUsername">Login username</Label>
-              <Input
-                id="dsaManagementLoginUsername"
-                onChange={(event) => {
-                  setCredentialUsername(event.target.value);
-                  setCredentialError("");
-                }}
-                type="email"
-                value={credentialUsername}
-              />
-            </Field>
-            <Field>
-              <Label htmlFor="dsaManagementLoginPassword">Temporary password</Label>
-              <Input
-                id="dsaManagementLoginPassword"
-                onChange={(event) => {
-                  setCredentialPassword(event.target.value);
-                  setCredentialError("");
-                }}
-                type="text"
-                value={credentialPassword}
-              />
-            </Field>
-            {credentialError ? <p className="text-xs font-medium text-rose-600">{credentialError}</p> : null}
-            <div className="flex justify-end gap-2">
+            {credentialError ? (
+              <p className="text-xs font-semibold text-rose-600">{credentialError}</p>
+            ) : null}
+            <div className="space-y-3">
+              <Field>
+                <Label htmlFor="credUser">Login email</Label>
+                <Input
+                  id="credUser"
+                  onChange={(event) => setCredentialUsername(event.target.value)}
+                  type="text"
+                  value={credentialUsername}
+                />
+              </Field>
+              <Field>
+                <Label htmlFor="credPass">New password</Label>
+                <Input
+                  id="credPass"
+                  onChange={(event) => setCredentialPassword(event.target.value)}
+                  placeholder="Minimum 8 characters"
+                  type="text"
+                  value={credentialPassword}
+                />
+              </Field>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
               <Button onClick={closeCredentialModal} type="button" variant="secondary">
                 Cancel
               </Button>
-              <Button onClick={saveDsaCredentials} type="button">
-                Save credentials
+              <Button disabled={actionLoading} onClick={saveDsaCredentials} type="button">
+                {actionLoading ? "Saving..." : "Save Credentials"}
               </Button>
             </div>
           </div>
@@ -1625,6 +1735,22 @@ export function DsaManagementPage() {
       </Modal>
     </div>
   );
+}
+
+export function mapBackendStatusToFrontend(onboarding?: string, operational?: string): DsaStatus {
+  if (operational === "ACTIVE") return "Active";
+  if (operational === "SUSPENDED") return "Suspended";
+  if (operational === "TERMINATED") return "Blacklisted";
+
+  const norm = (onboarding || "").toUpperCase();
+  if (norm === "DRAFT") return "Draft";
+  if (norm === "SUBMITTED") return "Submitted";
+  if (norm === "DOCUMENT_VERIFICATION") return "Pending Branch Approval";
+  if (norm === "COMPLIANCE_CHECK") return "KYC Pending";
+  if (norm === "PENDING_APPROVAL") return "Pending Credit Approval";
+  if (norm === "APPROVED") return "Active";
+  if (norm === "REJECTED") return "Rejected";
+  return "Draft";
 }
 
 export function DsaProfilePage({ id }: { id: string }) {
@@ -1635,16 +1761,16 @@ export function DsaProfilePage({ id }: { id: string }) {
   const [applicationProductFilter, setApplicationProductFilter] = useState("");
   const [creatingAgent, setCreatingAgent] = useState(false);
   const [editingAgent, setEditingAgent] = useState<User | null>(null);
-  const [approvingDsa, setApprovingDsa] = useState<Dsa | null>(null);
-  const [rejectingDsa, setRejectingDsa] = useState<Dsa | null>(null);
+  const [approvingDsa, setApprovingDsa] = useState<any | null>(null);
+  const [rejectingDsa, setRejectingDsa] = useState<any | null>(null);
   const [rejectionError, setRejectionError] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
-  const [deactivatingDsa, setDeactivatingDsa] = useState<Dsa | null>(null);
-  const [blacklistingDsa, setBlacklistingDsa] = useState<Dsa | null>(null);
-  const [activatingDsa, setActivatingDsa] = useState<Dsa | null>(null);
-  const [unblacklistingDsa, setUnblacklistingDsa] = useState<Dsa | null>(null);
-  const [deletingDsa, setDeletingDsa] = useState<Dsa | null>(null);
-  const [viewingLifecycleReason, setViewingLifecycleReason] = useState<Dsa | null>(null);
+  const [deactivatingDsa, setDeactivatingDsa] = useState<any | null>(null);
+  const [blacklistingDsa, setBlacklistingDsa] = useState<any | null>(null);
+  const [activatingDsa, setActivatingDsa] = useState<any | null>(null);
+  const [unblacklistingDsa, setUnblacklistingDsa] = useState<any | null>(null);
+  const [deletingDsa, setDeletingDsa] = useState<any | null>(null);
+  const [viewingLifecycleReason, setViewingLifecycleReason] = useState<any | null>(null);
   const [lifecycleReason, setLifecycleReason] = useState("");
   const [lifecycleReasonError, setLifecycleReasonError] = useState("");
 
@@ -1653,14 +1779,60 @@ export function DsaProfilePage({ id }: { id: string }) {
   const [counterAmount, setCounterAmount] = useState("");
   const [counterNote, setCounterNote] = useState("");
 
-  const dsa = store.dsas.find((item) => item.id === id) ?? store.dsas[0];
-  const missingProfileDocuments = dsa.documents.filter(isMissingDsaDocumentRecord);
-  const nextApprovalStatus = nextDsaApprovalStatus(currentUser?.role, dsa.status);
+  const {
+    currentDsa: dsa,
+    loading,
+    actionLoading,
+    fetchDsaDetail,
+    updateDsaProfile,
+    updateDsaStatus,
+    uploadDsaDocument,
+    updateDsaDocumentStatus,
+    deleteDsaDocument,
+    generateAgreement,
+    downloadAgreement,
+    uploadSignedAgreement,
+  } = useDsa();
+
+  useEffect(() => {
+    fetchDsaDetail(id);
+  }, [id, fetchDsaDetail]);
+
+  const [dsaAudit, setDsaAudit] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!dsa) return;
+    async function loadDsaAudit() {
+      try {
+        const response = await adminApi.getActivityLogs({ group: "dsa", page: 1, per_page: 8 });
+        setDsaAudit(response.data);
+      } catch (err) {
+        console.error("Failed to load DSA audit logs:", err);
+      }
+    }
+    loadDsaAudit();
+  }, [dsa]);
+
+  if (loading || !dsa) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <span className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" />
+      </div>
+    );
+  }
+
+  const uploadedTypes = new Set(dsa.documents?.map((d) => d.document_type) || []);
+  const missingProfileDocuments = requiredDsaDocuments.filter(
+    (req) => !uploadedTypes.has(dsaDocumentType(req.key))
+  );
+
+  const dsaStatus = mapBackendStatusToFrontend(dsa.onboarding_status, dsa.operational_status);
+  const nextApprovalStatus = nextDsaApprovalStatus(currentUser?.role, dsaStatus);
   const canDecideDsa = Boolean(nextApprovalStatus);
   const canApproveDsa = canDecideDsa && missingProfileDocuments.length === 0;
-  const allProductConfigs = store.dsaProductConfigs.filter((config) => config.dsaId === dsa.id);
+  const allProductConfigs = store.dsaProductConfigs.filter((config) => config.dsaId === String(dsa.id));
   const productConfigs = allProductConfigs
-    .filter((config) => dsa.status === "Active" && config.status === "Active")
+    .filter((config) => (dsa.onboarding_status === "APPROVED" || dsa.onboarding_status === "AGREEMENT_COMPLETED") && config.status === "Active")
     .sort((left, right) => left.product.localeCompare(right.product));
   const configuredProducts = productConfigs.map((config) => config.product);
 
@@ -1672,7 +1844,7 @@ export function DsaProfilePage({ id }: { id: string }) {
   };
 
   const applications = store.applications
-    .filter((item) => item.dsaId === dsa.id)
+    .filter((item) => item.dsaId === String(dsa.id))
     .sort((left, right) => left.product.localeCompare(right.product) || left.applicationId.localeCompare(right.applicationId));
   const effectiveApplicationProductFilter = configuredProducts.includes(applicationProductFilter as Product)
     ? applicationProductFilter
@@ -1680,22 +1852,22 @@ export function DsaProfilePage({ id }: { id: string }) {
   const visibleApplications = effectiveApplicationProductFilter
     ? applications.filter((application) => application.product === effectiveApplicationProductFilter)
     : applications;
-  const commissions = store.commissions.filter((item) => item.dsaId === dsa.id);
-  const leads = store.leads.filter((item) => item.dsaId === dsa.id);
-  const audit = store.auditLogs.slice(0, 8);
+  const commissions = store.commissions.filter((item) => item.dsaId === String(dsa.id));
+  const leads = store.leads.filter((item) => item.dsaId === String(dsa.id));
+  const audit = dsaAudit;
   const applicationIds = new Set(applications.map((application) => application.id));
   const applicationCodes = new Set(applications.map((application) => application.applicationId));
   const linkedDocumentCount = store.documents.filter(
-    (document) => document.dsaId === dsa.id || applicationIds.has(document.applicationId ?? ""),
+    (document) => document.dsaId === String(dsa.id) || applicationIds.has(document.applicationId ?? ""),
   ).length;
   const linkedVerificationCount = store.verificationChecks.filter((check) => applicationCodes.has(check.applicationId)).length;
   const linkedApprovalCount = store.approvals.filter((approval) => applicationCodes.has(approval.applicationId)).length;
   const linkedUserCount = store.users.filter(
-    (user) => user.id === dsa.id || user.dsaId === dsa.id || user.email === dsa.email || user.name === dsa.name,
+    (user) => user.id === String(dsa.id) || user.dsaId === String(dsa.id) || user.email === dsa.email || user.name === dsa.name,
   ).length;
   const canManageAgents = currentUser?.role === "DSA Manager" || currentUser?.role === "DSA Credit";
   const dsaAgents = store.users
-    .filter((user) => user.role === "DSA Agent" && user.dsaId === dsa.id)
+    .filter((user) => user.role === "DSA Agent" && user.dsaId === String(dsa.id))
     .sort((left, right) => left.name.localeCompare(right.name));
 
   const commissionTotal = commissions.reduce((sum, item) => sum + item.payout, 0);
@@ -1731,7 +1903,7 @@ export function DsaProfilePage({ id }: { id: string }) {
     currentUser?.role === "DSA Credit" ||
     currentUser?.role === "Branch Regional Head" ||
     (currentUser?.role === "Branch User" && dsa.manager === currentUser.name);
-  const canManageDsaLifecycle = canLifecycleRoleManageDsa && ["Active", "Suspended", "Blacklisted"].includes(dsa.status);
+  const canManageDsaLifecycle = canLifecycleRoleManageDsa && ["ACTIVE", "SUSPENDED", "TERMINATED"].includes(dsa.operational_status || "");
   const canViewDsaLifecycleReason = canLifecycleRoleManageDsa;
   const canDeleteDsa = currentUser?.role === "DSA Manager";
   const isBankUser = currentUser?.role !== "DSA Partner" && currentUser?.role !== "Customer";
@@ -1773,7 +1945,7 @@ export function DsaProfilePage({ id }: { id: string }) {
     if (isNaN(amount) || amount <= 0) return;
 
     const isBank = currentUser?.role !== "DSA Partner" && currentUser?.role !== "Customer";
-    const actor = currentUser?.name ?? dsa.name;
+    const actor = currentUser?.name ?? dsa?.name ?? "Partner";
     const party = isBank ? "Bank" as const : "DSA" as const;
     const note = counterNote.trim() || `${party} countered the invoice amount.`;
     const event = makeInvoiceEvent("Countered", actor, party, amount, note);
@@ -1841,13 +2013,13 @@ export function DsaProfilePage({ id }: { id: string }) {
     );
   }
 
-  function openDeactivationModal(nextDsa: Dsa) {
+  function openDeactivationModal(nextDsa: any) {
     setLifecycleReason("");
     setLifecycleReasonError("");
     setDeactivatingDsa(nextDsa);
   }
 
-  function openBlacklistModal(nextDsa: Dsa) {
+  function openBlacklistModal(nextDsa: any) {
     setLifecycleReason("");
     setLifecycleReasonError("");
     setBlacklistingDsa(nextDsa);
@@ -1875,12 +2047,12 @@ export function DsaProfilePage({ id }: { id: string }) {
     }
 
     createItem("users", {
-      dsaId: dsa.id,
+      dsaId: String(dsa?.id || ""),
       email,
       id: makeId("usr-agent"),
       lastLogin: new Date().toISOString(),
       name: String(value.name ?? "DSA Agent").trim() || "DSA Agent",
-      region: String(value.region ?? dsa.name).trim() || dsa.name,
+      region: String(value.region ?? dsa?.name ?? "DSA").trim() || (dsa?.name ?? "DSA"),
       role: "DSA Agent",
       status: (value.status as User["status"]) || "Active",
     });
@@ -1911,7 +2083,7 @@ export function DsaProfilePage({ id }: { id: string }) {
 
     updateItem("users", editingAgent.id, {
       ...value,
-      dsaId: dsa.id,
+      dsaId: String(dsa?.id || ""),
       email,
       name: String(value.name ?? editingAgent.name).trim() || editingAgent.name,
       role: "DSA Agent",
@@ -1940,7 +2112,7 @@ export function DsaProfilePage({ id }: { id: string }) {
 
   if (currentUser?.role === "DSA Partner") {
     const networkPartnerName = dsa.name;
-    const networkPartnerEmail = dsa.loginUsername;
+    const networkPartnerEmail = dsa.email;
     const conversion = applications.length ? (approvedApplications / applications.length) * 100 : 0;
 
     return (
@@ -1978,7 +2150,7 @@ export function DsaProfilePage({ id }: { id: string }) {
               <DetailItem label="Email" value={networkPartnerEmail} />
               <DetailItem label="Conversion" value={percent(conversion)} />
               <DetailItem label="Disbursed applications" value={disbursedApplications} />
-              <DetailItem label="Commission earned" value={formatCurrency(commissionTotal || dsa.commissionEarned)} />
+              <DetailItem label="Commission earned" value={formatCurrency(commissionTotal || dsa.commission_earned)} />
               <DetailItem label="Active products" value={productConfigs.length || "None"} />
             </DetailGrid>
           </CardContent>
@@ -2082,7 +2254,7 @@ export function DsaProfilePage({ id }: { id: string }) {
       <PageHeader
         action={
           <div className="flex items-center gap-2">
-            <StatusBadge status={dsa.status} />
+            <StatusBadge status={dsa.onboarding_status === "APPROVED" || dsa.onboarding_status === "AGREEMENT_COMPLETED" ? dsa.operational_status : dsa.onboarding_status} />
             {canDecideDsa && (
               <div className="flex gap-2">
                 <Button
@@ -2106,7 +2278,7 @@ export function DsaProfilePage({ id }: { id: string }) {
             )}
             {canManageDsaLifecycle && (
               <div className="flex gap-2">
-                {dsa.status === "Active" && (
+                {dsa.operational_status === "ACTIVE" && (
                   <>
                     <Button
                       onClick={() => openDeactivationModal(dsa)}
@@ -2126,7 +2298,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                     </Button>
                   </>
                 )}
-                {dsa.status === "Suspended" && (
+                {dsa.operational_status === "SUSPENDED" && (
                   <>
                     <Button
                       onClick={() => setActivatingDsa(dsa)}
@@ -2145,7 +2317,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                     </Button>
                   </>
                 )}
-                {dsa.status === "Blacklisted" && (
+                {dsa.operational_status === "TERMINATED" && (
                   <>
                     <Button
                       onClick={() => setUnblacklistingDsa(dsa)}
@@ -2185,9 +2357,9 @@ export function DsaProfilePage({ id }: { id: string }) {
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <KpiCard change="+6.2%" icon={TrendingUp} label="Approval rate" tone="green" value={percent(dsa.approvalRate)} />
+        <KpiCard change="+6.2%" icon={TrendingUp} label="Approval rate" tone="green" value={percent(dsa.approval_rate || 0)} />
         <KpiCard change="+11.0%" icon={ClipboardList} label="Applications sourced" value={String(applications.length)} />
-        <KpiCard change="+8.4%" icon={BadgeIndianRupee} label="Commission" tone="slate" value={formatCurrency(commissionTotal || dsa.commissionEarned)} />
+        <KpiCard change="+8.4%" icon={BadgeIndianRupee} label="Commission" tone="slate" value={formatCurrency(commissionTotal || dsa.commission_earned || 0)} />
       </div>
 
       {missingProfileDocuments.length ? (
@@ -2199,17 +2371,17 @@ export function DsaProfilePage({ id }: { id: string }) {
         </div>
       ) : null}
 
-      {canViewDsaLifecycleReason && dsa.statusReason ? (
+      {canViewDsaLifecycleReason && dsa.status_reason ? (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="font-semibold">{dsa.statusReasonAction ?? dsa.status} reason recorded</p>
+              <p className="font-semibold">{dsa.status_reason_action ?? dsa.onboarding_status} reason recorded</p>
               <p className="mt-1 text-xs text-amber-800">
-                {dsa.statusReasonBy ? `By ${dsa.statusReasonBy}` : "Recorded by internal user"}
-                {dsa.statusReasonAt ? ` - ${formatDate(dsa.statusReasonAt)}` : ""}
+                {dsa.status_reason_by ? `By ${dsa.status_reason_by}` : "Recorded by internal user"}
+                {dsa.status_reason_at ? ` - ${formatDate(dsa.status_reason_at)}` : ""}
               </p>
             </div>
-            <StatusBadge status={dsa.status} />
+            <StatusBadge status={dsa.onboarding_status} />
           </div>
           <Button
             className="mt-3 border-amber-200 bg-white text-amber-900 hover:bg-amber-100"
@@ -2231,6 +2403,7 @@ export function DsaProfilePage({ id }: { id: string }) {
             { label: "Basic Info", value: "overview" },
             { label: "KYC", value: "kyc" },
             { label: "Documents", value: "documents" },
+            { label: "Agreements", value: "agreements" },
             { label: "Manage Products", value: "products" },
             ...(canManageAgents ? [{ label: "Manage Agents", value: "agents" }] : []),
             { label: "Applications", value: "apps" },
@@ -2247,11 +2420,11 @@ export function DsaProfilePage({ id }: { id: string }) {
           {tab === "overview" ? (
             <DetailGrid>
               <DetailItem label="DSA ID" value={dsa.code} />
-              <DetailItem label="Contact person" value={dsa.contactPerson} />
+              <DetailItem label="Contact person" value={dsa.contact_person} />
               <DetailItem label="Mobile" value={dsa.mobile} />
               <DetailItem label="Email" value={dsa.email} />
               <DetailItem label="Address" value={`${dsa.address}, ${dsa.city}, ${dsa.state} ${dsa.pincode}`} />
-              <DetailItem label="Bank" value={`${dsa.bank.bankName} · ${dsa.bank.ifsc}`} />
+              <DetailItem label="Bank" value={`${dsa.bank_name} · ${dsa.ifsc}`} />
               <DetailItem label="Tier" value={dsa.tier} />
             </DetailGrid>
           ) : null}
@@ -2259,66 +2432,203 @@ export function DsaProfilePage({ id }: { id: string }) {
             <DetailGrid>
               <DetailItem label="PAN" value={dsa.pan} />
               <DetailItem label="GST" value={dsa.gst} />
-              <DetailItem label="Business type" value={dsa.businessType} />
-              <DetailItem label="KYC readiness" value={<StatusBadge status={dsa.status === "KYC Pending" ? "Pending" : "Verified"} />} />
+              <DetailItem label="Business type" value={dsa.business_type} />
+              <DetailItem label="KYC readiness" value={<StatusBadge status={dsa.onboarding_status} />} />
               <DetailItem label="Registered address" value={`${dsa.address}, ${dsa.city}, ${dsa.state} ${dsa.pincode}`} />
             </DetailGrid>
           ) : null}
           {tab === "documents" ? (
-            <div className="grid gap-4 lg:grid-cols-2">
-              {dsa.documents.map((doc) => (
-                <div className="rounded-lg border border-slate-200 p-4" key={doc.id}>
-                  <div className="flex flex-col gap-2 w-full">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-slate-950">{doc.type}</p>
-                        <p className="text-sm text-slate-500">{doc.fileName}</p>
+            <div className="space-y-4">
+              <div className="grid gap-4 lg:grid-cols-2">
+                {(dsa.documents || []).map((doc) => (
+                  <div className="rounded-lg border border-slate-200 p-4" key={doc.id}>
+                    <div className="flex flex-col gap-2 w-full">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold text-slate-950">{doc.document_type}</p>
+                          <p className="text-sm text-slate-500">{doc.file_name}</p>
+                        </div>
+                        <StatusBadge status={doc.status} />
                       </div>
-                      <StatusBadge status={doc.status} />
+                      {isBankUser && doc.status !== "Verified" && doc.status !== "Failed" ? (
+                        <div className="flex justify-end gap-2 pt-1 border-t border-slate-100 mt-2">
+                          <Button
+                            onClick={async () => {
+                              await updateDsaDocumentStatus(dsa.id, {
+                                document_id: doc.id,
+                                status: "Verified",
+                                remarks: `Verified by ${currentUser?.name}`,
+                              });
+                              await fetchDsaDetail(dsa.id);
+                              toast({
+                                title: "Document Verified",
+                                description: `${doc.document_type} has been verified successfully.`,
+                                variant: "success",
+                              });
+                            }}
+                            size="sm"
+                            type="button"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-2 py-0.5 h-auto"
+                          >
+                            Verify
+                          </Button>
+                          <Button
+                            onClick={async () => {
+                              await updateDsaDocumentStatus(dsa.id, {
+                                document_id: doc.id,
+                                status: "Failed",
+                                remarks: `Rejected by ${currentUser?.name}`,
+                              });
+                              await fetchDsaDetail(dsa.id);
+                              toast({
+                                title: "Document Rejected",
+                                description: `${doc.document_type} has been marked as failed/rejected.`,
+                                variant: "warning",
+                              });
+                            }}
+                            size="sm"
+                            type="button"
+                            variant="danger"
+                            className="font-semibold text-xs px-2 py-0.5 h-auto"
+                          >
+                            Fail
+                          </Button>
+                        </div>
+                      ) : null}
                     </div>
-                    {isBankUser && doc.status !== "Verified" && doc.status !== "Failed" ? (
-                      <div className="flex justify-end gap-2 pt-1 border-t border-slate-100 mt-2">
-                        <Button
-                          onClick={() => {
-                            const updatedDocs = dsa.documents.map(d => d.id === doc.id ? { ...d, status: "Verified" as const, remarks: `Verified by ${currentUser?.name}` } : d);
-                            updateItem("dsas", dsa.id, { documents: updatedDocs });
-                            toast({
-                              title: "Document Verified",
-                              description: `${doc.type} has been verified successfully.`,
-                              variant: "success",
-                            });
-                          }}
-                          size="sm"
-                          type="button"
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-2 py-0.5 h-auto"
-                        >
-                          Verify
-                        </Button>
-                        <Button
-                          onClick={() => {
-                            const updatedDocs = dsa.documents.map(d => d.id === doc.id ? { ...d, status: "Failed" as const, remarks: `Rejected by ${currentUser?.name}` } : d);
-                            updateItem("dsas", dsa.id, { documents: updatedDocs });
-                            toast({
-                              title: "Document Rejected",
-                              description: `${doc.type} has been marked as failed/rejected.`,
-                              variant: "warning",
-                            });
-                          }}
-                          size="sm"
-                          type="button"
-                          variant="danger"
-                          className="font-semibold text-xs px-2 py-0.5 h-auto"
-                        >
-                          Fail
-                        </Button>
-                      </div>
-                    ) : null}
+                  </div>
+                ))}
+                {(dsa.documents || []).length === 0 ? (
+                  <p className="text-sm text-slate-500">No documents uploaded for this partner.</p>
+                ) : null}
+              </div>
+
+              {missingProfileDocuments.length ? (
+                <div className="pt-4 border-t border-slate-100">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Upload Missing Documents</h4>
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {missingProfileDocuments.map((document) => {
+                      const inputId = `profile-doc-${dsa.id}-${document.key}`;
+                      return (
+                        <div className="rounded-lg border border-dashed border-sky-100 bg-sky-50/50 p-4 flex items-center justify-between" key={document.key}>
+                          <div>
+                            <p className="font-semibold text-slate-800 text-sm">{document.label}</p>
+                            <p className="text-xs text-sky-700">Missing - Required document</p>
+                          </div>
+                          <div>
+                            <input
+                              accept=".jpg,.jpeg,.png,.pdf"
+                              className="sr-only"
+                              id={inputId}
+                              onChange={async (e) => {
+                                const file = e.currentTarget.files?.[0];
+                                if (file) {
+                                  await uploadDsaDocument(dsa.id, {
+                                    file,
+                                    document_type: dsaDocumentType(document.key),
+                                    owner_name: dsa.name,
+                                  });
+                                  await fetchDsaDetail(dsa.id);
+                                }
+                              }}
+                              type="file"
+                            />
+                            <label
+                              className="inline-flex h-8 cursor-pointer items-center justify-center gap-2 rounded-md bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700 transition"
+                              htmlFor={inputId}
+                            >
+                              <UploadCloud className="h-3.5 w-3.5" />
+                              Upload
+                            </label>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              ))}
-              {dsa.documents.length === 0 ? (
-                <p className="text-sm text-slate-500">No documents uploaded for this partner.</p>
               ) : null}
+            </div>
+          ) : null}
+          {tab === "agreements" ? (
+            <div className="space-y-4">
+              <div className="flex flex-col gap-1">
+                <h3 className="text-sm font-bold text-slate-900">Master Service Agreement (MSA)</h3>
+                <p className="text-xs text-slate-500">Generate, review, and execute legal agreements for partner activation.</p>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <Card>
+                  <CardContent className="p-4 space-y-3">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">Agreement Generation</h4>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      The agreement can be generated once the partner is approved. Generating will create a customized legal document.
+                    </p>
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      <Button
+                        disabled={actionLoading || (dsa.onboarding_status !== "PENDING_APPROVAL" && dsa.onboarding_status !== "APPROVED" && dsa.onboarding_status !== "AGREEMENT_PENDING")}
+                        onClick={async () => {
+                          await generateAgreement(dsa.id);
+                          await fetchDsaDetail(dsa.id);
+                        }}
+                        size="sm"
+                        type="button"
+                      >
+                        {actionLoading ? "Generating..." : "Generate Agreement PDF"}
+                      </Button>
+                      <Button
+                        disabled={dsa.onboarding_status !== "AGREEMENT_PENDING" && dsa.onboarding_status !== "AGREEMENT_COMPLETED"}
+                        onClick={async () => {
+                          const details = await downloadAgreement(dsa.id);
+                          if (details?.file_url) {
+                            window.open(details.file_url, "_blank");
+                          }
+                        }}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        Download Agreement
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="p-4 space-y-3">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">Upload Signed Agreement</h4>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Upload the signed and scanned PDF copy of the generated MSA. Uploading the signed agreement will automatically transition the partner to Active status.
+                    </p>
+                    <div className="pt-2">
+                      <input
+                        accept=".pdf"
+                        className="sr-only"
+                        id="signedAgreementUpload"
+                        onChange={async (e) => {
+                          const file = e.currentTarget.files?.[0];
+                          if (file) {
+                            await uploadSignedAgreement(dsa.id, file);
+                            await fetchDsaDetail(dsa.id);
+                          }
+                        }}
+                        type="file"
+                        disabled={actionLoading || dsa.onboarding_status !== "AGREEMENT_PENDING"}
+                      />
+                      <label
+                        className={`inline-flex h-9 items-center justify-center gap-2 rounded-md px-4 text-xs font-semibold text-white transition ${
+                          dsa.onboarding_status === "AGREEMENT_PENDING" && !actionLoading
+                            ? "bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
+                            : "bg-slate-300 cursor-not-allowed"
+                        }`}
+                        htmlFor={dsa.onboarding_status === "AGREEMENT_PENDING" ? "signedAgreementUpload" : undefined}
+                      >
+                        <UploadCloud className="h-4 w-4" />
+                        {actionLoading ? "Uploading..." : "Upload Signed PDF"}
+                      </label>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           ) : null}
           {tab === "performance" ? (
@@ -2329,7 +2639,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                 <DetailItem label="Approved or disbursed" value={approvedApplications} />
                 <DetailItem label="Disbursed applications" value={disbursedApplications} />
                 <DetailItem label="Sourced loan value" value={formatCurrency(sourcedLoanValue)} />
-                <DetailItem label="Commission earned" value={formatCurrency(commissionTotal || dsa.commissionEarned)} />
+                <DetailItem label="Commission earned" value={formatCurrency(commissionTotal || dsa.commission_earned)} />
               </DetailGrid>
               <div>
                 <h3 className="text-sm font-bold text-slate-900">User activity analysis</h3>
@@ -2374,7 +2684,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                   <h3 className="text-sm font-bold text-slate-900">Configured Products</h3>
                   <p className="text-xs text-slate-500">Products configured here drive the Applications tab product filter.</p>
                 </div>
-                {currentUser?.role === "DSA Manager" && dsa.status === "Active" ? (
+                {currentUser?.role === "DSA Manager" && dsa.operational_status === "ACTIVE" ? (
                   <Link href="/dsa/product-setting">
                     <Button size="sm" type="button" variant="outline">
                       Add product
@@ -2448,7 +2758,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                 </div>
               ) : (
                 <p className="text-sm text-slate-500">
-                  {dsa.status === "Active"
+                  {dsa.operational_status === "ACTIVE"
                     ? "No products configured for this DSA yet."
                     : "Loan products will be available only after this DSA is verified and onboarded."}
                 </p>
@@ -2542,7 +2852,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                     const invoice = {
                       id: `inv-${Date.now()}`,
                       invoiceNumber: invoiceNum,
-                      dsaId: dsa.id,
+                      dsaId: String(dsa.id),
                       dsaName: dsa.name,
                       dsaCode: dsa.code,
                       month,
@@ -2552,7 +2862,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                       netAmount: net,
                       requestedAmount: net,
                       status: "Raised by DSA" as const,
-                      raisedBy: currentUser?.name ?? dsa.contactPerson,
+                      raisedBy: currentUser?.name ?? dsa.contact_person,
                       raisedByRole: (currentUser?.role ?? "DSA Partner") as any,
                       source: "Manual" as const,
                       remarks: `Auto-generated monthly invoice for ${month} from Commission Payouts.`,
@@ -2562,7 +2872,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                         {
                           id: `event-${Date.now()}`,
                           action: "Raised" as const,
-                          actor: currentUser?.name ?? dsa.contactPerson,
+                          actor: currentUser?.name ?? dsa.contact_person,
                           party: "DSA" as const,
                           amount: net,
                           at: new Date().toISOString(),
@@ -2657,7 +2967,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                 ]}
                 emptyDescription="No invoices generated or raised for this DSA yet."
                 emptyTitle="No invoices found"
-                items={store.dsaInvoices.filter((invoice) => invoice.dsaId === dsa.id)}
+                items={store.dsaInvoices.filter((invoice) => invoice.dsaId === String(dsa.id))}
                 searchKeys={["invoiceNumber", "month", "status", "remarks"]}
               />
             </div>
@@ -2676,7 +2986,7 @@ export function DsaProfilePage({ id }: { id: string }) {
             </div>
           ) : null}
           {tab === "reports" ? (
-            <DsaRecoveryReports dsaId={dsa.id} />
+            <DsaRecoveryReports dsaId={String(dsa.id)} />
           ) : null}
         </CardContent>
       </Card>
@@ -2716,10 +3026,10 @@ export function DsaProfilePage({ id }: { id: string }) {
               </p>
             </div>
             <DetailGrid>
-              <DetailItem label="New status" value={<StatusBadge status={nextApprovalStatus ?? approvingDsa.status} />} />
-              <DetailItem label="Approval rate" value={percent(0)} />
+              <DetailItem label="New status" value={<StatusBadge status={nextApprovalStatus ?? approvingDsa.onboarding_status} />} />
+              <DetailItem label="Approval rate" value={percent(approvingDsa.approval_rate || 0)} />
               <DetailItem label="Monthly lead target" value={0} />
-              <DetailItem label="Commission earned" value={formatCurrency(0)} />
+              <DetailItem label="Commission earned" value={formatCurrency(approvingDsa.commission_earned || 0)} />
             </DetailGrid>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="secondary" type="button" onClick={closeDecisionModals}>
@@ -2728,26 +3038,25 @@ export function DsaProfilePage({ id }: { id: string }) {
               <Button
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
                 type="button"
-                onClick={() => {
-                  const nextStatus = nextDsaApprovalStatus(currentUser?.role, approvingDsa.status);
-                  if (!nextStatus) return;
-                  updateItem(
-                    "dsas",
-                    approvingDsa.id,
-                    nextStatus === "Active" ? activeDsaPatch(approvingDsa) : { status: nextStatus },
-                  );
-                  toast({
-                    title: nextStatus === "Active" ? "Partner Activated" : "Partner Approved",
-                    description:
-                      nextStatus === "Active"
-                        ? `${approvingDsa.name} is now active in DSA Management.`
-                        : `${approvingDsa.name} moved to ${nextStatus}.`,
-                    variant: "success",
-                  });
-                  closeDecisionModals();
+                disabled={actionLoading}
+                onClick={async () => {
+                  const remarks = `Approved by ${currentUser?.role} (${currentUser?.name})`;
+                  const updated = await updateDsaProfile(approvingDsa.id, {
+                    action: "APPROVE",
+                    remarks,
+                  } as any);
+                  if (updated) {
+                    await fetchDsaDetail(id);
+                    toast({
+                      title: "Partner Approved",
+                      description: `${approvingDsa.name} moved to the next stage.`,
+                      variant: "success",
+                    });
+                    closeDecisionModals();
+                  }
                 }}
               >
-                {dsaApprovalActionLabel(nextApprovalStatus)}
+                {actionLoading ? "Processing..." : dsaApprovalActionLabel(nextApprovalStatus)}
               </Button>
             </div>
           </div>
@@ -2782,26 +3091,30 @@ export function DsaProfilePage({ id }: { id: string }) {
             <Button
               className="bg-rose-600 hover:bg-rose-700 text-white font-semibold"
               type="button"
-              onClick={() => {
+              disabled={actionLoading}
+              onClick={async () => {
                 if (rejectingDsa) {
                   if (!rejectionReason.trim()) {
                     setRejectionError("Add a reason before rejecting this DSA.");
                     return;
                   }
-                  updateItem("dsas", rejectingDsa.id, {
-                    status: "Rejected",
-                    rejectionReason: rejectionReason.trim(),
-                  });
-                  toast({
-                    title: "Partner Rejected",
-                    description: `${rejectingDsa.name} has been rejected and removed from the pending queue.`,
-                    variant: "success",
-                  });
-                  closeDecisionModals();
+                  const updated = await updateDsaProfile(rejectingDsa.id, {
+                    action: "REJECT",
+                    remarks: rejectionReason.trim(),
+                  } as any);
+                  if (updated) {
+                    await fetchDsaDetail(id);
+                    toast({
+                      title: "Partner Rejected",
+                      description: `${rejectingDsa.name} has been rejected.`,
+                      variant: "success",
+                    });
+                    closeDecisionModals();
+                  }
                 }
               }}
             >
-              Reject Partner
+              {actionLoading ? "Processing..." : "Reject Partner"}
             </Button>
           </div>
         </div>
@@ -2917,27 +3230,28 @@ export function DsaProfilePage({ id }: { id: string }) {
               Cancel
             </Button>
             <Button
-              onClick={() => {
+              onClick={async () => {
                 if (deactivatingDsa) {
                   const reason = lifecycleReason.trim();
                   if (!reason) {
                     setLifecycleReasonError("Add a reason before deactivating this DSA.");
                     return;
                   }
-                  updateItem("dsas", deactivatingDsa.id, {
-                    status: "Suspended",
-                    statusReason: reason,
-                    statusReasonAction: "Deactivated",
-                    statusReasonAt: new Date().toISOString(),
-                    statusReasonBy: currentUser?.name ?? DEMO_USERS.admin.name,
+                  const updated = await updateDsaStatus(deactivatingDsa.id, {
+                    operational_status: "SUSPENDED",
+                    reason,
                   });
-                  closeLifecycleModals();
+                  if (updated) {
+                    await fetchDsaDetail(id);
+                    closeLifecycleModals();
+                  }
                 }
               }}
               type="button"
               variant="danger"
+              disabled={actionLoading}
             >
-              Deactivate
+              {actionLoading ? "Processing..." : "Deactivate"}
             </Button>
           </div>
         </div>
@@ -2976,27 +3290,28 @@ export function DsaProfilePage({ id }: { id: string }) {
               Cancel
             </Button>
             <Button
-              onClick={() => {
+              onClick={async () => {
                 if (blacklistingDsa) {
                   const reason = lifecycleReason.trim();
                   if (!reason) {
                     setLifecycleReasonError("Add a reason before blacklisting this DSA.");
                     return;
                   }
-                  updateItem("dsas", blacklistingDsa.id, {
-                    status: "Blacklisted",
-                    statusReason: reason,
-                    statusReasonAction: "Blacklisted",
-                    statusReasonAt: new Date().toISOString(),
-                    statusReasonBy: currentUser?.name ?? DEMO_USERS.admin.name,
+                  const updated = await updateDsaStatus(blacklistingDsa.id, {
+                    operational_status: "TERMINATED",
+                    reason,
                   });
-                  closeLifecycleModals();
+                  if (updated) {
+                    await fetchDsaDetail(id);
+                    closeLifecycleModals();
+                  }
                 }
               }}
               type="button"
               variant="danger"
+              disabled={actionLoading}
             >
-              Blacklist
+              {actionLoading ? "Processing..." : "Blacklist"}
             </Button>
           </div>
         </div>
@@ -3020,22 +3335,23 @@ export function DsaProfilePage({ id }: { id: string }) {
               Cancel
             </Button>
             <Button
-              onClick={() => {
+              onClick={async () => {
                 if (activatingDsa) {
-                  updateItem("dsas", activatingDsa.id, {
-                    status: "Active",
-                    statusReason: undefined,
-                    statusReasonAction: undefined,
-                    statusReasonAt: undefined,
-                    statusReasonBy: undefined,
+                  const updated = await updateDsaStatus(activatingDsa.id, {
+                    operational_status: "ACTIVE",
+                    reason: "Reactivated by admin",
                   });
-                  setActivatingDsa(null);
+                  if (updated) {
+                    await fetchDsaDetail(id);
+                    setActivatingDsa(null);
+                  }
                 }
               }}
               type="button"
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+              disabled={actionLoading}
             >
-              Activate
+              {actionLoading ? "Processing..." : "Activate"}
             </Button>
           </div>
         </div>
@@ -3059,22 +3375,23 @@ export function DsaProfilePage({ id }: { id: string }) {
               Cancel
             </Button>
             <Button
-              onClick={() => {
+              onClick={async () => {
                 if (unblacklistingDsa) {
-                  updateItem("dsas", unblacklistingDsa.id, {
-                    status: "Active",
-                    statusReason: undefined,
-                    statusReasonAction: undefined,
-                    statusReasonAt: undefined,
-                    statusReasonBy: undefined,
+                  const updated = await updateDsaStatus(unblacklistingDsa.id, {
+                    operational_status: "ACTIVE",
+                    reason: "Removed from blacklist",
                   });
-                  setUnblacklistingDsa(null);
+                  if (updated) {
+                    await fetchDsaDetail(id);
+                    setUnblacklistingDsa(null);
+                  }
                 }
               }}
               type="button"
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+              disabled={actionLoading}
             >
-              Remove and Activate
+              {actionLoading ? "Processing..." : "Remove and Activate"}
             </Button>
           </div>
         </div>
