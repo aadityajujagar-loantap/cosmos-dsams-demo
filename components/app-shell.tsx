@@ -229,8 +229,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           ? [
               {
                 items: [
-                  { href: "/administration/users", icon: Users, label: "User Management" },
+                  { href: "/administration/users", icon: Users, label: "User Management" },
                   { href: "/administration/roles", icon: ShieldCheck, label: "Roles & Permissions" },
+                  { href: "/administration/branch-roles", icon: ShieldCheck, label: "Branch Roles" },
                   { href: "/administration/audit-logs", icon: FileText, label: "Audit Logs" },
                   ...(hasPermission("maker_requests.view")
                     ? [{ href: "/administration/maker-requests", icon: ClipboardCheck, label: "Maker Requests" }]

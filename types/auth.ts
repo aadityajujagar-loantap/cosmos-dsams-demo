@@ -42,3 +42,11 @@ export interface AuthSession {
     }[];
   }[];
 }
+
+export interface BranchRole {
+  id: number;
+  branch_role_id: string;
+  rolename: string;
+  created_at?: string;
+  updated_at?: string;
+}

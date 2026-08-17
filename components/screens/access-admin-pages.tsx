@@ -30,7 +30,7 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
-import type { Permission, Role, User } from "@/types/auth";
+import type { Permission, Role, User, BranchRole } from "@/types/auth";
 
 interface AdminUserRow {
   branchCode: string;
@@ -850,3 +850,249 @@ export function RolesPage() {
     </div>
   );
 }
+
+export function BranchRolesPage() {
+  const { toast } = useToast();
+  const [branchRoles, setBranchRoles] = useState<BranchRole[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<BranchRole | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ branch_role_id: "", rolename: "" });
+
+  async function loadBranchRoles() {
+    setLoading(true);
+    try {
+      const response = await adminApi.getBranchRoles({ per_page: 100 });
+      setBranchRoles(response.data || []);
+    } catch (error: any) {
+      toast({
+        title: "API Error",
+        description: error.message || "Failed to load branch roles.",
+        variant: "warning",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadBranchRoles();
+  }, []);
+
+  function openCreate() {
+    setEditing(null);
+    setForm({ branch_role_id: "", rolename: "" });
+    setCreating(true);
+  }
+
+  function openEdit(item: BranchRole) {
+    setEditing(item);
+    setForm({ branch_role_id: item.branch_role_id, rolename: item.rolename });
+  }
+
+  function closeForm() {
+    setCreating(false);
+    setEditing(null);
+    setForm({ branch_role_id: "", rolename: "" });
+  }
+
+  function updateForm(field: keyof typeof form, value: string) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function saveBranchRole() {
+    setSaving(true);
+    try {
+      const payload = {
+        branch_role_id: form.branch_role_id.trim(),
+        rolename: form.rolename.trim(),
+      };
+      
+      const response = editing
+        ? await adminApi.updateBranchRole(editing.branch_role_id, payload)
+        : await adminApi.createBranchRole(payload);
+
+      if (isMakerResponse(response)) {
+        toast({
+          title: "Branch Role change submitted",
+          description: `Pending checker approval: ${response.reference}`,
+          variant: "success",
+        });
+      } else {
+        toast({
+          title: editing ? "Branch Role updated" : "Branch Role created",
+          description: `Successfully saved role ${payload.rolename}`,
+          variant: "success",
+        });
+      }
+      
+      closeForm();
+      await loadBranchRoles();
+    } catch (error: any) {
+      toast({
+        title: "Save failed",
+        description: error.message || "Could not save branch role.",
+        variant: "warning",
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(item: BranchRole) {
+    if (!confirm(`Are you sure you want to delete branch role "${item.rolename}"?`)) return;
+    try {
+      const response = await adminApi.deleteBranchRole(item.branch_role_id);
+      if (isMakerResponse(response)) {
+        toast({
+          title: "Delete request submitted",
+          description: `Pending checker approval: ${response.reference}`,
+          variant: "success",
+        });
+      } else {
+        toast({
+          title: "Branch Role deleted",
+          description: `Successfully deleted role ${item.rolename}`,
+          variant: "success",
+        });
+      }
+      await loadBranchRoles();
+    } catch (error: any) {
+      toast({
+        title: "Delete failed",
+        description: error.message || "Could not delete branch role.",
+        variant: "warning",
+      });
+    }
+  }
+
+  const tableData = useMemo(() => {
+    return branchRoles.map((item) => ({
+      ...item,
+      id: String(item.id),
+    }));
+  }, [branchRoles]);
+
+  const columns: Column<Omit<BranchRole, "id"> & { id: string }>[] = [
+    { 
+      cell: (item) => <span className="font-mono font-semibold text-slate-800">{item.branch_role_id}</span>, 
+      header: "Branch Role ID", 
+      key: "branch_role_id", 
+      sortable: true, 
+      sortValue: (item) => item.branch_role_id 
+    },
+    { 
+      cell: (item) => <span className="font-semibold text-slate-900">{item.rolename}</span>, 
+      header: "Role Name", 
+      key: "rolename", 
+      sortable: true, 
+      sortValue: (item) => item.rolename 
+    },
+    { 
+      cell: (item) => item.created_at ? new Date(item.created_at).toLocaleString() : "-", 
+      header: "Created At", 
+      key: "created_at" 
+    },
+  ];
+
+  const formOpen = creating || Boolean(editing);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        action={
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={loadBranchRoles} variant="secondary">
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Refresh
+            </Button>
+            <Button onClick={openCreate}>
+              <Plus className="mr-2 h-4 w-4" />
+              Create Branch Role
+            </Button>
+          </div>
+        }
+        description="Configure and manage corporate bank branch roles for the Maker-Checker workflow."
+        eyebrow="Administration"
+        title="Branch Roles"
+      />
+
+      <Card>
+        <CardContent className="p-0">
+          {loading ? (
+            <EmptyState title="Loading branch roles" description="Fetching branch roles from the Laravel API." />
+          ) : (
+            <DataTable
+              actions={(item) => (
+                <div className="flex justify-end gap-1">
+                  <Button aria-label="Edit branch role" onClick={() => openEdit({ ...item, id: Number(item.id) })} size="icon" type="button" variant="ghost">
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button aria-label="Delete branch role" onClick={() => handleDelete({ ...item, id: Number(item.id) })} size="icon" type="button" variant="ghost">
+                    <Trash2 className="h-4 w-4 text-rose-600" />
+                  </Button>
+                </div>
+              )}
+              columns={columns}
+              emptyDescription="Create the first branch role to begin assigning users."
+              emptyTitle="No branch roles found"
+              items={tableData}
+              searchKeys={["branch_role_id", "rolename"]}
+            />
+          )}
+        </CardContent>
+      </Card>
+
+      <Modal
+        description={editing ? "Update the name or configuration of the selected branch role." : "Create a new branch role with a unique string ID."}
+        onClose={closeForm}
+        open={formOpen}
+        title={editing ? "Edit Branch Role" : "Create Branch Role"}
+        width="max-w-md"
+      >
+        <form
+          className="space-y-6"
+          onSubmit={(event) => {
+            event.preventDefault();
+            saveBranchRole();
+          }}
+        >
+          <div className="space-y-4">
+            <Field>
+              <Label>Branch Role ID</Label>
+              <Input 
+                onChange={(event) => updateForm("branch_role_id", event.target.value)} 
+                required 
+                disabled={Boolean(editing)}
+                placeholder="e.g. BR-MGR"
+                maxLength={20}
+                value={form.branch_role_id} 
+              />
+              <p className="text-xs text-slate-500 mt-1">A unique string code (max 20 chars). Cannot be changed after creation.</p>
+            </Field>
+            <Field>
+              <Label>Role Name</Label>
+              <Input 
+                onChange={(event) => updateForm("rolename", event.target.value)} 
+                required 
+                placeholder="e.g. Branch Manager"
+                maxLength={255}
+                value={form.rolename} 
+              />
+            </Field>
+          </div>
+          <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+            <Button onClick={closeForm} type="button" variant="secondary">
+              Cancel
+            </Button>
+            <Button disabled={saving} type="submit">
+              {saving ? "Saving..." : editing ? "Update Role" : "Save Role"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+    </div>
+  );
+}
+

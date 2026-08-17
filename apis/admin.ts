@@ -1,6 +1,6 @@
 import { request } from "./client";
 import type { MakerRequest, MakerRequestActionType, MakerRequestStatus } from "@/types/makerChecker";
-import type { Permission, Role, User } from "@/types/auth";
+import type { Permission, Role, User, BranchRole } from "@/types/auth";
 import type { ActivityLog } from "@/types/activityLog";
 import type {
   Dsa,
@@ -617,4 +617,41 @@ export const adminApi = {
   getProductMasterSlabs: async (productId: number): Promise<BackendResponse<{ product: LoanProduct; schemes: { id: number; name: string; slabs: SchemeSlab[] }[] }>> => {
     return request<BackendResponse<{ product: LoanProduct; schemes: { id: number; name: string; slabs: SchemeSlab[] }[] }>>(`/v1/loan-products/${productId}/slabs`, { method: "GET" });
   },
+
+  // ── Branch Role CRUD ──
+  getBranchRoles: async (params?: { search?: string; page?: number; per_page?: number }): Promise<PaginatedResponse<BranchRole>> => {
+    const response = await request<ApiEnvelope<PaginatedResponse<BranchRole>>>(
+      `/admin/branch-roles${compactParams(params)}`,
+      { method: "GET" }
+    );
+    return response.data;
+  },
+
+  getBranchRolesDropdown: (): Promise<BackendResponse<BranchRole[]>> => {
+    return request<BackendResponse<BranchRole[]>>("/admin/branch-roles/dropdown", { method: "GET" });
+  },
+
+  createBranchRole: async (payload: { branch_role_id: string; rolename: string }): Promise<BranchRole | MakerCheckerActionResponse> => {
+    const response = await request<ApiEnvelope<BranchRole> | MakerCheckerActionResponse>("/admin/branch-roles", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return unwrapMutation<BranchRole>(response);
+  },
+
+  updateBranchRole: async (branchRoleId: string, payload: Partial<{ branch_role_id: string; rolename: string }>): Promise<BranchRole | MakerCheckerActionResponse> => {
+    const response = await request<ApiEnvelope<BranchRole> | MakerCheckerActionResponse>(`/admin/branch-roles/${branchRoleId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+    return unwrapMutation<BranchRole>(response);
+  },
+
+  deleteBranchRole: async (branchRoleId: string): Promise<{ message?: string } | MakerCheckerActionResponse> => {
+    const response = await request<{ message?: string } | MakerCheckerActionResponse>(`/admin/branch-roles/${branchRoleId}`, {
+      method: "DELETE",
+    });
+    return response;
+  },
 };
+
