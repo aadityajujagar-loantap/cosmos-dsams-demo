@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -1107,7 +1107,7 @@ import type {
   CsvUploadResult,
 } from "@/types/auth";
 
-type UbmRow = UserBranchMapping & { id: string };
+type UbmRow = Omit<UserBranchMapping, "id"> & { id: string };
 
 function toUbmRow(m: UserBranchMapping): UbmRow {
   return { ...m, id: String(m.id) };
@@ -1187,7 +1187,7 @@ export function UserBranchMappingsPage() {
   }, [searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── delete ────────────────────────────────────────────────────────────────
-  async function handleDelete(mapping: UserBranchMapping) {
+  async function handleDelete(mapping: UbmRow) {
     if (
       !confirm(
         `Remove mapping of user "${mapping.user?.name ?? mapping.user_id}" from branch "${mapping.branch?.branch_name ?? mapping.branch_code}"?`
@@ -1195,7 +1195,7 @@ export function UserBranchMappingsPage() {
     )
       return;
     try {
-      await adminApi.deleteUserBranchMapping(mapping.id);
+      await adminApi.deleteUserBranchMapping(Number(mapping.id));
       toast({ title: "Mapping deleted", variant: "success" });
       await loadMappings(currentPage, searchQuery);
     } catch (err: any) {
@@ -1272,7 +1272,7 @@ export function UserBranchMappingsPage() {
   }
 
   // ── user branches panel ───────────────────────────────────────────────────
-  async function openUserPanel(mapping: UserBranchMapping) {
+  async function openUserPanel(mapping: UbmRow) {
     const userId = mapping.user_id;
     const userName = mapping.user?.name ?? `User #${userId}`;
     setPanelUser({ id: userId, name: userName });
@@ -1355,24 +1355,25 @@ export function UserBranchMappingsPage() {
       <PageHeader
         title="User Branch Mappings"
         description="Assign users to branches. A user can be mapped to multiple branches."
-      >
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={() => { setCsvFile(null); setCsvResult(null); setCsvOpen(true); }} variant="outline" type="button">
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-            </svg>
-            Upload CSV
-          </Button>
-          <Button onClick={() => { setBulkResult(null); setBulkForm({ user_id: "", branch_codes: "" }); setBulkOpen(true); }} variant="outline" type="button">
-            <Plus className="h-4 w-4" />
-            Bulk Assign
-          </Button>
-          <Button onClick={() => { setCreateForm({ user_id: "", branch_code: "" }); setCreateOpen(true); }} type="button">
-            <Plus className="h-4 w-4" />
-            Add Mapping
-          </Button>
-        </div>
-      </PageHeader>
+        action={
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => { setCsvFile(null); setCsvResult(null); setCsvOpen(true); }} variant="outline" type="button">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              Upload CSV
+            </Button>
+            <Button onClick={() => { setBulkResult(null); setBulkForm({ user_id: "", branch_codes: "" }); setBulkOpen(true); }} variant="outline" type="button">
+              <Plus className="h-4 w-4" />
+              Bulk Assign
+            </Button>
+            <Button onClick={() => { setCreateForm({ user_id: "", branch_code: "" }); setCreateOpen(true); }} type="button">
+              <Plus className="h-4 w-4" />
+              Add Mapping
+            </Button>
+          </div>
+        }
+      />
 
       {/* Stats bar */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -1738,7 +1739,7 @@ export function UserBranchMappingsPage() {
                 </div>
                 <Button
                   onClick={async () => {
-                    await handleDelete(m);
+                    await handleDelete(toUbmRow(m));
                     if (panelUser) {
                       const data = await adminApi.getUserBranches(panelUser.id);
                       setPanelMappings(data);
