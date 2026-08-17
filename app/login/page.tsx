@@ -239,7 +239,7 @@ export default function LoginPage() {
         <div className="relative z-10 flex items-center gap-3">
           <div className="bg-white/95 backdrop-blur rounded-lg px-4 py-2 shadow-md flex items-center justify-center">
             <Image
-              src="/logo-dsasm-cosmos.png"
+              src="/dsafrontend/logo-dsasm-cosmos.png"
               alt="Cosmos Logo"
               width={708}
               height={118}

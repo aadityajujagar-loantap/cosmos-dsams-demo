@@ -614,7 +614,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             className="h-10 w-auto max-w-[220px]"
             height={40}
             priority
-            src="/logo-dsasm-cosmos.png"
+            src="/dsafrontend/logo-dsasm-cosmos.png"
             unoptimized
             width={220}
           />
@@ -701,7 +701,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 className="h-10 w-auto max-w-[210px]"
                 height={40}
                 priority
-                src="/logo-dsasm-cosmos.png"
+                src="/dsafrontend/logo-dsasm-cosmos.png"
                 unoptimized
                 width={210}
               />
