@@ -25,6 +25,7 @@ import { ReactNode, useEffect, useMemo, useState, useSyncExternalStore } from "r
 import { Button, Input, Modal } from "@/components/ui/primitives";
 import { UserAccountModal } from "@/components/user-account-modal";
 import { useMockStore } from "@/lib/store";
+import { withBasePath } from "@/lib/base-path";
 import type { MockStore, Notification } from "@/lib/types";
 import { cn, formatDate, initials } from "@/lib/utils";
 
@@ -614,7 +615,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             className="h-10 w-auto max-w-[220px]"
             height={40}
             priority
-            src="/dsafrontend/logo-dsasm-cosmos.png"
+            src={withBasePath("/logo-dsasm-cosmos.png")}
             unoptimized
             width={220}
           />
@@ -701,7 +702,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 className="h-10 w-auto max-w-[210px]"
                 height={40}
                 priority
-                src="/dsafrontend/logo-dsasm-cosmos.png"
+                src={withBasePath("/logo-dsasm-cosmos.png")}
                 unoptimized
                 width={210}
               />

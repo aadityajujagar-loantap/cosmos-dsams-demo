@@ -22,6 +22,7 @@ import {
   sessionUserFromDsa,
 } from "@/lib/demo-identities";
 import { generateDsaCredentials, makeDsaCredentials } from "@/lib/dsa-credentials";
+import { withBasePath } from "@/lib/base-path";
 import { createMockStore } from "@/lib/mock-data";
 import {
   Application,
@@ -1431,7 +1432,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(STORE_STORAGE_KEY, serializedStore);
 
       // Save to shared store API
-      fetch("/api/store", {
+      fetch(withBasePath("/api/store"), {
         cache: "no-store",
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1446,7 +1447,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     async function syncStoreFromStorage() {
       // 1. Sync from server
       try {
-        const res = await fetch("/api/store", { cache: "no-store" });
+        const res = await fetch(withBasePath("/api/store"), { cache: "no-store" });
         if (res.ok) {
           const serverData = await res.json();
           if (serverData) {
