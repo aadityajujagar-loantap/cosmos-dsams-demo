@@ -59,6 +59,7 @@ interface OnboardingDraft {
   form: typeof initialOnboardingForm;
   step: number;
   uploadedFiles: Record<string, UploadedFileMeta>;
+  dsaDbId?: number;
 }
 
 const businessTypes: BusinessType[] = [
@@ -217,10 +218,12 @@ function readOnboardingDraft(): Partial<OnboardingDraft> {
 }
 
 export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boolean } = {}) {
-  const { currentUser, store } = useMockStore();
+  const { currentUser, store, createItem } = useMockStore();
   const {
     createDsa,
     uploadDsaDocument,
+    updateDsaProfile,
+    updateDsaStatus,
     states,
     districts,
     fetchStatesDropdown,
@@ -239,6 +242,7 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
     isDsaType(initialDraft.dsaType) ? initialDraft.dsaType : "Independent DSA",
   );
   const [form, setForm] = useState(() => ({ ...initialOnboardingForm, ...initialDraft.form }));
+  const [dsaDbId, setDsaDbId] = useState<number | null>(() => initialDraft.dsaDbId ?? null);
 
   useEffect(() => {
     fetchStatesDropdown();
@@ -268,9 +272,9 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
 
   useEffect(() => {
     if (isDsaPartnerBlocked) return;
-    const draft: OnboardingDraft = { dsaType, form, step, uploadedFiles };
+    const draft: OnboardingDraft = { dsaType, form, step, uploadedFiles, dsaDbId: dsaDbId ?? undefined };
     localStorage.setItem(DSA_ONBOARDING_DRAFT_KEY, JSON.stringify(draft));
-  }, [dsaType, form, isDsaPartnerBlocked, step, uploadedFiles]);
+  }, [dsaType, form, isDsaPartnerBlocked, step, uploadedFiles, dsaDbId]);
 
   if (isDsaPartnerBlocked) {
     return (
@@ -304,7 +308,9 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
     const nextErrors: Record<string, string> = {};
     const required = requiredByStep[currentStep] ?? [];
     required.forEach((field) => {
-      if (!form[field as keyof typeof form]) nextErrors[field] = "Required";
+      const val = form[field as keyof typeof form];
+      const isEmpty = !val || val === "Draft" || val === "000000" || val === "DUMMY000001" || (field === "pan" && val.startsWith("DFT"));
+      if (isEmpty) nextErrors[field] = "Required";
     });
     if (currentStep === 1) {
       if (form.mobile && !/^[6-9]\d{9}$/.test(form.mobile)) {
@@ -315,9 +321,10 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
       }
     }
     if (currentStep === 2) {
-      if (form.pan && !/^[A-Z]{5}\d{4}[A-Z]$/.test(form.pan)) {
+      const actualPan = form.pan?.startsWith("DFT") ? "" : form.pan;
+      if (actualPan && !/^[A-Z]{5}\d{4}[A-Z]$/.test(actualPan)) {
         nextErrors.pan = "PAN format should be ABCDE1234F";
-      } else if (form.pan && !isPanVerified) {
+      } else if (actualPan && !isPanVerified) {
         nextErrors.pan = "Please verify your PAN";
       }
     }
@@ -335,10 +342,104 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
     return false;
   }
 
-  function goNext(currentStep: number) {
+  async function goNext(currentStep: number) {
     if (currentStep > 0 && currentStep < 4 && !validate(currentStep)) return;
     if (currentStep === 4 && !validatePublicDocuments()) return;
     setErrors({});
+
+    try {
+      if (currentStep === 1) {
+        const dummyPan = `DFT${Date.now()}${Math.floor(100 + Math.random() * 900)}`;
+        const payload = {
+          name: form.name,
+          business_type: form.businessType,
+          contact_person: form.contactPerson,
+          mobile: form.mobile,
+          email: form.email,
+          pan: form.pan || dummyPan,
+          gst: form.gst || null,
+          address: form.address || "Draft",
+          city: form.city || "Draft",
+          state: form.state || "Draft",
+          pincode: form.pincode || "000000",
+          account_name: form.accountName || form.name || "Draft",
+          account_number: form.accountNumber || "000000",
+          ifsc: form.ifsc || "DUMMY000001",
+          bank_name: form.bankName || "Draft",
+          onboarding_status: "DRAFT",
+        };
+
+        if (dsaDbId === null) {
+          const dsaObj = await createDsa(payload);
+          if (dsaObj) {
+            setDsaDbId(dsaObj.id);
+            if (!form.pan) {
+              setForm((current) => ({ ...current, pan: dummyPan }));
+            }
+          } else {
+            return;
+          }
+        } else {
+          await updateDsaProfile(dsaDbId, {
+            name: form.name,
+            business_type: form.businessType,
+            contact_person: form.contactPerson,
+            mobile: form.mobile,
+            email: form.email,
+          });
+        }
+      } else if (currentStep === 2) {
+        if (dsaDbId !== null) {
+          await updateDsaProfile(dsaDbId, {
+            pan: form.pan,
+            gst: form.gst || null,
+            address: form.address,
+            city: form.city,
+            state: form.state,
+            pincode: form.pincode,
+          });
+        }
+      } else if (currentStep === 3) {
+        if (dsaDbId !== null) {
+          await updateDsaProfile(dsaDbId, {
+            account_name: form.accountName,
+            account_number: form.accountNumber,
+            bank_name: form.bankName,
+            ifsc: form.ifsc,
+          });
+          await updateDsaStatus(dsaDbId, {
+            onboarding_status: "DOCUMENT_VERIFICATION",
+            reason: "Transitioning to document verification stage",
+          });
+        }
+      } else if (currentStep === 4) {
+        if (dsaDbId !== null) {
+          for (const key of Object.keys(uploadedFiles)) {
+            const fileMeta = uploadedFiles[key] as any;
+            if (fileMeta?.file && !fileMeta.uploaded) {
+              const uploadedDoc = await uploadDsaDocument(dsaDbId, {
+                file: fileMeta.file,
+                document_type: dsaDocumentType(key),
+                owner_name: form.name,
+              });
+              if (uploadedDoc) {
+                setUploadedFiles((current) => ({
+                  ...current,
+                  [key]: {
+                    ...current[key],
+                    uploaded: true,
+                  },
+                }));
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to progress onboarding API step:", err);
+      return;
+    }
+
     setStep(currentStep + 1);
   }
 
@@ -370,41 +471,97 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
       return;
     }
 
-    const payload = {
-      name: form.name,
-      business_type: form.businessType,
-      pan: form.pan,
-      gst: form.gst || null,
-      contact_person: form.contactPerson,
-      mobile: form.mobile,
-      email: form.email,
-      address: form.address,
-      city: form.city,
-      state: form.state,
-      pincode: form.pincode,
-      account_name: form.accountName,
-      account_number: form.accountNumber,
-      ifsc: form.ifsc,
-      bank_name: form.bankName,
-    };
+    let finalDsa = null;
 
-    const dsaObj = await createDsa(payload);
-    if (!dsaObj) return;
+    if (dsaDbId !== null) {
+      finalDsa = await updateDsaStatus(dsaDbId, {
+        onboarding_status: "SUBMITTED",
+        reason: "Onboarding completed by partner",
+      });
 
-    // Upload files if any
-    for (const key of Object.keys(uploadedFiles)) {
-      const fileMeta = uploadedFiles[key] as any;
-      if (fileMeta?.file) {
-        await uploadDsaDocument(dsaObj.id, {
-          file: fileMeta.file,
-          document_type: dsaDocumentType(key),
-          owner_name: form.name,
-        });
+      for (const key of Object.keys(uploadedFiles)) {
+        const fileMeta = uploadedFiles[key] as any;
+        if (fileMeta?.file && !fileMeta.uploaded) {
+          await uploadDsaDocument(dsaDbId, {
+            file: fileMeta.file,
+            document_type: dsaDocumentType(key),
+            owner_name: form.name,
+          });
+        }
+      }
+    } else {
+      const payload = {
+        name: form.name,
+        business_type: form.businessType,
+        pan: form.pan,
+        gst: form.gst || null,
+        contact_person: form.contactPerson,
+        mobile: form.mobile,
+        email: form.email,
+        address: form.address,
+        city: form.city,
+        state: form.state,
+        pincode: form.pincode,
+        account_name: form.accountName,
+        account_number: form.accountNumber,
+        ifsc: form.ifsc,
+        bank_name: form.bankName,
+        onboarding_status: "SUBMITTED",
+      };
+      finalDsa = await createDsa(payload);
+      if (finalDsa) {
+        for (const key of Object.keys(uploadedFiles)) {
+          const fileMeta = uploadedFiles[key] as any;
+          if (fileMeta?.file) {
+            await uploadDsaDocument(finalDsa.id, {
+              file: fileMeta.file,
+              document_type: dsaDocumentType(key),
+              owner_name: form.name,
+            });
+          }
+        }
       }
     }
 
-    setSubmittedDsaId(dsaObj.code);
-    setSubmittedDsaStatus(dsaObj.onboarding_status as DsaStatus);
+    if (!finalDsa) return;
+
+    if (createItem) {
+      createItem("dsas", {
+        id: String(finalDsa.id),
+        code: finalDsa.code,
+        name: finalDsa.name,
+        businessType: finalDsa.business_type as any,
+        pan: finalDsa.pan,
+        gst: finalDsa.gst || "",
+        contactPerson: finalDsa.contact_person,
+        mobile: finalDsa.mobile,
+        email: finalDsa.email,
+        loginUsername: finalDsa.login_username || "",
+        loginPassword: finalDsa.login_password || "",
+        address: finalDsa.address,
+        city: finalDsa.city,
+        state: finalDsa.state,
+        pincode: finalDsa.pincode,
+        bank: {
+          accountName: finalDsa.account_name,
+          accountNumber: finalDsa.account_number,
+          bankName: finalDsa.bank_name,
+          ifsc: finalDsa.ifsc,
+        },
+        status: "Pending Branch Approval",
+        onboardingDate: new Date().toISOString(),
+        manager: finalDsa.manager || "",
+        tier: (finalDsa.tier as any) || "Bronze",
+        riskRating: (finalDsa.risk_rating as any) || "Low",
+        monthlyLeads: finalDsa.monthly_leads || 0,
+        approvalRate: finalDsa.approval_rate || 0,
+        commissionEarned: finalDsa.commission_earned || 0,
+        documents: [],
+      });
+    }
+
+    setSubmittedDsaId(finalDsa.code);
+    setSubmittedDsaStatus(finalDsa.onboarding_status as DsaStatus);
     setStep(6);
     localStorage.removeItem(DSA_ONBOARDING_DRAFT_KEY);
   }
@@ -420,6 +577,7 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
     setSubmittedDsaId("");
     setSubmittedDsaStatus("");
     setStep(0);
+    setDsaDbId(null);
     localStorage.removeItem(DSA_ONBOARDING_DRAFT_KEY);
   }
 
@@ -450,7 +608,7 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
           ))}
         </Select>
       ) : (
-        <Input id={key} onChange={(event) => update(key, event.target.value)} type={props?.type ?? "text"} value={form[key]} />
+        <Input id={key} onChange={(event) => update(key, event.target.value)} type={props?.type ?? "text"} value={form[key] === "Draft" || form[key] === "000000" || (key === "ifsc" && form[key] === "DUMMY000001") ? "" : form[key]} />
       )}
       {errors[key] ? <p className="text-xs font-medium text-rose-600 mt-1">{errors[key]}</p> : null}
     </Field>
@@ -691,7 +849,7 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
                         }}
                         className="pr-28 uppercase font-mono tracking-wider placeholder:font-sans placeholder:tracking-normal"
                         placeholder="ABCDE1234F"
-                        value={form.pan}
+                        value={form.pan?.startsWith("DFT") ? "" : form.pan}
                         disabled={isPanVerifying}
                       />
                       <div className="absolute right-1">
@@ -745,7 +903,7 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
                     <Label htmlFor="stateSelect">State</Label>
                     <Select
                       id="stateSelect"
-                      value={form.state}
+                      value={form.state === "Draft" ? "" : form.state}
                       onChange={(e) => handleStateChange(e.target.value)}
                     >
                       <option value="">Select state</option>
@@ -759,9 +917,9 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
                     <Label htmlFor="citySelect">City / District</Label>
                     <Select
                       id="citySelect"
-                      value={form.city}
+                      value={form.city === "Draft" ? "" : form.city}
                       onChange={(e) => update("city", e.target.value)}
-                      disabled={!form.state}
+                      disabled={!form.state || form.state === "Draft"}
                     >
                       <option value="">{form.state ? "Select city/district" : "Select state first"}</option>
                       {districts.map((d) => (

@@ -453,14 +453,24 @@ export const adminApi = {
   },
 
   uploadSignedAgreement: async (idOrCode: number | string, file: File): Promise<BackendResponse<any>> => {
-    const formData = new FormData();
-    formData.append("signed_agreement", file);
+    const fileToBase64 = (file: File): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = (error) => reject(error);
+      });
+    };
+
+    const base64Data = await fileToBase64(file);
+
     return request<BackendResponse<any>>(`/v1/dsas/${idOrCode}/agreements/upload-signed`, {
       method: "POST",
-      body: formData,
-      headers: {
-        "Content-Type": "",
-      },
+      body: JSON.stringify({
+        document_base64: base64Data,
+        file_name: file.name,
+        remarks: "Physical signed agreement copy uploaded and verified"
+      }),
     });
   },
 
@@ -475,18 +485,26 @@ export const adminApi = {
     idOrCode: number | string,
     payload: { file: File; document_type: string; owner_name?: string }
   ): Promise<BackendResponse<DsaDocument>> => {
-    const formData = new FormData();
-    formData.append("file", payload.file);
-    formData.append("document_type", payload.document_type);
-    if (payload.owner_name) {
-      formData.append("owner_name", payload.owner_name);
-    }
+    const fileToBase64 = (file: File): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = (error) => reject(error);
+      });
+    };
+
+    const base64Data = await fileToBase64(payload.file);
+
     return request<BackendResponse<DsaDocument>>(`/v1/dsas/${idOrCode}/documents`, {
       method: "POST",
-      body: formData,
-      headers: {
-        "Content-Type": "",
-      },
+      body: JSON.stringify({
+        document_type: payload.document_type,
+        file_name: payload.file.name,
+        document_base64: base64Data,
+        owner_name: payload.owner_name || null,
+        remarks: "Uploaded during onboarding"
+      }),
     });
   },
 
@@ -972,6 +990,54 @@ export const adminApi = {
   syncBranches: async (): Promise<BackendResponse<import("@/types/auth").BranchSyncResult>> => {
     return request<BackendResponse<import("@/types/auth").BranchSyncResult>>("/admin/branches/sync", {
       method: "POST",
+    });
+  },
+
+  createLead: async (payload: {
+    CustName: string;
+    mobile: string;
+    email: string;
+    city: string;
+    state: string;
+    Branch_id: string;
+    subregion_id: string;
+    DSACode: string;
+  }): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>("/leads", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  convertLead: async (id: number | string): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/leads/${id}/convert`, {
+      method: "POST",
+    });
+  },
+
+  getAdminBranches: async (params?: { sub_region_code?: string; per_page?: number }): Promise<BackendResponse<any>> => {
+    const searchParams = new URLSearchParams();
+    if (params?.sub_region_code) searchParams.append("sub_region_code", params.sub_region_code);
+    if (params?.per_page) searchParams.append("per_page", String(params.per_page));
+    return request<BackendResponse<any>>(`/admin/branches?${searchParams.toString()}`, { method: "GET" });
+  },
+
+  getLeads: async (params?: { search?: string; status?: string; per_page?: number; page?: number }): Promise<BackendResponse<any>> => {
+    const searchParams = new URLSearchParams();
+    if (params?.search) searchParams.append("search", params.search);
+    if (params?.status) searchParams.append("status", params.status);
+    if (params?.per_page) searchParams.append("per_page", String(params.per_page));
+    if (params?.page) searchParams.append("page", String(params.page));
+    return request<BackendResponse<any>>(`/leads?${searchParams.toString()}`, { method: "GET" });
+  },
+
+  getApplicationDetails: async (applicationId: string): Promise<any> => {
+    return request<any>(`/v1/loan/applications/${applicationId}`, {
+      method: "GET",
+      headers: {
+        "X-Tenant-ID": "cosmos-bank",
+        "X-API-Token": "ijkyWTMMuVWqDaGJFiEWQd2jogOuvO8QdkDBMWUG882HXQPvqg2StcydbAUiNH4J",
+      },
     });
   },
 };

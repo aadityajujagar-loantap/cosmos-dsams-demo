@@ -14,7 +14,8 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { adminApi } from "@/apis/admin";
 
 import { KpiCard } from "@/components/charts";
 import { ActionPair, DetailGrid, DetailItem, PageHeader } from "@/components/module";
@@ -163,8 +164,49 @@ export function LeadsPage() {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Lead | null>(null);
   const [selected, setSelected] = useState<Lead | null>(null);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  let rows = status ? store.leads.filter((item) => item.status === status) : store.leads;
+  function translateLeadStatus(s: string): LeadStatus {
+    const statusUpper = String(s).toUpperCase();
+    if (statusUpper === "CREATED") return "New";
+    if (statusUpper === "CONVERTED") return "Converted";
+    return "In Progress";
+  }
+
+  useEffect(() => {
+    async function fetchLeads() {
+      try {
+        const res = await adminApi.getLeads({ per_page: 100 });
+        const items = res?.data?.items || [];
+        const mapped = items.map((l: any) => ({
+          id: String(l.id),
+          leadId: l.lead_uuid ? l.lead_uuid.slice(0, 8).toUpperCase() : `LD-${l.id}`,
+          customer: l.CustName || "Customer",
+          mobile: l.mobile || "",
+          email: l.email || "",
+          city: l.city || "",
+          source: "Partner" as Lead["source"],
+          product: "Personal Loan" as Product,
+          amount: 250000,
+          status: translateLeadStatus(l.status),
+          dsaId: l.DSACode || "",
+          dsaName: l.dsa?.name || l.DSACode || "Direct",
+          createdAt: l.created_at || new Date().toISOString(),
+          nextAction: l.status === "CONVERTED" ? "Review Application" : "Convert to Application",
+        }));
+        setLeads(mapped);
+      } catch (err) {
+        console.error("Failed to load leads from backend:", err);
+        setLeads(store.leads);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchLeads();
+  }, [store.leads]);
+
+  let rows = status ? leads.filter((item) => item.status === status) : leads;
   if (currentUser?.role === "Customer") {
     rows = rows.filter((item) => item.customer === currentUser.name);
   } else if (currentUser?.role === "DSA Partner") {
@@ -377,13 +419,105 @@ export function ApplicationsPage() {
   const [riskFilter, setRiskFilter] = useState("");
   const [verificationFilter, setVerificationFilter] = useState("");
 
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [loading, setLoading] = useState(true);
+
   const dsaById = useMemo(() => new Map(store.dsas.map((dsa) => [dsa.id, dsa])), [store.dsas]);
   const dsaTypes = useMemo(
     () => Array.from(new Set(store.dsas.map((dsa) => dsa.businessType))).sort(),
     [store.dsas],
   );
 
-  let rows = store.applications;
+  function translateStage(backendStage: string): ApplicationStage {
+    const s = String(backendStage).toLowerCase();
+    if (s.includes("aadhaar") || s.includes("pan") || s.includes("kyc")) return "Lead Capture";
+    if (s.includes("document") || s.includes("upload")) return "Document Review";
+    if (s.includes("bre") || s.includes("eligibility")) return "BRE Check";
+    if (s.includes("underwrite") || s.includes("credit")) return "Credit Underwriting";
+    if (s.includes("risk") || s.includes("deviation")) return "Risk Review";
+    if (s.includes("approve") || s.includes("decision")) return "Approval";
+    if (s.includes("disburse")) return "Disbursal";
+    return "Lead Capture";
+  }
+
+  function translateStatus(backendStatus: string): ApplicationStatus {
+    const s = String(backendStatus).toLowerCase();
+    if (s.includes("progress")) return "In Review";
+    if (s.includes("hold")) return "On Hold";
+    if (s.includes("approve")) return "Approved";
+    if (s.includes("reject")) return "Rejected";
+    if (s.includes("disburse")) return "Disbursed";
+    return "Draft";
+  }
+
+  useEffect(() => {
+    async function loadApplications() {
+      try {
+        const leadsRes = await adminApi.getLeads({ per_page: 100 });
+        const leadsList = leadsRes?.data?.items || [];
+        const convertedLeads = leadsList.filter((l: any) => l.application_id);
+
+        const apps = await Promise.all(
+          convertedLeads.map(async (lead: any) => {
+            try {
+              const appRes = await adminApi.getApplicationDetails(lead.application_id);
+              const backendApp = appRes?.data?.application || {};
+              return {
+                id: lead.application_id,
+                applicationId: lead.application_id,
+                customer: lead.CustName || "Customer",
+                mobile: lead.mobile || "",
+                email: lead.email || "",
+                city: lead.city || "",
+                dsaId: lead.DSACode || "",
+                dsaName: lead.dsa?.name || lead.DSACode || "Direct",
+                product: (backendApp.loan_product || backendApp.loan_type || "Personal Loan") as Product,
+                loanAmount: Number(backendApp.loan_amount_requested || 250000),
+                stage: translateStage(backendApp.stage || "aadhaar_kyc_initiated"),
+                status: translateStatus(backendApp.status || "application-in-progress"),
+                creditScore: 650,
+                riskScore: 35,
+                verificationStatus: "Pending" as VerificationStatus,
+                createdAt: lead.created_at || new Date().toISOString(),
+                notes: [],
+                timeline: [],
+              };
+            } catch (err) {
+              return {
+                id: lead.application_id,
+                applicationId: lead.application_id,
+                customer: lead.CustName || "Customer",
+                mobile: lead.mobile || "",
+                email: lead.email || "",
+                city: lead.city || "",
+                dsaId: lead.DSACode || "",
+                dsaName: lead.DSACode || "Direct",
+                product: "Personal Loan" as Product,
+                loanAmount: 250000,
+                stage: "Lead Capture" as ApplicationStage,
+                status: "In Review" as ApplicationStatus,
+                creditScore: 650,
+                riskScore: 35,
+                verificationStatus: "Pending" as VerificationStatus,
+                createdAt: lead.created_at || new Date().toISOString(),
+                notes: [],
+                timeline: [],
+              };
+            }
+          })
+        );
+        setApplications(apps);
+      } catch (err) {
+        console.error("Failed to load applications list from backend:", err);
+        setApplications(store.applications);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadApplications();
+  }, [store.applications]);
+
+  let rows = applications;
   if (currentUser?.role === "Customer") {
     rows = rows.filter((item) => item.customer === currentUser.name);
   } else if (currentUser?.role === "DSA Partner") {
@@ -494,9 +628,93 @@ export function ApplicationDetailPage({ id }: { id: string }) {
   const [deviationInboxText, setDeviationInboxText] = useState("");
   const [deviationInboxError, setDeviationInboxError] = useState("");
 
-  const activeApp = store.applications.find((item) => item.id === id);
+  const [loading, setLoading] = useState(true);
+  const [application, setApplication] = useState<Application | null>(null);
+  const [backendDocs, setBackendDocs] = useState<any[]>([]);
 
-  if (!activeApp) {
+  function translateStage(backendStage: string): ApplicationStage {
+    const s = String(backendStage).toLowerCase();
+    if (s.includes("aadhaar") || s.includes("pan") || s.includes("kyc")) return "Lead Capture";
+    if (s.includes("document") || s.includes("upload")) return "Document Review";
+    if (s.includes("bre") || s.includes("eligibility")) return "BRE Check";
+    if (s.includes("underwrite") || s.includes("credit")) return "Credit Underwriting";
+    if (s.includes("risk") || s.includes("deviation")) return "Risk Review";
+    if (s.includes("approve") || s.includes("decision")) return "Approval";
+    if (s.includes("disburse")) return "Disbursal";
+    return "Lead Capture";
+  }
+
+  function translateStatus(backendStatus: string): ApplicationStatus {
+    const s = String(backendStatus).toLowerCase();
+    if (s.includes("progress")) return "In Review";
+    if (s.includes("hold")) return "On Hold";
+    if (s.includes("approve")) return "Approved";
+    if (s.includes("reject")) return "Rejected";
+    if (s.includes("disburse")) return "Disbursed";
+    return "Draft";
+  }
+
+  useEffect(() => {
+    async function loadAppDetails() {
+      try {
+        const appRes = await adminApi.getApplicationDetails(id);
+        const data = appRes?.data;
+        if (data && data.status_code === 200) {
+          const backendApp = data.application || {};
+          const mappedApp: Application = {
+            id: id,
+            applicationId: id,
+            customer: `${backendApp.first_name || ""} ${backendApp.last_name || ""}`.trim() || "Customer",
+            mobile: backendApp.mobile || "",
+            email: backendApp.email || "",
+            city: backendApp.city || "",
+            dsaId: backendApp.DSACode || "",
+            dsaName: backendApp.dsa_name || backendApp.DSACode || "Direct",
+            product: (backendApp.loan_product || backendApp.loan_type || "Personal Loan") as Product,
+            loanAmount: Number(backendApp.loan_amount_requested || 250000),
+            stage: translateStage(backendApp.stage || "aadhaar_kyc_initiated"),
+            status: translateStatus(backendApp.status || "application-in-progress"),
+            creditScore: 650,
+            riskScore: 35,
+            verificationStatus: "Pending" as VerificationStatus,
+            createdAt: backendApp.application_date || new Date().toISOString(),
+            notes: [],
+            timeline: [
+              {
+                id: "tl-created",
+                actor: backendApp.dsa_name || "DSA",
+                at: backendApp.application_date || new Date().toISOString(),
+                note: "Application punched in and converted from lead.",
+                title: "Application punched in",
+              }
+            ],
+          };
+          setApplication(mappedApp);
+          setBackendDocs(data.documents || []);
+        } else {
+          const localApp = store.applications.find((item) => item.id === id || item.applicationId === id);
+          if (localApp) setApplication(localApp);
+        }
+      } catch (err) {
+        console.error("Failed to load application details from backend:", err);
+        const localApp = store.applications.find((item) => item.id === id || item.applicationId === id);
+        if (localApp) setApplication(localApp);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadAppDetails();
+  }, [id, store.applications]);
+
+  if (loading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!application) {
     return (
       <div>
         <Link className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-blue-700" href="/applications">
@@ -511,9 +729,16 @@ export function ApplicationDetailPage({ id }: { id: string }) {
     );
   }
 
-  const application = activeApp;
   const canVerifyDocuments = currentUser?.role === "DSA Manager" || currentUser?.role === "DSA Credit";
-  const documents = store.documents.filter((item) => item.applicationId === application.id);
+  const documents: DocumentRecord[] = backendDocs.map((doc: any) => ({
+    id: String(doc.id),
+    applicationId: doc.application_id,
+    type: doc.doc_type,
+    name: doc.file_name,
+    status: doc.is_verified ? "Verified" : "Pending",
+    remarks: "",
+    uploadedAt: doc.verified_at || new Date().toISOString(),
+  }));
   const isCustomerApplication = currentUser?.role === "Customer" && application.customer === currentUser.name;
   const visibleDsaName = currentUser?.role === "Customer" ? CUSTOMER_DSA_DISPLAY_NAME : application.dsaName;
   const visibleVerificationStatus = isCustomerApplication && documents.length === 0 ? "Pending" : application.verificationStatus;
