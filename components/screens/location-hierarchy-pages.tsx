@@ -117,7 +117,7 @@ function RegionsTab({ toast }: { toast: any }) {
   };
 
   const tableData = useMemo(() => items.map((r) => ({ ...r, id: String(r.id) })), [items]);
-  const columns: Column<RegionItem & { id: string }>[] = [
+  const columns: Column<Omit<RegionItem, "id"> & { id: string }>[] = [
     { key: "region_code", header: "Region Code", sortable: true, cell: (r) => <span className="font-mono font-semibold text-slate-900">{r.region_code}</span> },
     { key: "region_name", header: "Region Name", sortable: true, cell: (r) => <span className="font-medium text-slate-800">{r.region_name}</span> },
     { key: "created_at", header: "Created At", cell: (r) => <span className="text-xs text-slate-500">{r.created_at ? new Date(r.created_at).toLocaleDateString() : "—"}</span> },
@@ -136,8 +136,8 @@ function RegionsTab({ toast }: { toast: any }) {
           <DataTable columns={columns} items={tableData} searchKeys={["region_code", "region_name"]} emptyTitle="No regions found"
             actions={(row) => (
               <div className="flex justify-end gap-1">
-                <Button size="sm" variant="outline" type="button" onClick={() => { setEditing(row); setForm({ region_code: row.region_code, region_name: row.region_name }); setModalOpen(true); }}><Edit className="h-3.5 w-3.5" /></Button>
-                <Button size="sm" variant="danger" type="button" onClick={() => handleDelete(row)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                <Button size="sm" variant="outline" type="button" onClick={() => { setEditing({...row, id: Number(row.id)}); setForm({ region_code: row.region_code, region_name: row.region_name }); setModalOpen(true); }}><Edit className="h-3.5 w-3.5" /></Button>
+                <Button size="sm" variant="danger" type="button" onClick={() => handleDelete({...row, id: Number(row.id)})}><Trash2 className="h-3.5 w-3.5" /></Button>
               </div>
             )}
           />}
@@ -203,7 +203,7 @@ function SubRegionsTab({ toast, regionOptions }: { toast: any; regionOptions: Re
   };
 
   const tableData = useMemo(() => items.map((sr) => ({ ...sr, id: String(sr.id) })), [items]);
-  const columns: Column<SubRegionItem & { id: string }>[] = [
+  const columns: Column<Omit<SubRegionItem, "id"> & { id: string }>[] = [
     { key: "sub_region_code", header: "Sub-Region Code", sortable: true, cell: (sr) => <span className="font-mono font-semibold text-slate-900">{sr.sub_region_code}</span> },
     { key: "sub_region_name", header: "Sub-Region Name", sortable: true, cell: (sr) => <span className="font-medium text-slate-800">{sr.sub_region_name}</span> },
     { key: "region_code", header: "Parent Region", sortable: true, cell: (sr) => <Badge>{sr.region_code}</Badge> },
@@ -229,8 +229,8 @@ function SubRegionsTab({ toast, regionOptions }: { toast: any; regionOptions: Re
           <DataTable columns={columns} items={tableData} searchKeys={["sub_region_code", "sub_region_name", "region_code"]} emptyTitle="No sub-regions found"
             actions={(row) => (
               <div className="flex justify-end gap-1">
-                <Button size="sm" variant="outline" type="button" onClick={() => { setEditing(row); setForm({ sub_region_code: row.sub_region_code, sub_region_name: row.sub_region_name, region_code: row.region_code }); setModalOpen(true); }}><Edit className="h-3.5 w-3.5" /></Button>
-                <Button size="sm" variant="danger" type="button" onClick={() => handleDelete(row)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                <Button size="sm" variant="outline" type="button" onClick={() => { setEditing({...row, id: Number(row.id)}); setForm({ sub_region_code: row.sub_region_code, sub_region_name: row.sub_region_name, region_code: row.region_code }); setModalOpen(true); }}><Edit className="h-3.5 w-3.5" /></Button>
+                <Button size="sm" variant="danger" type="button" onClick={() => handleDelete({...row, id: Number(row.id)})}><Trash2 className="h-3.5 w-3.5" /></Button>
               </div>
             )}
           />}
@@ -299,7 +299,7 @@ function StatesTab({ toast }: { toast: any }) {
   };
 
   const tableData = useMemo(() => items.map((st) => ({ ...st, id: String(st.id) })), [items]);
-  const columns: Column<StateItem & { id: string }>[] = [
+  const columns: Column<Omit<StateItem, "id"> & { id: string }>[] = [
     { key: "state_code", header: "State Code", sortable: true, cell: (st) => <span className="font-mono font-semibold text-slate-900">{st.state_code}</span> },
     { key: "state_name", header: "State Name", sortable: true, cell: (st) => <span className="font-medium text-slate-800">{st.state_name}</span> },
     { key: "created_at", header: "Created At", cell: (st) => <span className="text-xs text-slate-500">{st.created_at ? new Date(st.created_at).toLocaleDateString() : "—"}</span> },
@@ -318,8 +318,8 @@ function StatesTab({ toast }: { toast: any }) {
           <DataTable columns={columns} items={tableData} searchKeys={["state_code", "state_name"]} emptyTitle="No states found"
             actions={(row) => (
               <div className="flex justify-end gap-1">
-                <Button size="sm" variant="outline" type="button" onClick={() => { setEditing(row); setForm({ state_code: row.state_code, state_name: row.state_name }); setModalOpen(true); }}><Edit className="h-3.5 w-3.5" /></Button>
-                <Button size="sm" variant="danger" type="button" onClick={() => handleDelete(row)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                <Button size="sm" variant="outline" type="button" onClick={() => { setEditing({...row, id: Number(row.id)}); setForm({ state_code: row.state_code, state_name: row.state_name }); setModalOpen(true); }}><Edit className="h-3.5 w-3.5" /></Button>
+                <Button size="sm" variant="danger" type="button" onClick={() => handleDelete({...row, id: Number(row.id)})}><Trash2 className="h-3.5 w-3.5" /></Button>
               </div>
             )}
           />}
@@ -385,7 +385,7 @@ function DistrictsTab({ toast, stateOptions }: { toast: any; stateOptions: State
   };
 
   const tableData = useMemo(() => items.map((d) => ({ ...d, id: String(d.id) })), [items]);
-  const columns: Column<DistrictItem & { id: string }>[] = [
+  const columns: Column<Omit<DistrictItem, "id"> & { id: string }>[] = [
     { key: "district_code", header: "District Code", sortable: true, cell: (d) => <span className="font-mono font-semibold text-slate-900">{d.district_code}</span> },
     { key: "district_name", header: "District Name", sortable: true, cell: (d) => <span className="font-medium text-slate-800">{d.district_name}</span> },
     { key: "state_code", header: "Parent State", sortable: true, cell: (d) => <Badge>{d.state_code}</Badge> },
@@ -411,8 +411,8 @@ function DistrictsTab({ toast, stateOptions }: { toast: any; stateOptions: State
           <DataTable columns={columns} items={tableData} searchKeys={["district_code", "district_name", "state_code"]} emptyTitle="No districts found"
             actions={(row) => (
               <div className="flex justify-end gap-1">
-                <Button size="sm" variant="outline" type="button" onClick={() => { setEditing(row); setForm({ district_code: row.district_code, district_name: row.district_name, state_code: row.state_code }); setModalOpen(true); }}><Edit className="h-3.5 w-3.5" /></Button>
-                <Button size="sm" variant="danger" type="button" onClick={() => handleDelete(row)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                <Button size="sm" variant="outline" type="button" onClick={() => { setEditing({...row, id: Number(row.id)}); setForm({ district_code: row.district_code, district_name: row.district_name, state_code: row.state_code }); setModalOpen(true); }}><Edit className="h-3.5 w-3.5" /></Button>
+                <Button size="sm" variant="danger" type="button" onClick={() => handleDelete({...row, id: Number(row.id)})}><Trash2 className="h-3.5 w-3.5" /></Button>
               </div>
             )}
           />}
@@ -505,7 +505,7 @@ function BranchesTab({ toast, regionOptions, stateOptions }: { toast: any; regio
   };
 
   const tableData = useMemo(() => items.map((b) => ({ ...b, id: String(b.id) })), [items]);
-  const columns: Column<BranchItem & { id: string }>[] = [
+  const columns: Column<Omit<BranchItem, "id"> & { id: string }>[] = [
     { key: "branch_code", header: "Branch Code", sortable: true, cell: (b) => <span className="font-mono font-semibold text-slate-900">{b.branch_code}</span> },
     { key: "branch_name", header: "Branch Name", sortable: true, cell: (b) => <span className="font-medium text-slate-800">{b.branch_name}</span> },
     { key: "region_code", header: "Region", sortable: true, cell: (b) => <Badge>{b.region_code}</Badge> },
@@ -538,8 +538,8 @@ function BranchesTab({ toast, regionOptions, stateOptions }: { toast: any; regio
           <DataTable columns={columns} items={tableData} searchKeys={["branch_code", "branch_name", "region_code", "sub_region_code", "district_code"]} emptyTitle="No branches found"
             actions={(row) => (
               <div className="flex justify-end gap-1">
-                <Button size="sm" variant="outline" type="button" onClick={() => { setEditing(row); setForm({ branch_code: row.branch_code, branch_name: row.branch_name, branch_number: row.branch_number || "", region_code: row.region_code, sub_region_code: row.sub_region_code, district_code: row.district_code || "" }); setModalOpen(true); }}><Edit className="h-3.5 w-3.5" /></Button>
-                <Button size="sm" variant="danger" type="button" onClick={() => handleDelete(row)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                <Button size="sm" variant="outline" type="button" onClick={() => { setEditing({...row, id: Number(row.id)}); setForm({ branch_code: row.branch_code, branch_name: row.branch_name, branch_number: row.branch_number || "", region_code: row.region_code, sub_region_code: row.sub_region_code, district_code: row.district_code || "" }); setModalOpen(true); }}><Edit className="h-3.5 w-3.5" /></Button>
+                <Button size="sm" variant="danger" type="button" onClick={() => handleDelete({...row, id: Number(row.id)})}><Trash2 className="h-3.5 w-3.5" /></Button>
               </div>
             )}
           />}
