@@ -1,6 +1,297 @@
 {
   "applications": [
     {
+      "aadhaar": "XXXX-XXXX-0000",
+      "applicationId": "COSMOS180826233739CPL",
+      "city": "pune",
+      "createdAt": "2026-08-18T18:07:39.344Z",
+      "creditScore": 794,
+      "customer": "samrat",
+      "decisionSummary": "Home Loan journey submitted through assisted Sell Now for Aarohi Financial Services Pvt Ltd. Queued for BRE and verification review.",
+      "dsaId": "COS-DSA-MH-MUM-001",
+      "dsaName": "Aarohi Financial Services Pvt Ltd",
+      "email": "sam@gmal.com",
+      "id": "app-msyz6l3k-d3g7u",
+      "journey": {
+        "channel": "Assisted Sell Now Journey",
+        "completedSteps": [
+          "Property",
+          "Applicant",
+          "Income",
+          "Legal",
+          "Valuation"
+        ],
+        "currentStep": "BRE",
+        "fields": [
+          {
+            "group": "Property",
+            "id": "propertyType",
+            "label": "Property Type",
+            "value": "t"
+          },
+          {
+            "group": "Property",
+            "id": "propertyCity",
+            "label": "Property City",
+            "value": "test"
+          },
+          {
+            "group": "Property",
+            "id": "propertyUsage",
+            "label": "Property Usage",
+            "value": "test"
+          },
+          {
+            "group": "Property",
+            "id": "builderName",
+            "label": "Builder / Seller Name",
+            "value": "test"
+          },
+          {
+            "group": "Property",
+            "id": "agreementValue",
+            "label": "Agreement Value",
+            "value": "1000"
+          },
+          {
+            "group": "Funding",
+            "id": "ownContribution",
+            "label": "Own Contribution",
+            "value": "1000"
+          },
+          {
+            "group": "Legal",
+            "id": "reraStatus",
+            "label": "RERA Status",
+            "value": "test"
+          },
+          {
+            "group": "Legal",
+            "id": "legalStatus",
+            "label": "Legal Review Status",
+            "value": "test"
+          },
+          {
+            "group": "Valuation",
+            "id": "valuationStatus",
+            "label": "Valuation Status",
+            "value": "1000"
+          },
+          {
+            "group": "Loan",
+            "id": "requestedTenure",
+            "label": "Requested Tenure",
+            "value": "48"
+          },
+          {
+            "group": "Income",
+            "id": "coApplicantIncome",
+            "label": "Co-applicant Income",
+            "value": "35000"
+          }
+        ],
+        "journeyId": "JR-home-loan-9345",
+        "name": "Home Loan Journey",
+        "product": "Home Loan"
+      },
+      "loanAmount": 400000,
+      "mobile": "9090909090",
+      "notes": [
+        "kk",
+        "ok",
+        "Admin filled full Home Loan journey.",
+        "Sourced by Aarohi Financial Services Pvt Ltd."
+      ],
+      "pan": "ABCDE1234Y",
+      "product": "Home Loan",
+      "riskScore": 66,
+      "salary": 40000,
+      "stage": "BRE Check",
+      "status": "In Review",
+      "timeline": [
+        {
+          "actor": "Super Admin",
+          "at": "2026-08-18T18:25:18.752Z",
+          "id": "tl-msyztajk-edo6x",
+          "note": "kk",
+          "title": "Note added"
+        },
+        {
+          "actor": "Super Admin",
+          "at": "2026-08-18T18:24:29.328Z",
+          "id": "tl-msyzs8eo-0mxlh",
+          "note": "ok",
+          "title": "Note added"
+        },
+        {
+          "actor": "Super Admin",
+          "at": "2026-08-18T18:07:39.344Z",
+          "id": "tl-msyz6l3l-bym8r",
+          "note": "Home Loan journey completed with product-specific details.",
+          "title": "Journey submitted"
+        },
+        {
+          "actor": "Cosmos Auto Desk",
+          "at": "2026-08-18T18:07:39.344Z",
+          "id": "tl-msyz6l3l-1dpvr",
+          "note": "Application created from journey payload and routed to BRE checks.",
+          "title": "Application created"
+        }
+      ],
+      "verificationStatus": "In Progress"
+    },
+    {
+      "aadhaar": "XXXX-XXXX-0000",
+      "applicationId": "APP-J821950",
+      "city": "pune",
+      "createdAt": "2026-08-18T12:07:01.949Z",
+      "creditScore": 708,
+      "customer": "samrat",
+      "decisionSummary": "Home Loan journey submitted for Aarohi Financial Services Pvt Ltd. BRE deviation raised because Declared monthly income INR 29,993 is below INR 35,000. Pending approval by Branch, BRH, DSA Credit, or Super Admin.",
+      "deviation": {
+        "id": "dev-msymatku-1ciwy",
+        "reasons": [
+          "Declared monthly income INR 29,993 is below INR 35,000."
+        ],
+        "requestedAt": "2026-08-18T12:07:01.949Z",
+        "requestedBy": "Cosmos Auto BRE",
+        "required": true,
+        "status": "Pending"
+      },
+      "dsaId": "COS-DSA-MH-MUM-001",
+      "dsaName": "Aarohi Financial Services Pvt Ltd",
+      "email": "sam@gmail.com",
+      "id": "app-msymatku-w0ywv",
+      "journey": {
+        "channel": "Assisted Sell Now Journey",
+        "completedSteps": [
+          "Property",
+          "Applicant",
+          "Income",
+          "Legal",
+          "Valuation",
+          "Sanction"
+        ],
+        "currentStep": "BRE",
+        "fields": [
+          {
+            "group": "Property",
+            "id": "propertyType",
+            "label": "Property Type",
+            "value": "TEST"
+          },
+          {
+            "group": "Property",
+            "id": "propertyCity",
+            "label": "Property City",
+            "value": "pune"
+          },
+          {
+            "group": "Property",
+            "id": "propertyUsage",
+            "label": "Property Usage",
+            "value": "tt"
+          },
+          {
+            "group": "Property",
+            "id": "builderName",
+            "label": "Builder / Seller Name",
+            "value": "test"
+          },
+          {
+            "group": "Property",
+            "id": "agreementValue",
+            "label": "Agreement Value",
+            "value": "1000"
+          },
+          {
+            "group": "Funding",
+            "id": "ownContribution",
+            "label": "Own Contribution",
+            "value": "100"
+          },
+          {
+            "group": "Legal",
+            "id": "reraStatus",
+            "label": "RERA Status",
+            "value": "test"
+          },
+          {
+            "group": "Legal",
+            "id": "legalStatus",
+            "label": "Legal Review Status",
+            "value": "test"
+          },
+          {
+            "group": "Valuation",
+            "id": "valuationStatus",
+            "label": "Valuation Status",
+            "value": "10000"
+          },
+          {
+            "group": "Loan",
+            "id": "requestedTenure",
+            "label": "Requested Tenure",
+            "value": "5"
+          },
+          {
+            "group": "Income",
+            "id": "coApplicantIncome",
+            "label": "Co-applicant Income",
+            "value": "35000"
+          }
+        ],
+        "journeyId": "JR-home-loan-1949",
+        "name": "Home Loan Journey",
+        "product": "Home Loan"
+      },
+      "loanAmount": 100000,
+      "mobile": "9090909090",
+      "notes": [
+        "kk",
+        "Admin filled full Home Loan journey.",
+        "Sourced by Aarohi Financial Services Pvt Ltd.",
+        "Deviation pending: Declared monthly income INR 29,993 is below INR 35,000."
+      ],
+      "pan": "ABCDE1234T",
+      "product": "Home Loan",
+      "riskScore": 73,
+      "salary": 29993,
+      "stage": "Risk Review",
+      "status": "On Hold",
+      "timeline": [
+        {
+          "actor": "Super Admin",
+          "at": "2026-08-18T18:24:13.601Z",
+          "id": "tl-msyzrw9t-nykl5",
+          "note": "kk",
+          "title": "Note added"
+        },
+        {
+          "actor": "Super Admin",
+          "at": "2026-08-18T12:07:01.949Z",
+          "id": "tl-msymatku-snkoa",
+          "note": "Home Loan journey completed with product-specific details.",
+          "title": "Journey submitted"
+        },
+        {
+          "actor": "Cosmos Auto BRE",
+          "at": "2026-08-18T12:07:01.949Z",
+          "id": "tl-msymatku-7bdqq",
+          "note": "Deviation routed for approval: Declared monthly income INR 29,993 is below INR 35,000.",
+          "title": "BRE deviation raised"
+        },
+        {
+          "actor": "Cosmos Auto Desk",
+          "at": "2026-08-18T12:07:01.949Z",
+          "id": "tl-msymatku-7b4oc",
+          "note": "Application created from journey payload and placed on hold for deviation approval.",
+          "title": "Application created"
+        }
+      ],
+      "verificationStatus": "In Progress"
+    },
+    {
       "aadhaar": "XXXX-XXXX-4300",
       "applicationId": "APP-00001",
       "city": "Mumbai",
@@ -8331,6 +8622,44 @@
   ],
   "approvals": [
     {
+      "applicationId": "COSMOS180826233739CPL",
+      "approver": "Super Admin",
+      "customer": "samrat",
+      "history": [
+        {
+          "actor": "Super Admin",
+          "at": "2026-08-18T18:07:39.344Z",
+          "id": "tl-auto-app-msyz6l3k-d3g7u-approval",
+          "note": "Workflow opened for COSMOS180826233739CPL.",
+          "title": "Workflow initiated"
+        }
+      ],
+      "id": "approval-auto-app-msyz6l3k-d3g7u",
+      "stage": "Maker",
+      "status": "Pending",
+      "updatedAt": "2026-08-18T18:07:39.344Z",
+      "workflowId": "WF-33739"
+    },
+    {
+      "applicationId": "APP-J821950",
+      "approver": "Super Admin",
+      "customer": "samrat",
+      "history": [
+        {
+          "actor": "Super Admin",
+          "at": "2026-08-18T12:07:01.949Z",
+          "id": "tl-auto-app-msymatku-w0ywv-approval",
+          "note": "Workflow opened for APP-J821950.",
+          "title": "Workflow initiated"
+        }
+      ],
+      "id": "approval-auto-app-msymatku-w0ywv",
+      "stage": "Risk Review",
+      "status": "Pending",
+      "updatedAt": "2026-08-18T12:07:01.949Z",
+      "workflowId": "WF-21950"
+    },
+    {
       "applicationId": "APP-00075",
       "approver": "admin",
       "customer": "Kunal Joshi",
@@ -9605,6 +9934,153 @@
     }
   ],
   "auditLogs": [
+    {
+      "action": "Update",
+      "actionType": "Update",
+      "actor": "Super Admin",
+      "actorId": "1",
+      "actorRole": "DSA Manager",
+      "at": "2026-08-18T18:25:18.752Z",
+      "affectedDsaId": "COS-DSA-MH-MUM-001",
+      "affectedDsaName": "Aarohi Financial Services Pvt Ltd",
+      "changedFields": [
+        "notes",
+        "timeline"
+      ],
+      "collection": "applications",
+      "entity": "Applications",
+      "entityId": "app-msyz6l3k-d3g7u",
+      "entityName": "samrat",
+      "fromValue": "notes: 3 items | timeline: 3 items",
+      "id": "audit-msyztajl-mcy5r",
+      "ipAddress": "10.24.0.91",
+      "severity": "Info",
+      "summary": "Update: samrat changed notes, timeline.",
+      "toValue": "notes: 4 items | timeline: 4 items"
+    },
+    {
+      "action": "Update",
+      "actionType": "Update",
+      "actor": "Super Admin",
+      "actorId": "1",
+      "actorRole": "DSA Manager",
+      "at": "2026-08-18T18:24:29.329Z",
+      "affectedDsaId": "COS-DSA-MH-MUM-001",
+      "affectedDsaName": "Aarohi Financial Services Pvt Ltd",
+      "changedFields": [
+        "notes",
+        "timeline"
+      ],
+      "collection": "applications",
+      "entity": "Applications",
+      "entityId": "app-msyz6l3k-d3g7u",
+      "entityName": "samrat",
+      "fromValue": "notes: 2 items | timeline: 2 items",
+      "id": "audit-msyzs8ep-3nnmv",
+      "ipAddress": "10.24.0.91",
+      "severity": "Info",
+      "summary": "Update: samrat changed notes, timeline.",
+      "toValue": "notes: 3 items | timeline: 3 items"
+    },
+    {
+      "action": "Update",
+      "actionType": "Update",
+      "actor": "Super Admin",
+      "actorId": "1",
+      "actorRole": "DSA Manager",
+      "at": "2026-08-18T18:24:13.603Z",
+      "affectedDsaId": "COS-DSA-MH-MUM-001",
+      "affectedDsaName": "Aarohi Financial Services Pvt Ltd",
+      "changedFields": [
+        "notes",
+        "timeline"
+      ],
+      "collection": "applications",
+      "entity": "Applications",
+      "entityId": "app-msymatku-w0ywv",
+      "entityName": "samrat",
+      "fromValue": "notes: 3 items | timeline: 3 items",
+      "id": "audit-msyzrw9v-kpneq",
+      "ipAddress": "10.24.0.91",
+      "severity": "Info",
+      "summary": "Update: samrat changed notes, timeline.",
+      "toValue": "notes: 4 items | timeline: 4 items"
+    },
+    {
+      "action": "Create",
+      "actionType": "Create",
+      "actor": "Super Admin",
+      "actorId": "1",
+      "actorRole": "DSA Manager",
+      "at": "2026-08-18T18:07:39.346Z",
+      "affectedDsaId": "COS-DSA-MH-MUM-001",
+      "affectedDsaName": "Aarohi Financial Services Pvt Ltd",
+      "changedFields": [],
+      "collection": "applications",
+      "entity": "Applications",
+      "entityId": "app-msyz6l3k-d3g7u",
+      "entityName": "samrat",
+      "id": "audit-msyz6l3m-f1o65",
+      "ipAddress": "10.24.0.91",
+      "severity": "Info",
+      "summary": "samrat was created in Applications."
+    },
+    {
+      "action": "Create",
+      "actionType": "Create",
+      "actor": "Super Admin",
+      "actorId": "1",
+      "actorRole": "DSA Manager",
+      "at": "2026-08-18T12:07:01.952Z",
+      "affectedDsaId": "COS-DSA-MH-MUM-001",
+      "affectedDsaName": "Aarohi Financial Services Pvt Ltd",
+      "changedFields": [],
+      "collection": "applications",
+      "entity": "Applications",
+      "entityId": "app-msymatku-w0ywv",
+      "entityName": "samrat",
+      "id": "audit-msymatkw-p1003",
+      "ipAddress": "10.24.0.91",
+      "severity": "Info",
+      "summary": "samrat was created in Applications."
+    },
+    {
+      "action": "Create",
+      "actionType": "Create",
+      "actor": "admin",
+      "actorRole": "DSA Manager",
+      "at": "2026-08-18T10:41:22.533Z",
+      "affectedDsaId": "4",
+      "affectedDsaName": "adi",
+      "changedFields": [],
+      "collection": "dsas",
+      "entity": "Dsas",
+      "entityId": "4",
+      "entityName": "adi",
+      "id": "audit-msyj8nz9-e264k",
+      "ipAddress": "10.24.0.91",
+      "severity": "Info",
+      "summary": "adi was created in Dsas."
+    },
+    {
+      "action": "Create",
+      "actionType": "Create",
+      "actor": "Super Admin",
+      "actorId": "1",
+      "actorRole": "DSA Manager",
+      "at": "2026-08-18T10:33:20.498Z",
+      "affectedDsaId": "3",
+      "affectedDsaName": "samm",
+      "changedFields": [],
+      "collection": "dsas",
+      "entity": "Dsas",
+      "entityId": "3",
+      "entityName": "samm",
+      "id": "audit-msyiyc1e-p5ms8",
+      "ipAddress": "10.24.0.91",
+      "severity": "Info",
+      "summary": "samm was created in Dsas."
+    },
     {
       "action": "Invoice Workflow",
       "actionType": "Invoice Workflow",
@@ -19211,6 +19687,70 @@
   ],
   "dsas": [
     {
+      "id": "4",
+      "code": "COSDSA20260818HKCZ",
+      "name": "adi",
+      "businessType": "Private Limited",
+      "pan": "ABCDE1234G",
+      "gst": "testt",
+      "contactPerson": "test",
+      "mobile": "9098987890",
+      "email": "kt@gmail.com",
+      "loginUsername": "cosdsa@branch27.in",
+      "loginPassword": "branch27@123",
+      "address": "pune",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pincode": "560010",
+      "bank": {
+        "accountName": "aad",
+        "accountNumber": "1000000000",
+        "bankName": "sbi",
+        "ifsc": "sbi01"
+      },
+      "status": "Pending Branch Approval",
+      "onboardingDate": "2026-08-18T10:41:22.531Z",
+      "manager": "",
+      "tier": "Bronze",
+      "riskRating": "Low",
+      "monthlyLeads": 0,
+      "approvalRate": 0,
+      "commissionEarned": 0,
+      "documents": []
+    },
+    {
+      "id": "3",
+      "code": "COSDSA20260818RQKR",
+      "name": "samm",
+      "businessType": "Private Limited",
+      "pan": "ABCDE1234T",
+      "gst": "test",
+      "contactPerson": "test",
+      "mobile": "9098900000",
+      "email": "kk@gmail.com",
+      "loginUsername": "cosdsa@branch26.in",
+      "loginPassword": "branch26@123",
+      "address": "RAMWADI",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pincode": "909090",
+      "bank": {
+        "accountName": "SAMRAT",
+        "accountNumber": "9000000000",
+        "bankName": "PNB",
+        "ifsc": "PUNB006"
+      },
+      "status": "Pending Branch Approval",
+      "onboardingDate": "2026-08-18T10:33:20.496Z",
+      "manager": "",
+      "tier": "Bronze",
+      "riskRating": "Low",
+      "monthlyLeads": 0,
+      "approvalRate": 0,
+      "commissionEarned": 0,
+      "documents": []
+    },
+    {
       "address": "Aarohi Financial Services Pvt Ltd, Mumbai Business District",
       "approvalRate": 67,
       "bank": {
@@ -23795,6 +24335,26 @@
       "region": "admin",
       "role": "DSA Partner",
       "status": "Active"
+    },
+    {
+      "dsaId": "3",
+      "email": "cosdsa@branch26.in",
+      "id": "3",
+      "lastLogin": "2026-08-18T10:33:20.496Z",
+      "name": "samm",
+      "region": "Mumbai",
+      "role": "DSA Partner",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "4",
+      "email": "cosdsa@branch27.in",
+      "id": "4",
+      "lastLogin": "2026-08-18T10:41:22.531Z",
+      "name": "adi",
+      "region": "Mumbai",
+      "role": "DSA Partner",
+      "status": "Invited"
     },
     {
       "email": "admin@cosmosbank.example",
@@ -28600,9 +29160,467 @@
       "region": "Amritsar",
       "role": "DSA Agent",
       "status": "Active"
+    },
+    {
+      "dsaId": "3",
+      "email": "agent1.cosdsa20260818rqkr@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818rqkr-01",
+      "lastLogin": "2026-08-18T10:33:20.496Z",
+      "name": "Divya Kulkarni",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "3",
+      "email": "agent2.cosdsa20260818rqkr@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818rqkr-02",
+      "lastLogin": "2026-08-18T10:33:20.496Z",
+      "name": "Arjun Singh",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "3",
+      "email": "agent3.cosdsa20260818rqkr@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818rqkr-03",
+      "lastLogin": "2026-08-18T10:33:20.496Z",
+      "name": "Neha Joshi",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "3",
+      "email": "agent4.cosdsa20260818rqkr@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818rqkr-04",
+      "lastLogin": "2026-08-18T10:33:20.496Z",
+      "name": "Vikram Jain",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "3",
+      "email": "agent5.cosdsa20260818rqkr@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818rqkr-05",
+      "lastLogin": "2026-08-18T10:33:20.496Z",
+      "name": "Prisha Sharma",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "3",
+      "email": "agent6.cosdsa20260818rqkr@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818rqkr-06",
+      "lastLogin": "2026-08-18T10:33:20.496Z",
+      "name": "Raghav Rao",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "3",
+      "email": "agent7.cosdsa20260818rqkr@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818rqkr-07",
+      "lastLogin": "2026-08-18T10:33:20.496Z",
+      "name": "Simran Mehta",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "3",
+      "email": "agent8.cosdsa20260818rqkr@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818rqkr-08",
+      "lastLogin": "2026-08-18T10:33:20.496Z",
+      "name": "Harsh Kapoor",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "3",
+      "email": "agent9.cosdsa20260818rqkr@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818rqkr-09",
+      "lastLogin": "2026-08-18T10:33:20.496Z",
+      "name": "Hetal Kulkarni",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "3",
+      "email": "agent10.cosdsa20260818rqkr@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818rqkr-10",
+      "lastLogin": "2026-08-18T10:33:20.496Z",
+      "name": "Aarav Singh",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "3",
+      "email": "agent11.cosdsa20260818rqkr@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818rqkr-11",
+      "lastLogin": "2026-08-18T10:33:20.496Z",
+      "name": "Nisha Joshi",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "3",
+      "email": "agent12.cosdsa20260818rqkr@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818rqkr-12",
+      "lastLogin": "2026-08-18T10:33:20.496Z",
+      "name": "Rohan Jain",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "3",
+      "email": "agent13.cosdsa20260818rqkr@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818rqkr-13",
+      "lastLogin": "2026-08-18T10:33:20.496Z",
+      "name": "Meera Sharma",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "3",
+      "email": "agent14.cosdsa20260818rqkr@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818rqkr-14",
+      "lastLogin": "2026-08-18T10:33:20.496Z",
+      "name": "Kabir Rao",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "3",
+      "email": "agent15.cosdsa20260818rqkr@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818rqkr-15",
+      "lastLogin": "2026-08-18T10:33:20.496Z",
+      "name": "Anika Mehta",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "3",
+      "email": "agent16.cosdsa20260818rqkr@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818rqkr-16",
+      "lastLogin": "2026-08-18T10:33:20.496Z",
+      "name": "Dev Kapoor",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "3",
+      "email": "agent17.cosdsa20260818rqkr@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818rqkr-17",
+      "lastLogin": "2026-08-18T10:33:20.496Z",
+      "name": "Riya Kulkarni",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "3",
+      "email": "agent18.cosdsa20260818rqkr@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818rqkr-18",
+      "lastLogin": "2026-08-18T10:33:20.496Z",
+      "name": "Ishaan Singh",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "4",
+      "email": "agent1.cosdsa20260818hkcz@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818hkcz-01",
+      "lastLogin": "2026-08-18T10:41:22.531Z",
+      "name": "Arjun Kulkarni",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "4",
+      "email": "agent2.cosdsa20260818hkcz@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818hkcz-02",
+      "lastLogin": "2026-08-18T10:41:22.531Z",
+      "name": "Neha Singh",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "4",
+      "email": "agent3.cosdsa20260818hkcz@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818hkcz-03",
+      "lastLogin": "2026-08-18T10:41:22.531Z",
+      "name": "Vikram Joshi",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "4",
+      "email": "agent4.cosdsa20260818hkcz@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818hkcz-04",
+      "lastLogin": "2026-08-18T10:41:22.531Z",
+      "name": "Prisha Jain",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "4",
+      "email": "agent5.cosdsa20260818hkcz@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818hkcz-05",
+      "lastLogin": "2026-08-18T10:41:22.531Z",
+      "name": "Raghav Sharma",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "4",
+      "email": "agent6.cosdsa20260818hkcz@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818hkcz-06",
+      "lastLogin": "2026-08-18T10:41:22.531Z",
+      "name": "Simran Rao",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "4",
+      "email": "agent7.cosdsa20260818hkcz@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818hkcz-07",
+      "lastLogin": "2026-08-18T10:41:22.531Z",
+      "name": "Harsh Mehta",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "4",
+      "email": "agent8.cosdsa20260818hkcz@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818hkcz-08",
+      "lastLogin": "2026-08-18T10:41:22.531Z",
+      "name": "Hetal Kapoor",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "4",
+      "email": "agent9.cosdsa20260818hkcz@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818hkcz-09",
+      "lastLogin": "2026-08-18T10:41:22.531Z",
+      "name": "Aarav Kulkarni",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "4",
+      "email": "agent10.cosdsa20260818hkcz@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818hkcz-10",
+      "lastLogin": "2026-08-18T10:41:22.531Z",
+      "name": "Nisha Singh",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "4",
+      "email": "agent11.cosdsa20260818hkcz@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818hkcz-11",
+      "lastLogin": "2026-08-18T10:41:22.531Z",
+      "name": "Rohan Joshi",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "4",
+      "email": "agent12.cosdsa20260818hkcz@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818hkcz-12",
+      "lastLogin": "2026-08-18T10:41:22.531Z",
+      "name": "Meera Jain",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "4",
+      "email": "agent13.cosdsa20260818hkcz@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818hkcz-13",
+      "lastLogin": "2026-08-18T10:41:22.531Z",
+      "name": "Kabir Sharma",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "4",
+      "email": "agent14.cosdsa20260818hkcz@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818hkcz-14",
+      "lastLogin": "2026-08-18T10:41:22.531Z",
+      "name": "Anika Rao",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "4",
+      "email": "agent15.cosdsa20260818hkcz@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818hkcz-15",
+      "lastLogin": "2026-08-18T10:41:22.531Z",
+      "name": "Dev Mehta",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "4",
+      "email": "agent16.cosdsa20260818hkcz@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818hkcz-16",
+      "lastLogin": "2026-08-18T10:41:22.531Z",
+      "name": "Riya Kapoor",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "4",
+      "email": "agent17.cosdsa20260818hkcz@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818hkcz-17",
+      "lastLogin": "2026-08-18T10:41:22.531Z",
+      "name": "Ishaan Kulkarni",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "4",
+      "email": "agent18.cosdsa20260818hkcz@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818hkcz-18",
+      "lastLogin": "2026-08-18T10:41:22.531Z",
+      "name": "Saanvi Singh",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
+    },
+    {
+      "dsaId": "4",
+      "email": "agent19.cosdsa20260818hkcz@cosdsa.in",
+      "id": "usr-agent-cosdsa20260818hkcz-19",
+      "lastLogin": "2026-08-18T10:41:22.531Z",
+      "name": "Karthik Joshi",
+      "region": "Mumbai",
+      "role": "DSA Agent",
+      "status": "Invited"
     }
   ],
   "verificationChecks": [
+    {
+      "applicationId": "COSMOS180826233739CPL",
+      "assignedTo": "Super Admin",
+      "checkId": "VER-33739-1",
+      "customer": "samrat",
+      "dueDate": "2026-08-20T18:07:39.344Z",
+      "evidence": "Pending source validation",
+      "id": "ver-auto-app-msyz6l3k-d3g7u-kyc",
+      "status": "Pending",
+      "type": "KYC"
+    },
+    {
+      "applicationId": "COSMOS180826233739CPL",
+      "assignedTo": "Super Admin",
+      "checkId": "VER-33739-2",
+      "customer": "samrat",
+      "dueDate": "2026-08-21T18:07:39.344Z",
+      "evidence": "Pending source validation",
+      "id": "ver-auto-app-msyz6l3k-d3g7u-address",
+      "status": "Pending",
+      "type": "Address"
+    },
+    {
+      "applicationId": "COSMOS180826233739CPL",
+      "assignedTo": "Super Admin",
+      "checkId": "VER-33739-3",
+      "customer": "samrat",
+      "dueDate": "2026-08-22T18:07:39.344Z",
+      "evidence": "Pending source validation",
+      "id": "ver-auto-app-msyz6l3k-d3g7u-employment",
+      "status": "Pending",
+      "type": "Employment"
+    },
+    {
+      "applicationId": "COSMOS180826233739CPL",
+      "assignedTo": "Super Admin",
+      "checkId": "VER-33739-4",
+      "customer": "samrat",
+      "dueDate": "2026-08-23T18:07:39.344Z",
+      "evidence": "Pending source validation",
+      "id": "ver-auto-app-msyz6l3k-d3g7u-bank",
+      "status": "Pending",
+      "type": "Bank"
+    },
+    {
+      "applicationId": "APP-J821950",
+      "assignedTo": "Super Admin",
+      "checkId": "VER-21950-1",
+      "customer": "samrat",
+      "dueDate": "2026-08-20T12:07:01.949Z",
+      "evidence": "Pending source validation",
+      "id": "ver-auto-app-msymatku-w0ywv-kyc",
+      "status": "Pending",
+      "type": "KYC"
+    },
+    {
+      "applicationId": "APP-J821950",
+      "assignedTo": "Super Admin",
+      "checkId": "VER-21950-2",
+      "customer": "samrat",
+      "dueDate": "2026-08-21T12:07:01.949Z",
+      "evidence": "Pending source validation",
+      "id": "ver-auto-app-msymatku-w0ywv-address",
+      "status": "Pending",
+      "type": "Address"
+    },
+    {
+      "applicationId": "APP-J821950",
+      "assignedTo": "Super Admin",
+      "checkId": "VER-21950-3",
+      "customer": "samrat",
+      "dueDate": "2026-08-22T12:07:01.949Z",
+      "evidence": "Pending source validation",
+      "id": "ver-auto-app-msymatku-w0ywv-employment",
+      "status": "Pending",
+      "type": "Employment"
+    },
+    {
+      "applicationId": "APP-J821950",
+      "assignedTo": "Super Admin",
+      "checkId": "VER-21950-4",
+      "customer": "samrat",
+      "dueDate": "2026-08-23T12:07:01.949Z",
+      "evidence": "Pending source validation",
+      "id": "ver-auto-app-msymatku-w0ywv-bank",
+      "status": "Pending",
+      "type": "Bank"
+    },
     {
       "applicationId": "APP-00075",
       "assignedTo": "admin",
