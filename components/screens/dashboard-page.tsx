@@ -1097,7 +1097,7 @@ export function DashboardPage() {
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-slate-950 capitalize">{log.action.replace(/_/g, " ")}</p>
                         <p className="text-xs text-slate-500">
-                          {log.user?.name || "System"} · {log.group.replace(/_/g, " ")} · {formatDate(log.created_at)}
+                          {log.user?.name || "System"} · {(log.group ?? "").replace(/_/g, " ")} · {formatDate(log.created_at)}
                         </p>
                       </div>
                       <StatusBadge status={log.status_code >= 400 ? "Warning" : "Info"} />
