@@ -979,69 +979,52 @@ export function SellNowPage() {
                     </Select>
                   </Field>
                 ) : null}
-                <ApplicantFields
-                  draft={applicant}
-                  onChange={(patch) => setApplicant((current) => ({ ...current, ...patch }))}
-                  requireKyc={mode === "assist"}
-                />
-
                 {mode === "send" ? (
-                  <div className="space-y-4">
-                    <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
-                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Journey link</p>
-                          <p className="mt-1 break-all text-sm font-medium text-slate-950">{shareLink || "Select a journey"}</p>
-                        </div>
-                        <Button onClick={() => copyLink(shareLink)} type="button" variant="outline">
-                          <Copy className="h-4 w-4" />
-                          Copy Link
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap justify-end gap-2">
-                      {isBankJourneyUser ? (
-                        <Button onClick={() => sendJourney("Email")} type="button" variant="outline">
-                          <Mail className="h-4 w-4" />
-                          Send Email
-                        </Button>
-                      ) : null}
-                      <Button onClick={() => sendJourney("SMS")} type="button">
-                        <MessageSquare className="h-4 w-4" />
-                        Send SMS
-                      </Button>
-                    </div>
-                    {lastLink ? (
-                      <div className="flex flex-col gap-3 rounded-md bg-emerald-50 p-3 text-sm font-medium text-emerald-700 md:flex-row md:items-center md:justify-between">
-                        <span className="break-all">Journey link ready: {lastLink}</span>
-                        <Button onClick={() => copyLink(lastLink)} type="button" variant="outline">
-                          <Copy className="h-4 w-4" />
-                          Copy Link
-                        </Button>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : (
-                  <div className="space-y-5">
-                    {journey ? (
-                      <JourneyStepper
-                        fieldValues={fieldValues}
-                        journey={journey}
-                        onFieldChange={(id, value) => setFieldValues((current) => ({ ...current, [id]: value }))}
-                        onStepChange={setStepIndex}
-                        onSubmit={createAssistedApplication}
-                        stepIndex={stepIndex}
-                      />
-                    ) : null}
-                    <div className="flex flex-wrap items-center justify-end gap-2">
-                      {createdApplication ? (
-                        <Link href={`/applications/${createdApplication.id}`}>
-                          <Button type="button" variant="outline">
-                            Open {createdApplication.applicationId}
+                  <>
+                    <ApplicantFields
+                      draft={applicant}
+                      onChange={(patch) => setApplicant((current) => ({ ...current, ...patch }))}
+                      requireKyc={false}
+                    />
+                    <div className="space-y-4">
+                      <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Journey link</p>
+                            <p className="mt-1 break-all text-sm font-medium text-slate-950">{shareLink || "Select a journey"}</p>
+                          </div>
+                          <Button onClick={() => copyLink(shareLink)} type="button" variant="outline">
+                            <Copy className="h-4 w-4" />
+                            Copy Link
                           </Button>
-                        </Link>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {isBankJourneyUser ? (
+                          <Button onClick={() => sendJourney("Email")} type="button" variant="outline">
+                            <Mail className="h-4 w-4" />
+                            Send Email
+                          </Button>
+                        ) : null}
+                        <Button onClick={() => sendJourney("SMS")} type="button">
+                          <MessageSquare className="h-4 w-4" />
+                          Send SMS
+                        </Button>
+                      </div>
+                      {lastLink ? (
+                        <div className="flex flex-col gap-3 rounded-md bg-emerald-50 p-3 text-sm font-medium text-emerald-700 md:flex-row md:items-center md:justify-between">
+                          <span className="break-all">Journey link ready: {lastLink}</span>
+                          <Button onClick={() => copyLink(lastLink)} type="button" variant="outline">
+                            <Copy className="h-4 w-4" />
+                            Copy Link
+                          </Button>
+                        </div>
                       ) : null}
                     </div>
+                  </>
+                ) : (
+                  <div className="text-center py-12 text-slate-500 font-medium text-sm bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                    No form is configured under Fill on Behalf mode as of now.
                   </div>
                 )}
               </CardContent>
