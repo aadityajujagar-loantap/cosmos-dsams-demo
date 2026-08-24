@@ -4,7 +4,7 @@ import { Fragment, useState, useEffect, useCallback } from "react";
 import { Layers, Plus, Shield, Edit, Trash2, AlertCircle, TrendingUp, Users, Calendar, Check, Send, X } from "lucide-react";
 
 import { ActionPair, PageHeader } from "@/components/module";
-import { Button, Modal } from "@/components/ui/primitives";
+import { Button, Modal, Select } from "@/components/ui/primitives";
 import { FieldConfig, RecordForm } from "@/components/ui/record-form";
 import { adminApi } from "@/apis/admin";
 import { useToast } from "@/components/ui/toast";
@@ -222,8 +222,8 @@ function SlabsTab() {
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2">
-          <select
-            className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          <Select
+            className="w-44"
             onChange={(event) => setProductFilter(event.target.value)}
             value={productFilter}
           >
@@ -233,9 +233,9 @@ function SlabsTab() {
                 {product.name}
               </option>
             ))}
-          </select>
-          <select
-            className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          </Select>
+          <Select
+            className="w-44"
             onChange={(event) => setBandFilter(event.target.value)}
             value={bandFilter}
           >
@@ -245,7 +245,7 @@ function SlabsTab() {
                 {band}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
         {canEdit && (

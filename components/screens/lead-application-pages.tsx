@@ -678,6 +678,19 @@ export function ApplicationDetailPage({ id }: { id: string }) {
             riskScore: 35,
             verificationStatus: "Pending" as VerificationStatus,
             createdAt: backendApp.application_date || new Date().toISOString(),
+            pan: backendApp.pan || backendApp.pan_number || "",
+            aadhaar: backendApp.aadhaar || backendApp.aadhaar_number || "",
+            salary: Number(backendApp.salary || backendApp.monthly_income || 0),
+            decisionSummary: backendApp.decision_summary || "In Review",
+            journey: {
+              journeyId: `journey-${id}`,
+              name: "DSA Onboarding",
+              product: (backendApp.loan_product || backendApp.loan_type || "Personal Loan") as Product,
+              channel: "DSA",
+              completedSteps: [],
+              currentStep: "Document Review",
+              fields: [],
+            },
             notes: [],
             timeline: [
               {
@@ -732,11 +745,14 @@ export function ApplicationDetailPage({ id }: { id: string }) {
   const canVerifyDocuments = currentUser?.role === "DSA Manager" || currentUser?.role === "DSA Credit";
   const documents: DocumentRecord[] = backendDocs.map((doc: any) => ({
     id: String(doc.id),
-    applicationId: doc.application_id,
+    documentId: String(doc.id),
+    applicationId: String(doc.application_id || ""),
     type: doc.doc_type,
-    name: doc.file_name,
+    fileName: doc.file_name || "",
+    ownerName: doc.owner_name || "",
+    size: doc.file_size || doc.size || "0 KB",
     status: doc.is_verified ? "Verified" : "Pending",
-    remarks: "",
+    remarks: doc.remarks || "",
     uploadedAt: doc.verified_at || new Date().toISOString(),
   }));
   const isCustomerApplication = currentUser?.role === "Customer" && application.customer === currentUser.name;
@@ -767,6 +783,7 @@ export function ApplicationDetailPage({ id }: { id: string }) {
   const tatTargets = [1, 2, 1, 2, 1, 1, 1];
 
   function uploadCustomerDocument(event: FormEvent<HTMLInputElement>) {
+    if (!application) return;
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = "";
     if (!file || !isCustomerApplication) return;
@@ -803,7 +820,7 @@ export function ApplicationDetailPage({ id }: { id: string }) {
     });
   }
   function addNote() {
-    if (!note.trim()) return;
+    if (!application || !note.trim()) return;
     updateItem("applications", application.id, {
       notes: [note.trim(), ...application.notes],
       timeline: [
@@ -830,7 +847,7 @@ export function ApplicationDetailPage({ id }: { id: string }) {
   }
 
   function submitDeviationNote() {
-    if (!application.deviation?.required || !deviationApproverRole) return;
+    if (!application || !application.deviation?.required || !deviationApproverRole) return;
     const inboxNote = getDeviationInboxNote();
     if (!inboxNote) return;
 
@@ -860,7 +877,7 @@ export function ApplicationDetailPage({ id }: { id: string }) {
   }
 
   function resolveDeviation(resolution: "Approved" | "Rejected") {
-    if (!application.deviation?.required || !deviationApproverRole) return;
+    if (!application || !application.deviation?.required || !deviationApproverRole) return;
     const inboxNote = getDeviationInboxNote();
     if (!inboxNote) return;
 

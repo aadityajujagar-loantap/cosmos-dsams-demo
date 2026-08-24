@@ -64,6 +64,8 @@ export interface Dsa {
   status_reason_by: string | null;
   created_at: string;
   updated_at: string;
+  login_username?: string;
+  login_password?: string;
   documents?: DsaDocument[];
   approvals?: DsaApproval[];
   related_users?: {

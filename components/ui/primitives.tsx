@@ -1,7 +1,7 @@
 "use client";
 
-import { X } from "lucide-react";
-import {
+import { X, ChevronDown, Search } from "lucide-react";
+import React, {
   ButtonHTMLAttributes,
   HTMLAttributes,
   InputHTMLAttributes,
@@ -10,6 +10,11 @@ import {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
   useEffect,
+  useState,
+  useRef,
+  useMemo,
+  Children,
+  isValidElement,
 } from "react";
 
 import { cn } from "@/lib/utils";
@@ -137,15 +142,171 @@ export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTex
   );
 }
 
-export function Select({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+export function Select({
+  className,
+  children,
+  onChange,
+  value,
+  disabled,
+  name,
+  id,
+  placeholder,
+  ...props
+}: SelectHTMLAttributes<HTMLSelectElement> & { placeholder?: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const options = useMemo(() => {
+    const list: { value: string; label: string }[] = [];
+    Children.forEach(children, (child) => {
+      if (isValidElement(child) && child.type === "option") {
+        const props = child.props as any;
+        list.push({
+          value: String(props.value ?? ""),
+          label: String(props.children ?? props.value ?? ""),
+        });
+      }
+    });
+    return list;
+  }, [children]);
+
+  const selectedOption = useMemo(() => {
+    return options.find((opt) => opt.value === value) || options[0];
+  }, [options, value]);
+
+  const filteredOptions = useMemo(() => {
+    if (!searchQuery.trim()) return options;
+    const q = searchQuery.toLowerCase();
+    return options.filter((opt) =>
+      opt.label.toLowerCase().includes(q)
+    );
+  }, [options, searchQuery]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      const timer = setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
+
+  const handleSelect = (selectedValue: string) => {
+    if (onChange) {
+      const event = {
+        target: {
+          value: selectedValue,
+          name: name || "",
+          id: id || "",
+        },
+        currentTarget: {
+          value: selectedValue,
+          name: name || "",
+          id: id || "",
+        }
+      } as unknown as React.ChangeEvent<HTMLSelectElement>;
+      onChange(event);
+    }
+    setIsOpen(false);
+    setSearchQuery("");
+  };
+
   return (
-    <select
-      className={cn(
-        "h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100",
-        className,
+    <div className={cn("relative w-full", className)} ref={containerRef}>
+      <select
+        className="sr-only"
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        name={name}
+        id={id}
+        tabIndex={-1}
+        {...props}
+      >
+        {children}
+      </select>
+
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          "flex h-9 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:opacity-50 disabled:pointer-events-none disabled:bg-slate-50",
+          isOpen && "border-blue-500 ring-2 ring-blue-100"
+        )}
+      >
+        <span className="truncate">{selectedOption?.label || placeholder || "Select..."}</span>
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 text-slate-400 transition-transform duration-200",
+            isOpen && "rotate-180"
+          )}
+        />
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 right-0 z-50 mt-1 flex max-h-60 w-full flex-col overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg animate-in fade-in slide-in-from-top-1 duration-100">
+          <div className="flex items-center border-b border-slate-100 bg-slate-50 px-2.5">
+            <Search className="h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              ref={searchInputRef}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search..."
+              className="h-8 w-full bg-transparent px-2 text-sm text-slate-800 placeholder:text-slate-400 outline-none"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="rounded-full p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+          <div className="flex-1 overflow-y-auto py-1">
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((opt) => {
+                const isSelected = opt.value === value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => handleSelect(opt.value)}
+                    className={cn(
+                      "flex w-full items-center px-3 py-2 text-left text-sm transition-colors hover:bg-slate-50",
+                      isSelected
+                        ? "bg-blue-50 font-medium text-blue-700"
+                        : "text-slate-700"
+                    )}
+                  >
+                    <span className="truncate">{opt.label}</span>
+                  </button>
+                );
+              })
+            ) : (
+              <div className="px-3 py-2.5 text-center text-xs text-slate-400">
+                No options found
+              </div>
+            )}
+          </div>
+        </div>
       )}
-      {...props}
-    />
+    </div>
   );
 }
 
