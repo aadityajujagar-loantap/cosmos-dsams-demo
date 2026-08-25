@@ -973,6 +973,306 @@ export function SellNowPage() {
     }
   }
 
+  function applyDecodedMeta(metaList: any[]) {
+    if (!metaList || !Array.isArray(metaList)) return;
+
+    const metaMap: Record<string, any> = {};
+    metaList.forEach((item) => {
+      if (item && item.meta_key) {
+        metaMap[item.meta_key] = item.meta_value;
+      }
+    });
+
+    if (metaMap.is_existing_customer !== undefined) {
+      setIsExistingCustomer(metaMap.is_existing_customer === "1" || metaMap.is_existing_customer === true || String(metaMap.is_existing_customer) === "true");
+    }
+    if (metaMap.account_number !== undefined) {
+      setAccountNumber(metaMap.account_number ?? "");
+    }
+    if (metaMap.mobile !== undefined) {
+      setApplicant((curr) => ({ ...curr, mobile: metaMap.mobile ?? "" }));
+    }
+    if (metaMap.communication_consent !== undefined) {
+      setCommunicationConsent(metaMap.communication_consent === "1" || metaMap.communication_consent === true || String(metaMap.communication_consent) === "true");
+    }
+    if (metaMap.not_npa_defaulter_flag !== undefined) {
+      setNotNpaDefaulterFlag(metaMap.not_npa_defaulter_flag === "1" || metaMap.not_npa_defaulter_flag === true || String(metaMap.not_npa_defaulter_flag) === "true");
+    }
+
+    if (metaMap.state !== undefined) {
+      setSelectedStateName(metaMap.state ?? "");
+    }
+    if (metaMap.district !== undefined) {
+      setSelectedDistrictName(metaMap.district ?? "");
+    }
+    if (metaMap.branch !== undefined) {
+      setSelectedBranchName(metaMap.branch ?? "");
+    }
+
+    if (metaMap.pan !== undefined) {
+      setPanNumber(metaMap.pan ?? "");
+    }
+
+    if (metaMap.personal_details) {
+      try {
+        const details = typeof metaMap.personal_details === "string" 
+          ? JSON.parse(metaMap.personal_details) 
+          : metaMap.personal_details;
+        if (details.email_id) setPersonalEmailId(details.email_id);
+        if (details.gender) setPersonalGender(details.gender);
+        if (details.dob) setPersonalDob(details.dob);
+        if (details.no_of_dependents) setPersonalDependents(String(details.no_of_dependents));
+        if (details.marital_status) setPersonalMaritalStatus(details.marital_status);
+        if (details.religion) setPersonalReligion(details.religion);
+        if (details.category) setPersonalCategory(details.category);
+      } catch (e) {
+        console.error("Failed to parse personal_details meta:", e);
+      }
+    }
+
+    if (metaMap.permanent_address) {
+      try {
+        const addr = typeof metaMap.permanent_address === "string"
+          ? JSON.parse(metaMap.permanent_address)
+          : metaMap.permanent_address;
+        const val1 = addr.permanent_address_line1 || addr.perm_addr_1;
+        if (val1) setPermAddr1(val1);
+        const val2 = addr.permanent_address_line2 || addr.perm_addr_2;
+        if (val2) setPermAddr2(val2);
+        if (addr.perm_addr_3) setPermAddr3(addr.perm_addr_3);
+        const city = addr.permanent_city || addr.perm_city;
+        if (city) setPermCity(city);
+        if (addr.perm_district) setPermDistrict(addr.perm_district);
+        const pin = addr.permanent_pincode || addr.perm_pincode;
+        if (pin) setPermPincode(pin);
+        const state = addr.permanent_state || addr.perm_state;
+        if (state) setPermState(state);
+        const country = addr.permanent_country || addr.perm_country;
+        if (country) setPermCountry(country);
+        const ownership = addr.permanent_residence_ownership || addr.perm_residence_ownership;
+        if (ownership) setPermOwnership(ownership);
+      } catch (e) {
+        console.error("Failed to parse permanent_address meta:", e);
+      }
+    }
+    if (metaMap.current_address) {
+      try {
+        const addr = typeof metaMap.current_address === "string"
+          ? JSON.parse(metaMap.current_address)
+          : metaMap.current_address;
+        const val1 = addr.current_address_line1 || addr.curr_addr_1;
+        if (val1) setCurrAddr1(val1);
+        const val2 = addr.current_address_line2 || addr.curr_address_2;
+        if (val2) setCurrAddr2(val2);
+        const city = addr.current_city || addr.curr_city;
+        if (city) setCurrCity(city);
+        const pin = addr.current_pincode || addr.curr_pincode;
+        if (pin) setCurrPincode(pin);
+        const state = addr.current_state || addr.curr_state;
+        if (state) setCurrState(state);
+        const country = addr.current_country || addr.curr_country;
+        if (country) setCurrCountry(country);
+      } catch (e) {
+        console.error("Failed to parse current_address meta:", e);
+      }
+    }
+
+    if (metaMap.educational_qualification !== undefined) {
+      setEduQualification(metaMap.educational_qualification ?? "");
+    }
+
+    if (metaMap.occupation !== undefined) {
+      const occ = metaMap.occupation;
+      setOccupation(occ === "service" ? "Salaried" : occ === "business" ? "Self Employed" : occ === "professional" ? "Professional" : occ);
+    }
+
+    if (metaMap.orgnization_details || metaMap.organization_details) {
+      try {
+        const org = typeof (metaMap.orgnization_details ?? metaMap.organization_details) === "string"
+          ? JSON.parse(metaMap.orgnization_details ?? metaMap.organization_details)
+          : (metaMap.orgnization_details ?? metaMap.organization_details);
+        if (org.employer_name) setEmployerName(org.employer_name);
+        if (org.nature_of_org) setNatureOfOrg(org.nature_of_org);
+        if (org.work_email) setWorkEmail(org.work_email);
+        if (org.work_phone) setWorkPhone(org.work_phone);
+        if (org.total_work_exp) setTotalWorkExp(String(org.total_work_exp));
+        if (org.remaining_service_period) setRemainingServicePeriod(String(org.remaining_service_period));
+        if (org.retirement_age) setRetirementAge(String(org.retirement_age));
+        if (org.designation) setDesignation(org.designation);
+        if (org.org_address) setOrgAddress(org.org_address);
+        if (org.business_email) setBusinessEmail(org.business_email);
+        if (org.org_name) setOrgName(org.org_name);
+        if (org.business_since_date) setBusinessSinceDate(org.business_since_date);
+        if (org.profession) setProfession(org.profession);
+      } catch (e) {
+        console.error("Failed to parse organization details meta:", e);
+      }
+    }
+
+    if (metaMap.avg_monthly_income !== undefined) {
+      setAvgMonthlyIncome(String(metaMap.avg_monthly_income ?? ""));
+    }
+    if (metaMap.monthly_deduction !== undefined) {
+      setMonthlyDeduction(String(metaMap.monthly_deduction ?? ""));
+    }
+    if (metaMap.existing_monthly_obligations !== undefined) {
+      setExistingObligations(String(metaMap.existing_monthly_obligations ?? ""));
+    }
+    if (metaMap.total_monthly_income !== undefined) {
+      setTotalMonthlyIncome(String(metaMap.total_monthly_income ?? ""));
+    }
+
+    if (metaMap.loan_product !== undefined) {
+      setLoanProduct(metaMap.loan_product ?? "2");
+    }
+    if (metaMap.loan_scheme !== undefined) {
+      setLoanScheme(metaMap.loan_scheme ?? "");
+    }
+    if (metaMap.loan_amount_requested !== undefined) {
+      setLoanAmountRequested(String(metaMap.loan_amount_requested ?? ""));
+    }
+    if (metaMap.loan_period_requested !== undefined) {
+      setLoanPeriodRequested(String(metaMap.loan_period_requested ?? ""));
+    }
+    if (metaMap.loan_purpose !== undefined) {
+      setLoanPurpose(metaMap.loan_purpose ?? "");
+    }
+
+    if (metaMap.eligible !== undefined) {
+      setEligibleOffer({
+        eligible: metaMap.eligible === "1" || metaMap.eligible === true || String(metaMap.eligible) === "true",
+        sanction_amount: metaMap.sanction_amount ? Number(metaMap.sanction_amount) : undefined,
+        eligible_loan_amount: metaMap.eligible_loan_amount ? Number(metaMap.eligible_loan_amount) : undefined,
+        roi: metaMap.eligible_roi ? Number(metaMap.eligible_roi) : undefined,
+        emi: metaMap.eligible_emi ? Number(metaMap.eligible_emi) : undefined,
+        tenure: metaMap.eligible_tenure ? Number(metaMap.eligible_tenure) : undefined,
+      });
+    }
+  }
+
+  function applyDecodedMetaFromBase64(base64Str: string) {
+    if (!base64Str) return;
+    try {
+      const jsonStr = window.atob(base64Str);
+      const metaList = JSON.parse(jsonStr);
+      applyDecodedMeta(metaList);
+    } catch (e) {
+      console.error("Failed to decode base64 application_data:", e);
+    }
+  }
+
+  async function loadAndRestoreApplication(appId: string) {
+    try {
+      const res = await adminApi.getApplicationDetails(appId);
+      const resData = res?.data || res;
+      if (resData?.status === "success" && resData.application) {
+        const metaList = Object.entries(resData.application).map(([key, value]) => ({
+          meta_key: key,
+          meta_value: value,
+        }));
+        applyDecodedMeta(metaList);
+
+        if (resData.coapplicants && Array.isArray(resData.coapplicants) && resData.coapplicants.length > 0) {
+          setHasCoApplicant(true);
+          const restoredCoapps = resData.coapplicants.map((co: any) => ({
+            title: co.title || "Mr.",
+            first_name: co.first_name || "",
+            middle_name: co.middle_name || "",
+            last_name: co.last_name || "",
+            email_id: co.email_id || "",
+            phone: co.phone || "",
+            pan: co.pan || "",
+            relationship: co.relationship || "Relative",
+            gender: co.gender || "M",
+            marital_status: co.marital_status || "Single",
+            dob: co.dob || "",
+            perm_addr_1: co.perm_addr_1 || "",
+            perm_addr_2: co.perm_addr_2 || "",
+            perm_addr_3: co.perm_addr_3 || "",
+            perm_state: co.perm_state || "",
+            perm_district: co.perm_district || "",
+            perm_pincode: co.perm_pincode || "",
+            perm_ownership: co.perm_ownership || "",
+            perm_country: co.perm_country || "India",
+            same_as_perm: co.same_as_perm === 1 || co.same_as_perm === true || String(co.same_as_perm) === "true" || String(co.same_as_perm) === "1",
+            curr_addr_1: co.curr_addr_1 || "",
+            curr_city: co.curr_city || "",
+            curr_pincode: co.curr_pincode || "",
+            curr_state: co.curr_state || "",
+            curr_country: co.curr_country || "India",
+            avg_monthly_income: co.avg_monthly_income || "",
+            monthly_deduction: co.monthly_deduction || "",
+            existing_monthly_obligations: co.existing_monthly_obligations || "",
+            educational_qualification: co.educational_qualification || "",
+            occupation: co.occupation === "service" ? "Salaried" : co.occupation === "business" ? "Self Employed" : co.occupation === "professional" ? "Professional" : (co.occupation || "Salaried"),
+          }));
+          setCoApplicantsList(restoredCoapps);
+        }
+
+        if (resData.documents && Array.isArray(resData.documents) && resData.documents.length > 0) {
+          resData.documents.forEach((doc: any) => {
+            const mockFile = new File([""], doc.file_name, { type: "application/pdf" });
+            Object.defineProperty(mockFile, 'size', { value: doc.file_size || 0 });
+            if (doc.doc_type === "Identity Proof") {
+              setIdentityProofFile(mockFile);
+              if (doc.doc_sub_type) setIdentityProofType(doc.doc_sub_type);
+            } else if (doc.doc_type === "Address Proof") {
+              setAddressProofFile(mockFile);
+              if (doc.doc_sub_type) setAddressProofType(doc.doc_sub_type);
+            } else if (doc.doc_type === "Income Proof") {
+              setIncomeProofFile(mockFile);
+              if (doc.doc_sub_type) setIncomeProofType(doc.doc_sub_type);
+            } else if (doc.doc_type === "Bank Statement") {
+              setBankStatementFile(mockFile);
+            } else if (doc.doc_type === "Salary Slips") {
+              setSalarySlipsFile(mockFile);
+            }
+          });
+        }
+
+        const restoredStep = resData.application.current_step;
+        if (restoredStep) {
+          setCurrentStepKey(restoredStep);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load and restore application:", e);
+    }
+  }
+
+  useEffect(() => {
+    if (journeyApplicationId) {
+      loadAndRestoreApplication(journeyApplicationId);
+    }
+  }, [journeyApplicationId]);
+
+  useEffect(() => {
+    if (selectedStateName && statesList.length > 0) {
+      const matched = statesList.find((s) => s.state_name === selectedStateName);
+      if (matched && matched.state_code !== selectedStateCode) {
+        setSelectedStateCode(matched.state_code);
+      }
+    }
+  }, [selectedStateName, statesList, selectedStateCode]);
+
+  useEffect(() => {
+    if (selectedDistrictName && districtsList.length > 0) {
+      const matched = districtsList.find((d) => d.district_name === selectedDistrictName);
+      if (matched && matched.district_code !== selectedDistrictCode) {
+        setSelectedDistrictCode(matched.district_code);
+      }
+    }
+  }, [selectedDistrictName, districtsList, selectedDistrictCode]);
+
+  useEffect(() => {
+    if (selectedBranchName && branchesList.length > 0) {
+      const matched = branchesList.find((b) => b.branch_name === selectedBranchName);
+      if (matched && matched.branch_code !== selectedBranchCode) {
+        setSelectedBranchCode(matched.branch_code);
+      }
+    }
+  }, [selectedBranchName, branchesList, selectedBranchCode]);
+
   // ── Generic process step handler with proper error extraction ───────────
   async function processStep(stepKey: string, payload: Record<string, any>): Promise<any> {
     const res = await adminApi.processLoanStep(stepKey, payload, "PERSONAL_LOAN");
@@ -982,6 +1282,9 @@ export function SellNowPage() {
         ? Object.values(resData.errors as Record<string, any>).flat().join(" ")
         : resData.message;
       throw new Error(errMessages || "Step failed.");
+    }
+    if (resData?.application_data) {
+      applyDecodedMetaFromBase64(resData.application_data);
     }
     return resData;
   }
