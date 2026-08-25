@@ -47,3 +47,12 @@ export async function request<T = any>(
 
   return response.json() as Promise<T>;
 }
+
+export async function rawRequest(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<Response> {
+  const rootUrl = BASE_URL.replace(/\/api$/, "");
+  const response = await fetch(`${rootUrl}/${endpoint.replace(/^\//, "")}`, options);
+  return response;
+}
