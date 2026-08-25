@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useMockStore } from "@/lib/store";
 import { useProduct } from "@/hooks/useProduct";
 import { useToast } from "@/components/ui/toast";
+import { useDsa } from "@/hooks/useDsa";
 import { PageHeader } from "@/components/module";
 import {
   Button,
@@ -57,6 +58,11 @@ export function ProductSettingPage() {
   const { store, createItem, updateItem, currentUser } = useMockStore();
   const { toast } = useToast();
   const { products, fetchProducts, schemes, fetchSchemes } = useProduct();
+  const { dsas, fetchDsas } = useDsa();
+
+  useEffect(() => {
+    fetchDsas();
+  }, [fetchDsas]);
 
   const [product, setProduct] = useState<Product | "">("");
   const [partner, setPartner] = useState<string>("");
@@ -248,7 +254,7 @@ export function ProductSettingPage() {
       return;
     }
 
-    const selectedDsa = store.dsas.find((dsa) => dsa.id === partner && dsa.status === "Active");
+    const selectedDsa = dsas.find((dsa) => String(dsa.id) === partner && (dsa.operational_status === "ACTIVE" || dsa.onboarding_status === "APPROVED"));
     if (!selectedDsa) {
       toast({
         title: "Select Active DSA",
@@ -268,7 +274,7 @@ export function ProductSettingPage() {
     }
 
     const existingConfig = store.dsaProductConfigs.find(
-      (config) => config.dsaId === selectedDsa.id && config.product === product,
+      (config) => config.dsaId === String(selectedDsa.id) && config.product === product,
     );
     const configId = existingConfig?.id ?? draftConfigId;
     const landingEndpoint = journeyUrl(configId);
@@ -278,7 +284,7 @@ export function ProductSettingPage() {
       configuredAt: new Date().toISOString(),
       configuredBy: currentUser?.name ?? DEMO_USERS.admin.name,
       dsaCode: selectedDsa.code,
-      dsaId: selectedDsa.id,
+      dsaId: String(selectedDsa.id),
       dsaName: selectedDsa.name,
       loanUrl: landingEndpoint,
       product,
@@ -313,14 +319,14 @@ export function ProductSettingPage() {
     });
   };
 
-  const activeDsas = store.dsas.filter((d: any) => d.status === "Active" || d.operational_status === "ACTIVE" || d.onboarding_status === "APPROVED");
-  const selectedDsa = store.dsas.find((dsa) => dsa.id === partner);
-  const productCommissions = store.commissions.filter((commission) => commission.dsaId === partner && commission.product === product);
+  const activeDsas = dsas.filter((d: any) => d.operational_status === "ACTIVE" || d.onboarding_status === "APPROVED");
+  const selectedDsa = dsas.find((dsa) => String(dsa.id) === partner);
+  const productCommissions = store.commissions.filter((commission) => String(commission.dsaId) === partner && commission.product === product);
   const latestDisbursement = productCommissions[0]?.disbursedAmount ?? 0;
   const previousDisbursement = productCommissions[1]?.disbursedAmount ?? 0;
   const growthEligible = latestDisbursement > previousDisbursement;
   const selectedConfig = product && partner
-    ? store.dsaProductConfigs.find((config) => config.dsaId === partner && config.product === product)
+    ? store.dsaProductConfigs.find((config) => String(config.dsaId) === partner && config.product === product)
     : undefined;
   const activeEndpoint = product && partner ? journeyUrl(selectedConfig?.id ?? draftConfigId) : "";
   const parsedMinRange = Number(minRange);

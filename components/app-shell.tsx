@@ -230,19 +230,22 @@ export function AppShell({ children }: { children: ReactNode }) {
           ? [
               {
                 items: [
-
-
                   { href: "/administration/users", icon: Users, label: "User Management" },
                   { href: "/administration/roles", icon: ShieldCheck, label: "Roles & Permissions" },
                   { href: "/administration/branch-roles", icon: ShieldCheck, label: "Branch Roles" },
                   { href: "/administration/user-branch-mappings", icon: Users, label: "User Branch Mappings" },
+                ],
+                label: "Administration",
+              },
+              {
+                items: [
                   { href: "/administration/location-hierarchy", icon: MapPin, label: "Location Hierarchy" },
                   { href: "/administration/audit-logs", icon: FileText, label: "Audit Logs" },
                   ...(hasPermission("maker_requests.view")
                     ? [{ href: "/administration/maker-requests", icon: ClipboardCheck, label: "Maker Requests" }]
                     : []),
                 ],
-                label: "Administration",
+                label: "System Operations",
               },
             ]
           : []),
@@ -533,7 +536,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 }}
               >
                 <Icon className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate text-sm leading-5">{item.label}</span>
+                <span className="truncate text-sm font-medium leading-5">{item.label}</span>
               </Link>
             </div>
           );
@@ -559,7 +562,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               <span className="flex min-w-0 items-center gap-2.5">
                 <GroupIcon className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate text-sm leading-5">{group.label}</span>
+                <span className="truncate text-sm font-medium leading-5">{group.label}</span>
               </span>
               <ChevronDown
                 className={cn(
@@ -591,7 +594,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                         onClick={() => setMobileOpen(false)}
                       >
                         <Icon className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate text-sm leading-5">{item.label}</span>
+                        <span className="truncate text-sm font-medium leading-5">{item.label}</span>
                       </Link>
                     );
                   })}

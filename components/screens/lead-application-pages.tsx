@@ -12,6 +12,15 @@ import {
   Search,
   UploadCloud,
   ShieldAlert,
+  User,
+  Phone,
+  Mail,
+  MapPin,
+  Calendar,
+  ExternalLink,
+  Copy,
+  Landmark,
+  ShieldCheck,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -41,6 +50,8 @@ import { FieldConfig, RecordForm } from "@/components/ui/record-form";
 import { DEMO_USERS } from "@/lib/demo-identities";
 import { buildApplicationJourney } from "@/lib/product-journeys";
 import { useMockStore } from "@/lib/store";
+import { useDsa } from "@/hooks/useDsa";
+import { useToast } from "@/components/ui/toast";
 import {
   Application,
   DeviationApproverRole,
@@ -159,13 +170,38 @@ function newLead(value: Partial<Lead>, dsaId: string, dsaName: string): Lead {
 
 export function LeadsPage() {
   const { createItem, deleteItem, store, updateItem, currentUser } = useMockStore();
+  const { dsas, fetchDsas } = useDsa();
+  const { toast } = useToast();
   const [view, setView] = useState("table");
   const [status, setStatus] = useState("");
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Lead | null>(null);
   const [selected, setSelected] = useState<Lead | null>(null);
+  const [selectedDetail, setSelectedDetail] = useState<any | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!selected) {
+      setSelectedDetail(null);
+      return;
+    }
+    const leadId = selected.id;
+    async function fetchDetail() {
+      setDetailLoading(true);
+      try {
+        const res = await adminApi.getLeadDetail(leadId);
+        setSelectedDetail(res.data);
+      } catch (err) {
+        console.error("Failed to load lead detail from backend:", err);
+        setSelectedDetail(null);
+      } finally {
+        setDetailLoading(false);
+      }
+    }
+    fetchDetail();
+  }, [selected]);
 
   function translateLeadStatus(s: string): LeadStatus {
     const statusUpper = String(s).toUpperCase();
@@ -173,6 +209,10 @@ export function LeadsPage() {
     if (statusUpper === "CONVERTED") return "Converted";
     return "In Progress";
   }
+
+  useEffect(() => {
+    fetchDsas();
+  }, [fetchDsas]);
 
   useEffect(() => {
     async function fetchLeads() {
@@ -198,13 +238,13 @@ export function LeadsPage() {
         setLeads(mapped);
       } catch (err) {
         console.error("Failed to load leads from backend:", err);
-        setLeads(store.leads);
+        setLeads([]);
       } finally {
         setLoading(false);
       }
     }
     fetchLeads();
-  }, [store.leads]);
+  }, []);
 
   let rows = status ? leads.filter((item) => item.status === status) : leads;
   if (currentUser?.role === "Customer") {
@@ -215,8 +255,8 @@ export function LeadsPage() {
       item.dsaName === currentUser.name
     );
   }
-  const defaultDsa = store.dsas.find((d) => d.status === "Active") || store.dsas[0];
-  const activeDsas = store.dsas.filter((d) => d.status === "Active");
+  const defaultDsa = dsas.find((d) => d.operational_status === "ACTIVE" || d.onboarding_status === "APPROVED") || dsas[0];
+  const activeDsas = dsas.filter((d) => d.operational_status === "ACTIVE" || d.onboarding_status === "APPROVED");
   const isDsaPartner = currentUser?.role === "DSA Partner";
 
   const leadFormFields = useMemo(() => {
@@ -324,50 +364,151 @@ export function LeadsPage() {
         </div>
       )}
 
-      <Modal onClose={() => setSelected(null)} open={Boolean(selected)} title={selected?.customer ?? "Lead"} width="max-w-xl">
-        {selected ? (() => {
-          const linkedApplication = store.applications.find(
-            (application) =>
-              application.dsaId === selected.dsaId &&
-              application.customer === selected.customer &&
-              application.product === selected.product,
-          );
-
-          return (
-            <div className="space-y-4">
-              <DetailGrid>
-                <DetailItem label="Lead ID" value={selected.leadId} />
-                <DetailItem label="Status" value={<StatusBadge status={selected.status} />} />
-                <DetailItem label="Product" value={selected.product} />
-                <DetailItem label="Amount" value={formatCurrency(selected.amount)} />
-                <DetailItem label="DSA" value={selected.dsaName} />
-                <DetailItem label="Next action" value={selected.nextAction} />
-              </DetailGrid>
-              <Card>
-                <CardHeader>
-                  <h2 className="text-sm font-semibold text-slate-950">Lead TAT Timeline</h2>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {[
-                    ["Lead captured", formatDate(selected.createdAt), "Done"],
-                    [`Current status: ${selected.status}`, `${daysOpenSince(selected.createdAt)} day(s) open`, selected.status],
-                    [
-                      linkedApplication ? `Converted to ${linkedApplication.applicationId}` : "Application not created yet",
-                      linkedApplication ? formatDate(linkedApplication.createdAt) : selected.nextAction,
-                      linkedApplication ? linkedApplication.status : "Pending action",
-                    ],
-                  ].map(([title, meta, statusValue]) => (
-                    <div className="border-l-2 border-blue-100 pl-3" key={title}>
-                      <p className="text-sm font-semibold text-slate-950">{title}</p>
-                      <p className="text-xs text-slate-500">{meta}</p>
-                      <p className="mt-1"><StatusBadge status={statusValue} /></p>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
+      <Modal onClose={() => setSelected(null)} open={Boolean(selected)} title={selectedDetail?.CustName || selected?.customer || "Lead Details"} width="max-w-2xl">
+        {selected ? (
+          detailLoading ? (
+            <div className="flex h-48 items-center justify-center">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
             </div>
-          );
-        })() : null}
+          ) : selectedDetail ? (
+            <div className="space-y-6">
+              {/* Profile / Details Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <User className="h-4 w-4 text-blue-600" />
+                    <div>
+                      <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Customer Name</p>
+                      <p className="text-sm font-semibold text-slate-800">{selectedDetail.CustName}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Phone className="h-4 w-4 text-blue-600" />
+                    <div>
+                      <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Mobile Number</p>
+                      <p className="text-sm font-semibold text-slate-800">{selectedDetail.mobile || "N/A"}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Mail className="h-4 w-4 text-blue-600" />
+                    <div>
+                      <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Email Address</p>
+                      <p className="text-sm font-semibold text-slate-800">{selectedDetail.email || "N/A"}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <MapPin className="h-4 w-4 text-blue-600" />
+                    <div>
+                      <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Location</p>
+                      <p className="text-sm font-semibold text-slate-800">
+                        {selectedDetail.city && selectedDetail.state 
+                          ? `${selectedDetail.city}, ${selectedDetail.state}` 
+                          : selectedDetail.city || selectedDetail.state || "N/A"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <FileText className="h-4 w-4 text-blue-600" />
+                    <div>
+                      <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Lead UUID</p>
+                      <p className="text-xs font-mono text-slate-800">{selectedDetail.lead_uuid || selectedDetail.id}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Landmark className="h-4 w-4 text-blue-600" />
+                    <div>
+                      <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Branch & Subregion</p>
+                      <p className="text-sm font-semibold text-slate-800">
+                        Branch: {selectedDetail.Branch_id || "N/A"} · Subregion: {selectedDetail.subregion_id || "N/A"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <ShieldCheck className="h-4 w-4 text-blue-600" />
+                    <div>
+                      <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">DSA Channel</p>
+                      <p className="text-sm font-semibold text-slate-800">Code: {selectedDetail.DSACode || "Direct"}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Calendar className="h-4 w-4 text-blue-600" />
+                    <div>
+                      <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Created Date</p>
+                      <p className="text-sm font-semibold text-slate-800">{formatDate(selectedDetail.created_at)}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status Section */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 bg-white rounded-xl border border-slate-100 shadow-sm gap-4">
+                <div>
+                  <p className="text-xs text-slate-500 font-medium">Lifecycle Status</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <StatusBadge status={translateLeadStatus(selectedDetail.status)} />
+                    <span className="text-xs text-slate-400">(Backend: {selectedDetail.status})</span>
+                  </div>
+                </div>
+                {selectedDetail.application_id && (
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium">Converted Application</p>
+                    <Link
+                      href={`/applications/${selectedDetail.application_id}`}
+                      className="inline-flex items-center gap-1.5 mt-1 text-sm font-bold text-blue-600 hover:text-blue-700 hover:underline"
+                    >
+                      {selectedDetail.application_id}
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  </div>
+                )}
+              </div>
+
+              {/* Application Link Section */}
+              {selectedDetail.application_link && (
+                <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100 space-y-2">
+                  <p className="text-xs font-semibold text-blue-900">Unique Customer Loan Application Link</p>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    This link can be shared with the customer to complete their loan onboarding journey.
+                  </p>
+                  <div className="flex gap-2 mt-2">
+                    <input
+                      readOnly
+                      type="text"
+                      value={selectedDetail.application_link}
+                      className="flex-1 bg-white px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-mono text-slate-700 select-all focus:outline-none"
+                    />
+                    <Button
+                      onClick={() => {
+                        navigator.clipboard.writeText(selectedDetail.application_link);
+                        toast({
+                          title: "Link copied",
+                          description: "Application URL copied to clipboard.",
+                          variant: "success",
+                        });
+                      }}
+                      size="sm"
+                      type="button"
+                    >
+                      <Copy className="h-3.5 w-3.5 mr-1" />
+                      Copy
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <EmptyState title="Lead not found" description="Failed to retrieve this lead details from database." />
+          )
+        ) : null}
       </Modal>
 
       <Modal onClose={() => setCreating(false)} open={creating} title="Create lead">
@@ -382,7 +523,7 @@ export function LeadsPage() {
           onCancel={() => setCreating(false)}
           onSubmit={(value) => {
             const matchedDsa = activeDsas.find((d) => d.name === value.dsaName) ?? defaultDsa;
-            const dsaId = isDsaPartner ? (currentUser.id || defaultDsa.id) : matchedDsa.id;
+            const dsaId = isDsaPartner ? (currentUser.id || String(defaultDsa.id)) : String(matchedDsa.id);
             const dsaName = isDsaPartner ? currentUser.name : matchedDsa.name;
             createItem("leads", newLead(value, dsaId, dsaName));
             setCreating(false);
@@ -509,13 +650,13 @@ export function ApplicationsPage() {
         setApplications(apps);
       } catch (err) {
         console.error("Failed to load applications list from backend:", err);
-        setApplications(store.applications);
+        setApplications([]);
       } finally {
         setLoading(false);
       }
     }
     loadApplications();
-  }, [store.applications]);
+  }, []);
 
   let rows = applications;
   if (currentUser?.role === "Customer") {
@@ -705,19 +846,17 @@ export function ApplicationDetailPage({ id }: { id: string }) {
           setApplication(mappedApp);
           setBackendDocs(data.documents || []);
         } else {
-          const localApp = store.applications.find((item) => item.id === id || item.applicationId === id);
-          if (localApp) setApplication(localApp);
+          setApplication(null);
         }
       } catch (err) {
         console.error("Failed to load application details from backend:", err);
-        const localApp = store.applications.find((item) => item.id === id || item.applicationId === id);
-        if (localApp) setApplication(localApp);
+        setApplication(null);
       } finally {
         setLoading(false);
       }
     }
     loadAppDetails();
-  }, [id, store.applications]);
+  }, [id]);
 
   if (loading) {
     return (

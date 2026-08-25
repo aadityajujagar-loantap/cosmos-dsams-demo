@@ -1,4 +1,4 @@
-﻿import { request } from "./client";
+import { request } from "./client";
 import type { MakerRequest, MakerRequestActionType, MakerRequestStatus } from "@/types/makerChecker";
 import type { Permission, Role, User, BranchRole } from "@/types/auth";
 import type { ActivityLog } from "@/types/activityLog";
@@ -311,6 +311,18 @@ export const adminApi = {
     return request<Role>(`/admin/roles/${roleId}/permissions`, {
       method: "POST",
       body: JSON.stringify({ permissions: permissionNames }),
+    });
+  },
+
+  grantRolePermission: (roleId: number, permissionId: number): Promise<{ message?: string }> => {
+    return request<{ message?: string }>(`/admin/roles/${roleId}/permissions/${permissionId}`, {
+      method: "POST",
+    });
+  },
+
+  revokeRolePermission: (roleId: number, permissionId: number): Promise<{ message?: string }> => {
+    return request<{ message?: string }>(`/admin/roles/${roleId}/permissions/${permissionId}`, {
+      method: "DELETE",
     });
   },
 
@@ -1029,6 +1041,10 @@ export const adminApi = {
     if (params?.per_page) searchParams.append("per_page", String(params.per_page));
     if (params?.page) searchParams.append("page", String(params.page));
     return request<BackendResponse<any>>(`/leads?${searchParams.toString()}`, { method: "GET" });
+  },
+
+  getLeadDetail: async (id: number | string): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/leads/${id}`, { method: "GET" });
   },
 
   getApplicationDetails: async (applicationId: string): Promise<any> => {

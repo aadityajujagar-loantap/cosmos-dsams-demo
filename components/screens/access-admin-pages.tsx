@@ -645,21 +645,26 @@ export function RolesPage() {
 
   async function togglePermission(permission: Permission) {
     if (!selectedRole) return;
-    const current = new Set(selectedPermissionNames);
-    if (current.has(permission.name)) {
-      current.delete(permission.name);
-    } else {
-      current.add(permission.name);
-    }
+    const hasPerm = selectedPermissionNames.has(permission.name);
 
     try {
-      const updated = await adminApi.syncRolePermissions(selectedRole.id, Array.from(current));
-      setRoles((items) => items.map((role) => (role.id === updated.id ? updated : role)));
-      toast({ title: "Permissions updated", description: selectedRole.name, variant: "success" });
+      if (hasPerm) {
+        await adminApi.revokeRolePermission(selectedRole.id, permission.id);
+        const updatedPermissions = (selectedRole.permissions || []).filter((p) => p.id !== permission.id);
+        const updated = { ...selectedRole, permissions: updatedPermissions };
+        setRoles((items) => items.map((role) => (role.id === updated.id ? updated : role)));
+        toast({ title: "Permission revoked", description: `${permission.name} removed from ${selectedRole.name}`, variant: "success" });
+      } else {
+        await adminApi.grantRolePermission(selectedRole.id, permission.id);
+        const updatedPermissions = [...(selectedRole.permissions || []), permission];
+        const updated = { ...selectedRole, permissions: updatedPermissions };
+        setRoles((items) => items.map((role) => (role.id === updated.id ? updated : role)));
+        toast({ title: "Permission granted", description: `${permission.name} added to ${selectedRole.name}`, variant: "success" });
+      }
     } catch (error: any) {
       toast({
-        title: "Permission sync failed",
-        description: error.message || "Could not update role permissions.",
+        title: "Permission update failed",
+        description: error.message || "Could not update role permission.",
         variant: "warning",
       });
     }
