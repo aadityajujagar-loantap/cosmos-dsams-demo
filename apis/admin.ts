@@ -1047,6 +1047,29 @@ export const adminApi = {
     return request<BackendResponse<any>>(`/leads/${id}`, { method: "GET" });
   },
 
+  getCaptcha: async (): Promise<any> => {
+    return request<any>("/auth/captcha", { method: "GET" });
+  },
+
+  processLoanStep: async (
+    stepKey: string,
+    payload: any,
+    loanType: string = "PERSONAL_LOAN"
+  ): Promise<any> => {
+    return request<any>("/v1/loan/process-step", {
+      method: "POST",
+      headers: {
+        "X-Tenant-ID": "cosmos-bank",
+        "X-API-Token": "ijkyWTMMuVWqDaGJFiEWQd2jogOuvO8QdkDBMWUG882HXQPvqg2StcydbAUiNH4J",
+      },
+      body: JSON.stringify({
+        step_key: stepKey,
+        loan_type: loanType,
+        payload,
+      }),
+    });
+  },
+
   getApplicationDetails: async (applicationId: string): Promise<any> => {
     return request<any>(`/v1/loan/applications/${applicationId}`, {
       method: "GET",
@@ -1054,6 +1077,23 @@ export const adminApi = {
         "X-Tenant-ID": "cosmos-bank",
         "X-API-Token": "ijkyWTMMuVWqDaGJFiEWQd2jogOuvO8QdkDBMWUG882HXQPvqg2StcydbAUiNH4J",
       },
+    });
+  },
+
+  downloadOfferLetter: async (applicationId: string, currentStep: string = "LOAN_APPLICATION", sectionId: string = "loan_application_submitted"): Promise<any> => {
+    return request<any>("/v1/loan/loan-offers", {
+      method: "POST",
+      headers: {
+        "X-Tenant-ID": "cosmos-bank",
+        "X-API-Token": "ijkyWTMMuVWqDaGJFiEWQd2jogOuvO8QdkDBMWUG882HXQPvqg2StcydbAUiNH4J",
+      },
+      body: JSON.stringify({
+        step_key: currentStep,
+        payload: {
+          application_id: applicationId,
+          section_id: sectionId,
+        },
+      }),
     });
   },
 };
