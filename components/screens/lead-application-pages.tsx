@@ -594,59 +594,37 @@ export function ApplicationsPage() {
   useEffect(() => {
     async function loadApplications() {
       try {
-        const leadsRes = await adminApi.getLeads({ per_page: 100 });
-        const leadsList = leadsRes?.data?.items || [];
-        const convertedLeads = leadsList.filter((l: any) => l.application_id);
+        const res = await adminApi.getApplicationDetails("");
+        const resData = res?.data || res;
+        const appsList = resData?.applications || [];
 
-        const apps = await Promise.all(
-          convertedLeads.map(async (lead: any) => {
-            try {
-              const appRes = await adminApi.getApplicationDetails(lead.application_id);
-              const backendApp = appRes?.data?.application || {};
-              return {
-                id: lead.application_id,
-                applicationId: lead.application_id,
-                customer: lead.CustName || "Customer",
-                mobile: lead.mobile || "",
-                email: lead.email || "",
-                city: lead.city || "",
-                dsaId: lead.DSACode || "",
-                dsaName: lead.dsa?.name || lead.DSACode || "Direct",
-                product: (backendApp.loan_product || backendApp.loan_type || "Personal Loan") as Product,
-                loanAmount: Number(backendApp.loan_amount_requested || 250000),
-                stage: translateStage(backendApp.stage || "aadhaar_kyc_initiated"),
-                status: translateStatus(backendApp.status || "application-in-progress"),
-                creditScore: 650,
-                riskScore: 35,
-                verificationStatus: "Pending" as VerificationStatus,
-                createdAt: lead.created_at || new Date().toISOString(),
-                notes: [],
-                timeline: [],
-              };
-            } catch (err) {
-              return {
-                id: lead.application_id,
-                applicationId: lead.application_id,
-                customer: lead.CustName || "Customer",
-                mobile: lead.mobile || "",
-                email: lead.email || "",
-                city: lead.city || "",
-                dsaId: lead.DSACode || "",
-                dsaName: lead.DSACode || "Direct",
-                product: "Personal Loan" as Product,
-                loanAmount: 250000,
-                stage: "Lead Capture" as ApplicationStage,
-                status: "In Review" as ApplicationStatus,
-                creditScore: 650,
-                riskScore: 35,
-                verificationStatus: "Pending" as VerificationStatus,
-                createdAt: lead.created_at || new Date().toISOString(),
-                notes: [],
-                timeline: [],
-              };
-            }
-          })
-        );
+        const apps = appsList.map((appItem: any) => {
+          const appId = appItem.application_id;
+          const backendApp = appItem.application || {};
+          const fullName = `${backendApp.first_name || ""} ${backendApp.last_name || ""}`.trim();
+
+          return {
+            id: appId,
+            applicationId: appId,
+            customer: fullName || "Customer",
+            mobile: backendApp.mobile || "",
+            email: backendApp.email || "",
+            city: backendApp.city || "",
+            dsaId: backendApp.DSACode || "",
+            dsaName: dsaById.get(backendApp.DSACode)?.name || backendApp.DSACode || "Direct",
+            product: (backendApp.loan_product || backendApp.loan_type || "Personal Loan") as Product,
+            loanAmount: Number(backendApp.loan_amount_requested || 250000),
+            stage: translateStage(backendApp.stage || "aadhaar_kyc_initiated"),
+            status: translateStatus(backendApp.status || "application-in-progress"),
+            creditScore: 650,
+            riskScore: 35,
+            verificationStatus: "Pending" as VerificationStatus,
+            createdAt: backendApp.application_date || new Date().toISOString(),
+            notes: [],
+            timeline: [],
+          };
+        });
+
         setApplications(apps);
       } catch (err) {
         console.error("Failed to load applications list from backend:", err);

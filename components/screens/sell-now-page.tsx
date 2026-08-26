@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { BookOpen, CheckCircle2, Copy, FileSpreadsheet, Loader2, Mail, MessageSquare, Send, UploadCloud, RefreshCw, ShieldCheck } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import type { ChangeEvent } from "react";
 
 import { DetailItem, PageHeader } from "@/components/module";
@@ -32,7 +32,7 @@ import {
   JourneyApplicantInput,
 } from "@/lib/product-journeys";
 import { useMockStore } from "@/lib/store";
-import { Application, ApplicationJourney, DsaProductConfig } from "@/lib/types";
+import { Application, ApplicationJourney, DsaProductConfig, Product } from "@/lib/types";
 import { commissionDisplayLabel, formatCommissionDisplay, formatCurrency, cn } from "@/lib/utils";
 
 function fileToBase64(file: File): Promise<string> {
@@ -417,39 +417,61 @@ function JourneySelection({
   lockDsa,
   onDsaChange,
   onProductChange,
+  onSchemeChange,
   selectedDsaId,
   selectedProduct,
+  selectedSchemeId,
+  dsas,
+  schemes,
+  loadingProducts,
+  loadingSchemes,
 }: {
   configs: DsaProductConfig[];
   lockDsa?: boolean;
   onDsaChange: (value: string) => void;
   onProductChange: (value: string) => void;
+  onSchemeChange: (value: string) => void;
   selectedDsaId: string;
   selectedProduct: string;
+  selectedSchemeId: string;
+  dsas: any[];
+  schemes: any[];
+  loadingProducts?: boolean;
+  loadingSchemes?: boolean;
 }) {
-  const dsaOptions = Array.from(new Map(configs.map((config) => [config.dsaId, config])).values());
   const productOptions = configs.filter((config) => config.dsaId === selectedDsaId);
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid gap-4 md:grid-cols-3">
       <Field>
         <Label htmlFor="sellNowDsa">DSA partner</Label>
         <Select disabled={lockDsa} id="sellNowDsa" onChange={(event) => onDsaChange(event.target.value)} value={selectedDsaId}>
           <option value="">Select DSA</option>
-          {dsaOptions.map((config) => (
-            <option key={config.dsaId} value={config.dsaId}>
-              {config.dsaName} ({config.dsaCode})
+          {dsas.map((dsa) => (
+            <option key={dsa.id} value={String(dsa.id)}>
+              {dsa.name} ({dsa.code})
             </option>
           ))}
         </Select>
       </Field>
       <Field>
         <Label htmlFor="sellNowProduct">Journey / product</Label>
-        <Select id="sellNowProduct" onChange={(event) => onProductChange(event.target.value)} value={selectedProduct}>
-          <option value="">Select journey</option>
+        <Select disabled={!selectedDsaId || loadingProducts} id="sellNowProduct" onChange={(event) => onProductChange(event.target.value)} value={selectedProduct}>
+          <option value="">{loadingProducts ? "Loading products..." : "Select journey"}</option>
           {productOptions.map((config) => (
             <option key={config.id} value={config.product}>
               {config.product} Journey
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field>
+        <Label htmlFor="sellNowScheme">Loan Scheme</Label>
+        <Select disabled={!selectedProduct || loadingSchemes} id="sellNowScheme" onChange={(event) => onSchemeChange(event.target.value)} value={selectedSchemeId}>
+          <option value="">{loadingSchemes ? "Loading schemes..." : "Select Scheme"}</option>
+          {schemes.map((s) => (
+            <option key={s.id} value={String(s.id)}>
+              {s.name}
             </option>
           ))}
         </Select>
@@ -557,8 +579,116 @@ export function SellNowPage() {
   const { createItem, currentUser, store } = useMockStore();
   const { toast } = useToast();
   const isDsaPartner = currentUser?.role === "DSA Partner";
+  const [realDsas, setRealDsas] = useState<any[]>([]);
+  const [realProducts, setRealProducts] = useState<any[]>([]);
+  const [realSchemes, setRealSchemes] = useState<any[]>([]);
+  const [fetchingProducts, setFetchingProducts] = useState(false);
+  const [fetchingSchemes, setFetchingSchemes] = useState(false);
+
+  useEffect(() => {
+    async function loadInitialData() {
+      try {
+        const dsasRes = await adminApi.getDsas({ per_page: 100 });
+        const dsas = dsasRes?.data?.items ?? [];
+        setRealDsas(dsas);
+
+        const draft = loadSellNowDraft();
+        const initialDsaId = isDsaPartner ? (dsas[0]?.id || "") : (draft.selectedDsaId || "");
+
+        if (initialDsaId) {
+          setFetchingProducts(true);
+          const productsRes = await adminApi.getProductsList();
+          const products = productsRes?.data || [];
+          setRealProducts(products);
+
+          const initialProduct = draft.selectedProduct || "";
+          if (initialProduct) {
+            setFetchingSchemes(true);
+            const matchedProduct = products.find(
+              (p) => p.name.toLowerCase() === initialProduct.toLowerCase()
+            );
+            if (matchedProduct) {
+              const schemesRes = await adminApi.getSchemes(matchedProduct.id);
+              setRealSchemes(schemesRes?.data || []);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load initial Sell Now data:", err);
+      } finally {
+        setFetchingProducts(false);
+        setFetchingSchemes(false);
+      }
+    }
+    loadInitialData();
+  }, [isDsaPartner]);
+
   const [selectedDsaId, setSelectedDsaId] = useState(() => loadSellNowDraft().selectedDsaId ?? "");
   const [selectedProduct, setSelectedProduct] = useState(() => loadSellNowDraft().selectedProduct ?? "");
+  const [selectedSchemeId, setSelectedSchemeId] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const draft = JSON.parse(localStorage.getItem(sellNowDraftKey) ?? "{}");
+        return draft.selectedSchemeId ?? "";
+      } catch {
+        return "";
+      }
+    }
+    return "";
+  });
+
+  const handleDsaChange = useCallback(async (dsaId: string) => {
+    setSelectedDsaId(dsaId);
+    setSelectedProduct("");
+    setSelectedSchemeId("");
+    setRealSchemes([]);
+    setFieldValues({});
+    setCreatedApplication(null);
+    setLastLink("");
+    setStepIndex(0);
+
+    if (dsaId) {
+      setFetchingProducts(true);
+      try {
+        const productsRes = await adminApi.getProductsList();
+        const products = productsRes?.data || [];
+        setRealProducts(products);
+      } catch (err) {
+        console.error("Failed to fetch products for selected DSA:", err);
+      } finally {
+        setFetchingProducts(false);
+      }
+    } else {
+      setRealProducts([]);
+    }
+  }, []);
+
+  const handleProductChange = useCallback(async (productName: string) => {
+    setSelectedProduct(productName);
+    setSelectedSchemeId("");
+    setRealSchemes([]);
+    setFieldValues({});
+    setCreatedApplication(null);
+    setLastLink("");
+    setStepIndex(0);
+
+    if (productName) {
+      setFetchingSchemes(true);
+      try {
+        const matchedProduct = realProducts.find(
+          (p) => p.name.toLowerCase() === productName.toLowerCase()
+        );
+        if (matchedProduct) {
+          const res = await adminApi.getSchemes(matchedProduct.id);
+          setRealSchemes(res?.data || []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch schemes for product:", err);
+      } finally {
+        setFetchingSchemes(false);
+      }
+    }
+  }, [realProducts]);
   const [mode, setMode] = useState(() => loadSellNowDraft().mode ?? "send");
   const [applicant, setApplicant] = useState<ApplicantDraft>(defaultApplicant);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
@@ -602,6 +732,7 @@ export function SellNowPage() {
     return null;
   });
 
+  const restoredRef = useRef(false);
   const [captchaKey, setCaptchaKey] = useState("");
   const [captchaImg, setCaptchaImg] = useState("");
   const [captchaValue, setCaptchaValue] = useState("");
@@ -941,6 +1072,7 @@ export function SellNowPage() {
 
   function handleResetJourney() {
     if (confirm("Are you sure you want to reset the onboarding session and start over?")) {
+      restoredRef.current = false;
       setCurrentStepKey("LOGIN_INITIATE");
       setJourneyApplicationId(null);
       setOtpReferenceId(null);
@@ -1161,6 +1293,45 @@ export function SellNowPage() {
     }
   }
 
+  function resolveStepFromDbState(status: string, stage: string, dbCurrentStep: string): string {
+    const statusLower = (status || "").toLowerCase();
+    const stageLower = (stage || "").toLowerCase();
+    
+    if (statusLower === "initiated") return "OTP_VERIFICATION";
+    if (statusLower === "otp-verified") return "BRANCH_SELECTION";
+    if (statusLower === "branch-selected") return "PERSONAL_DETAILS";
+    if (statusLower === "application-submitted") return "LOAN_APPLICATION_SUBMITTED";
+    
+    if (statusLower === "application-in-progress") {
+      if (stageLower === "aadhaar_kyc_initiated" || stageLower === "aadhaar_kyc_otp" || stageLower === "pan_verification") {
+        return "PERSONAL_DETAILS";
+      }
+      if (stageLower === "personal_details_completed" || stageLower === "personal_detail") {
+        return "OCCUPATION_DETAILS";
+      }
+      if (stageLower === "occupation_details_completed") {
+        return "INCOME_DETAILS";
+      }
+      if (stageLower === "income_details_completed") {
+        return "COAPP_DETAILS";
+      }
+      if (stageLower === "coapplicant_details_completed") {
+        return "LOAN_DETAILS";
+      }
+      if (stageLower === "loan_details_completed") {
+        return "LOAN_OFFER";
+      }
+      if (stageLower === "loan_offer_completed") {
+        return "DOCUMENT_UPLOAD";
+      }
+      if (stageLower === "document_upload_completed") {
+        return "LOAN_APPLICATION_SUBMITTED";
+      }
+    }
+    
+    return dbCurrentStep || "LOGIN_INITIATE";
+  }
+
   async function loadAndRestoreApplication(appId: string) {
     try {
       const res = await adminApi.getApplicationDetails(appId);
@@ -1230,9 +1401,13 @@ export function SellNowPage() {
           });
         }
 
-        const restoredStep = resData.application.current_step;
-        if (restoredStep) {
-          setCurrentStepKey(restoredStep);
+        const dbStatus = resData.application.status || "";
+        const dbStage = resData.application.stage || "";
+        const dbStep = resData.application.current_step || "";
+        const resolvedStep = resolveStepFromDbState(dbStatus, dbStage, dbStep);
+        setCurrentStepKey(resolvedStep);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("cosmos_assisted_step_key", resolvedStep);
         }
       }
     } catch (e) {
@@ -1241,7 +1416,8 @@ export function SellNowPage() {
   }
 
   useEffect(() => {
-    if (journeyApplicationId) {
+    if (journeyApplicationId && !restoredRef.current) {
+      restoredRef.current = true;
       loadAndRestoreApplication(journeyApplicationId);
     }
   }, [journeyApplicationId]);
@@ -1637,7 +1813,25 @@ export function SellNowPage() {
         documents: documentsPayload,
       });
 
-      setCurrentStepKey(resData.next_step || "LOAN_APPLICATION_SUBMITTED");
+      const nextStepKey = resData.next_step || "LOAN_APPLICATION_SUBMITTED";
+      setCurrentStepKey(nextStepKey);
+
+      // Sync the generated application to the frontend store
+      const nextApplication = createJourneyApplication({
+        actor: (currentUser?.name ?? applicant.customer) || "Customer",
+        applicant: toApplicant(applicant),
+        dsaId: effectiveConfig?.dsaId || "",
+        dsaName: effectiveConfig?.dsaName || "",
+        fieldValues,
+        product: effectiveConfig?.product || "Personal Loan",
+        source: "Assisted",
+      });
+      nextApplication.applicationId = journeyApplicationId;
+      nextApplication.status = "In Review";
+      nextApplication.stage = "Document Review";
+
+      createItem("applications", nextApplication);
+
       toast({ title: "Application Submitted! 🎉", description: "Documents uploaded successfully.", variant: "success" });
     } catch (err: any) {
       toast({ title: "Submission failed", description: err.message || "Failed to submit documents.", variant: "warning" });
@@ -1869,61 +2063,65 @@ export function SellNowPage() {
 
     setJourneyLoading(true);
     try {
-      let dsaCodeToUse = effectiveConfig.dsaCode;
-      let subregionId = "SR001";
-      let state = "Maharashtra";
-      let city = "Mumbai";
+      // Step 1: Resolve real backend DSA — match by name or use first seeded
+      const dsasRes = await adminApi.getDsas({ per_page: 50 });
+      const backendDsas = dsasRes?.data?.items ?? [];
+      if (!backendDsas.length) {
+        throw new Error("No DSA records found in backend. Please seed the database or onboard a DSA.");
+      }
+      const matchedDsa = backendDsas.find(
+        (d) => d.name?.toLowerCase() === effectiveConfig.dsaName?.toLowerCase()
+      ) ?? backendDsas[0];
+      const dsaCodeToUse = matchedDsa.code;
+      const dsaCity = matchedDsa.city ?? "";
+      const dsaState = matchedDsa.state ?? "";
 
-      try {
-        const dsaRes = await adminApi.getDsaDetail(effectiveConfig.dsaCode);
-        const dsa = dsaRes?.data;
-        if (dsa) {
-          if (dsa.subregion_id) subregionId = dsa.subregion_id;
-          if (dsa.state) state = dsa.state;
-          if (dsa.city) city = dsa.city;
-        }
-      } catch (dsaErr) {
-        console.warn("Could not retrieve partner details from backend, checking for fallback DSA:", dsaErr);
+      // Step 2: Resolve the first available branch from the backend
+      const branchesPage = await adminApi.getBranches({ per_page: 5 });
+      const branchList = branchesPage?.data ?? [];
+      if (!branchList.length) {
+        throw new Error("No branches found in backend. Please sync or create branches first.");
+      }
+      const firstBranch = branchList[0];
+      const branchCode = firstBranch.branch_code;
+      const subregionId = firstBranch.sub_region_code ?? "";
+
+
+      // Check if we already have a valid lead token in localStorage for this mobile
+      let leadUuid = null;
+      if (typeof window !== "undefined") {
+        leadUuid = localStorage.getItem("cosmos_assisted_lead_token");
+      }
+      let lead = null;
+
+      if (leadUuid) {
         try {
-          const dsasRes = await adminApi.getDsas({ per_page: 5 });
-          const seededDsas = dsasRes?.data?.items;
-          if (seededDsas && seededDsas.length > 0) {
-            const fallbackDsa = seededDsas[0];
-            dsaCodeToUse = fallbackDsa.code;
-            if (fallbackDsa.subregion_id) subregionId = fallbackDsa.subregion_id;
-            if (fallbackDsa.state) state = fallbackDsa.state;
-            if (fallbackDsa.city) city = fallbackDsa.city;
+          const existingLeads = await adminApi.getLeads({ search: applicant.mobile });
+          const items = existingLeads?.data?.items || [];
+          const matched = items.find((l: any) => l.lead_uuid === leadUuid);
+          if (matched) {
+            lead = matched;
+            console.log("Reusing existing lead:", lead);
           }
-        } catch (listErr) {
-          console.error("Failed to query fallback DSA list:", listErr);
+        } catch (e) {
+          console.warn("Failed to check existing lead, will create a new one:", e);
         }
       }
 
-      let branchCode = "BR001";
-      try {
-        const branchRes = await adminApi.getAdminBranches({ sub_region_code: subregionId, per_page: 5 });
-        const branchList = branchRes?.data?.data || branchRes?.data?.items;
-        if (branchList && branchList.length > 0) {
-          branchCode = branchList[0].branch_code;
-        } else if (currentUser?.code) {
-          branchCode = currentUser.code;
-        }
-      } catch (branchErr) {
-        console.warn("Failed to retrieve matching branch:", branchErr);
+      if (!lead) {
+        const leadRes = await adminApi.createLead({
+          CustName: applicant.customer,
+          mobile: applicant.mobile,
+          email: applicant.email,
+          city: applicant.city || dsaCity,
+          state: dsaState,
+          Branch_id: branchCode,
+          subregion_id: subregionId,
+          DSACode: dsaCodeToUse,
+        });
+        lead = leadRes?.data;
       }
 
-      const leadRes = await adminApi.createLead({
-        CustName: applicant.customer,
-        mobile: applicant.mobile,
-        email: applicant.email,
-        city: city,
-        state: state,
-        Branch_id: branchCode,
-        subregion_id: subregionId,
-        DSACode: dsaCodeToUse,
-      });
-
-      const lead = leadRes?.data;
       if (!lead || !lead.lead_uuid) {
         throw new Error("Failed to create Lead in database.");
       }
@@ -1957,6 +2155,7 @@ export function SellNowPage() {
         throw new Error(errMessages || "Failed to initiate loan login.");
       }
 
+      restoredRef.current = true;
       setJourneyApplicationId(resData.application_id);
       setOtpReferenceId(resData.opt_reference_id || resData.otp_reference_id);
       setCurrentStepKey(resData.next_step || "OTP_VERIFICATION");
@@ -2161,7 +2360,7 @@ export function SellNowPage() {
                             placeholder="Enter CAPTCHA exactly as shown"
                             value={captchaValue}
                             onChange={(e) => setCaptchaValue(e.target.value)}
-                            className="font-mono uppercase tracking-widest"
+                            className="font-mono tracking-widest"
                           />
                         </Field>
                         <p className="text-[11px] text-amber-600 font-medium flex items-center gap-1">
@@ -3374,26 +3573,105 @@ export function SellNowPage() {
         );
       }
 
-  const activeConfigs = useMemo(
-    () =>
-      getActiveProductConfigs(store, {
-        dsaId: isDsaPartner ? currentUser?.id : undefined,
-      }),
-    [currentUser?.id, isDsaPartner, store],
-  );
+  const activeDbDsas = useMemo(() => {
+    return realDsas.filter(
+      (d) => String(d.operational_status).toLowerCase() === "active" || String(d.status).toLowerCase() === "active" || d.onboarding_status === "APPROVED"
+    );
+  }, [realDsas]);
 
-  const effectiveDsaId =
-    selectedDsaId && activeConfigs.some((config) => config.dsaId === selectedDsaId)
-      ? selectedDsaId
-      : activeConfigs[0]?.dsaId ?? "";
+  const activeConfigs = useMemo(() => {
+    if (!activeDbDsas.length || !realProducts.length) {
+      return [];
+    }
+
+    const configs: DsaProductConfig[] = [];
+    const activeDbProducts = realProducts.filter(
+      (p) => String(p.status).toLowerCase() === "active"
+    );
+
+    activeDbDsas.forEach((dsa) => {
+      const dsaIdStr = String(dsa.id);
+      const dsaCodeLower = String(dsa.code).toLowerCase();
+      const dsaNameLower = String(dsa.name).toLowerCase();
+
+      // Check if custom product settings exist in the store for this active database DSA
+      const existingStoreConfigs = store.dsaProductConfigs.filter(
+        (c) =>
+          c.dsaId === dsaIdStr ||
+          c.dsaCode?.toLowerCase() === dsaCodeLower ||
+          c.dsaName?.toLowerCase() === dsaNameLower
+      );
+
+      if (existingStoreConfigs.length > 0) {
+        existingStoreConfigs.forEach((c) => {
+          configs.push({
+            ...c,
+            dsaId: dsaIdStr,
+            dsaCode: dsa.code,
+            dsaName: dsa.name,
+          });
+        });
+      } else {
+        // Fallback: seed default configurations for all active products
+        activeDbProducts.forEach((product) => {
+          configs.push({
+            id: `db-${dsa.code}-${product.name.replace(/\s+/g, "-")}`,
+            dsaId: dsaIdStr,
+            dsaName: dsa.name,
+            dsaCode: dsa.code,
+            product: product.name as Product,
+            status: "Active",
+            commissionType: "Tiered",
+            ranges: [
+              {
+                id: "r1",
+                min: 100000,
+                max: 1000000,
+                effectiveDate: "2026-08-01",
+                endDate: "2026-12-31",
+                frequency: "Monthly",
+                rate: 1.5
+              }
+            ],
+            loanUrl: "",
+            configuredAt: new Date().toISOString(),
+            configuredBy: "Admin",
+          });
+        });
+      }
+    });
+
+    if (isDsaPartner) {
+      const userCode = currentUser?.code || currentUser?.id || "";
+      const userName = currentUser?.name || "";
+      return configs.filter(
+        (c) => c.dsaCode?.toLowerCase() === userCode.toLowerCase() ||
+               c.dsaName?.toLowerCase() === userName.toLowerCase() ||
+               c.dsaId === userCode
+      );
+    }
+
+    return configs;
+  }, [realDsas, realProducts, store.dsaProductConfigs, isDsaPartner, currentUser]);
+
+  const effectiveDsaId = isDsaPartner
+    ? (activeConfigs[0]?.dsaId ?? "")
+    : (selectedDsaId && activeConfigs.some((config) => config.dsaId === selectedDsaId) ? selectedDsaId : "");
+
   const productsForDsa = activeConfigs.filter((config) => config.dsaId === effectiveDsaId);
+
   const effectiveProduct =
     selectedProduct && productsForDsa.some((config) => config.product === selectedProduct)
       ? selectedProduct
-      : productsForDsa[0]?.product ?? "";
+      : "";
+
   const effectiveConfig = activeConfigs.find(
     (config) => config.dsaId === effectiveDsaId && config.product === effectiveProduct,
   );
+
+  const isSelectionComplete = isDsaPartner
+    ? (!!effectiveProduct && !!selectedSchemeId)
+    : (!!effectiveDsaId && !!effectiveProduct && !!selectedSchemeId);
 
   const journey = effectiveConfig
     ? buildApplicationJourney(effectiveConfig.product, effectiveConfig.id.length + effectiveConfig.dsaCode.length, {
@@ -3415,10 +3693,11 @@ export function SellNowPage() {
         mode,
         selectedDsaId: effectiveDsaId,
         selectedProduct: effectiveProduct,
+        selectedSchemeId,
         stepIndex,
       }),
     );
-  }, [effectiveDsaId, effectiveProduct, lastLink, mode, stepIndex]);
+  }, [effectiveDsaId, effectiveProduct, selectedSchemeId, lastLink, mode, stepIndex]);
 
 
   async function copyText(label: string, value: string) {
@@ -3552,71 +3831,42 @@ export function SellNowPage() {
     }
 
     try {
-      let dsaCodeToUse = effectiveConfig.dsaCode;
-      let subregionId = "SR001";
-      let state = "Maharashtra";
-      let city = "Mumbai";
-
-      // 1. Resolve DSA location info from backend database
-      try {
-        const dsaRes = await adminApi.getDsaDetail(effectiveConfig.dsaCode);
-        const dsa = dsaRes?.data;
-        if (dsa) {
-          if (dsa.subregion_id) subregionId = dsa.subregion_id;
-          if (dsa.state) state = dsa.state;
-          if (dsa.city) city = dsa.city;
-        } else {
-          throw new Error("No data returned");
-        }
-      } catch (dsaErr) {
-        console.warn("Could not retrieve partner details from backend, checking for fallback DSA:", dsaErr);
-        // Attempt to fetch any existing DSA in backend database to use as fallback
-        try {
-          const dsasRes = await adminApi.getDsas({ per_page: 5 });
-          const seededDsas = dsasRes?.data?.items;
-          if (seededDsas && seededDsas.length > 0) {
-            const fallbackDsa = seededDsas[0];
-            dsaCodeToUse = fallbackDsa.code;
-            if (fallbackDsa.subregion_id) subregionId = fallbackDsa.subregion_id;
-            if (fallbackDsa.state) state = fallbackDsa.state;
-            if (fallbackDsa.city) city = fallbackDsa.city;
-            console.log("Resolved fallback DSA code:", dsaCodeToUse);
-          } else {
-            toast({
-              title: "Seeding required",
-              description: "No DSA records found in the backend database. Please run migrations & seeds or onboard a DSA.",
-              variant: "warning"
-            });
-            return;
-          }
-        } catch (listErr) {
-          console.error("Failed to query fallback DSA list:", listErr);
-          toast({ title: "Resolution failed", description: "Could not connect to backend to resolve partner code.", variant: "warning" });
-          return;
-        }
+      // Step 1: Resolve real backend DSA — match by name or use first seeded
+      const dsasRes = await adminApi.getDsas({ per_page: 50 });
+      const backendDsas = dsasRes?.data?.items ?? [];
+      if (!backendDsas.length) {
+        toast({
+          title: "Seeding required",
+          description: "No DSA records found in the backend database. Please run migrations & seeds or onboard a DSA.",
+          variant: "warning"
+        });
+        return;
       }
+      const matchedDsa = backendDsas.find(
+        (d) => d.name?.toLowerCase() === effectiveConfig.dsaName?.toLowerCase()
+      ) ?? backendDsas[0];
+      const dsaCodeToUse = matchedDsa.code;
+      const dsaCity = matchedDsa.city ?? "";
+      const dsaState = matchedDsa.state ?? "";
 
-      // 2. Resolve matching branch in same subregion
-      let branchCode = "BR001";
-      const branchRes = await adminApi.getAdminBranches({ sub_region_code: subregionId, per_page: 5 });
-      const branchList = branchRes?.data?.data || branchRes?.data?.items;
-      if (branchList && branchList.length > 0) {
-        branchCode = branchList[0].branch_code;
-      } else if (currentUser?.code && currentUser.code !== "COS-DSA-MH-MUM-001") {
-        branchCode = currentUser.code;
+      // Step 2: Resolve the first available branch from the backend
+      const branchesPage = await adminApi.getBranches({ per_page: 5 });
+      const branchList = branchesPage?.data ?? [];
+      if (!branchList.length) {
+        toast({ title: "No branches found", description: "Please sync or create branches in the backend first.", variant: "warning" });
+        return;
       }
+      const firstBranch = branchList[0];
+      const branchCode = firstBranch.branch_code;
+      const subregionId = firstBranch.sub_region_code ?? "";
 
-      // Format customer mobile and email with dummy fallbacks to ensure backend validation passes
-      const customerMobile = applicant.mobile || "9999999999";
-      const customerEmail = applicant.email || `${applicant.customer.toLowerCase().replace(/[^a-z0-9]/g, "") || "customer"}@example.com`;
 
-      // 3. Create Lead in backend database
       const leadRes = await adminApi.createLead({
         CustName: applicant.customer,
-        mobile: customerMobile,
-        email: customerEmail,
-        city: applicant.city || city,
-        state: state,
+        mobile: applicant.mobile,
+        email: applicant.email,
+        city: applicant.city || dsaCity,
+        state: dsaState,
         Branch_id: branchCode,
         subregion_id: subregionId,
         DSACode: dsaCodeToUse,
@@ -3718,134 +3968,121 @@ export function SellNowPage() {
       </div>
 
       {workspaceTab === "punch" ? (
-        activeConfigs.length ? (
+        activeDbDsas.length ? (
           <div className="space-y-6">
-            {!isDsaPartner ? (
-              <Card>
-                <CardHeader>
-                  <h2 className="text-base font-semibold text-slate-950">Journey selection</h2>
-                </CardHeader>
-                <CardContent className="space-y-5">
-                  <JourneySelection
-                    configs={activeConfigs}
-                    lockDsa={currentUser.role === "DSA Partner"}
-                    onDsaChange={(value) => {
-                      setSelectedDsaId(value);
-                      setSelectedProduct("");
-                      setFieldValues({});
-                      setCreatedApplication(null);
-                      setLastLink("");
-                      setStepIndex(0);
-                    }}
-                    onProductChange={(value) => {
-                      setSelectedProduct(value);
-                      setFieldValues({});
-                      setCreatedApplication(null);
-                      setLastLink("");
-                      setStepIndex(0);
-                    }}
-                    selectedDsaId={effectiveDsaId}
-                    selectedProduct={effectiveProduct}
-                  />
-                  {effectiveConfig ? (
-                    <div className="grid gap-3 md:grid-cols-3">
-                      <DetailItem label="DSA ID" value={effectiveConfig.dsaCode} />
-                      <DetailItem label="Configured product" value={effectiveConfig.product} />
-                      <DetailItem label="Commission type" value={effectiveConfig.commissionType} />
-                    </div>
-                  ) : null}
-                </CardContent>
-              </Card>
-            ) : null}
+            <Card>
+              <CardHeader>
+                <h2 className="text-base font-semibold text-slate-950">Journey selection</h2>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <JourneySelection
+                  configs={activeConfigs}
+                  lockDsa={currentUser.role === "DSA Partner"}
+                  onDsaChange={handleDsaChange}
+                  onProductChange={handleProductChange}
+                  onSchemeChange={setSelectedSchemeId}
+                  selectedDsaId={effectiveDsaId}
+                  selectedProduct={effectiveProduct}
+                  selectedSchemeId={selectedSchemeId}
+                  dsas={activeDbDsas}
+                  schemes={realSchemes}
+                  loadingProducts={fetchingProducts}
+                  loadingSchemes={fetchingSchemes}
+                />
+                {effectiveConfig ? (
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <DetailItem label="DSA ID" value={effectiveConfig.dsaCode} />
+                    <DetailItem label="Configured product" value={effectiveConfig.product} />
+                    <DetailItem label="Commission type" value={effectiveConfig.commissionType} />
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
 
             <Card>
               <CardHeader className="flex-row items-center justify-between gap-3">
                 <div>
                   <h2 className="text-base font-semibold text-slate-950">Journey action</h2>
-                  {effectiveConfig ? (
+                  {isSelectionComplete && effectiveConfig ? (
                     <p className="mt-1 text-xs text-slate-500">
                       {isDsaPartner ? effectiveConfig.product : `${effectiveConfig.dsaName} - ${effectiveConfig.product}`}
                     </p>
                   ) : null}
                 </div>
-                <Tabs
-                  onChange={setMode}
-                  tabs={[
-                    { label: "Send Link", value: "send" },
-                    { label: "Fill on Behalf", value: "assist" },
-                  ]}
-                  value={mode}
-                />
+                {isSelectionComplete ? (
+                  <Tabs
+                    onChange={setMode}
+                    tabs={[
+                      { label: "Send Link", value: "send" },
+                      { label: "Fill on Behalf", value: "assist" },
+                    ]}
+                    value={mode}
+                  />
+                ) : null}
               </CardHeader>
               <CardContent className="space-y-5">
-                {isDsaPartner ? (
-                  <Field className="max-w-md">
-                    <Label htmlFor="sellNowPartnerProduct">Loan product</Label>
-                    <Select
-                      id="sellNowPartnerProduct"
-                      onChange={(event) => {
-                        setSelectedProduct(event.target.value);
-                        setFieldValues({});
-                        setCreatedApplication(null);
-                        setLastLink("");
-                        setStepIndex(0);
-                      }}
-                      value={effectiveProduct}
-                    >
-                      <option value="">Select product</option>
-                      {productsForDsa.map((config) => (
-                        <option key={config.id} value={config.product}>
-                          {config.product}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                ) : null}
-                {mode === "send" ? (
-                  <>
-                    <ApplicantFields
-                      draft={applicant}
-                      onChange={(patch) => setApplicant((current) => ({ ...current, ...patch }))}
-                      requireKyc={false}
-                    />
-                    <div className="space-y-4">
-                      <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
-                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Journey link</p>
-                            <p className="mt-1 break-all text-sm font-medium text-slate-950">{shareLink || "Select a journey"}</p>
-                          </div>
-                          <Button onClick={() => copyLink(shareLink)} type="button" variant="outline">
-                            <Copy className="h-4 w-4" />
-                            Copy Link
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap justify-end gap-2">
-                        {isBankJourneyUser ? (
-                          <Button onClick={() => sendJourney("Email")} type="button" variant="outline">
-                            <Mail className="h-4 w-4" />
-                            Send Email
-                          </Button>
-                        ) : null}
-                        <Button onClick={() => sendJourney("SMS")} type="button">
-                          <MessageSquare className="h-4 w-4" />
-                          Send SMS
-                        </Button>
-                      </div>
-                      {lastLink ? (
-                        <div className="flex flex-col gap-3 rounded-md bg-emerald-50 p-3 text-sm font-medium text-emerald-700 md:flex-row md:items-center md:justify-between">
-                          <span className="break-all">Journey link ready: {lastLink}</span>
-                          <Button onClick={() => copyLink(lastLink)} type="button" variant="outline">
-                            <Copy className="h-4 w-4" />
-                            Copy Link
-                          </Button>
-                        </div>
-                      ) : null}
+                {!isSelectionComplete ? (
+                  <div className="text-center py-12 space-y-4">
+                    <div className="mx-auto w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 animate-pulse">
+                      <ShieldCheck className="h-6 w-6" />
                     </div>
-                  </>
+                    <div className="space-y-1">
+                      <p className="text-sm font-bold text-slate-900">Journey Action Locked</p>
+                      <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                        Please select a DSA Partner and Loan Product first to configure links or start an onboarding session.
+                      </p>
+                    </div>
+                  </div>
                 ) : (
-                  renderJourneyStep()
+                  <>
+
+                    {mode === "send" ? (
+                      <>
+                        <ApplicantFields
+                          draft={applicant}
+                          onChange={(patch) => setApplicant((current) => ({ ...current, ...patch }))}
+                          requireKyc={false}
+                        />
+                        <div className="space-y-4">
+                          <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
+                            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Journey link</p>
+                                <p className="mt-1 break-all text-sm font-medium text-slate-950">{shareLink || "Select a journey"}</p>
+                              </div>
+                              <Button onClick={() => copyLink(shareLink)} type="button" variant="outline">
+                                <Copy className="h-4 w-4" />
+                                Copy Link
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap justify-end gap-2">
+                            {isBankJourneyUser ? (
+                              <Button onClick={() => sendJourney("Email")} type="button" variant="outline">
+                                <Mail className="h-4 w-4" />
+                                Send Email
+                              </Button>
+                            ) : null}
+                            <Button onClick={() => sendJourney("SMS")} type="button">
+                              <MessageSquare className="h-4 w-4" />
+                              Send SMS
+                            </Button>
+                          </div>
+                          {lastLink ? (
+                            <div className="flex flex-col gap-3 rounded-md bg-emerald-50 p-3 text-sm font-medium text-emerald-700 md:flex-row md:items-center md:justify-between">
+                              <span className="break-all">Journey link ready: {lastLink}</span>
+                              <Button onClick={() => copyLink(lastLink)} type="button" variant="outline">
+                                <Copy className="h-4 w-4" />
+                                Copy Link
+                              </Button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </>
+                    ) : (
+                      renderJourneyStep()
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -3890,7 +4127,7 @@ export function SellNowPage() {
       ) : null}
 
       {workspaceTab === "bulk" ? (
-        activeConfigs.length ? (
+        activeDbDsas.length ? (
           <div className="space-y-6">
             {!isDsaPartner ? (
               <Card>
@@ -3901,18 +4138,27 @@ export function SellNowPage() {
                   <JourneySelection
                     configs={activeConfigs}
                     onDsaChange={(value) => {
-                      setSelectedDsaId(value);
-                      setSelectedProduct("");
+                      handleDsaChange(value);
                       setBulkFile(null);
                       setBulkResult(null);
                     }}
                     onProductChange={(value) => {
-                      setSelectedProduct(value);
+                      handleProductChange(value);
+                      setBulkFile(null);
+                      setBulkResult(null);
+                    }}
+                    onSchemeChange={(value) => {
+                      setSelectedSchemeId(value);
                       setBulkFile(null);
                       setBulkResult(null);
                     }}
                     selectedDsaId={effectiveDsaId}
                     selectedProduct={effectiveProduct}
+                    selectedSchemeId={selectedSchemeId}
+                    dsas={activeDbDsas}
+                    schemes={realSchemes}
+                    loadingProducts={fetchingProducts}
+                    loadingSchemes={fetchingSchemes}
                   />
                 </CardContent>
               </Card>
