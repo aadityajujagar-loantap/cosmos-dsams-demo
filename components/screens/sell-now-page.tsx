@@ -927,8 +927,41 @@ export function SellNowPage() {
   const [loanAmountRequested, setLoanAmountRequested] = useState("");
   const [loanPeriodRequested, setLoanPeriodRequested] = useState("");
   const [loanPurpose, setLoanPurpose] = useState("");
-  const [loanProduct, setLoanProduct] = useState("2");
+  const [loanProduct, setLoanProduct] = useState("");
   const [loanScheme, setLoanScheme] = useState("");
+
+  useEffect(() => {
+    if (selectedProduct && realProducts.length) {
+      const matchedProduct = realProducts.find(
+        (p) => p.name.toLowerCase() === selectedProduct.toLowerCase()
+      );
+      if (matchedProduct) {
+        setLoanProduct(String(matchedProduct.id));
+      }
+    }
+  }, [selectedProduct, realProducts]);
+
+  useEffect(() => {
+    if (selectedSchemeId) {
+      setLoanScheme(selectedSchemeId);
+    }
+  }, [selectedSchemeId]);
+
+  useEffect(() => {
+    if (loanProduct) {
+      async function fetchSchemesForJourney() {
+        try {
+          const res = await adminApi.getSchemes(Number(loanProduct));
+          setRealSchemes(res?.data || []);
+        } catch (err) {
+          console.warn("Failed to load schemes for product ID:", loanProduct, err);
+        }
+      }
+      fetchSchemesForJourney();
+    } else {
+      setRealSchemes([]);
+    }
+  }, [loanProduct]);
 
   // ── Step 9 & 10: Offer & Documents ─────────────────────────────────────────
   const [identityProofType, setIdentityProofType] = useState("Aadhaar Card");
@@ -1088,6 +1121,11 @@ export function SellNowPage() {
       setSelectedBranchCode("");
       setSelectedBranchName("");
       setEligibleOffer(null);
+      const matchedProduct = realProducts.find(
+        (p) => p.name.toLowerCase() === selectedProduct.toLowerCase()
+      );
+      setLoanProduct(matchedProduct ? String(matchedProduct.id) : "");
+      setLoanScheme(selectedSchemeId);
       if (typeof window !== "undefined") {
         localStorage.removeItem("cosmos_assisted_step_key");
         localStorage.removeItem("cosmos_assisted_application_id");
@@ -1594,7 +1632,9 @@ export function SellNowPage() {
         payload.org_address = orgAddress;
       }
       const resData = await processStep("OCCUPATION_DETAILS", payload);
-      setLoanScheme(isSalaried ? "4" : "5");
+      if (!selectedSchemeId) {
+        setLoanScheme(isSalaried ? "4" : "5");
+      }
       setCurrentStepKey(resData.next_step || "INCOME_DETAILS");
       toast({ title: "Occupation Saved", description: "Employment details saved successfully.", variant: "success" });
     } catch (err: any) {
@@ -3133,17 +3173,40 @@ export function SellNowPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
                     <Field>
                       <Label htmlFor="loanProdSel">LOAN PRODUCT <span className="text-red-500">*</span></Label>
-                      <Select id="loanProdSel" value={loanProduct} onChange={(e) => setLoanProduct(e.target.value)}>
-                        <option value="2">Personal Loan</option>
+                      <Select
+                        id="loanProdSel"
+                        value={loanProduct}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setLoanProduct(val);
+                          const matched = realProducts.find((p) => String(p.id) === val);
+                          if (matched) {
+                            setSelectedProduct(matched.name);
+                          }
+                        }}
+                      >
+                        <option value="">Select Product</option>
+                        {realProducts.map((p) => (
+                          <option key={p.id} value={String(p.id)}>{p.name}</option>
+                        ))}
                       </Select>
                     </Field>
 
                     <Field>
                       <Label htmlFor="loanSchemeSel">LOAN SCHEME <span className="text-red-500">*</span></Label>
-                      <Select id="loanSchemeSel" value={loanScheme} onChange={(e) => setLoanScheme(e.target.value)}>
+                      <Select
+                        id="loanSchemeSel"
+                        value={loanScheme}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setLoanScheme(val);
+                          setSelectedSchemeId(val);
+                        }}
+                      >
                         <option value="">Select Scheme</option>
-                        <option value="4">Salaried Personal Loan</option>
-                        <option value="5">Self-Employed Personal Loan</option>
+                        {realSchemes.map((s) => (
+                          <option key={s.id} value={String(s.id)}>{s.name}</option>
+                        ))}
                       </Select>
                     </Field>
 

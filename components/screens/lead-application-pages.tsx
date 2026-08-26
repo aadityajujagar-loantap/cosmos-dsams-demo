@@ -594,7 +594,7 @@ export function ApplicationsPage() {
   useEffect(() => {
     async function loadApplications() {
       try {
-        const res = await adminApi.getApplicationDetails("");
+        const res = await adminApi.getApplicationDetails("all");
         const resData = res?.data || res;
         const appsList = resData?.applications || [];
 
