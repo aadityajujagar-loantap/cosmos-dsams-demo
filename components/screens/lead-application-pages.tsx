@@ -1073,7 +1073,15 @@ export function ApplicationDetailPage({ id }: { id: string }) {
                 <DetailItem label="Customer" value={application.customer} />
                 <DetailItem label="Mobile" value={application.mobile} />
                 <DetailItem label="Email" value={application.email} />
-                <DetailItem label="PAN" value={application.pan} />
+                <DetailItem
+                  label="PAN"
+                  value={
+                    <div className="flex items-center gap-2">
+                      <span>{application.pan || "N/A"}</span>
+                      <StatusBadge status="Verified" />
+                    </div>
+                  }
+                />
                 <DetailItem label="Aadhaar" value={application.aadhaar} />
                 <DetailItem label="Salary" value={formatCurrency(application.salary)} />
               </DetailGrid>

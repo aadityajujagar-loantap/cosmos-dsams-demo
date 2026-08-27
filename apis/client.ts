@@ -37,9 +37,15 @@ export async function request<T = any>(
       errorData = { error: response.statusText };
     }
 
-    const error = new Error(
-      errorData.message || errorData.error || `HTTP error ${response.status}`
-    ) as RequestError;
+        const serverMsg =
+      errorData.message ||
+      errorData.data?.message ||
+      (errorData.data?.errors ? Object.values(errorData.data.errors).flat().join(" ") : null) ||
+      (errorData.errors ? Object.values(errorData.errors).flat().join(" ") : null) ||
+      errorData.error ||
+      `HTTP error ${response.status}`;
+
+    const error = new Error(serverMsg) as RequestError;
     error.status = response.status;
     error.data = errorData;
     throw error;

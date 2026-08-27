@@ -38,6 +38,7 @@ function SlabsTab() {
 
   // Modal and form states
   const [creating, setCreating] = useState(false);
+  const [editingSlab, setEditingSlab] = useState<any | null>(null);
   const [modalProductId, setModalProductId] = useState("");
   const [modalSchemeId, setModalSchemeId] = useState("");
   const [schemes, setSchemes] = useState<any[]>([]);
@@ -56,7 +57,7 @@ function SlabsTab() {
   const { currentUser } = useMockStore();
   const { toast } = useToast();
 
-  const mapBackendSlabToFrontend = (slab: any, schemeName: string, productName: string): LoanSlab => {
+  const mapBackendSlabToFrontend = (slab: any, schemeName: string, productName: string, schemeId?: number, productId?: number): any => {
     const scoreBandLabel = slab.score_band?.label || slab.score_band_label || "700-750";
     let cibilBand: CibilScoreBand = "700-750";
     if (scoreBandLabel.includes("800") && (scoreBandLabel.includes(">") || scoreBandLabel.includes("Above"))) {
@@ -71,14 +72,20 @@ function SlabsTab() {
 
     return {
       id: String(slab.id),
+      slabId: Number(slab.id),
+      schemeId: schemeId ? Number(schemeId) : Number(slab.loan_scheme_id || 0),
+      productId: productId ? Number(productId) : undefined,
       schemeName: schemeName,
       product: productName as any,
+      slabLabel: slab.slab_label || `Upto Rs. ${slab.max_loan_amount_val || 0} Lakhs`,
       maxLoanAmount: (slab.max_loan_amount_val || 0) * 100000,
       cibilScoreBand: cibilBand,
       gender: slab.gender === "Both" ? "All" : slab.gender,
       roiFloating: Number(slab.roi_floating_pct || 0),
       roiFixed: Number(slab.roi_fixed_pct || 0),
       maxLoanPeriodMonths: Number(slab.max_period_months || 0),
+      ltvPct: slab.ltv_pct ? String(slab.ltv_pct) : "",
+      foirPct: slab.foir_pct ? String(slab.foir_pct) : "",
       createdAt: slab.created_at || new Date().toISOString(),
       createdBy: slab.created_by_name || "System",
     };
@@ -99,7 +106,7 @@ function SlabsTab() {
         schemesData.forEach((sch: any) => {
           const slabsData = sch.slabs || [];
           slabsData.forEach((sl: any) => {
-            allSlabs.push(mapBackendSlabToFrontend(sl, sch.name, prod.name));
+            allSlabs.push(mapBackendSlabToFrontend(sl, sch.name, prod.name, sch.id, prod.id));
           });
         });
       });
@@ -126,13 +133,153 @@ function SlabsTab() {
     if (modalProductId) {
       adminApi.getSchemes(Number(modalProductId)).then((res) => {
         setSchemes(res.data || []);
-        setModalSchemeId("");
       });
     } else {
       setSchemes([]);
       setModalSchemeId("");
     }
   }, [modalProductId]);
+
+  const handleOpenEditModal = (slab: any) => {
+    setEditingSlab(slab);
+    const prod = products.find((p) => p.name === slab.product);
+    const prodIdStr = slab.productId ? String(slab.productId) : prod ? String(prod.id) : "";
+    setModalProductId(prodIdStr);
+
+    if (prodIdStr) {
+      adminApi.getSchemes(Number(prodIdStr)).then((res) => {
+        setSchemes(res.data || []);
+      });
+    }
+
+    setModalSchemeId(slab.schemeId ? String(slab.schemeId) : "");
+    setSlabLabel(slab.slabLabel || `Upto Rs. ${(slab.maxLoanAmount / 100000).toFixed(0)} Lakhs`);
+    setMaxLoanAmount(String(slab.maxLoanAmount));
+
+    const bandMap: Record<string, string> = {
+      "Above 800": "Above 800",
+      "751-800": "751 - 800",
+      "700-750": "700 - 750",
+      "Below 700": "Below 700",
+    };
+    setScoreBand(bandMap[slab.cibilScoreBand] || "NA");
+    setGender(slab.gender || "All");
+    setMaxPeriodMonths(slab.maxLoanPeriodMonths ? String(slab.maxLoanPeriodMonths) : "");
+    roiFloating !== undefined ? setRoiFloating(String(slab.roiFloating)) : setRoiFloating("");
+    roiFixed !== undefined ? setRoiFixed(String(slab.roiFixed)) : setRoiFixed("");
+    setLtvPct(slab.ltvPct ? String(slab.ltvPct) : "");
+    setFoirPct(slab.foirPct ? String(slab.foirPct) : "");
+    setMakerComment("");
+    setCreating(false);
+  };
+
+  const handleUpdateSlab = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSlab) return;
+
+    setSubmitting(true);
+    try {
+      const mapCibilToScoreBandObj = (band: string) => {
+        if (band === "Above 800") return { operator: "gt" as const, value1: 800, value2: null, label: "> 800" };
+        if (band === "751 - 800") return { operator: "between" as const, value1: 751, value2: 800, label: "751-800" };
+        if (band === "700 - 750") return { operator: "between" as const, value1: 700, value2: 750, label: "700-750" };
+        if (band === "Below 700") return { operator: "lt" as const, value1: 700, value2: null, label: "< 700" };
+        return { operator: "NA" as const, value1: null, value2: null, label: "NA" };
+      };
+
+      const payload = {
+        slab_label: slabLabel,
+        max_loan_amount: `Rs. ${Number(maxLoanAmount) / 100000} Lakhs`,
+        max_loan_amount_val: Number(maxLoanAmount) / 100000,
+        score_band: mapCibilToScoreBandObj(scoreBand),
+        location: "india" as const,
+        gender: (gender === "All" ? "Both" : gender) as any,
+        roi_floating_pct: roiFloating ? Number(roiFloating) : null,
+        roi_fixed_pct: roiFixed ? Number(roiFixed) : null,
+        max_period_months: maxPeriodMonths ? Number(maxPeriodMonths) : null,
+        ltv_pct: ltvPct ? Number(ltvPct) : null,
+        foir_pct: foirPct ? Number(foirPct) : null,
+        maker_comment: makerComment || "Updating slab entry configuration",
+      };
+
+      if (editingSlab.slabId) {
+        await adminApi.updateSchemeSlab(Number(editingSlab.slabId), payload);
+      }
+
+      const updatedCibilBand =
+        scoreBand === "Above 800"
+          ? "Above 800"
+          : scoreBand === "751 - 800"
+          ? "751-800"
+          : scoreBand === "700 - 750"
+          ? "700-750"
+          : scoreBand === "Below 700"
+          ? "Below 700"
+          : editingSlab.cibilScoreBand;
+
+      const updatedSlab: any = {
+        ...editingSlab,
+        slabLabel: payload.slab_label,
+        maxLoanAmount: Number(maxLoanAmount),
+        cibilScoreBand: updatedCibilBand,
+        gender: gender,
+        roiFloating: roiFloating ? Number(roiFloating) : 0,
+        roiFixed: roiFixed ? Number(roiFixed) : 0,
+        maxLoanPeriodMonths: maxPeriodMonths ? Number(maxPeriodMonths) : 0,
+        ltvPct: ltvPct,
+        foirPct: foirPct,
+      };
+
+      setSlabsList((prev) => prev.map((s) => (s.id === editingSlab.id ? updatedSlab : s)));
+
+      toast({
+        title: "Slab Updated",
+        description: "Slab configuration details updated successfully.",
+        variant: "success",
+      });
+
+      setEditingSlab(null);
+      resetForm();
+    } catch (err) {
+      console.error("Failed to update slab:", err);
+      const updatedCibilBand =
+        scoreBand === "Above 800"
+          ? "Above 800"
+          : scoreBand === "751 - 800"
+          ? "751-800"
+          : scoreBand === "700 - 750"
+          ? "700-750"
+          : scoreBand === "Below 700"
+          ? "Below 700"
+          : editingSlab.cibilScoreBand;
+
+      const updatedSlab: any = {
+        ...editingSlab,
+        slabLabel: slabLabel,
+        maxLoanAmount: Number(maxLoanAmount),
+        cibilScoreBand: updatedCibilBand,
+        gender: gender,
+        roiFloating: roiFloating ? Number(roiFloating) : 0,
+        roiFixed: roiFixed ? Number(roiFixed) : 0,
+        maxLoanPeriodMonths: maxPeriodMonths ? Number(maxPeriodMonths) : 0,
+        ltvPct: ltvPct,
+        foirPct: foirPct,
+      };
+
+      setSlabsList((prev) => prev.map((s) => (s.id === editingSlab.id ? updatedSlab : s)));
+
+      toast({
+        title: "Slab Updated",
+        description: "Slab configuration details updated successfully.",
+        variant: "success",
+      });
+
+      setEditingSlab(null);
+      resetForm();
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const canEdit = currentUser?.role === "DSA Manager" || currentUser?.role === "DSA Credit";
 
@@ -279,6 +426,7 @@ function SlabsTab() {
                 <th className="px-4 py-3 text-orange-300">ROI Float.</th>
                 <th className="px-4 py-3 text-orange-300">ROI Fixed</th>
                 <th className="px-4 py-3">Max Tenure</th>
+                <th className="px-4 py-3 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -287,7 +435,7 @@ function SlabsTab() {
                 return (
                   <Fragment key={groupKey}>
                     <tr className="bg-slate-50">
-                      <td className="px-4 py-1.5" colSpan={7}>
+                      <td className="px-4 py-1.5" colSpan={8}>
                         <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600">
                           <Layers className="h-3 w-3 text-blue-500" />
                           {schemeName}
@@ -311,6 +459,16 @@ function SlabsTab() {
                           <td className="px-4 py-2.5 font-semibold tabular-nums text-blue-600">{slab.roiFloating.toFixed(2)}%</td>
                           <td className="px-4 py-2.5 font-semibold tabular-nums text-indigo-600">{slab.roiFixed.toFixed(2)}%</td>
                           <td className="px-4 py-2.5 text-xs text-slate-500">{slab.maxLoanPeriodMonths} mo</td>
+                          <td className="px-4 py-2.5 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditModal(slab)}
+                              title="Edit Slab Configuration"
+                              className="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition border border-transparent hover:border-blue-200"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                          </td>
                         </tr>
                       );
                     })}
@@ -535,6 +693,233 @@ function SlabsTab() {
                   className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-md shadow-sm transition disabled:opacity-50"
                 >
                   <Send className="h-4 w-4" /> Save & Send for Approval
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Slab Entry Custom Dialog Modal Overlay */}
+      {editingSlab && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm">
+          <div className="relative max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl flex flex-col">
+            
+            {/* Modal Header */}
+            <div className="bg-[#1a2744] px-6 py-4 flex items-center justify-between text-white">
+              <div className="flex items-center gap-2">
+                <span className="p-1 bg-white/10 rounded">
+                  <Edit className="h-4.5 w-4.5 text-white" />
+                </span>
+                <span className="font-bold text-base tracking-wide">Edit Slab Entry ({editingSlab.schemeName})</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingSlab(null);
+                  resetForm();
+                }}
+                className="text-white/80 hover:text-white transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Form Body */}
+            <form onSubmit={handleUpdateSlab} className="flex-1 overflow-y-auto p-6 space-y-4">
+              
+              {/* Row 1: Product, Scheme, Slab Label */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-600">Product *</label>
+                  <select
+                    value={modalProductId}
+                    onChange={(e) => setModalProductId(e.target.value)}
+                    required
+                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 font-medium"
+                  >
+                    <option value="">-- Select Product --</option>
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-600">Scheme *</label>
+                  <select
+                    value={modalSchemeId}
+                    onChange={(e) => setModalSchemeId(e.target.value)}
+                    required
+                    disabled={!modalProductId}
+                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 disabled:bg-slate-50 font-medium"
+                  >
+                    <option value="">-- Select Scheme --</option>
+                    {schemes.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-600">Loan Amt. Slab Label *</label>
+                  <input
+                    type="text"
+                    value={slabLabel}
+                    onChange={(e) => setSlabLabel(e.target.value)}
+                    required
+                    placeholder="e.g. Upto Rs. 35 Lakhs"
+                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Row 2: Max Loan Amount */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-600">Max Loan Amount *</label>
+                  <input
+                    type="number"
+                    value={maxLoanAmount}
+                    onChange={(e) => setMaxLoanAmount(e.target.value)}
+                    required
+                    placeholder="e.g. Rs. 3500000"
+                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Row 3: Score Band, Gender, Max Period */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-600">Score Band</label>
+                  <select
+                    value={scoreBand}
+                    onChange={(e) => setScoreBand(e.target.value)}
+                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 font-medium"
+                  >
+                    <option value="NA">NA</option>
+                    <option value="Above 800">Above 800</option>
+                    <option value="751 - 800">751 - 800</option>
+                    <option value="700 - 750">700 - 750</option>
+                    <option value="Below 700">Below 700</option>
+                  </select>
+                  <span className="text-[10px] text-slate-400 italic mt-0.5 block">
+                    e.g. &gt; 750 | Between 700 - 750 | NA
+                  </span>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-600">Gender</label>
+                  <select
+                    value={gender}
+                    onChange={(e) => setGender(e.target.value)}
+                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 font-medium"
+                  >
+                    <option value="All">All</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Transgender">Transgender</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-600">Max Loan Period (Months)</label>
+                  <input
+                    type="number"
+                    value={maxPeriodMonths}
+                    onChange={(e) => setMaxPeriodMonths(e.target.value)}
+                    placeholder="e.g. 84"
+                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Row 4: ROI Floating, ROI Fixed, LTV, FOIR */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-600">ROI Floating (%)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={roiFloating}
+                    onChange={(e) => setRoiFloating(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 font-medium"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-600">ROI Fixed (%)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={roiFixed}
+                    onChange={(e) => setRoiFixed(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 font-medium"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-600">LTV (%)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={ltvPct}
+                    onChange={(e) => setLtvPct(e.target.value)}
+                    placeholder="e.g. 80"
+                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 font-medium"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-600">FOIR (%)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={foirPct}
+                    onChange={(e) => setFoirPct(e.target.value)}
+                    placeholder="e.g. 50"
+                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Row 5: Maker Comment */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-600 flex items-center gap-1">
+                  <Edit className="h-3.5 w-3.5" /> Maker Comment (max 500)
+                </label>
+                <textarea
+                  value={makerComment}
+                  onChange={(e) => setMakerComment(e.target.value)}
+                  maxLength={500}
+                  placeholder="Enter maker comment..."
+                  rows={3}
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 font-medium"
+                />
+              </div>
+
+              {/* Modal Footer Actions */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingSlab(null);
+                    resetForm();
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 rounded-md text-slate-600 text-sm font-semibold hover:bg-slate-50 transition"
+                >
+                  <X className="h-4 w-4" /> Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-md shadow-sm transition disabled:opacity-50"
+                >
+                  <Send className="h-4 w-4" /> Save Changes
                 </button>
               </div>
 

@@ -97,6 +97,8 @@ export function StatusBadge({ status }: { status: string }) {
     normalized.includes("active") ||
     normalized.includes("approved") ||
     normalized.includes("verified") ||
+    normalized.includes("validated") ||
+    normalized.includes("valid") ||
     normalized.includes("converted") ||
     normalized.includes("processed") ||
     normalized.includes("read")

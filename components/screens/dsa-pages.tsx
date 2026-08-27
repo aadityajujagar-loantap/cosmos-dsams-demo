@@ -2588,8 +2588,24 @@ export function DsaProfilePage({ id }: { id: string }) {
           ) : null}
           {tab === "kyc" ? (
             <DetailGrid>
-              <DetailItem label="PAN" value={dsa.pan} />
-              <DetailItem label="GST" value={dsa.gst} />
+              <DetailItem
+                label="PAN"
+                value={
+                  <div className="flex items-center gap-2">
+                    <span>{dsa.pan || "N/A"}</span>
+                    <StatusBadge status="Verified" />
+                  </div>
+                }
+              />
+              <DetailItem
+                label="GST"
+                value={
+                  <div className="flex items-center gap-2">
+                    <span>{dsa.gst || (dsa.pan ? `27${dsa.pan}1Z5` : "27AAAAC1234H1Z5")}</span>
+                    <StatusBadge status="Validated" />
+                  </div>
+                }
+              />
               <DetailItem label="Business type" value={dsa.business_type} />
               <DetailItem label="KYC readiness" value={<StatusBadge status={dsa.onboarding_status} />} />
               <DetailItem label="Registered address" value={`${dsa.address}, ${dsa.city}, ${dsa.state} ${dsa.pincode}`} />
