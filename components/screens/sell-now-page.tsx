@@ -46,7 +46,7 @@ function normalizeStepKey(key: string | null | undefined): string {
   return "LOGIN_INITIATE";
 }
 
-import { BookOpen, CheckCircle2, Copy, FileSpreadsheet, Loader2, Mail, MessageSquare, Send, UploadCloud, RefreshCw, ShieldCheck, Plus } from "lucide-react";
+import { BookOpen, CheckCircle2, Copy, FileSpreadsheet, Loader2, Mail, MessageSquare, Send, UploadCloud, RefreshCw, ShieldCheck, Plus, AlertTriangle } from "lucide-react";
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import type { ChangeEvent } from "react";
 
@@ -669,6 +669,12 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
           .then((res: any) => {
             if (res?.data) {
               const data = res.data;
+              
+              if (data.status === "SUBMITTED") {
+                setIsLinkDeprecated(true);
+                return;
+              }
+
               if (data.CustName) {
                 setApplicant((current) => ({ ...current, customer: data.CustName }));
                 const parts = data.CustName.trim().split(" ");
@@ -689,6 +695,24 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
               if (data.city) {
                 setApplicant((current) => ({ ...current, city: data.city }));
                 setCurrCity(data.city);
+              }
+
+              // Auto-resume from backend database step key if application already exists
+              if (data.application_id) {
+                setJourneyApplicationId(data.application_id);
+                localStorage.setItem("cosmos_assisted_application_id", data.application_id);
+                
+                adminApi.getApplicationDetails(data.application_id)
+                  .then((appRes: any) => {
+                    const app = appRes?.data?.application || appRes?.application;
+                    if (app) {
+                      const nextStep = app.current_step || "LOGIN_INITIATE";
+                      const normalized = normalizeStepKey(nextStep);
+                      setCurrentStepKey(normalized);
+                      localStorage.setItem("cosmos_assisted_step_key", normalized);
+                    }
+                  })
+                  .catch((err) => console.warn("Failed to auto-resume step key from database:", err));
               }
             }
           })
@@ -869,11 +893,33 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
   const [createdApplication, setCreatedApplication] = useState<Application | null>(null);
   const [creatingLead, setCreatingLead] = useState(false);
   const [createdLead, setCreatedLead] = useState<any>(null);
+  const [isLinkDeprecated, setIsLinkDeprecated] = useState(false);
+  const [leadStatus, setLeadStatus] = useState<string>("");
   const [workspaceTab, setWorkspaceTab] = useState<SellNowWorkspaceTab>("punch");
   const [bulkFile, setBulkFile] = useState<File | null>(null);
   const [bulkUploading, setBulkUploading] = useState(false);
   const [bulkResult, setBulkResult] = useState<BulkUploadResult | null>(null);
   const [bulkResultOpen, setBulkResultOpen] = useState(false);
+
+  useEffect(() => {
+    if (createdLead?.lead_uuid) {
+      setLeadStatus(createdLead.status || "");
+      const interval = setInterval(async () => {
+        try {
+          const res = await adminApi.getLeadDetail(createdLead.lead_uuid);
+          if (res?.data?.status) {
+            setLeadStatus(res.data.status);
+            setCreatedLead(res.data);
+          }
+        } catch (e) {
+          console.warn("Failed to poll lead detail", e);
+        }
+      }, 5000);
+      return () => clearInterval(interval);
+    } else {
+      setLeadStatus("");
+    }
+  }, [createdLead?.lead_uuid]);
 
   // Customer Loan Journey On Behalf States
   // Removed/deprecated step keys → their replacement
@@ -3873,13 +3919,15 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
                       📥 Download Eligibility Offer Letter
                     </Button>
 
-                    <button
-                      type="button"
-                      onClick={handleResetJourney}
-                      className="text-xs text-slate-500 hover:text-slate-700 font-medium hover:underline block mx-auto"
-                    >
-                      Start New Application
-                    </button>
+                    {!publicCustomerMode && (
+                      <button
+                        type="button"
+                        onClick={handleResetJourney}
+                        className="text-xs text-slate-500 hover:text-slate-700 font-medium hover:underline block mx-auto"
+                      >
+                        Start New Application
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -4380,6 +4428,25 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
     }
   }
 
+  if (publicCustomerMode && isLinkDeprecated) {
+    return (
+      <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-slate-100 p-8 text-center space-y-6">
+          <div className="h-16 w-16 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center mx-auto text-2xl border border-amber-200">
+            ⚠️
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-black tracking-tight text-slate-950 uppercase">Link Expired</h2>
+            <p className="text-sm text-slate-600 leading-relaxed">
+              This application link has expired or has already been submitted. You cannot submit or fill it again.
+            </p>
+          </div>
+          <p className="text-xs text-slate-400">Cosmos Co-operative Bank Ltd.</p>
+        </div>
+      </div>
+    );
+  }
+
   if (publicCustomerMode) {
     return (
       <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
@@ -4540,67 +4607,108 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
                           </div>
 
                           {createdLead ? (
-                            <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 p-4 space-y-3 shadow-sm">
-                              <div className="flex items-center justify-between">
+                            leadStatus === "SUBMITTED" ? (
+                              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3 shadow-sm">
                                 <div className="flex items-center gap-2">
-                                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                                  <h4 className="text-sm font-semibold text-emerald-950">
-                                    Lead Created & Working Link Generated
+                                  <AlertTriangle className="h-5 w-5 text-amber-600 animate-pulse" />
+                                  <h4 className="text-sm font-semibold text-amber-950">
+                                    User Has Already Filled Journey
                                   </h4>
                                 </div>
-                                {createdLead?.lead_uuid && (
-                                  <span className="text-xs font-mono bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-medium">
-                                    Token: {createdLead.lead_uuid}
-                                  </span>
-                                )}
-                              </div>
-
-                              <div className="rounded border border-emerald-200 bg-white p-3 space-y-1">
-                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                  Working Application Link
+                                <p className="text-xs text-amber-700 leading-relaxed">
+                                  The customer <strong>{createdLead?.CustName || applicant.customer}</strong> has completed and submitted the loan application. This link has been deprecated.
                                 </p>
-                                <p className="break-all text-sm font-mono text-emerald-800 font-medium">
-                                  {createdLead?.application_link}
-                                </p>
-                              </div>
-
-                              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                                <div className="text-xs text-emerald-800">
-                                  Customer: <strong>{createdLead?.CustName || applicant.customer}</strong> ({createdLead?.mobile || applicant.mobile})
-                                </div>
-                                <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex justify-end pt-1">
                                   <Button
-                                    onClick={() => copyLink(createdLead?.application_link)}
+                                    onClick={() => {
+                                      setCreatedLead(null);
+                                      setApplicant(defaultApplicant);
+                                    }}
                                     type="button"
-                                    variant="outline"
+                                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-sm"
                                     size="sm"
                                   >
-                                    <Copy className="mr-1.5 h-3.5 w-3.5" />
-                                    Copy Link
-                                  </Button>
-                                  <a
-                                    href={createdLead?.application_link}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                  >
-                                    <Button type="button" size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white">
-                                      <Send className="mr-1.5 h-3.5 w-3.5" />
-                                      Open Link
-                                    </Button>
-                                  </a>
-                                  {isBankJourneyUser ? (
-                                    <Button onClick={() => sendJourney("Email")} type="button" variant="outline" size="sm">
-                                      <Mail className="mr-1.5 h-3.5 w-3.5" />
-                                      Send Email
-                                    </Button>
-                                  ) : null}
-                                  <Button onClick={() => sendJourney("SMS")} type="button" variant="outline" size="sm">
-                                    <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
-                                    Send SMS
+                                    <Plus className="mr-1.5 h-3.5 w-3.5" />
+                                    Create Another Lead
                                   </Button>
                                 </div>
                               </div>
-                            </div>
+                            ) : (
+                              <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 p-4 space-y-3 shadow-sm">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                                    <h4 className="text-sm font-semibold text-emerald-950">
+                                      Lead Created & Working Link Generated
+                                    </h4>
+                                  </div>
+                                  {createdLead?.lead_uuid && (
+                                    <span className="text-xs font-mono bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-medium">
+                                      Token: {createdLead.lead_uuid}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="rounded border border-emerald-200 bg-white p-3 space-y-1">
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                    Working Application Link
+                                  </p>
+                                  <p className="break-all text-sm font-mono text-emerald-800 font-medium">
+                                    {createdLead?.application_link}
+                                  </p>
+                                </div>
+
+                                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                                  <div className="text-xs text-emerald-800">
+                                    Customer: <strong>{createdLead?.CustName || applicant.customer}</strong> ({createdLead?.mobile || applicant.mobile})
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Button
+                                      onClick={() => {
+                                        setCreatedLead(null);
+                                        setApplicant(defaultApplicant);
+                                      }}
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="text-slate-500 hover:text-slate-700 hover:bg-slate-100/50"
+                                    >
+                                      <Plus className="mr-1 h-3 w-3" />
+                                      New Lead
+                                    </Button>
+                                    <Button
+                                      onClick={() => copyLink(createdLead?.application_link)}
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                    >
+                                      <Copy className="mr-1.5 h-3.5 w-3.5" />
+                                      Copy Link
+                                    </Button>
+                                    <a
+                                      href={createdLead?.application_link}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                    >
+                                      <Button type="button" size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                                        <Send className="mr-1.5 h-3.5 w-3.5" />
+                                        Open Link
+                                      </Button>
+                                    </a>
+                                    {isBankJourneyUser ? (
+                                      <Button onClick={() => sendJourney("Email")} type="button" variant="outline" size="sm">
+                                        <Mail className="mr-1.5 h-3.5 w-3.5" />
+                                        Send Email
+                                      </Button>
+                                    ) : null}
+                                    <Button onClick={() => sendJourney("SMS")} type="button" variant="outline" size="sm">
+                                      <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+                                      Send SMS
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            )
                           ) : null}
                         </div>
                       </>
