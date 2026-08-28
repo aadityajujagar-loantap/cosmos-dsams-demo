@@ -629,10 +629,59 @@ function ApiDocumentationPanel({ onCopy }: { onCopy: (label: string, value: stri
     </div>
   );
 }
-export function SellNowPage() {
+
+export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode?: boolean } = {}) {
   const { createItem, currentUser, store } = useMockStore();
   const { toast } = useToast();
   const isDsaPartner = currentUser?.role === "DSA Partner";
+
+  // URL params for public customer journey
+  const [urlDsaName, setUrlDsaName] = useState("");
+  const [urlDsaCode, setUrlDsaCode] = useState("");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const dsa = urlParams.get("DSA");
+      const dsaC = urlParams.get("DSACode");
+      const token = urlParams.get("lead_token");
+
+      if (dsa) setUrlDsaName(dsa);
+      if (dsaC) setUrlDsaCode(dsaC);
+
+      if (token && publicCustomerMode) {
+        adminApi
+          .getLeadDetail(token)
+          .then((res: any) => {
+            if (res?.data) {
+              const data = res.data;
+              if (data.CustName) {
+                setApplicant((current) => ({ ...current, customer: data.CustName }));
+                const parts = data.CustName.trim().split(" ");
+                if (parts.length > 1) {
+                  setPersonalFirstName(parts[0]);
+                  setPersonalLastName(parts.slice(1).join(" "));
+                } else {
+                  setPersonalFirstName(data.CustName);
+                }
+              }
+              if (data.mobile) {
+                setApplicant((current) => ({ ...current, mobile: data.mobile }));
+              }
+              if (data.email) {
+                setApplicant((current) => ({ ...current, email: data.email }));
+                setPersonalEmailId(data.email);
+              }
+              if (data.city) {
+                setApplicant((current) => ({ ...current, city: data.city }));
+                setCurrCity(data.city);
+              }
+            }
+          })
+          .catch((e) => console.warn("Failed to auto-fill lead details from token", e));
+      }
+    }
+  }, [publicCustomerMode]);
   const [realDsas, setRealDsas] = useState<any[]>([]);
   const [realProducts, setRealProducts] = useState<any[]>([]);
   const [realSchemes, setRealSchemes] = useState<any[]>([]);
@@ -3851,22 +3900,46 @@ export function SellNowPage() {
     return configs;
   }, [realDsas, realProducts, store.dsaProductConfigs, isDsaPartner, currentUser]);
 
-  const effectiveDsaId = isDsaPartner
+  const fallbackDsaId = activeConfigs[0]?.dsaId || "dsa-1";
+  const fallbackProduct = activeConfigs[0]?.product || "Personal Loan";
+
+  const effectiveDsaId = publicCustomerMode
+    ? (selectedDsaId || fallbackDsaId)
+    : isDsaPartner
     ? (activeConfigs[0]?.dsaId ?? "")
     : (selectedDsaId && activeConfigs.some((config) => config.dsaId === selectedDsaId) ? selectedDsaId : "");
 
   const productsForDsa = activeConfigs.filter((config) => config.dsaId === effectiveDsaId);
 
-  const effectiveProduct =
-    selectedProduct && productsForDsa.some((config) => config.product === selectedProduct)
+  const effectiveProduct = publicCustomerMode
+    ? (selectedProduct || productsForDsa[0]?.product || fallbackProduct)
+    : selectedProduct && productsForDsa.some((config) => config.product === selectedProduct)
       ? selectedProduct
       : "";
 
+  const defaultPublicConfig: DsaProductConfig = {
+    id: "cfg-public-default",
+    dsaId: effectiveDsaId || "dsa-1",
+    dsaCode: urlDsaCode || "APEX01",
+    dsaName: urlDsaName || "Apex Solutions",
+    product: (effectiveProduct || "Personal Loan") as Product,
+    commissionType: "Percentage-based",
+    status: "Active",
+    ranges: [
+      { id: "r1", min: 100000, max: 2500000, rate: 1.5, effectiveDate: "2026-01-01", endDate: "2099-12-31", frequency: "Monthly" }
+    ],
+    loanUrl: "",
+    configuredAt: new Date().toISOString(),
+    configuredBy: "Admin",
+  };
+
   const effectiveConfig = activeConfigs.find(
     (config) => config.dsaId === effectiveDsaId && config.product === effectiveProduct,
-  );
+  ) || (publicCustomerMode ? (activeConfigs[0] || defaultPublicConfig) : undefined);
 
-  const isSelectionComplete = isDsaPartner
+  const isSelectionComplete = publicCustomerMode
+    ? true
+    : isDsaPartner
     ? (!!effectiveProduct && !!selectedSchemeId)
     : (!!effectiveDsaId && !!effectiveProduct && !!selectedSchemeId);
 
@@ -4236,6 +4309,36 @@ export function SellNowPage() {
         variant: "warning",
       });
     }
+  }
+
+  if (publicCustomerMode) {
+    return (
+      <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
+        <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur shadow-sm">
+          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
+            <div className="flex items-center gap-3">
+              <div className="bg-blue-900 text-white font-black px-3 py-1.5 rounded-lg text-lg tracking-wider shadow-sm">
+                COSMOS BANK
+              </div>
+              <div>
+                <h1 className="text-sm font-bold text-slate-900 leading-tight">Digital Loan Portal</h1>
+                <p className="text-xs text-slate-500 font-medium">Cosmos Co-operative Bank Ltd.</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 font-medium hidden sm:inline">Partner:</span>
+              <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800 border border-blue-200">
+                {urlDsaName || effectiveConfig?.dsaName || "Apex Solutions"} ({urlDsaCode || effectiveConfig?.dsaCode || "APEX01"})
+              </span>
+            </div>
+          </div>
+        </header>
+
+        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+          {renderJourneyStep()}
+        </main>
+      </div>
+    );
   }
 
   const isBankJourneyUser = currentUser?.role === "DSA Manager" || currentUser?.role === "DSA Credit";

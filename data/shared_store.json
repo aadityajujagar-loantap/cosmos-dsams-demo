@@ -9606,6 +9606,25 @@
   ],
   "auditLogs": [
     {
+      "action": "Create",
+      "actionType": "Create",
+      "actor": "Super Admin",
+      "actorId": "1",
+      "actorRole": "DSA Manager",
+      "at": "2026-08-27T16:44:13.190Z",
+      "affectedDsaId": "5",
+      "affectedRole": "DSA Agent",
+      "changedFields": [],
+      "collection": "users",
+      "entity": "Users",
+      "entityId": "usr-agent-mtbr5ybn-48bz4",
+      "entityName": "sam",
+      "id": "audit-mtbr5ybq-6fi7v",
+      "ipAddress": "10.24.0.91",
+      "severity": "Info",
+      "summary": "sam was created in Users."
+    },
+    {
       "action": "Invoice Workflow",
       "actionType": "Invoice Workflow",
       "actor": "admin",
@@ -23546,6 +23565,16 @@
     }
   ],
   "users": [
+    {
+      "dsaId": "5",
+      "email": "samrat.kumar@loantap.in",
+      "id": "usr-agent-mtbr5ybn-48bz4",
+      "lastLogin": "2026-08-27T16:44:13.187Z",
+      "name": "sam",
+      "region": "pune",
+      "role": "DSA Agent",
+      "status": "Active"
+    },
     {
       "dsaId": "COS-DSA-GJ-BDQ-025",
       "email": "cosdsa@branch25.in",
