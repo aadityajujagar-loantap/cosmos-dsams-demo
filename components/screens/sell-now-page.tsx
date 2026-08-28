@@ -650,6 +650,20 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
       if (dsaC) setUrlDsaCode(dsaC);
 
       if (token && publicCustomerMode) {
+        // Prevent session leak: Reset journey localStorage states if lead_token has changed
+        const storedToken = localStorage.getItem("cosmos_assisted_lead_token");
+        if (storedToken !== token) {
+          localStorage.removeItem("cosmos_assisted_step_key");
+          localStorage.removeItem("cosmos_assisted_application_id");
+          localStorage.removeItem("cosmos_otp_reference_id");
+          localStorage.setItem("cosmos_assisted_lead_token", token);
+          
+          setJourneyApplicationId(null);
+          setOtpReferenceId(null);
+          setLeadToken(token);
+          setCurrentStepKey("LOGIN_INITIATE");
+        }
+
         adminApi
           .getLeadDetail(token)
           .then((res: any) => {
@@ -695,8 +709,56 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
         const dsas = dsasRes?.data?.items ?? [];
         setRealDsas(dsas);
 
-        const draft = loadSellNowDraft();
-        const initialDsaId = isDsaPartner ? (dsas[0]?.id || "") : (draft.selectedDsaId || "");
+        let initialDsaId = "";
+        let initialProduct = "";
+        let urlParams: URLSearchParams | null = null;
+
+        if (typeof window !== "undefined") {
+          urlParams = new URLSearchParams(window.location.search);
+        }
+
+        if (publicCustomerMode && urlParams) {
+          const dsaC = urlParams.get("DSACode") || "";
+          const dsaN = urlParams.get("DSA") || "";
+          const matched = dsas.find(
+            (d: any) => 
+              (dsaC && d.code?.toLowerCase() === dsaC.toLowerCase()) ||
+              (dsaN && d.name?.toLowerCase() === dsaN.toLowerCase())
+          ) ?? dsas[0];
+
+          if (matched) {
+            initialDsaId = String(matched.id);
+            setSelectedDsaId(String(matched.id));
+          }
+
+          // Parse product from pathname
+          let configIdFromUrl = "";
+          const pathParts = window.location.pathname.split("/");
+          const journeyIdx = pathParts.indexOf("journey");
+          if (journeyIdx !== -1 && pathParts[journeyIdx + 1]) {
+            configIdFromUrl = decodeURIComponent(pathParts[journeyIdx + 1]);
+          }
+
+          if (configIdFromUrl) {
+            const normalized = configIdFromUrl.toUpperCase().replace(/_/g, " ");
+            if (normalized.includes("PERSONAL LOAN") || normalized === "PERSONAL_LOAN") initialProduct = "Personal Loan";
+            else if (normalized.includes("HOME LOAN") || normalized === "HOME_LOAN") initialProduct = "Home Loan";
+            else if (normalized.includes("BUSINESS LOAN") || normalized === "BUSINESS_LOAN") initialProduct = "Business Loan";
+            else if (normalized.includes("AUTO LOAN") || normalized === "AUTO_LOAN") initialProduct = "Auto Loan";
+            else if (normalized.includes("PROPERTY") || normalized === "LAP") initialProduct = "Loan Against Property";
+            else if (normalized.includes("PERSONAL")) initialProduct = "Personal Loan";
+            else if (normalized.includes("HOME")) initialProduct = "Home Loan";
+            else if (normalized.includes("BUSINESS")) initialProduct = "Business Loan";
+            else if (normalized.includes("AUTO")) initialProduct = "Auto Loan";
+          }
+          if (initialProduct) {
+            setSelectedProduct(initialProduct);
+          }
+        } else {
+          const draft = loadSellNowDraft();
+          initialDsaId = isDsaPartner ? String(dsas[0]?.id || "") : String(draft.selectedDsaId || "");
+          initialProduct = draft.selectedProduct || "";
+        }
 
         if (initialDsaId) {
           setFetchingProducts(true);
@@ -704,15 +766,22 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
           const products = productsRes?.data || [];
           setRealProducts(products);
 
-          const initialProduct = draft.selectedProduct || "";
           if (initialProduct) {
             setFetchingSchemes(true);
             const matchedProduct = products.find(
-              (p) => p.name.toLowerCase() === initialProduct.toLowerCase()
+              (p: any) => p.name.toLowerCase() === initialProduct.toLowerCase()
             );
             if (matchedProduct) {
+              setLoanProduct(String(matchedProduct.id));
               const schemesRes = await adminApi.getSchemes(matchedProduct.id);
-              setRealSchemes(schemesRes?.data || []);
+              const schemes = schemesRes?.data || [];
+              setRealSchemes(schemes);
+              
+              if (publicCustomerMode && schemes.length > 0) {
+                // Pre-populate first scheme on public customer view
+                setLoanScheme(String(schemes[0].id));
+                setSelectedSchemeId(String(schemes[0].id));
+              }
             }
           }
         }
@@ -724,7 +793,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
       }
     }
     loadInitialData();
-  }, [isDsaPartner]);
+  }, [isDsaPartner, publicCustomerMode]);
 
   const [selectedDsaId, setSelectedDsaId] = useState(() => loadSellNowDraft().selectedDsaId ?? "");
   const [selectedProduct, setSelectedProduct] = useState(() => loadSellNowDraft().selectedProduct ?? "");
@@ -1154,22 +1223,22 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
   }
 
   useEffect(() => {
-    if (mode === "assist" && currentStepKey === "BRANCH_SELECTION") {
+    if ((mode === "assist" || publicCustomerMode) && currentStepKey === "BRANCH_SELECTION") {
       loadStates();
     }
-  }, [mode, currentStepKey]);
+  }, [mode, currentStepKey, publicCustomerMode]);
 
   useEffect(() => {
-    if (mode === "assist" && currentStepKey === "BRANCH_SELECTION" && selectedStateCode) {
+    if ((mode === "assist" || publicCustomerMode) && currentStepKey === "BRANCH_SELECTION" && selectedStateCode) {
       loadDistricts(selectedStateCode);
     }
-  }, [mode, currentStepKey, selectedStateCode]);
+  }, [mode, currentStepKey, selectedStateCode, publicCustomerMode]);
 
   useEffect(() => {
-    if (mode === "assist" && currentStepKey === "BRANCH_SELECTION" && selectedDistrictCode) {
+    if ((mode === "assist" || publicCustomerMode) && currentStepKey === "BRANCH_SELECTION" && selectedDistrictCode) {
       loadBranches(selectedDistrictCode);
     }
-  }, [mode, currentStepKey, selectedDistrictCode]);
+  }, [mode, currentStepKey, selectedDistrictCode, publicCustomerMode]);
 
   const handleStateChange = (stateCode: string) => {
     setSelectedStateCode(stateCode);
@@ -2240,10 +2309,10 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
   }
 
   useEffect(() => {
-    if (mode === "assist" && currentStepKey === "LOGIN_INITIATE") {
+    if ((mode === "assist" || publicCustomerMode) && currentStepKey === "LOGIN_INITIATE") {
       loadCaptcha();
     }
-  }, [mode, currentStepKey]);
+  }, [mode, currentStepKey, publicCustomerMode]);
 
   async function handleLoginInitiate() {
     if (!effectiveConfig) {
