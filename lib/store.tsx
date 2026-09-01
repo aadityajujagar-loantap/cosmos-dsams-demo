@@ -11,16 +11,18 @@ import {
 } from "react";
 
 import { ToastProvider, useToast } from "@/components/ui/toast";
+import { authService } from "@/services/authService";
+import { authApi } from "@/apis/auth";
+import type { AuthSession } from "@/types/auth";
 import {
   DEFAULT_DSA_ID,
   DEFAULT_DSA_LOGIN_PASSWORD,
   DemoSessionUser,
   DEMO_USERS,
-  getDemoUserByRole,
-  isDemoSessionUser,
   sessionUserFromDsa,
 } from "@/lib/demo-identities";
 import { generateDsaCredentials, makeDsaCredentials } from "@/lib/dsa-credentials";
+import { withBasePath } from "@/lib/base-path";
 import { createMockStore } from "@/lib/mock-data";
 import {
   Application,
@@ -56,8 +58,10 @@ interface StoreContextValue {
     patch: Partial<EntityMap[K]>,
   ) => void;
   currentUser: DemoSessionUser | null;
-  login: (user: DemoSessionUser) => void;
+  login: (session: AuthSession) => void;
   logout: () => void;
+  hasPermission: (permission: string) => boolean;
+  hasRole: (role: string | string[]) => boolean;
 }
 
 const StoreContext = createContext<StoreContextValue | undefined>(undefined);
@@ -68,6 +72,42 @@ const USER_STORAGE_KEY = "cosmos_dsa_user";
 const COLON_DSA_ID_PATTERN = /^COSDSA(\d{8})(\d{2}):(\d{2}):(\d{2}):(\d{3})$/;
 const LEGACY_DSA_ID_PATTERN = /^dsa-(\d+)$/;
 const LEGACY_DSA_CODE_PATTERN = /^DSA-\d+$/;
+
+function sessionRoleFromBackendRoles(roleNames: string[]): DemoSessionUser["role"] {
+  if (roleNames.some((role) => ["super_admin", "admin", "checker"].includes(role))) return "DSA Manager";
+  if (roleNames.includes("dsa_credit")) return "DSA Credit";
+  if (roleNames.includes("branch_regional_head")) return "Branch Regional Head";
+  if (roleNames.includes("maker") || roleNames.includes("branch_user")) return "Branch User";
+  if (roleNames.includes("dsa_partner")) return "DSA Partner";
+  return "Customer";
+}
+
+function sessionUserFromAuthSession(session: AuthSession): DemoSessionUser {
+  const roleNames = session.roles.map((role) => role.name);
+
+  return {
+    code: session.user.branch_code ?? undefined,
+    email: session.user.email,
+    id: String(session.user.id),
+    mobile: session.user.phone ?? "",
+    name: session.user.name,
+    role: sessionRoleFromBackendRoles(roleNames),
+  };
+}
+
+function sessionUserFromStoredAuth(): DemoSessionUser | null {
+  const user = authService.getUser();
+  if (!user) return null;
+
+  return {
+    code: user.branch_code ?? undefined,
+    email: user.email,
+    id: String(user.id),
+    mobile: user.phone ?? "",
+    name: user.name,
+    role: sessionRoleFromBackendRoles(authService.getRoles()),
+  };
+}
 
 function ensureApplicationJourneys(store: MockStore): MockStore {
   return {
@@ -1366,20 +1406,18 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
 
   const [currentUser, setCurrentUser] = useState<DemoSessionUser | null>(() => {
     if (typeof window !== "undefined") {
-      const stored = localStorage.getItem(USER_STORAGE_KEY);
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          if (isDemoSessionUser(parsed)) {
-            return parsed;
-          }
-          localStorage.removeItem(USER_STORAGE_KEY);
-          return null;
-        } catch {
-          localStorage.removeItem(USER_STORAGE_KEY);
-          return null;
-        }
+      if (!authService.isLoggedIn()) {
+        localStorage.removeItem(USER_STORAGE_KEY);
+        return null;
       }
+
+      const authenticatedUser = sessionUserFromStoredAuth();
+      if (authenticatedUser) {
+        localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(authenticatedUser));
+        return authenticatedUser;
+      }
+
+      localStorage.removeItem(USER_STORAGE_KEY);
     }
     return null;
   });
@@ -1394,7 +1432,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(STORE_STORAGE_KEY, serializedStore);
 
       // Save to shared store API
-      fetch("/api/store", {
+      fetch(withBasePath("/api/store"), {
         cache: "no-store",
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1409,7 +1447,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     async function syncStoreFromStorage() {
       // 1. Sync from server
       try {
-        const res = await fetch("/api/store", { cache: "no-store" });
+        const res = await fetch(withBasePath("/api/store"), { cache: "no-store" });
         if (res.ok) {
           const serverData = await res.json();
           if (serverData) {
@@ -1461,7 +1499,9 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = useCallback((user: DemoSessionUser) => {
+  const login = useCallback((session: AuthSession) => {
+    const user = sessionUserFromAuthSession(session);
+    authService.startSession(session);
     setCurrentUser(user);
     if (typeof window !== "undefined") {
       localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
@@ -1474,6 +1514,10 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
   }, [toast]);
 
   const logout = useCallback(() => {
+    // Revoke Sanctum access token on the Laravel backend
+    authApi.logout().catch((err) => console.warn("Backend logout request failed:", err));
+
+    authService.endSession();
     setCurrentUser(null);
     if (typeof window !== "undefined") {
       localStorage.removeItem(USER_STORAGE_KEY);
@@ -1484,6 +1528,14 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       variant: "warning",
     });
   }, [toast]);
+
+  const hasPermission = useCallback((permission: string) => {
+    return authService.hasPermission(permission);
+  }, []);
+
+  const hasRole = useCallback((role: string | string[]) => {
+    return authService.hasRole(role);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1745,8 +1797,10 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       currentUser,
       login,
       logout,
+      hasPermission,
+      hasRole,
     }),
-    [createItem, deleteDsaCascade, deleteItem, getById, store, updateItem, currentUser, login, logout],
+    [createItem, deleteDsaCascade, deleteItem, getById, store, updateItem, currentUser, login, logout, hasPermission, hasRole],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

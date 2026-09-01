@@ -8,42 +8,61 @@ import { KeyRound, Lock, RefreshCw, ShieldCheck, User } from "lucide-react";
 import { DsaOnboardingPage } from "@/components/screens/dsa-pages";
 import { Modal } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
-import {
-  getDemoUserForCredentials,
-  sessionUserFromDsa,
-  type DemoSessionUser,
-} from "@/lib/demo-identities";
 import { useMockStore } from "@/lib/store";
+import { withBasePath } from "@/lib/base-path";
+import { authApi } from "@/apis/auth";
 
-const CAPTCHA_CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-const DUMMY_OTP = "123456";
 const OTP_LENGTH = 6;
 const EMPTY_OTP = Array.from({ length: OTP_LENGTH }, () => "");
 
-function generateCaptcha(length = 5) {
-  return Array.from({ length }, () => CAPTCHA_CHARSET[Math.floor(Math.random() * CAPTCHA_CHARSET.length)]).join("");
+function authErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === "object" && "data" in error) {
+    const data = (error as { data?: { message?: unknown; error?: unknown } }).data;
+    if (typeof data?.message === "string") return data.message;
+    if (typeof data?.error === "string") return data.error;
+  }
+
+  if (error instanceof Error) return error.message;
+  return fallback;
 }
 
 export default function LoginPage() {
-  const { login, currentUser, store } = useMockStore();
+  const { login, currentUser } = useMockStore();
   const { toast } = useToast();
   const router = useRouter();
   const otpRefs = useRef<Array<HTMLInputElement | null>>([]);
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [captcha, setCaptcha] = useState("");
-  const [captchaCode, setCaptchaCode] = useState(() => generateCaptcha());
+  const [captchaKey, setCaptchaKey] = useState("");
+  const [captchaImg, setCaptchaImg] = useState("");
   const [step, setStep] = useState<"credentials" | "otp">("credentials");
-  const [pendingUser, setPendingUser] = useState<DemoSessionUser | null>(null);
+  const [otpRefId, setOtpRefId] = useState("");
+  const [mobileHint, setMobileHint] = useState("");
   const [otpDigits, setOtpDigits] = useState<string[]>(EMPTY_OTP);
   const [error, setError] = useState("");
   const [publicOnboardingOpen, setPublicOnboardingOpen] = useState(false);
+  const [verifying, setVerifying] = useState(false);
 
-  const refreshCaptcha = useCallback(() => {
-    setCaptchaCode(generateCaptcha());
-    setCaptcha("");
-    setError("");
+  const refreshCaptcha = useCallback(async () => {
+    try {
+      const response = await authApi.getCaptcha();
+      if (response.status === "0") {
+        setCaptchaKey(response.respData.captcha_key);
+        setCaptchaImg(response.respData.captcha_img);
+        setCaptcha("");
+        setError("");
+      } else {
+        setError(response.message);
+      }
+    } catch (err: unknown) {
+      setError(authErrorMessage(err, "Failed to load CAPTCHA"));
+    }
   }, []);
+
+  useEffect(() => {
+    refreshCaptcha();
+  }, [refreshCaptcha]);
 
   useEffect(() => {
     const intervalId = window.setInterval(refreshCaptcha, 60_000);
@@ -66,53 +85,60 @@ export default function LoginPage() {
     window.requestAnimationFrame(() => otpRefs.current[0]?.focus());
   };
 
-  function getDsaCredentialUser(username: string, inputPassword: string) {
-    const normalizedUsername = username.trim().toLowerCase();
-    const dsa = store.dsas.find((item) => item.loginUsername.trim().toLowerCase() === normalizedUsername);
-
-    if (!dsa) return { user: null as DemoSessionUser | null };
-    if (dsa.loginPassword !== inputPassword) {
-      return { error: "Invalid username or password.", user: null };
-    }
-    if (dsa.status !== "Active") {
-      return {
-        error: `This DSA account is ${dsa.status}. Super Admin must activate it before login.`,
-        user: null,
-      };
-    }
-
-    return { user: sessionUserFromDsa(dsa) };
-  }
-
-  const handleCredentialSubmit = (e: React.FormEvent) => {
+  const handleCredentialSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!identifier.trim() || !password) {
-      setError("Please enter username and password");
+    if (!identifier.trim() || !password || !captcha.trim()) {
+      const msg = "Username, password, and CAPTCHA are required.";
+      setError(msg);
+      toast({
+        title: "Validation Error",
+        description: msg,
+        variant: "warning",
+      });
       return;
     }
 
-    const demoUser = getDemoUserForCredentials(identifier, password);
-    const dsaCredentialResult: { error?: string; user: DemoSessionUser | null } = demoUser
-      ? { user: demoUser }
-      : getDsaCredentialUser(identifier, password);
-    if (dsaCredentialResult.error) {
-      setError(dsaCredentialResult.error);
-      return;
-    }
-    if (!dsaCredentialResult.user) {
-      setError("Invalid username or password.");
-      return;
-    }
+    setVerifying(true);
+    try {
+      const response = await authApi.login({
+        userName: identifier,
+        password,
+        captcha_key: captchaKey,
+        captcha_value: captcha,
+      });
 
-    if (!captchaCode || captcha.trim().toUpperCase() !== captchaCode) {
-      setError("Captcha does not match.");
-      return;
+      if (response.status === "0") {
+        setOtpRefId(response.respData.reference_id);
+        setMobileHint(response.respData.mobile_hint);
+        setStep("otp");
+        setError("");
+        setOtpDigits([...EMPTY_OTP]);
+        toast({
+          title: "OTP Sent",
+          description: response.message || "OTP has been sent to your registered phone number.",
+          variant: "success",
+        });
+      } else {
+        setError(response.message);
+        toast({
+          title: "Login Failed",
+          description: response.message,
+          variant: "warning",
+        });
+        refreshCaptcha();
+      }
+    } catch (err: unknown) {
+      const errMsg = authErrorMessage(err, "Login failed");
+      setError(errMsg);
+      toast({
+        title: "Login Failed",
+        description: errMsg,
+        variant: "warning",
+      });
+      refreshCaptcha();
+    } finally {
+      setVerifying(false);
     }
-
-    setPendingUser(dsaCredentialResult.user);
-    setStep("otp");
-    setError("");
-    setOtpDigits([...EMPTY_OTP]);
   };
 
   const handleOtpChange = (index: number, value: string) => {
@@ -158,7 +184,7 @@ export default function LoginPage() {
     }
   };
 
-  const handleOtpSubmit = (e: React.FormEvent) => {
+  const handleOtpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const otp = otpDigits.join("");
 
@@ -172,18 +198,36 @@ export default function LoginPage() {
       return;
     }
 
-    if (otp !== DUMMY_OTP || !pendingUser) {
-      setError("Incorrect OTP. Please try again.");
+    setVerifying(true);
+    try {
+      const response = await authApi.verifyOtp({
+        reference_id: otpRefId,
+        otp,
+      });
+
+      if (response.status === "0") {
+        login(response.respData);
+      } else {
+        setError(response.message);
+        toast({
+          description: response.message,
+          title: "OTP verification failed",
+          variant: "warning",
+        });
+        resetOtp();
+      }
+    } catch (err: unknown) {
+      const errMsg = authErrorMessage(err, "OTP verification failed");
+      setError(errMsg);
       toast({
-        description: "The OTP entered is not valid.",
+        description: errMsg,
         title: "OTP verification failed",
         variant: "warning",
       });
       resetOtp();
-      return;
+    } finally {
+      setVerifying(false);
     }
-
-    login(pendingUser);
   };
 
   return (
@@ -196,12 +240,13 @@ export default function LoginPage() {
         <div className="relative z-10 flex items-center gap-3">
           <div className="bg-white/95 backdrop-blur rounded-lg px-4 py-2 shadow-md flex items-center justify-center">
             <Image
-              src="/logo-dsasm-cosmos.svg"
+              src={withBasePath("/logo-dsasm-cosmos.png")}
               alt="Cosmos Logo"
               width={708}
               height={118}
               className="h-8 w-auto"
               priority
+              unoptimized
             />
           </div>
         </div>
@@ -247,7 +292,7 @@ export default function LoginPage() {
             <p className="text-sm text-slate-500">
               {step === "credentials"
                 ? "Access the direct selling console using your registered username and password."
-                : "Complete verification for the selected account."}
+                : `Enter the 6-digit OTP sent to your registered phone number ${mobileHint || ""}.`}
             </p>
           </div>
 
@@ -308,11 +353,10 @@ export default function LoginPage() {
                 <label htmlFor="captcha" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                   Captcha
                 </label>
-                <div className="grid grid-cols-[minmax(0,1fr)_132px_44px] gap-3">
+                <div className="grid grid-cols-[1fr_1fr_44px] gap-3">
                   <div className="relative">
                     <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                     <input
-                      autoCapitalize="characters"
                       id="captcha"
                       placeholder="Enter captcha"
                       type="text"
@@ -321,24 +365,29 @@ export default function LoginPage() {
                         setCaptcha(e.target.value);
                         setError("");
                       }}
-                      className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 uppercase tracking-[0.2em] focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none text-sm transition"
+                      className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 tracking-[0.1em] focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none text-sm transition"
                     />
                   </div>
-                  {/* suppressHydrationWarning prevents React from throwing on captcha mismatch.
-                      The captchaCode is "" on the server (no Math.random()), and gets set
-                      client-side in the useEffect above, so the first client paint shows ".....". */}
                   <div
-                    aria-label={`Captcha code ${captchaCode || "loading"}`}
-                    className="flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-base font-black tracking-[0.24em] text-slate-800 shadow-inner"
-                    suppressHydrationWarning
+                    aria-label="Captcha image"
+                    className="flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 overflow-hidden shadow-inner"
                   >
-                    {captchaCode || "....."}
+                    {captchaImg ? (
+                      <img
+                        src={captchaImg}
+                        alt="Captcha"
+                        className="h-full w-full object-fill"
+                      />
+                    ) : (
+                      <span className="text-slate-400 text-xs">Loading...</span>
+                    )}
                   </div>
                   <button
                     aria-label="Refresh captcha"
-                    className="flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
+                    className="flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                     onClick={refreshCaptcha}
                     type="button"
+                    disabled={verifying}
                   >
                     <RefreshCw className="h-4 w-4" />
                   </button>
@@ -348,9 +397,14 @@ export default function LoginPage() {
               <div className="flex gap-3 pt-1">
                 <button
                   type="submit"
-                  className="inline-flex w-full h-11 items-center justify-center gap-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-sm font-bold shadow-md shadow-blue-100 hover:shadow-lg transition"
+                  disabled={verifying}
+                  className="inline-flex w-full h-11 items-center justify-center gap-2 rounded-xl bg-blue-700 hover:bg-blue-800 disabled:bg-blue-400 text-white text-sm font-bold shadow-md shadow-blue-100 hover:shadow-lg transition"
                 >
-                  <ShieldCheck className="h-4 w-4" />
+                  {verifying ? (
+                    <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+                  ) : (
+                    <ShieldCheck className="h-4 w-4" />
+                  )}
                   Next
                 </button>
               </div>
@@ -387,21 +441,27 @@ export default function LoginPage() {
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
+                  disabled={verifying}
                   onClick={() => {
                     setStep("credentials");
-                    setPendingUser(null);
                     setOtpDigits([...EMPTY_OTP]);
                     setError("");
+                    refreshCaptcha();
                   }}
-                  className="h-11 rounded-xl border border-slate-200 px-5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                  className="h-11 rounded-xl border border-slate-200 px-5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                 >
                   Back
                 </button>
                 <button
                   type="submit"
-                  className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-sm font-bold shadow-md shadow-blue-100 hover:shadow-lg transition"
+                  disabled={verifying}
+                  className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-blue-700 hover:bg-blue-800 disabled:bg-blue-400 text-white text-sm font-bold shadow-md shadow-blue-100 hover:shadow-lg transition"
                 >
-                  <KeyRound className="h-4 w-4" />
+                  {verifying ? (
+                    <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+                  ) : (
+                    <KeyRound className="h-4 w-4" />
+                  )}
                   Verify &amp; Sign In
                 </button>
               </div>

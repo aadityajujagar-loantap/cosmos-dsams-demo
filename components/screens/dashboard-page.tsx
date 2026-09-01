@@ -22,7 +22,7 @@ import {
   Info,
   ChevronDown,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { BarChartCard, KpiCard, PieChartCard, TrendCard } from "@/components/charts";
@@ -46,11 +46,30 @@ import { buildApplicationJourney } from "@/lib/product-journeys";
 import { getActiveProductConfigs, getUniqueProductConfigs, resolveProductConfig } from "@/lib/product-configs";
 import { compactNumber, formatCurrency, formatDate, makeId } from "@/lib/utils";
 import { Application, Product, Lead } from "@/lib/types";
+import { adminApi } from "@/apis/admin";
+import type { ActivityLog } from "@/types/activityLog";
 
 const CUSTOMER_DSA_DISPLAY_NAME = "Assigned DSA";
 
 export function DashboardPage() {
   const { store, currentUser, createItem } = useMockStore();
+
+  const [recentLogs, setRecentLogs] = useState<ActivityLog[]>([]);
+  const [logsLoading, setLogsLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadRecentLogs() {
+      try {
+        const response = await adminApi.getActivityLogs({ per_page: 6 });
+        setRecentLogs(response.data);
+      } catch (err) {
+        console.error("Failed to load recent activity logs on dashboard:", err);
+      } finally {
+        setLogsLoading(false);
+      }
+    }
+    loadRecentLogs();
+  }, []);
 
   // State for Customer Loan Application Modal
   const [applyModalOpen, setApplyModalOpen] = useState(false);
@@ -1065,18 +1084,26 @@ export function DashboardPage() {
                 <Activity className="h-5 w-5 text-blue-600" />
               </div>
               <div className="space-y-3">
-                {store.auditLogs.slice(0, 6).map((log) => (
-                  <div className="flex items-start gap-3 rounded-md border border-slate-100 p-3" key={log.id}>
-                    <span className="mt-1 h-2 w-2 rounded-full bg-blue-600" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-slate-950">{log.action}</p>
-                      <p className="text-xs text-slate-500">
-                        {log.actor} · {log.entity} · {formatDate(log.at)}
-                      </p>
-                    </div>
-                    <StatusBadge status={log.severity} />
+                {logsLoading ? (
+                  <div className="flex items-center justify-center py-6">
+                    <span className="h-5 w-5 animate-spin rounded-full border-b-2 border-blue-600" />
                   </div>
-                ))}
+                ) : recentLogs.length === 0 ? (
+                  <p className="text-sm text-slate-500 py-4 text-center">No activity logs recorded.</p>
+                ) : (
+                  recentLogs.map((log) => (
+                    <div className="flex items-start gap-3 rounded-md border border-slate-100 p-3" key={log.id}>
+                      <span className="mt-1 h-2 w-2 rounded-full bg-blue-600" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-slate-950 capitalize">{log.action.replace(/_/g, " ")}</p>
+                        <p className="text-xs text-slate-500">
+                          {log.user?.name || "System"} · {(log.group ?? "").replace(/_/g, " ")} · {formatDate(log.created_at)}
+                        </p>
+                      </div>
+                      <StatusBadge status={log.status_code >= 400 ? "Warning" : "Info"} />
+                    </div>
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
