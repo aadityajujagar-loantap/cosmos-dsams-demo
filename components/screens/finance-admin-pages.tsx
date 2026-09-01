@@ -1830,10 +1830,10 @@ export function AuditLogsPage() {
                           </div>
                         </td>
                         <td className="p-4 capitalize">
-                          <span className="font-medium">{log.action.replace(/_/g, " ")}</span>
+                          <span className="font-medium">{(log.action || "").replace(/_/g, " ")}</span>
                         </td>
                         <td className="p-4 capitalize text-slate-700">
-                          {log.group.replace(/_/g, " ")}
+                          {(log.group || "").replace(/_/g, " ")}
                         </td>
                         <td className="p-4 font-mono text-xs text-slate-500">
                           {log.ip_address}
@@ -1895,11 +1895,11 @@ export function AuditLogsPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Module</span>
-                  <span className="mt-0.5 block text-sm font-semibold text-slate-900 capitalize">{selectedLog.group.replace(/_/g, " ")}</span>
+                  <span className="mt-0.5 block text-sm font-semibold text-slate-900 capitalize">{(selectedLog.group || "").replace(/_/g, " ")}</span>
                 </div>
                 <div>
                   <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Action</span>
-                  <span className="mt-0.5 block text-sm font-semibold text-slate-900 capitalize">{selectedLog.action.replace(/_/g, " ")}</span>
+                  <span className="mt-0.5 block text-sm font-semibold text-slate-900 capitalize">{(selectedLog.action || "").replace(/_/g, " ")}</span>
                 </div>
                 <div>
                   <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Actor</span>

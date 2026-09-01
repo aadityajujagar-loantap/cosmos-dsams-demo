@@ -36,11 +36,24 @@ export function useActivityLogs() {
       setLoading(true);
       try {
         const response = await adminApi.getActivityLogs(params);
-        setLogs(response.data);
+        const raw = response as any;
+        const paginated = (raw && typeof raw === "object" && "data" in raw && !Array.isArray(raw.data) && typeof raw.data === "object")
+          ? raw.data
+          : raw;
+
+        const items: ActivityLog[] = Array.isArray(paginated?.data)
+          ? paginated.data
+          : (Array.isArray(raw?.data) ? raw.data : (Array.isArray(raw) ? raw : []));
+
+        const currentPage = Number(paginated?.current_page ?? raw?.current_page ?? params?.page ?? 1);
+        const total = Number(paginated?.total ?? raw?.total ?? items.length);
+        const lastPage = Number(paginated?.last_page ?? raw?.last_page ?? (total ? Math.ceil(total / (params?.per_page || 10)) : 1));
+
+        setLogs(items);
         setPagination({
-          page: response.current_page,
-          total: response.total,
-          lastPage: response.last_page,
+          page: currentPage,
+          total: total,
+          lastPage: Math.max(1, lastPage),
         });
       } catch (error: unknown) {
         toast({

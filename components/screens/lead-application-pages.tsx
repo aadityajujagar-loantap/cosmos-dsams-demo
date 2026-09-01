@@ -205,8 +205,9 @@ export function LeadsPage() {
 
   function translateLeadStatus(s: string): LeadStatus {
     const statusUpper = String(s).toUpperCase();
-    if (statusUpper === "CREATED") return "New";
+    if (statusUpper === "CREATED" || statusUpper === "APPLICATION_INITIATED") return "New";
     if (statusUpper === "CONVERTED") return "Converted";
+    if (statusUpper === "SUBMITTED") return "In Progress";
     return "In Progress";
   }
 
@@ -598,21 +599,41 @@ export function ApplicationsPage() {
         const resData = res?.data || res;
         const appsList = resData?.applications || [];
 
+        const LOAN_PRODUCT_ID_MAP: Record<string, string> = {
+          "1": "Home Loan",
+          "2": "Personal Loan",
+          "3": "Auto Loan",
+          "4": "Loan Against Property",
+          "5": "Business Loan",
+        };
+        const LOAN_TYPE_MAP: Record<string, string> = {
+          PERSONAL_LOAN: "Personal Loan",
+          HOME_LOAN: "Home Loan",
+          AUTO_LOAN: "Auto Loan",
+          BUSINESS_LOAN: "Business Loan",
+          LAP: "Loan Against Property",
+        };
+
         const apps = appsList.map((appItem: any) => {
           const appId = appItem.application_id;
           const backendApp = appItem.application || {};
           const fullName = `${backendApp.first_name || ""} ${backendApp.last_name || ""}`.trim();
+          const rawProduct = backendApp.loan_product || backendApp.loan_type || "";
+          const resolvedProduct = (LOAN_PRODUCT_ID_MAP[String(rawProduct)]
+            ?? LOAN_TYPE_MAP[String(rawProduct).toUpperCase()]
+            ?? rawProduct)
+            || "Personal Loan";
 
           return {
             id: appId,
             applicationId: appId,
-            customer: fullName || "Customer",
+            customer: fullName || backendApp.CustName || "Customer",
             mobile: backendApp.mobile || "",
-            email: backendApp.email || "",
+            email: backendApp.email || backendApp.email_id || "",
             city: backendApp.city || "",
             dsaId: backendApp.DSACode || "",
             dsaName: dsaById.get(backendApp.DSACode)?.name || backendApp.DSACode || "Direct",
-            product: (backendApp.loan_product || backendApp.loan_type || "Personal Loan") as Product,
+            product: (resolvedProduct) as Product,
             loanAmount: Number(backendApp.loan_amount_requested || 250000),
             stage: translateStage(backendApp.stage || "aadhaar_kyc_initiated"),
             status: translateStatus(backendApp.status || "application-in-progress"),
