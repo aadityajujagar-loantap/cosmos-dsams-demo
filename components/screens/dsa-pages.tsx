@@ -126,44 +126,25 @@ function activeDsaPatch(dsa: Dsa): Partial<Dsa> {
   };
 }
 
-// Approval action eligibility — driven by backend current_approval_level + onboarding_status
-const APPROVAL_ACTIONABLE_STATUSES = [
-  "SUBMITTED",
-  "DOCUMENT_VERIFICATION",
-  "COMPLIANCE_CHECK",
-  "RISK_ASSESSMENT",
-  "PENDING_APPROVAL",
-];
-
-function canActOnDsa(
-  role: string | undefined,
-  currentLevel: number,
-  onboardingStatus: string,
-  operationalStatus: string
-): boolean {
-  if (operationalStatus === "ACTIVE" || operationalStatus === "TERMINATED") return false;
-  if (!APPROVAL_ACTIONABLE_STATUSES.includes(onboardingStatus)) return false;
-  if (role === "DSA Manager") return true; // Super Admin: bypass all levels
-  if (role === "Branch User" && currentLevel === 1) return true;
-  if (role === "Branch Regional Head" && currentLevel === 2) return true;
-  if (role === "DSA Credit" && (currentLevel === 3 || currentLevel === 4)) return true;
-  return false;
+function nextDsaApprovalStatus(role: string | undefined, status: DsaStatus): DsaStatus | null {
+  if (role === "DSA Manager" && queueStatuses.includes(status)) return "Active";
+  if (role === "Branch User" && status === "Pending Branch Approval") return "Pending BRH Approval";
+  if (role === "Branch Regional Head" && status === "Pending BRH Approval") return "Pending Credit Approval";
+  if (
+    role === "DSA Credit" &&
+    (status === "Pending Credit Approval" || status === "Submitted" || status === "KYC Pending")
+  ) {
+    return "Active";
+  }
+  return null;
 }
 
-function approvalLevelLabel(currentLevel: number, deviation: boolean): string {
-  if (currentLevel === 1) return "Approve (Level 1 – Asst. Manager)";
-  if (currentLevel === 2) return "Approve (Level 2 – Manager)";
-  if (currentLevel === 4) return "Approve Deviation (Level 4 – DGM)";
-  if (currentLevel === 3) return "Final Approve (Level 3 – AGM)";
-  if (currentLevel >= 5) return "Fully Approved";
+function dsaApprovalActionLabel(nextStatus: DsaStatus | null) {
+  if (nextStatus === "Active") return "Approve and Activate";
+  if (nextStatus === "Pending BRH Approval") return "Approve to BRH";
+  if (nextStatus === "Pending Credit Approval") return "Approve to Credit";
   return "Approve";
 }
-
-// Keep legacy shims used in a few places below
-function nextDsaApprovalStatus(role: string | undefined, status: DsaStatus): DsaStatus | null {
-  return null; // Deprecated — use canActOnDsa instead
-}
-function dsaApprovalActionLabel(_: DsaStatus | null) { return "Approve"; }
 
 const dsaFields: FieldConfig<Dsa>[] = [
   { label: "DSA name", name: "name", required: true },
@@ -202,7 +183,6 @@ const initialOnboardingForm = {
   pan: "",
   pincode: "",
   state: "",
-  subregion_id: "",
   status: "Submitted",
 };
 
@@ -246,10 +226,8 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
     updateDsaStatus,
     states,
     districts,
-    subRegions,
     fetchStatesDropdown,
     fetchDistrictsDropdown,
-    fetchSubRegionsDropdown,
     setDistricts,
     actionLoading,
   } = useDsa();
@@ -268,8 +246,7 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
 
   useEffect(() => {
     fetchStatesDropdown();
-    fetchSubRegionsDropdown();
-  }, [fetchStatesDropdown, fetchSubRegionsDropdown]);
+  }, [fetchStatesDropdown]);
 
   // Load districts when state changes
   const handleStateChange = async (stateName: string) => {
@@ -325,7 +302,7 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
   function validate(currentStep: number) {
     const requiredByStep: Record<number, string[]> = {
       1: ["name", "businessType", "contactPerson", "mobile", "email"],
-      2: ["pan", "gst", "address", "city", "state", "subregion_id", "pincode"],
+      2: ["pan", "gst", "address", "city", "state", "pincode"],
       3: ["accountName", "accountNumber", "bankName", "ifsc"],
     };
     const nextErrors: Record<string, string> = {};
@@ -384,7 +361,6 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
           address: form.address || "Draft",
           city: form.city || "Draft",
           state: form.state || "Draft",
-          subregion_id: form.subregion_id || "SR001",
           pincode: form.pincode || "000000",
           account_name: form.accountName || form.name || "Draft",
           account_number: form.accountNumber || "000000",
@@ -420,7 +396,6 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
             address: form.address,
             city: form.city,
             state: form.state,
-            subregion_id: form.subregion_id || undefined,
             pincode: form.pincode,
           });
         }
@@ -499,9 +474,11 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
     let finalDsa = null;
 
     if (dsaDbId !== null) {
-      // DSA was already created at step 1 with onboarding_status="SUBMITTED".
-      // Do NOT call updateDsaStatus here — backend already set the correct status.
-      // Just upload any remaining documents that weren't uploaded in step 4.
+      finalDsa = await updateDsaStatus(dsaDbId, {
+        onboarding_status: "SUBMITTED",
+        reason: "Onboarding completed by partner",
+      });
+
       for (const key of Object.keys(uploadedFiles)) {
         const fileMeta = uploadedFiles[key] as any;
         if (fileMeta?.file && !fileMeta.uploaded) {
@@ -512,16 +489,6 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
           });
         }
       }
-      // Fetch latest DSA state to use for the rest of handleSubmit
-      finalDsa = await (async () => {
-        try {
-          const { adminApi } = await import("@/apis/admin");
-          const res = await adminApi.getDsaDetail(dsaDbId);
-          return res.data;
-        } catch {
-          return null;
-        }
-      })();
     } else {
       const payload = {
         name: form.name,
@@ -534,7 +501,6 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
         address: form.address,
         city: form.city,
         state: form.state,
-        subregion_id: form.subregion_id || "SR001",
         pincode: form.pincode,
         account_name: form.accountName,
         account_number: form.accountNumber,
@@ -556,7 +522,6 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
         }
       }
     }
-
 
     if (!finalDsa) return;
 
@@ -962,22 +927,6 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
                       ))}
                     </Select>
                     {errors.city ? <p className="text-xs font-medium text-rose-600 mt-1">{errors.city}</p> : null}
-                  </Field>
-                  <Field>
-                    <Label htmlFor="subRegionSelect">Subregion</Label>
-                    <Select
-                      id="subRegionSelect"
-                      value={form.subregion_id || ""}
-                      onChange={(e) => update("subregion_id", e.target.value)}
-                    >
-                      <option value="">Select subregion</option>
-                      {subRegions.map((sr) => (
-                        <option key={sr.sub_region_code} value={sr.sub_region_code}>
-                          {sr.sub_region_name} ({sr.sub_region_code})
-                        </option>
-                      ))}
-                    </Select>
-                    {errors.subregion_id ? <p className="text-xs font-medium text-rose-600 mt-1">{errors.subregion_id}</p> : null}
                   </Field>
                   {renderField("pincode", "Pincode")}
                 </div>
@@ -1955,14 +1904,9 @@ export function mapBackendStatusToFrontend(onboarding?: string, operational?: st
   if (norm === "DRAFT") return "Draft";
   if (norm === "SUBMITTED") return "Submitted";
   if (norm === "DOCUMENT_VERIFICATION") return "Pending Branch Approval";
-  if (norm === "DOCUMENT_PENDING") return "KYC Pending";
-  if (norm === "COMPLIANCE_CHECK") return "Pending BRH Approval";
-  if (norm === "RISK_ASSESSMENT") return "Pending Credit Approval";
+  if (norm === "COMPLIANCE_CHECK") return "KYC Pending";
   if (norm === "PENDING_APPROVAL") return "Pending Credit Approval";
-  // APPROVED = all approvals done, agreement pending — NOT operationally active yet
-  if (norm === "APPROVED") return "Pending Credit Approval";
-  if (norm === "AGREEMENT_PENDING") return "Pending Credit Approval";
-  if (norm === "AGREEMENT_COMPLETED") return "Active";
+  if (norm === "APPROVED") return "Active";
   if (norm === "REJECTED") return "Rejected";
   return "Draft";
 }
@@ -1976,9 +1920,6 @@ export function DsaProfilePage({ id }: { id: string }) {
   const [creatingAgent, setCreatingAgent] = useState(false);
   const [editingAgent, setEditingAgent] = useState<User | null>(null);
   const [approvingDsa, setApprovingDsa] = useState<any | null>(null);
-  const [queryingDsa, setQueryingDsa] = useState<any | null>(null);
-  const [queryText, setQueryText] = useState("");
-  const [queryError, setQueryError] = useState("");
   const [rejectingDsa, setRejectingDsa] = useState<any | null>(null);
   const [rejectionError, setRejectionError] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
@@ -2019,19 +1960,16 @@ export function DsaProfilePage({ id }: { id: string }) {
 
   useEffect(() => {
     if (!dsa) return;
-    if (!currentUser || currentUser.role === "DSA Partner" || currentUser.role === "Customer") {
-      return;
-    }
     async function loadDsaAudit() {
       try {
         const response = await adminApi.getActivityLogs({ group: "dsa", page: 1, per_page: 8 });
-        setDsaAudit(response?.data || []);
+        setDsaAudit(response.data);
       } catch (err) {
-        console.warn("Failed to load DSA audit logs:", err);
+        console.error("Failed to load DSA audit logs:", err);
       }
     }
     loadDsaAudit();
-  }, [dsa, currentUser]);
+  }, [dsa]);
 
   if (loading || !dsa) {
     return (
@@ -2047,15 +1985,9 @@ export function DsaProfilePage({ id }: { id: string }) {
   );
 
   const dsaStatus = mapBackendStatusToFrontend(dsa.onboarding_status, dsa.operational_status);
-  // Level-based approval gating: uses actual backend current_approval_level
-  const canDecideDsa = canActOnDsa(
-    currentUser?.role,
-    dsa.current_approval_level,
-    dsa.onboarding_status,
-    dsa.operational_status
-  );
+  const nextApprovalStatus = nextDsaApprovalStatus(currentUser?.role, dsaStatus);
+  const canDecideDsa = Boolean(nextApprovalStatus);
   const canApproveDsa = canDecideDsa && missingProfileDocuments.length === 0;
-  const nextApprovalStatus = null; // legacy compat — unused
   const allProductConfigs = store.dsaProductConfigs.filter((config) => config.dsaId === String(dsa.id));
   const productConfigs = allProductConfigs
     .filter((config) => (dsa.onboarding_status === "APPROVED" || dsa.onboarding_status === "AGREEMENT_COMPLETED") && config.status === "Active")
@@ -2064,9 +1996,6 @@ export function DsaProfilePage({ id }: { id: string }) {
 
   const closeDecisionModals = () => {
     setApprovingDsa(null);
-    setQueryingDsa(null);
-    setQueryText("");
-    setQueryError("");
     setRejectingDsa(null);
     setRejectionError("");
     setRejectionReason("");
@@ -2490,22 +2419,10 @@ export function DsaProfilePage({ id }: { id: string }) {
                   disabled={!canApproveDsa}
                   onClick={() => setApprovingDsa(dsa)}
                   size="sm"
-                  title={canApproveDsa ? "Approve DSA" : "Missing mandatory documents — verify all docs first"}
+                  title={canApproveDsa ? "Approve DSA" : "Missing mandatory documents"}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1 h-auto"
                 >
-                  {approvalLevelLabel(dsa.current_approval_level, dsa.deviation)}
-                </Button>
-                <Button
-                  onClick={() => {
-                    setQueryText("");
-                    setQueryError("");
-                    setQueryingDsa(dsa);
-                  }}
-                  size="sm"
-                  variant="secondary"
-                  className="bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-200 font-bold text-xs py-1 h-auto"
-                >
-                  Query
+                  {dsaApprovalActionLabel(nextApprovalStatus)}
                 </Button>
                 <Button
                   onClick={() => setRejectingDsa(dsa)}
@@ -2642,7 +2559,6 @@ export function DsaProfilePage({ id }: { id: string }) {
           tabs={[
             { label: "Partner analysis", value: "performance" },
             { label: "Basic Info", value: "overview" },
-            { label: "Approval & BRE", value: "workflow" },
             { label: "KYC", value: "kyc" },
             { label: "Documents", value: "documents" },
             { label: "Agreements", value: "agreements" },
@@ -2666,167 +2582,9 @@ export function DsaProfilePage({ id }: { id: string }) {
               <DetailItem label="Mobile" value={dsa.mobile} />
               <DetailItem label="Email" value={dsa.email} />
               <DetailItem label="Address" value={`${dsa.address}, ${dsa.city}, ${dsa.state} ${dsa.pincode}`} />
-              <DetailItem label="Subregion" value={dsa.subregion_id || "N/A"} />
               <DetailItem label="Bank" value={`${dsa.bank_name} · ${dsa.ifsc}`} />
               <DetailItem label="Tier" value={dsa.tier} />
             </DetailGrid>
-          ) : null}
-          {tab === "workflow" ? (
-            <div className="space-y-6">
-              {/* BRE Engine Section */}
-              <div className="rounded-lg border border-slate-200 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900">BRE Engine Evaluation Results</h3>
-                    <p className="text-xs text-slate-500">Automated underwriting checks & deviation eligibility</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold ${
-                      dsa.bre_status === "PASSED"
-                        ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                        : "bg-amber-100 text-amber-800 border border-amber-300"
-                    }`}>
-                      {dsa.bre_status || "PENDING"}
-                    </span>
-                    {dsa.deviation ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700">
-                        Deviation Required (DGM Level 4)
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-
-                {dsa.bre_results && dsa.bre_results.length ? (
-                  <div className="overflow-x-auto rounded-md border border-slate-200">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-50 uppercase tracking-wide text-slate-500">
-                        <tr>
-                          <th className="p-2.5">Rule Code</th>
-                          <th className="p-2.5">Rule Name</th>
-                          <th className="p-2.5">Status</th>
-                          <th className="p-2.5">Rule Value</th>
-                          <th className="p-2.5">Expected Value</th>
-                          <th className="p-2.5">Remarks</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {dsa.bre_results.map((rule) => (
-                          <tr key={rule.id}>
-                            <td className="p-2.5 font-mono font-bold text-slate-700">{rule.rule_code}</td>
-                            <td className="p-2.5 font-semibold text-slate-900">{rule.rule_name}</td>
-                            <td className="p-2.5">
-                              <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold ${
-                                rule.rule_status === "PASS"
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : "bg-rose-100 text-rose-700"
-                              }`}>
-                                {rule.rule_status}
-                              </span>
-                            </td>
-                            <td className="p-2.5 text-slate-700">{rule.rule_value || "-"}</td>
-                            <td className="p-2.5 text-slate-500">{rule.expected_value || "-"}</td>
-                            <td className="p-2.5 text-slate-600">{rule.remarks || "-"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-500">No BRE execution records found.</p>
-                )}
-              </div>
-
-              {/* Multi-Level Approval Chain Section */}
-              <div className="rounded-lg border border-slate-200 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900">Multi-Level Approval Hierarchy</h3>
-                    <p className="text-xs text-slate-500">Level 1 Assistant Manager → Level 2 Manager → (Level 4 DGM if deviation) → Level 3 AGM</p>
-                  </div>
-                  {isBankUser && (dsa.onboarding_status === "SUBMITTED" || dsa.onboarding_status === "PENDING_APPROVAL" || dsa.onboarding_status === "DOCUMENT_VERIFICATION") ? (
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => setApprovingDsa(dsa)}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-8"
-                      >
-                        Approve Level
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          setQueryText("");
-                          setQueryError("");
-                          setQueryingDsa(dsa);
-                        }}
-                        className="bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs h-8"
-                      >
-                        Raise Query
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => setRejectingDsa(dsa)}
-                        className="bg-rose-50 text-rose-600 hover:bg-rose-100 font-semibold text-xs h-8"
-                      >
-                        Reject
-                      </Button>
-                    </div>
-                  ) : null}
-                </div>
-
-                {dsa.approvals && dsa.approvals.length ? (
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {dsa.approvals.map((app) => (
-                      <div
-                        key={app.id}
-                        className={`rounded-lg border p-3.5 space-y-2 ${
-                          app.status === "APPROVED"
-                            ? "border-emerald-200 bg-emerald-50/30"
-                            : app.status === "QUERY"
-                            ? "border-amber-200 bg-amber-50/30"
-                            : app.status === "REJECTED"
-                            ? "border-rose-200 bg-rose-50/30"
-                            : "border-slate-200 bg-slate-50/50"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                            Level {app.approval_level} — {app.assigned_role}
-                          </span>
-                          <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold ${
-                            app.status === "APPROVED"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : app.status === "QUERY"
-                              ? "bg-amber-100 text-amber-800"
-                              : app.status === "REJECTED"
-                              ? "bg-rose-100 text-rose-800"
-                              : "bg-slate-200 text-slate-700"
-                          }`}>
-                            {app.status}
-                          </span>
-                        </div>
-                        {app.remarks ? (
-                          <p className="text-xs text-slate-700">
-                            <span className="font-semibold">Remarks:</span> {app.remarks}
-                          </p>
-                        ) : null}
-                        {app.query_response ? (
-                          <p className="text-xs text-amber-800 bg-amber-100/60 p-2 rounded">
-                            <span className="font-semibold">Query Note:</span> {app.query_response}
-                          </p>
-                        ) : null}
-                        {app.action_at ? (
-                          <p className="text-[10px] text-slate-400">Actioned at: {formatDate(app.action_at)}</p>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-500">No approval history records available yet.</p>
-                )}
-              </div>
-            </div>
           ) : null}
           {tab === "kyc" ? (
             <DetailGrid>
@@ -3438,7 +3196,7 @@ export function DsaProfilePage({ id }: { id: string }) {
             <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4">
               <p className="text-sm font-semibold text-emerald-900">{approvingDsa.name}</p>
               <p className="mt-1 text-xs text-emerald-800">
-                Level {dsa.current_approval_level} approval — {approvalLevelLabel(dsa.current_approval_level, dsa.deviation)}. This will advance the DSA to the next review stage.
+                Approval will move this DSA to the next hierarchy stage.
               </p>
             </div>
             <DetailGrid>
@@ -3472,64 +3230,11 @@ export function DsaProfilePage({ id }: { id: string }) {
                   }
                 }}
               >
-                {actionLoading ? "Processing..." : approvalLevelLabel(dsa.current_approval_level, dsa.deviation)}
+                {actionLoading ? "Processing..." : dsaApprovalActionLabel(nextApprovalStatus)}
               </Button>
             </div>
           </div>
         ) : null}
-      </Modal>
-
-      <Modal onClose={closeDecisionModals} open={Boolean(queryingDsa)} title="Raise Query for DSA Partner" width="max-w-lg">
-        <div className="space-y-4">
-          <Field>
-            <Label htmlFor="profileQueryText">Query details</Label>
-            <textarea
-              id="profileQueryText"
-              rows={3}
-              className="w-full rounded-md border border-slate-200 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              value={queryText}
-              onChange={(event) => {
-                setQueryText(event.target.value);
-                setQueryError("");
-              }}
-              placeholder="Enter query details (e.g. Please re-upload clearer GST registration copy)"
-            />
-            {queryError ? <p className="text-xs font-medium text-rose-600">{queryError}</p> : null}
-          </Field>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="secondary" type="button" onClick={closeDecisionModals}>
-              Cancel
-            </Button>
-            <Button
-              className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
-              type="button"
-              disabled={actionLoading}
-              onClick={async () => {
-                if (queryingDsa) {
-                  if (!queryText.trim()) {
-                    setQueryError("Enter query text before submitting.");
-                    return;
-                  }
-                  const updated = await updateDsaProfile(queryingDsa.id, {
-                    action: "QUERY",
-                    query: queryText.trim(),
-                  } as any);
-                  if (updated) {
-                    await fetchDsaDetail(id);
-                    toast({
-                      title: "Query Raised",
-                      description: `Query sent for ${queryingDsa.name}.`,
-                      variant: "success",
-                    });
-                    closeDecisionModals();
-                  }
-                }
-              }}
-            >
-              {actionLoading ? "Processing..." : "Submit Query"}
-            </Button>
-          </div>
-        </div>
       </Modal>
 
       <Modal onClose={closeDecisionModals} open={Boolean(rejectingDsa)} title="Reject DSA Partner" width="max-w-lg">

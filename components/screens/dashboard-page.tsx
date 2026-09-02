@@ -59,21 +59,17 @@ export function DashboardPage() {
 
   useEffect(() => {
     async function loadRecentLogs() {
-      if (!currentUser || currentUser.role === "DSA Partner" || currentUser.role === "Customer") {
-        setLogsLoading(false);
-        return;
-      }
       try {
         const response = await adminApi.getActivityLogs({ per_page: 6 });
-        setRecentLogs(response?.data || []);
+        setRecentLogs(response.data);
       } catch (err) {
-        console.warn("Activity logs not loaded for current user:", err);
+        console.error("Failed to load recent activity logs on dashboard:", err);
       } finally {
         setLogsLoading(false);
       }
     }
     loadRecentLogs();
-  }, [currentUser]);
+  }, []);
 
   // State for Customer Loan Application Modal
   const [applyModalOpen, setApplyModalOpen] = useState(false);

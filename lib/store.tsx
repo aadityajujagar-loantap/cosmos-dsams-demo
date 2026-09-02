@@ -1548,15 +1548,19 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
           row.code === currentUser.code ||
           row.loginUsername.toLowerCase() === currentUser.email.toLowerCase()
       );
-      if (dsa && dsa.status === "Active") {
-        const updated = sessionUserFromDsa(dsa);
-        if (JSON.stringify(currentUser) !== JSON.stringify(updated)) {
-          setCurrentUser(updated);
-          localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updated));
+      if (dsa) {
+        if (dsa.status !== "Active") {
+          logout();
+        } else {
+          const updated = sessionUserFromDsa(dsa);
+          if (JSON.stringify(currentUser) !== JSON.stringify(updated)) {
+            setCurrentUser(updated);
+            localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updated));
+          }
         }
       }
     }
-  }, [store.dsas, currentUser]);
+  }, [store.dsas, currentUser, logout]);
 
   const getById = useCallback(
     <K extends CollectionName>(collection: K, id: string) =>

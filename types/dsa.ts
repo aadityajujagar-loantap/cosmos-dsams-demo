@@ -68,7 +68,6 @@ export interface Dsa {
   login_password?: string;
   documents?: DsaDocument[];
   approvals?: DsaApproval[];
-  bre_results?: DsaBreResult[];
   related_users?: {
     id: number;
     name: string;
@@ -78,19 +77,6 @@ export interface Dsa {
     deactivated_at: string | null;
     created_at: string;
   }[];
-}
-
-export interface DsaBreResult {
-  id: number;
-  dsa_id: number;
-  rule_code: string;
-  rule_name: string;
-  rule_status: "PASS" | "FAIL";
-  rule_value: string | null;
-  expected_value: string | null;
-  remarks: string | null;
-  is_deviation_eligible: boolean;
-  checked_at: string;
 }
 
 export interface StateOption {
