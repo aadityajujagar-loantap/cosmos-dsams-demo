@@ -139,6 +139,7 @@ export function UsersPage() {
   const { toast } = useToast();
   const [rows, setRows] = useState<AdminUserRow[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [branchRoles, setBranchRoles] = useState<BranchRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"" | "active" | "deactivated">("");
@@ -152,12 +153,14 @@ export function UsersPage() {
   async function loadUsers() {
     setLoading(true);
     try {
-      const [page, roleList] = await Promise.all([
+      const [page, roleList, branchRoleRes] = await Promise.all([
         adminApi.getUsersPage({ per_page: 100, status: statusFilter || undefined }),
         adminApi.getRoles(),
+        adminApi.getBranchRolesDropdown().catch(() => ({ data: [] })),
       ]);
       setRows(page.data.map(userToRow));
       setRoles(roleList);
+      setBranchRoles(branchRoleRes?.data || []);
     } catch (error: any) {
       toast({
         title: "User API failed",
@@ -467,8 +470,15 @@ export function UsersPage() {
               <Input onChange={(event) => updateForm("zone_code", event.target.value)} value={form.zone_code} />
             </Field>
             <Field className="sm:col-span-1">
-              <Label>Branch role ID</Label>
-              <Input onChange={(event) => updateForm("branch_role_id", event.target.value)} value={form.branch_role_id} />
+              <Label>Branch role</Label>
+              <Select onChange={(event) => updateForm("branch_role_id", event.target.value)} value={form.branch_role_id}>
+                <option value="">Select branch role</option>
+                {branchRoles.map((br) => (
+                  <option key={br.branch_role_id} value={br.branch_role_id}>
+                    {br.rolename} ({br.branch_role_id})
+                  </option>
+                ))}
+              </Select>
             </Field>
             <Field className="sm:col-span-1">
               <Label>Status</Label>
