@@ -89,6 +89,10 @@ export type UserRole =
   | "DSA Credit"
   | "Branch Regional Head"
   | "Branch User"
+  | "Assistant Manager"
+  | "Manager"
+  | "AGM"
+  | "DGM"
   | "DSA Partner"
   | "DSA Agent"
   | "Customer";
@@ -106,6 +110,23 @@ export interface BankDetails {
   accountNumber: string;
   ifsc: string;
   bankName: string;
+}
+
+export interface DsaApprovalRecord {
+  id: number;
+  dsa_id: number;
+  workflow_step_id?: number;
+  sequence?: number;
+  approval_level: number;
+  assigned_role: string;
+  condition_type?: string | null;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "QUERY" | "SKIPPED" | "RESUBMITTED";
+  remarks?: string | null;
+  query?: string | null;
+  actioned_by?: string | null;
+  actioned_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Dsa extends Entity {
@@ -135,9 +156,16 @@ export interface Dsa extends Entity {
   documents: DocumentRecord[];
   rejectionReason?: string;
   statusReason?: string;
-  statusReasonAction?: "Deactivated" | "Blacklisted";
+  statusReasonAction?: string;
   statusReasonAt?: string;
   statusReasonBy?: string;
+  onboarding_status?: string;
+  operational_status?: string;
+  bre_status?: string;
+  deviation?: boolean;
+  current_approval_level?: number;
+  current_workflow_step_id?: number;
+  approvals?: DsaApprovalRecord[];
 }
 
 export interface ProductCommissionRange {

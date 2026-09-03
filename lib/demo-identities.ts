@@ -6,7 +6,12 @@ export type SessionRole =
   | "DSA Credit"
   | "Branch Regional Head"
   | "Branch User"
+  | "Assistant Manager"
+  | "Manager"
+  | "AGM"
+  | "DGM"
   | "DSA Partner"
+  | "DSA Agent"
   | "Customer";
 export type DemoUserName = "admin" | "credit" | "brh" | "branch" | "user";
 
@@ -107,11 +112,19 @@ export function getDemoUserByRole(role: SessionRole): DemoSessionUser {
   return { ...DEMO_USERS.user };
 }
 
-export function sessionUserFromDsa(dsa: Dsa): DemoSessionUser {
+export function sessionUserFromDsa(dsa: {
+  id: string | number;
+  code: string;
+  name: string;
+  mobile: string;
+  email: string;
+  login_username?: string;
+  loginUsername?: string;
+}): DemoSessionUser {
   return {
     code: dsa.code,
-    email: dsa.loginUsername || dsa.email,
-    id: dsa.id,
+    email: dsa.login_username || dsa.loginUsername || dsa.email,
+    id: String(dsa.id),
     mobile: dsa.mobile,
     name: dsa.name,
     role: "DSA Partner",

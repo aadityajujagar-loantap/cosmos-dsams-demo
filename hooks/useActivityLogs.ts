@@ -56,16 +56,12 @@ export function useActivityLogs() {
           lastPage: Math.max(1, lastPage),
         });
       } catch (error: unknown) {
-        toast({
-          title: "Error fetching logs",
-          description: errorMessage(error, "Failed to query activity logs."),
-          variant: "warning",
-        });
+        setLogs([]);
       } finally {
         setLoading(false);
       }
     },
-    [toast]
+    []
   );
 
   const fetchLogDetail = useCallback(

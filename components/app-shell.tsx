@@ -73,7 +73,7 @@ function isPathAllowedForRole(role: string, pathname: string) {
     return pathname === "/dsa/management" || brhDsaProfile;
   }
 
-  if (role === "DSA Partner") {
+  if (role === "DSA Partner" || role === "DSA Agent") {
     const partnerDsaProfile =
       pathname.startsWith("/dsa/") &&
       !["/dsa/management", "/dsa/onboarding", "/dsa/product-setting"].some(
@@ -295,6 +295,21 @@ export function AppShell({ children }: { children: ReactNode }) {
             { href: "/finance/commissions", icon: Wallet, label: "My Commissions" },
           ],
           label: "Finance",
+        },
+      ];
+    } else if (currentUser.role === "DSA Agent") {
+      return [
+        {
+          items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
+          label: "Overview",
+        },
+        {
+          items: [{ href: "/applications", icon: ClipboardCheck, label: "Sourced Applications" }],
+          label: "Applications",
+        },
+        {
+          items: [{ href: "/sell-now", icon: Send, label: "Lead Sourcing" }],
+          label: "Journeys",
         },
       ];
     } else {

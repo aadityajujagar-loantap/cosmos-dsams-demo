@@ -9,6 +9,7 @@ import {
   Download,
   FileText,
   KeyRound,
+  LogIn,
   Plus,
   ShieldCheck,
   TrendingUp,
@@ -38,7 +39,7 @@ import {
 } from "@/components/ui/primitives";
 import { FieldConfig, RecordForm } from "@/components/ui/record-form";
 import { useToast } from "@/components/ui/toast";
-import { DEMO_USERS } from "@/lib/demo-identities";
+import { DEMO_USERS, sessionUserFromDsa } from "@/lib/demo-identities";
 import { generateDsaCredentials } from "@/lib/dsa-credentials";
 import {
   dsaDocumentType,
@@ -126,24 +127,247 @@ function activeDsaPatch(dsa: Dsa): Partial<Dsa> {
   };
 }
 
-function nextDsaApprovalStatus(role: string | undefined, status: DsaStatus): DsaStatus | null {
-  if (role === "DSA Manager" && queueStatuses.includes(status)) return "Active";
-  if (role === "Branch User" && status === "Pending Branch Approval") return "Pending BRH Approval";
-  if (role === "Branch Regional Head" && status === "Pending BRH Approval") return "Pending Credit Approval";
-  if (
-    role === "DSA Credit" &&
-    (status === "Pending Credit Approval" || status === "Submitted" || status === "KYC Pending")
-  ) {
-    return "Active";
+export type ApprovalStepLevelInfo = {
+  currentLevel: number;
+  levelName: string;
+  roleName: string;
+  canUserApprove: boolean;
+  actionLabel: string;
+  nextLevelName: string;
+  isFinalStep: boolean;
+  isDeviationStep: boolean;
+  isCompleted: boolean;
+  isRejected: boolean;
+};
+
+export function getDsaWorkflowLevelInfo(currentUserRole: string | undefined, dsa: any | null): ApprovalStepLevelInfo {
+  if (!dsa) {
+    return {
+      currentLevel: 1,
+      levelName: "Level 1: Assistant Manager",
+      roleName: "Assistant Manager",
+      canUserApprove: false,
+      actionLabel: "Approve",
+      nextLevelName: "Level 2: Manager",
+      isFinalStep: false,
+      isDeviationStep: false,
+      isCompleted: false,
+      isRejected: false,
+    };
   }
-  return null;
+
+  const onboardingStatus = String(dsa.onboarding_status || dsa.status || "").toUpperCase();
+  const isCompleted = onboardingStatus === "APPROVED" || onboardingStatus === "AGREEMENT_PENDING" || onboardingStatus === "AGREEMENT_COMPLETED";
+  const isRejected = onboardingStatus === "REJECTED";
+
+  if (isCompleted || isRejected) {
+    return {
+      currentLevel: dsa.current_approval_level || 5,
+      levelName: isCompleted ? "Approved & Verified" : "Rejected",
+      roleName: "N/A",
+      canUserApprove: false,
+      actionLabel: isCompleted ? "Approved" : "Rejected",
+      nextLevelName: "Completed",
+      isFinalStep: true,
+      isDeviationStep: false,
+      isCompleted,
+      isRejected,
+    };
+  }
+
+  const level = Number(dsa.current_approval_level || 1);
+  const isSuperAdmin = currentUserRole === "DSA Manager" || currentUserRole === "Admin";
+
+  if (level === 1) {
+    const canApprove = isSuperAdmin || currentUserRole === "Branch User" || currentUserRole === "Assistant Manager";
+    return {
+      currentLevel: 1,
+      levelName: "Level 1: Assistant Manager Review",
+      roleName: "Assistant Manager",
+      canUserApprove: canApprove,
+      actionLabel: "Approve Level 1 (Assistant Manager)",
+      nextLevelName: "Level 2: Manager",
+      isFinalStep: false,
+      isDeviationStep: false,
+      isCompleted: false,
+      isRejected: false,
+    };
+  }
+
+  if (level === 2) {
+    const canApprove = isSuperAdmin || currentUserRole === "Branch Regional Head" || currentUserRole === "Manager";
+    const isDeviationRequired = (dsa.bre_status === "FAILED" || dsa.bre_status === "failed") && Boolean(dsa.deviation);
+    return {
+      currentLevel: 2,
+      levelName: "Level 2: Manager Review",
+      roleName: "Manager",
+      canUserApprove: canApprove,
+      actionLabel: isDeviationRequired ? "Approve to DGM Deviation (Level 2)" : "Approve to AGM (Level 2)",
+      nextLevelName: isDeviationRequired ? "Level 4: DGM (Deviation)" : "Level 3: AGM",
+      isFinalStep: false,
+      isDeviationStep: false,
+      isCompleted: false,
+      isRejected: false,
+    };
+  }
+
+  if (level === 4) {
+    const canApprove = isSuperAdmin || currentUserRole === "DGM";
+    return {
+      currentLevel: 4,
+      levelName: "Level 4: DGM Deviation Approval",
+      roleName: "DGM",
+      canUserApprove: canApprove,
+      actionLabel: "Approve Deviation (DGM Level 4)",
+      nextLevelName: "Level 3: AGM",
+      isFinalStep: false,
+      isDeviationStep: true,
+      isCompleted: false,
+      isRejected: false,
+    };
+  }
+
+  if (level === 3) {
+    const canApprove = isSuperAdmin || currentUserRole === "DSA Credit" || currentUserRole === "AGM";
+    return {
+      currentLevel: 3,
+      levelName: "Level 3: AGM Final Approval",
+      roleName: "AGM",
+      canUserApprove: canApprove,
+      actionLabel: "Grant Final Approval & Activate (AGM)",
+      nextLevelName: "Approved & Active",
+      isFinalStep: true,
+      isDeviationStep: false,
+      isCompleted: false,
+      isRejected: false,
+    };
+  }
+
+  return {
+    currentLevel: level,
+    levelName: `Level ${level} Approval`,
+    roleName: "Reviewer",
+    canUserApprove: isSuperAdmin,
+    actionLabel: "Approve",
+    nextLevelName: "Next Step",
+    isFinalStep: false,
+    isDeviationStep: false,
+    isCompleted: false,
+    isRejected: false,
+  };
 }
 
-function dsaApprovalActionLabel(nextStatus: DsaStatus | null) {
-  if (nextStatus === "Active") return "Approve and Activate";
-  if (nextStatus === "Pending BRH Approval") return "Approve to BRH";
-  if (nextStatus === "Pending Credit Approval") return "Approve to Credit";
-  return "Approve";
+export function DsaApprovalStepper({ dsa }: { dsa: any }) {
+  if (!dsa) return null;
+  const currentLevel = Number(dsa.current_approval_level || 1);
+  const onboardingStatus = String(dsa.onboarding_status || dsa.status || "").toUpperCase();
+  const isApproved = onboardingStatus === "APPROVED" || onboardingStatus === "AGREEMENT_PENDING" || onboardingStatus === "AGREEMENT_COMPLETED";
+  const isRejected = onboardingStatus === "REJECTED";
+
+  const steps = [
+    { level: 1, name: "Level 1: Assistant Manager", role: "Assistant Manager" },
+    { level: 2, name: "Level 2: Manager", role: "Manager" },
+    ...(dsa.deviation || dsa.bre_status === "FAILED" || dsa.bre_status === "failed" || (Array.isArray(dsa.approvals) && dsa.approvals.some((a: any) => a.approval_level === 4))
+      ? [{ level: 4, name: "Level 4: DGM Deviation", role: "DGM" }]
+      : []),
+    { level: 3, name: "Level 3: AGM Final", role: "AGM" },
+  ];
+
+  const getStepRecord = (stepLevel: number) => {
+    if (Array.isArray(dsa.approvals) && dsa.approvals.length > 0) {
+      const match = dsa.approvals.find((a: any) => Number(a.approval_level) === stepLevel);
+      if (match) return match;
+    }
+    if (isApproved) return { status: "APPROVED", remarks: "Approved" };
+    if (isRejected && currentLevel === stepLevel) return { status: "REJECTED", remarks: dsa.rejection_reason || dsa.rejectionReason || "Rejected" };
+    if (currentLevel > stepLevel && stepLevel !== 4) return { status: "APPROVED", remarks: "Completed" };
+    if (currentLevel === stepLevel) return { status: onboardingStatus === "DOCUMENT_PENDING" ? "QUERY" : "PENDING", remarks: "Pending Review" };
+    return { status: "PENDING", remarks: "Upcoming" };
+  };
+
+  return (
+    <Card className="p-4 bg-slate-50/80 border-slate-200 shadow-sm mb-6">
+      <div className="mb-3 flex items-center justify-between">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+          <ShieldCheck className="h-4 w-4 text-blue-600" />
+          4-Level Approval Workflow Stepper
+        </h4>
+        <span className="text-xs font-medium text-slate-500">
+          {isApproved ? "Status: Fully Approved & Active" : isRejected ? "Status: Rejected" : `Active Queue: Level ${currentLevel}`}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {steps.map((step, idx) => {
+          const rec = getStepRecord(step.level);
+          const statusStr = String(rec.status || "PENDING").toUpperCase();
+          const isPassed = statusStr === "APPROVED";
+          const isCurrent = currentLevel === step.level && !isApproved && !isRejected;
+          const isFailed = statusStr === "REJECTED";
+          const isQuery = statusStr === "QUERY";
+
+          return (
+            <div
+              key={step.level}
+              className={`relative flex flex-col justify-between rounded-lg border p-3 text-xs transition-all ${
+                isPassed
+                  ? "border-emerald-200 bg-emerald-50/70 text-emerald-900"
+                  : isCurrent
+                  ? "border-blue-400 bg-blue-50 ring-2 ring-blue-400/20 text-blue-900 font-medium"
+                  : isQuery
+                  ? "border-amber-300 bg-amber-50 text-amber-900"
+                  : isFailed
+                  ? "border-rose-300 bg-rose-50 text-rose-900"
+                  : "border-slate-200 bg-white text-slate-500"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-1 mb-1.5">
+                <span className="font-bold text-[10px] uppercase tracking-wide opacity-75">
+                  Step {idx + 1}
+                </span>
+                {isPassed && (
+                  <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                    <Check className="mr-0.5 h-3 w-3" /> Approved
+                  </span>
+                )}
+                {isCurrent && (
+                  <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800 animate-pulse">
+                    In Review
+                  </span>
+                )}
+                {isQuery && (
+                  <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                    Query Raised
+                  </span>
+                )}
+                {isFailed && (
+                  <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-800">
+                    Rejected
+                  </span>
+                )}
+                {!isPassed && !isCurrent && !isQuery && !isFailed && (
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                    Pending
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <p className="font-bold text-slate-900 text-xs">{step.name}</p>
+                <p className="text-[11px] text-slate-600 font-normal mt-0.5">Role: {step.role}</p>
+              </div>
+
+              {rec.remarks && (
+                <p className="mt-2 text-[10px] text-slate-600 bg-white/70 p-1.5 rounded border border-slate-200/50 truncate">
+                  {rec.remarks}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
 }
 
 const dsaFields: FieldConfig<Dsa>[] = [
@@ -218,7 +442,7 @@ function readOnboardingDraft(): Partial<OnboardingDraft> {
 }
 
 export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boolean } = {}) {
-  const { currentUser, store, createItem } = useMockStore();
+  const { currentUser, store, createItem, updateItem } = useMockStore();
   const {
     createDsa,
     uploadDsaDocument,
@@ -342,10 +566,13 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
     return false;
   }
 
+  const [isStepNavigating, setIsStepNavigating] = useState(false);
+
   async function goNext(currentStep: number) {
     if (currentStep > 0 && currentStep < 4 && !validate(currentStep)) return;
     if (currentStep === 4 && !validatePublicDocuments()) return;
     setErrors({});
+    setIsStepNavigating(true);
 
     try {
       if (currentStep === 1) {
@@ -435,12 +662,13 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
           }
         }
       }
+      setStep(currentStep + 1);
     } catch (err) {
       console.error("Failed to progress onboarding API step:", err);
       return;
+    } finally {
+      setIsStepNavigating(false);
     }
-
-    setStep(currentStep + 1);
   }
 
   function goBack(currentStep: number) {
@@ -470,63 +698,68 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
       setStep(4);
       return;
     }
+    setIsStepNavigating(true);
 
-    let finalDsa = null;
+    try {
+      let finalDsa = null;
 
-    if (dsaDbId !== null) {
-      finalDsa = await updateDsaStatus(dsaDbId, {
-        onboarding_status: "SUBMITTED",
-        reason: "Onboarding completed by partner",
-      });
+      if (dsaDbId !== null) {
+        finalDsa = await updateDsaStatus(dsaDbId, {
+          onboarding_status: "SUBMITTED",
+          reason: "Onboarding completed by partner",
+        });
 
-      for (const key of Object.keys(uploadedFiles)) {
-        const fileMeta = uploadedFiles[key] as any;
-        if (fileMeta?.file && !fileMeta.uploaded) {
-          await uploadDsaDocument(dsaDbId, {
-            file: fileMeta.file,
-            document_type: dsaDocumentType(key),
-            owner_name: form.name,
-          });
-        }
-      }
-    } else {
-      const payload = {
-        name: form.name,
-        business_type: form.businessType,
-        pan: form.pan,
-        gst: form.gst || null,
-        contact_person: form.contactPerson,
-        mobile: form.mobile,
-        email: form.email,
-        address: form.address,
-        city: form.city,
-        state: form.state,
-        pincode: form.pincode,
-        account_name: form.accountName,
-        account_number: form.accountNumber,
-        ifsc: form.ifsc,
-        bank_name: form.bankName,
-        onboarding_status: "SUBMITTED",
-      };
-      finalDsa = await createDsa(payload);
-      if (finalDsa) {
         for (const key of Object.keys(uploadedFiles)) {
           const fileMeta = uploadedFiles[key] as any;
-          if (fileMeta?.file) {
-            await uploadDsaDocument(finalDsa.id, {
+          if (fileMeta?.file && !fileMeta.uploaded) {
+            await uploadDsaDocument(dsaDbId, {
               file: fileMeta.file,
               document_type: dsaDocumentType(key),
               owner_name: form.name,
             });
           }
         }
+      } else {
+        const payload = {
+          name: form.name,
+          business_type: form.businessType,
+          pan: form.pan,
+          gst: form.gst || null,
+          contact_person: form.contactPerson,
+          mobile: form.mobile,
+          email: form.email,
+          address: form.address,
+          city: form.city,
+          state: form.state,
+          pincode: form.pincode,
+          account_name: form.accountName,
+          account_number: form.accountNumber,
+          ifsc: form.ifsc,
+          bank_name: form.bankName,
+          onboarding_status: "SUBMITTED",
+        };
+        finalDsa = await createDsa(payload);
+        if (finalDsa) {
+          for (const key of Object.keys(uploadedFiles)) {
+            const fileMeta = uploadedFiles[key] as any;
+            if (fileMeta?.file) {
+              await uploadDsaDocument(finalDsa.id, {
+                file: fileMeta.file,
+                document_type: dsaDocumentType(key),
+                owner_name: form.name,
+              });
+            }
+          }
+        }
       }
-    }
 
-    if (!finalDsa) return;
+      if (!finalDsa) return;
 
-    if (createItem) {
-      createItem("dsas", {
+      const existingStoreDsa = store.dsas.find(
+        (item) => String(item.id) === String(finalDsa.id) || item.code === finalDsa.code
+      );
+
+      const dsaStoreData = {
         id: String(finalDsa.id),
         code: finalDsa.code,
         name: finalDsa.name,
@@ -548,7 +781,7 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
           bankName: finalDsa.bank_name,
           ifsc: finalDsa.ifsc,
         },
-        status: "Pending Branch Approval",
+        status: "Pending Branch Approval" as const,
         onboardingDate: new Date().toISOString(),
         manager: finalDsa.manager || "",
         tier: (finalDsa.tier as any) || "Bronze",
@@ -557,13 +790,23 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
         approvalRate: finalDsa.approval_rate || 0,
         commissionEarned: finalDsa.commission_earned || 0,
         documents: [],
-      });
-    }
+        onboarding_status: finalDsa.onboarding_status,
+        operational_status: finalDsa.operational_status,
+      };
 
-    setSubmittedDsaId(finalDsa.code);
-    setSubmittedDsaStatus(finalDsa.onboarding_status as DsaStatus);
-    setStep(6);
-    localStorage.removeItem(DSA_ONBOARDING_DRAFT_KEY);
+      if (existingStoreDsa && updateItem) {
+        updateItem("dsas", existingStoreDsa.id, dsaStoreData);
+      } else if (createItem) {
+        createItem("dsas", dsaStoreData);
+      }
+
+      setSubmittedDsaId(finalDsa.code);
+      setSubmittedDsaStatus(finalDsa.onboarding_status as DsaStatus);
+      setStep(6);
+      localStorage.removeItem(DSA_ONBOARDING_DRAFT_KEY);
+    } finally {
+      setIsStepNavigating(false);
+    }
   }
 
   function resetOnboarding() {
@@ -799,9 +1042,17 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
                   <Button
                     type="button"
                     onClick={() => setStep(1)}
-                    className="bg-blue-700 hover:bg-blue-800 text-white font-bold h-11 px-10 rounded-lg shadow-sm"
+                    disabled={actionLoading || isStepNavigating}
+                    className="bg-blue-700 hover:bg-blue-800 text-white font-bold h-11 px-10 rounded-lg shadow-sm flex items-center justify-center gap-2"
                   >
-                    Continue
+                    {(actionLoading || isStepNavigating) ? (
+                      <>
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                        <span>Processing...</span>
+                      </>
+                    ) : (
+                      <span>Continue</span>
+                    )}
                   </Button>
                 </div>
               </div>
@@ -1044,9 +1295,17 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
                   <Button
                     onClick={handleSubmit}
                     type="button"
-                    className="h-10 px-6 bg-blue-700 hover:bg-blue-800 text-white font-bold"
+                    disabled={actionLoading || isStepNavigating}
+                    className="h-10 px-6 bg-blue-700 hover:bg-blue-800 text-white font-bold flex items-center justify-center gap-2 min-w-[170px]"
                   >
-                    Submit Onboarding
+                    {(actionLoading || isStepNavigating) ? (
+                      <>
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                        <span>Submitting...</span>
+                      </>
+                    ) : (
+                      <span>Submit Onboarding</span>
+                    )}
                   </Button>
                 </div>
               </div>
@@ -1125,6 +1384,7 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
                     onClick={() => goBack(step)}
                     type="button"
                     variant="secondary"
+                    disabled={actionLoading || isStepNavigating}
                     className="h-10 px-5"
                   >
                     Back
@@ -1134,9 +1394,17 @@ export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boole
                 <Button
                   onClick={() => goNext(step)}
                   type="button"
-                  className="h-10 px-5"
+                  disabled={actionLoading || isStepNavigating}
+                  className="h-10 px-6 bg-blue-700 hover:bg-blue-800 text-white font-bold flex items-center justify-center gap-2 min-w-[130px]"
                 >
-                  Continue
+                  {(actionLoading || isStepNavigating) ? (
+                    <>
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      <span>Processing...</span>
+                    </>
+                  ) : (
+                    <span>Continue</span>
+                  )}
                 </Button>
               </div>
             ) : null}
@@ -1319,7 +1587,7 @@ function DsaRecoveryReports({ dsaId }: { dsaId: string }) {
 }
 
 export function DsaManagementPage() {
-  const { createItem, deleteItem, store, updateItem, currentUser } = useMockStore();
+  const { createItem, deleteItem, store, updateItem, currentUser, setCurrentUser } = useMockStore();
   const {
     dsas,
     listLoading,
@@ -1351,6 +1619,8 @@ export function DsaManagementPage() {
 
   const [onHoldDsas, setOnHoldDsas] = useState<any[]>([]);
 
+  const [approvalBucket, setApprovalBucket] = useState("");
+
   const getBackendStatusParams = (statusVal: string) => {
     if (!statusVal) return {};
     const normalized = statusVal.toLowerCase();
@@ -1371,10 +1641,11 @@ export function DsaManagementPage() {
     return {
       search: search.trim() || undefined,
       ...statusParams,
+      approval_bucket: approvalBucket ? Number(approvalBucket) : undefined,
       page,
       per_page: 10,
     };
-  }, [search, status, page]);
+  }, [search, status, approvalBucket, page]);
 
   useEffect(() => {
     if (isNetworkPage) return;
@@ -1409,6 +1680,11 @@ export function DsaManagementPage() {
 
   const handleStatusChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setStatus(event.target.value);
+    setPage(1);
+  };
+
+  const handleApprovalBucketChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setApprovalBucket(event.target.value);
     setPage(1);
   };
 
@@ -1712,12 +1988,24 @@ export function DsaManagementPage() {
                 aria-label="Filter by status"
                 onChange={handleStatusChange}
                 value={status}
-                className="w-full sm:w-[200px]"
+                className="w-full sm:w-[180px]"
               >
                 <option value="">All statuses</option>
                 {managementStatuses.map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
+              </Select>
+              <Select
+                aria-label="Filter by approval queue"
+                onChange={handleApprovalBucketChange}
+                value={approvalBucket}
+                className="w-full sm:w-[220px]"
+              >
+                <option value="">All Approval Queues</option>
+                <option value="1">Level 1: Assistant Manager</option>
+                <option value="2">Level 2: Manager</option>
+                <option value="3">Level 3: AGM (Final)</option>
+                <option value="4">Level 4: DGM (Deviation)</option>
               </Select>
             </div>
             <span className="text-xs text-slate-500 font-medium">
@@ -1912,7 +2200,7 @@ export function mapBackendStatusToFrontend(onboarding?: string, operational?: st
 }
 
 export function DsaProfilePage({ id }: { id: string }) {
-  const { createItem, deleteDsaCascade, deleteItem, store, updateItem, currentUser } = useMockStore();
+  const { createItem, deleteDsaCascade, deleteItem, store, updateItem, currentUser, setCurrentUser } = useMockStore();
   const { toast } = useToast();
   const router = useRouter();
   const [tab, setTab] = useState("performance");
@@ -1923,6 +2211,9 @@ export function DsaProfilePage({ id }: { id: string }) {
   const [rejectingDsa, setRejectingDsa] = useState<any | null>(null);
   const [rejectionError, setRejectionError] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
+  const [queryingDsa, setQueryingDsa] = useState<any | null>(null);
+  const [queryReason, setQueryReason] = useState("");
+  const [queryError, setQueryError] = useState("");
   const [deactivatingDsa, setDeactivatingDsa] = useState<any | null>(null);
   const [blacklistingDsa, setBlacklistingDsa] = useState<any | null>(null);
   const [activatingDsa, setActivatingDsa] = useState<any | null>(null);
@@ -1959,17 +2250,17 @@ export function DsaProfilePage({ id }: { id: string }) {
   const [dsaAudit, setDsaAudit] = useState<any[]>([]);
 
   useEffect(() => {
-    if (!dsa) return;
+    if (!dsa || currentUser?.role !== "DSA Manager") return;
     async function loadDsaAudit() {
       try {
         const response = await adminApi.getActivityLogs({ group: "dsa", page: 1, per_page: 8 });
         setDsaAudit(response.data);
       } catch (err) {
-        console.error("Failed to load DSA audit logs:", err);
+        // Activity log API access is restricted to Super Admin (DSA Manager)
       }
     }
     loadDsaAudit();
-  }, [dsa]);
+  }, [dsa, currentUser?.role]);
 
   if (loading || !dsa) {
     return (
@@ -1984,9 +2275,8 @@ export function DsaProfilePage({ id }: { id: string }) {
     (req) => !uploadedTypes.has(dsaDocumentType(req.key))
   );
 
-  const dsaStatus = mapBackendStatusToFrontend(dsa.onboarding_status, dsa.operational_status);
-  const nextApprovalStatus = nextDsaApprovalStatus(currentUser?.role, dsaStatus);
-  const canDecideDsa = Boolean(nextApprovalStatus);
+  const workflowLevelInfo = getDsaWorkflowLevelInfo(currentUser?.role, dsa);
+  const canDecideDsa = workflowLevelInfo.canUserApprove;
   const canApproveDsa = canDecideDsa && missingProfileDocuments.length === 0;
   const allProductConfigs = store.dsaProductConfigs.filter((config) => config.dsaId === String(dsa.id));
   const productConfigs = allProductConfigs
@@ -1997,8 +2287,11 @@ export function DsaProfilePage({ id }: { id: string }) {
   const closeDecisionModals = () => {
     setApprovingDsa(null);
     setRejectingDsa(null);
+    setQueryingDsa(null);
     setRejectionError("");
     setRejectionReason("");
+    setQueryError("");
+    setQueryReason("");
   };
 
   const applications = store.applications
@@ -2422,7 +2715,15 @@ export function DsaProfilePage({ id }: { id: string }) {
                   title={canApproveDsa ? "Approve DSA" : "Missing mandatory documents"}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1 h-auto"
                 >
-                  {dsaApprovalActionLabel(nextApprovalStatus)}
+                  {workflowLevelInfo.actionLabel}
+                </Button>
+                <Button
+                  onClick={() => setQueryingDsa(dsa)}
+                  size="sm"
+                  variant="secondary"
+                  className="bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 font-bold text-xs py-1 h-auto"
+                >
+                  Raise Query
                 </Button>
                 <Button
                   onClick={() => setRejectingDsa(dsa)}
@@ -2514,6 +2815,8 @@ export function DsaProfilePage({ id }: { id: string }) {
         title={dsa.name}
       />
 
+      <DsaApprovalStepper dsa={dsa} />
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <KpiCard change="+6.2%" icon={TrendingUp} label="Approval rate" tone="green" value={percent(dsa.approval_rate || 0)} />
         <KpiCard change="+11.0%" icon={ClipboardList} label="Applications sourced" value={String(applications.length)} />
@@ -2567,7 +2870,7 @@ export function DsaProfilePage({ id }: { id: string }) {
             { label: "Applications", value: "apps" },
             { label: "Commission", value: "commission" },
             { label: "Reports", value: "reports" },
-            { label: "Audit Timeline", value: "audit" },
+            ...(currentUser?.role === "DSA Manager" ? [{ label: "Audit Timeline", value: "audit" }] : []),
           ]}
           value={tab}
         />
@@ -3148,15 +3451,26 @@ export function DsaProfilePage({ id }: { id: string }) {
           ) : null}
           {tab === "audit" ? (
             <div className="space-y-3">
-              {audit.map((item) => (
-                <div className="flex gap-3 rounded-md border border-slate-100 p-3" key={item.id}>
-                  <FileText className="mt-0.5 h-4 w-4 text-blue-600" />
-                  <div>
-                    <p className="font-medium text-slate-950">{item.action}</p>
-                    <p className="text-sm text-slate-500">{item.actor} · {formatDate(item.at)} · {item.ipAddress}</p>
-                  </div>
-                </div>
-              ))}
+              {audit.length ? (
+                audit.map((item, idx) => {
+                  const action = item.action || item.event || item.description || "Activity logged";
+                  const actor = item.actor || item.user?.name || item.causer?.name || "System";
+                  const atDate = item.at || item.created_at || item.createdAt;
+                  const ip = item.ipAddress || item.ip_address || "Internal";
+
+                  return (
+                    <div className="flex gap-3 rounded-md border border-slate-100 p-3" key={item.id || idx}>
+                      <FileText className="mt-0.5 h-4 w-4 text-blue-600" />
+                      <div>
+                        <p className="font-medium text-slate-950">{action}</p>
+                        <p className="text-sm text-slate-500">{actor} · {formatDate(atDate)} · {ip}</p>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="text-sm text-slate-500">No activity logs recorded for this DSA yet.</p>
+              )}
             </div>
           ) : null}
           {tab === "reports" ? (
@@ -3185,10 +3499,10 @@ export function DsaProfilePage({ id }: { id: string }) {
         ) : null}
       </Modal>
       <Modal
-        description="Confirm this only after KYC, documents, bank details, and business information have been checked."
+        description="Confirm this approval step after verifying KYC, documents, and business information."
         onClose={closeDecisionModals}
         open={Boolean(approvingDsa)}
-        title="Approve DSA Partner"
+        title={`Approve DSA Partner — ${workflowLevelInfo.levelName}`}
         width="max-w-lg"
       >
         {approvingDsa ? (
@@ -3196,14 +3510,14 @@ export function DsaProfilePage({ id }: { id: string }) {
             <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4">
               <p className="text-sm font-semibold text-emerald-900">{approvingDsa.name}</p>
               <p className="mt-1 text-xs text-emerald-800">
-                Approval will move this DSA to the next hierarchy stage.
+                This action will approve Level {workflowLevelInfo.currentLevel} ({workflowLevelInfo.roleName}) and advance the application to {workflowLevelInfo.nextLevelName}.
               </p>
             </div>
             <DetailGrid>
-              <DetailItem label="New status" value={<StatusBadge status={nextApprovalStatus ?? approvingDsa.onboarding_status} />} />
+              <DetailItem label="Current stage" value={workflowLevelInfo.levelName} />
+              <DetailItem label="Assigned role" value={workflowLevelInfo.roleName} />
+              <DetailItem label="Next stage" value={workflowLevelInfo.nextLevelName} />
               <DetailItem label="Approval rate" value={percent(approvingDsa.approval_rate || 0)} />
-              <DetailItem label="Monthly lead target" value={0} />
-              <DetailItem label="Commission earned" value={formatCurrency(approvingDsa.commission_earned || 0)} />
             </DetailGrid>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="secondary" type="button" onClick={closeDecisionModals}>
@@ -3214,7 +3528,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                 type="button"
                 disabled={actionLoading}
                 onClick={async () => {
-                  const remarks = `Approved by ${currentUser?.role} (${currentUser?.name})`;
+                  const remarks = `Approved Level ${workflowLevelInfo.currentLevel} by ${currentUser?.role} (${currentUser?.name})`;
                   const updated = await updateDsaProfile(approvingDsa.id, {
                     action: "APPROVE",
                     remarks,
@@ -3223,18 +3537,78 @@ export function DsaProfilePage({ id }: { id: string }) {
                     await fetchDsaDetail(id);
                     toast({
                       title: "Partner Approved",
-                      description: `${approvingDsa.name} moved to the next stage.`,
+                      description: `${approvingDsa.name} approved to ${workflowLevelInfo.nextLevelName}.`,
                       variant: "success",
                     });
                     closeDecisionModals();
                   }
                 }}
               >
-                {actionLoading ? "Processing..." : dsaApprovalActionLabel(nextApprovalStatus)}
+                {actionLoading ? "Processing..." : workflowLevelInfo.actionLabel}
               </Button>
             </div>
           </div>
         ) : null}
+      </Modal>
+
+      <Modal
+        description="Specify the missing information or document query required from the applicant."
+        onClose={closeDecisionModals}
+        open={Boolean(queryingDsa)}
+        title="Raise Onboarding Query"
+        width="max-w-lg"
+      >
+        <div className="space-y-4">
+          <Field>
+            <Label htmlFor="queryReason">Query details</Label>
+            <textarea
+              id="queryReason"
+              rows={3}
+              className="w-full rounded-md border border-slate-200 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              value={queryReason}
+              onChange={(event) => {
+                setQueryReason(event.target.value);
+                setQueryError("");
+              }}
+              placeholder="Enter query details (e.g. Bank statement signature missing, GST registration certificate unclear)"
+            />
+            {queryError ? <p className="text-xs font-medium text-rose-600">{queryError}</p> : null}
+          </Field>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="secondary" type="button" onClick={closeDecisionModals}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
+              type="button"
+              disabled={actionLoading}
+              onClick={async () => {
+                if (queryingDsa) {
+                  if (!queryReason.trim()) {
+                    setQueryError("Please provide query details before submitting.");
+                    return;
+                  }
+                  const updated = await updateDsaProfile(queryingDsa.id, {
+                    action: "QUERY",
+                    query: queryReason.trim(),
+                    remarks: queryReason.trim(),
+                  } as any);
+                  if (updated) {
+                    await fetchDsaDetail(id);
+                    toast({
+                      title: "Query Raised",
+                      description: `Query submitted for ${queryingDsa.name}. Status updated to Document Pending.`,
+                      variant: "success",
+                    });
+                    closeDecisionModals();
+                  }
+                }
+              }}
+            >
+              {actionLoading ? "Processing..." : "Submit Query"}
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       <Modal onClose={closeDecisionModals} open={Boolean(rejectingDsa)} title="Reject DSA Partner" width="max-w-lg">

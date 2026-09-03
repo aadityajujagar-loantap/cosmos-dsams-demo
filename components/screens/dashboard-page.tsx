@@ -58,18 +58,22 @@ export function DashboardPage() {
   const [logsLoading, setLogsLoading] = useState(true);
 
   useEffect(() => {
+    if (currentUser?.role !== "DSA Manager") {
+      setLogsLoading(false);
+      return;
+    }
     async function loadRecentLogs() {
       try {
         const response = await adminApi.getActivityLogs({ per_page: 6 });
         setRecentLogs(response.data);
       } catch (err) {
-        console.error("Failed to load recent activity logs on dashboard:", err);
+        // Activity log API access is restricted to Super Admin (DSA Manager)
       } finally {
         setLogsLoading(false);
       }
     }
     loadRecentLogs();
-  }, []);
+  }, [currentUser?.role]);
 
   // State for Customer Loan Application Modal
   const [applyModalOpen, setApplyModalOpen] = useState(false);
@@ -97,13 +101,13 @@ export function DashboardPage() {
   }, [store]);
 
   const pendingDsas = useMemo(() => {
+    let result: typeof store.dsas = [];
     if (currentUser?.role === "DSA Credit") {
-      return store.dsas.filter(
+      result = store.dsas.filter(
         (item) => item.status === "Pending Credit Approval" || item.status === "KYC Pending",
       );
-    }
-    if (currentUser?.role === "DSA Manager") {
-      return store.dsas.filter(
+    } else if (currentUser?.role === "DSA Manager") {
+      result = store.dsas.filter(
         (item) =>
           item.status === "Submitted" ||
           item.status === "Pending Branch Approval" ||
@@ -112,28 +116,44 @@ export function DashboardPage() {
           item.status === "Pending Credit Approval",
       );
     }
-    return [];
+    const seen = new Set<string>();
+    return result.filter((item) => {
+      if (seen.has(String(item.id))) return false;
+      seen.add(String(item.id));
+      return true;
+    });
   }, [currentUser?.role, store.dsas]);
 
   const onHoldDsas = useMemo(() => {
+    let result: typeof store.dsas = [];
     if (currentUser?.role === "Branch User") {
-      return store.dsas
+      result = store.dsas
         .filter((item) => item.status === "On Hold" && item.manager === currentUser.name)
         .sort((left, right) => right.onboardingDate.localeCompare(left.onboardingDate));
-    }
-    if (currentUser?.role === "DSA Credit" || currentUser?.role === "DSA Manager") {
-      return store.dsas
+    } else if (currentUser?.role === "DSA Credit" || currentUser?.role === "DSA Manager") {
+      result = store.dsas
         .filter((item) => item.status === "On Hold")
         .sort((left, right) => right.onboardingDate.localeCompare(left.onboardingDate));
     }
-    return [];
+    const seen = new Set<string>();
+    return result.filter((item) => {
+      if (seen.has(String(item.id))) return false;
+      seen.add(String(item.id));
+      return true;
+    });
   }, [currentUser, store.dsas]);
 
   const branchDsas = useMemo(() => {
     if (currentUser?.role !== "Branch User") return [];
-    return store.dsas
+    const result = store.dsas
       .filter((item) => item.manager === currentUser.name)
       .sort((left, right) => right.onboardingDate.localeCompare(left.onboardingDate));
+    const seen = new Set<string>();
+    return result.filter((item) => {
+      if (seen.has(String(item.id))) return false;
+      seen.add(String(item.id));
+      return true;
+    });
   }, [currentUser, store.dsas]);
 
   const branchStats = useMemo(

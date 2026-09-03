@@ -149,7 +149,7 @@ export function useDsa() {
   );
 
   const updateDsaProfile = useCallback(
-    async (idOrCode: number | string, payload: Partial<Dsa> & { action?: string; remarks?: string }) => {
+    async (idOrCode: number | string, payload: Partial<Dsa> & { action?: string; remarks?: string; query?: string }) => {
       setActionLoading(true);
       try {
         const response = await adminApi.updateDsaProfile(idOrCode, payload);

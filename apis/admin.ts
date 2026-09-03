@@ -434,7 +434,7 @@ export const adminApi = {
     });
   },
 
-  updateDsaProfile: async (idOrCode: number | string, payload: Partial<Dsa> & { action?: string; remarks?: string }): Promise<BackendResponse<Dsa>> => {
+  updateDsaProfile: async (idOrCode: number | string, payload: Partial<Dsa> & { action?: string; remarks?: string; query?: string }): Promise<BackendResponse<Dsa>> => {
     return request<BackendResponse<Dsa>>(`/v1/dsas/${idOrCode}/update-profile`, {
       method: "POST",
       body: JSON.stringify(payload),

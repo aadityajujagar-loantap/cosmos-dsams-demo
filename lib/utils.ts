@@ -38,12 +38,15 @@ export function formatCommissionDisplay(range: CommissionRangeDisplay) {
   return formatCommissionRateValue(Number(range.rate || 0));
 }
 
-export function formatDate(value: string) {
+export function formatDate(value?: string | number | null) {
+  if (!value) return "N/A";
+  const date = new Date(value);
+  if (isNaN(date.getTime())) return "N/A";
   return new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",
     month: "short",
     year: "numeric",
-  }).format(new Date(value));
+  }).format(date);
 }
 
 export function compactNumber(value: number) {
@@ -56,7 +59,6 @@ export function compactNumber(value: number) {
 export function percent(value: number) {
   return `${Math.round(value)}%`;
 }
-
 export function makeId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }

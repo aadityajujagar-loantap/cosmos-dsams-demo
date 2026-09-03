@@ -58,6 +58,7 @@ interface StoreContextValue {
     patch: Partial<EntityMap[K]>,
   ) => void;
   currentUser: DemoSessionUser | null;
+  setCurrentUser: (user: DemoSessionUser | null) => void;
   login: (session: AuthSession) => void;
   logout: () => void;
   hasPermission: (permission: string) => boolean;
@@ -73,12 +74,39 @@ const COLON_DSA_ID_PATTERN = /^COSDSA(\d{8})(\d{2}):(\d{2}):(\d{2}):(\d{3})$/;
 const LEGACY_DSA_ID_PATTERN = /^dsa-(\d+)$/;
 const LEGACY_DSA_CODE_PATTERN = /^DSA-\d+$/;
 
-function sessionRoleFromBackendRoles(roleNames: string[]): DemoSessionUser["role"] {
-  if (roleNames.some((role) => ["super_admin", "admin", "checker"].includes(role))) return "DSA Manager";
-  if (roleNames.includes("dsa_credit")) return "DSA Credit";
-  if (roleNames.includes("branch_regional_head")) return "Branch Regional Head";
-  if (roleNames.includes("maker") || roleNames.includes("branch_user")) return "Branch User";
-  if (roleNames.includes("dsa_partner")) return "DSA Partner";
+function sessionRoleFromBackendRoles(
+  roleNames: string[],
+  user?: { email?: string; name?: string; ticket_no?: string | null; branch_code?: string | null }
+): DemoSessionUser["role"] {
+  const lowerRoles = roleNames.map((r) => r.toLowerCase());
+
+  if (lowerRoles.some((role) => ["super_admin", "admin", "checker"].includes(role))) return "DSA Manager";
+  if (lowerRoles.some((role) => ["dgm", "dgm_user"].includes(role))) return "DGM";
+  if (lowerRoles.some((role) => ["agm", "dsa_credit"].includes(role))) return "DSA Credit";
+  if (lowerRoles.some((role) => ["manager", "branch_regional_head"].includes(role))) return "Branch Regional Head";
+  if (lowerRoles.some((role) => ["assistant_manager", "assistant manager", "maker", "branch_user"].includes(role))) return "Branch User";
+  if (lowerRoles.some((role) => ["dsa_agent", "dsa agent", "agent"].includes(role))) return "DSA Agent" as any;
+  if (lowerRoles.some((role) => ["dsa_partner", "dsa partner", "dsa", "dsa_admin", "dsa_staff", "dsa admin", "partner"].includes(role))) return "DSA Partner";
+
+  const emailLower = (user?.email || "").toLowerCase();
+  const nameLower = (user?.name || "").toLowerCase();
+  const ticketLower = (user?.ticket_no || "").toLowerCase();
+  const codeLower = (user?.branch_code || "").toLowerCase();
+
+  if (
+    ticketLower.startsWith("cosdsa") ||
+    nameLower.startsWith("cosdsa") ||
+    codeLower.startsWith("cosdsa") ||
+    emailLower.includes("dsa") ||
+    emailLower.includes("partner")
+  ) {
+    return "DSA Partner";
+  }
+
+  if (lowerRoles.length === 0 && emailLower && !emailLower.endsWith("@cosmosbank.example")) {
+    return "DSA Partner";
+  }
+
   return "Customer";
 }
 
@@ -91,7 +119,7 @@ function sessionUserFromAuthSession(session: AuthSession): DemoSessionUser {
     id: String(session.user.id),
     mobile: session.user.phone ?? "",
     name: session.user.name,
-    role: sessionRoleFromBackendRoles(roleNames),
+    role: sessionRoleFromBackendRoles(roleNames, session.user),
   };
 }
 
@@ -105,7 +133,7 @@ function sessionUserFromStoredAuth(): DemoSessionUser | null {
     id: String(user.id),
     mobile: user.phone ?? "",
     name: user.name,
-    role: sessionRoleFromBackendRoles(authService.getRoles()),
+    role: sessionRoleFromBackendRoles(authService.getRoles(), user),
   };
 }
 
@@ -1499,19 +1527,23 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = useCallback((session: AuthSession) => {
-    const user = sessionUserFromAuthSession(session);
-    authService.startSession(session);
-    setCurrentUser(user);
-    if (typeof window !== "undefined") {
-      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
-    }
-    toast({
-      description: `Logged in as ${user.name} (${user.role})`,
-      title: "Authentication successful",
-      variant: "success",
-    });
-  }, [toast]);
+  const login = useCallback(
+    (session: AuthSession) => {
+      const user = sessionUserFromAuthSession(session);
+
+      authService.startSession(session);
+      setCurrentUser(user);
+      if (typeof window !== "undefined") {
+        localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+      }
+      toast({
+        description: `Logged in as ${user.name} (${user.role})`,
+        title: "Authentication successful",
+        variant: "success",
+      });
+    },
+    [toast],
+  );
 
   const logout = useCallback(() => {
     // Revoke Sanctum access token on the Laravel backend
@@ -1546,21 +1578,18 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
         (row) =>
           row.id === currentUser.id ||
           row.code === currentUser.code ||
-          row.loginUsername.toLowerCase() === currentUser.email.toLowerCase()
+          (row.loginUsername && row.loginUsername.toLowerCase() === currentUser.email.toLowerCase()) ||
+          (row.email && row.email.toLowerCase() === currentUser.email.toLowerCase())
       );
       if (dsa) {
-        if (dsa.status !== "Active") {
-          logout();
-        } else {
-          const updated = sessionUserFromDsa(dsa);
-          if (JSON.stringify(currentUser) !== JSON.stringify(updated)) {
-            setCurrentUser(updated);
-            localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updated));
-          }
+        const updated = sessionUserFromDsa(dsa);
+        if (JSON.stringify(currentUser) !== JSON.stringify(updated)) {
+          setCurrentUser(updated);
+          localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updated));
         }
       }
     }
-  }, [store.dsas, currentUser, logout]);
+  }, [store.dsas, currentUser]);
 
   const getById = useCallback(
     <K extends CollectionName>(collection: K, id: string) =>
@@ -1582,9 +1611,12 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
         }
 
         createdItem = normalized.item;
+        const existingFiltered = (current[collection] as any[]).filter(
+          (existing) => String(existing.id) !== String(normalized.item.id)
+        );
         let next = {
           ...current,
-          [collection]: [normalized.item, ...current[collection]],
+          [collection]: [normalized.item, ...existingFiltered],
         } as MockStore;
         if (collection !== "auditLogs") {
           next.auditLogs = [audit("Created", collection, currentUser, normalized.item, undefined, current), ...current.auditLogs];
@@ -1795,12 +1827,13 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       store,
       updateItem,
       currentUser,
+      setCurrentUser,
       login,
       logout,
       hasPermission,
       hasRole,
     }),
-    [createItem, deleteDsaCascade, deleteItem, getById, store, updateItem, currentUser, login, logout, hasPermission, hasRole],
+    [createItem, deleteDsaCascade, deleteItem, getById, store, updateItem, currentUser, setCurrentUser, login, logout, hasPermission, hasRole],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
