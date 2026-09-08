@@ -470,6 +470,12 @@ export const adminApi = {
     });
   },
 
+  verifyDsaEmail: async (token: string): Promise<any> => {
+    return request<any>(`/v1/dsa/verify-email/${token}`, {
+      method: "GET",
+    });
+  },
+
   uploadDsaVisitReport: async (
     idOrCode: number | string,
     file: File,
