@@ -7,6 +7,8 @@ import {
   Check,
   ClipboardList,
   Download,
+  ExternalLink,
+  Eye,
   FileText,
   KeyRound,
   LogIn,
@@ -44,24 +46,13 @@ import { generateDsaCredentials } from "@/lib/dsa-credentials";
 import {
   dsaDocumentType,
   isMissingDsaDocumentRecord,
-  requiredDsaDocumentGroups,
   requiredDsaDocuments,
 } from "@/lib/dsa-documents";
 import { useMockStore } from "@/lib/store";
 import { useDsa } from "@/hooks/useDsa";
 import { BusinessType, Dsa, DsaStatus, Product, User } from "@/lib/types";
-import { formatCommissionDisplay, formatCurrency, formatDate, generateDsaId, makeId, percent } from "@/lib/utils";
+import { cn, formatCommissionDisplay, formatCurrency, formatDate, generateDsaId, makeId, percent } from "@/lib/utils";
 
-type DsaType = "Independent DSA" | "Exclusive DSA" | "Corporate DSA";
-type UploadedFileMeta = { name: string; size: string };
-
-interface OnboardingDraft {
-  dsaType: DsaType;
-  form: typeof initialOnboardingForm;
-  step: number;
-  uploadedFiles: Record<string, UploadedFileMeta>;
-  dsaDbId?: number;
-}
 
 const businessTypes: BusinessType[] = [
   "Sole Proprietor",
@@ -139,6 +130,29 @@ export type ApprovalStepLevelInfo = {
   isCompleted: boolean;
   isRejected: boolean;
 };
+
+function getDocumentUrl(doc: any): string {
+  if (!doc) return "";
+  const rawUrl = doc.file_url || doc.url;
+  if (rawUrl) {
+    try {
+      const parsed = new URL(rawUrl);
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+      const apiOrigin = new URL(apiBase).origin;
+      if (parsed.hostname === "localhost" && parsed.port !== "8000") {
+        return `${apiOrigin}${parsed.pathname}${parsed.search}`;
+      }
+      return rawUrl;
+    } catch {
+      return rawUrl;
+    }
+  }
+  if (doc.file_path) {
+    const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").replace(/\/api\/?$/, "");
+    return `${apiBase}/storage/${doc.file_path.replace(/^\/+/, "")}`;
+  }
+  return "";
+}
 
 export function getDsaWorkflowLevelInfo(currentUserRole: string | undefined, dsa: any | null): ApprovalStepLevelInfo {
   if (!dsa) {
@@ -391,1050 +405,7 @@ const agentFields: FieldConfig<User>[] = [
   { label: "Status", name: "status", options: ["Active", "Invited", "Disabled"], required: true, type: "select" },
 ];
 
-const initialOnboardingForm = {
-  accountName: "",
-  accountNumber: "",
-  address: "",
-  bankName: "",
-  businessType: "Private Limited",
-  city: "",
-  contactPerson: "",
-  email: "",
-  gst: "",
-  ifsc: "",
-  mobile: "",
-  name: "",
-  pan: "",
-  pincode: "",
-  state: "",
-  status: "Submitted",
-};
 
-const DSA_ONBOARDING_DRAFT_KEY = "cosmos_dsa_onboarding_draft";
-
-function clampOnboardingStep(value: unknown) {
-  if (typeof value !== "number") return 0;
-  return Math.min(Math.max(value, 0), 6);
-}
-
-function formatFileSize(size: number) {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function isDsaType(value: unknown): value is DsaType {
-  return value === "Independent DSA" || value === "Exclusive DSA" || value === "Corporate DSA";
-}
-
-function readOnboardingDraft(): Partial<OnboardingDraft> {
-  if (typeof window === "undefined") return {};
-
-  const savedDraft = localStorage.getItem(DSA_ONBOARDING_DRAFT_KEY);
-  if (!savedDraft) return {};
-
-  try {
-    return JSON.parse(savedDraft) as Partial<OnboardingDraft>;
-  } catch {
-    localStorage.removeItem(DSA_ONBOARDING_DRAFT_KEY);
-    return {};
-  }
-}
-
-export function DsaOnboardingPage({ publicEntry = false }: { publicEntry?: boolean } = {}) {
-  const { currentUser, store, createItem, updateItem } = useMockStore();
-  const {
-    createDsa,
-    uploadDsaDocument,
-    updateDsaProfile,
-    updateDsaStatus,
-    states,
-    districts,
-    fetchStatesDropdown,
-    fetchDistrictsDropdown,
-    setDistricts,
-    actionLoading,
-  } = useDsa();
-
-  const isBranchOnboarding = currentUser?.role === "Branch User";
-  const isDsaPartnerBlocked = currentUser?.role === "DSA Partner" && !publicEntry;
-  const isDsaSubmittedOnboarding = publicEntry;
-  const isSuperAdminOnboarding = currentUser?.role === "DSA Manager";
-  const [initialDraft] = useState(() => readOnboardingDraft());
-  const [step, setStep] = useState(() => clampOnboardingStep(initialDraft.step));
-  const [dsaType, setDsaType] = useState<DsaType>(() =>
-    isDsaType(initialDraft.dsaType) ? initialDraft.dsaType : "Independent DSA",
-  );
-  const [form, setForm] = useState(() => ({ ...initialOnboardingForm, ...initialDraft.form }));
-  const [dsaDbId, setDsaDbId] = useState<number | null>(() => initialDraft.dsaDbId ?? null);
-
-  useEffect(() => {
-    fetchStatesDropdown();
-  }, [fetchStatesDropdown]);
-
-  // Load districts when state changes
-  const handleStateChange = async (stateName: string) => {
-    update("state", stateName);
-    update("city", "");
-    setDistricts([]);
-    
-    const stateObj = states.find((s) => s.state_name === stateName);
-    if (stateObj) {
-      await fetchDistrictsDropdown(stateObj.state_code);
-    }
-  };
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [uploadedFiles, setUploadedFiles] = useState<Record<string, UploadedFileMeta>>(
-    () => initialDraft.uploadedFiles ?? {},
-  );
-  const [isPanVerifying, setIsPanVerifying] = useState(false);
-  const [isPanVerified, setIsPanVerified] = useState(false);
-  const [isAbortModalOpen, setIsAbortModalOpen] = useState(false);
-  const [submittedDsaId, setSubmittedDsaId] = useState("");
-  const [submittedDsaStatus, setSubmittedDsaStatus] = useState<DsaStatus | "">("");
-  const missingRequiredDocuments = requiredDsaDocuments.filter((document) => !uploadedFiles[document.key]);
-
-  useEffect(() => {
-    if (isDsaPartnerBlocked) return;
-    const draft: OnboardingDraft = { dsaType, form, step, uploadedFiles, dsaDbId: dsaDbId ?? undefined };
-    localStorage.setItem(DSA_ONBOARDING_DRAFT_KEY, JSON.stringify(draft));
-  }, [dsaType, form, isDsaPartnerBlocked, step, uploadedFiles, dsaDbId]);
-
-  if (isDsaPartnerBlocked) {
-    return (
-      <div>
-        <PageHeader
-          description="Active DSA accounts can manage their own network and applications, but cannot submit another DSA onboarding request from inside the dashboard."
-          eyebrow="DSA onboarding"
-          title="Onboarding restricted"
-        />
-        <Card>
-          <CardContent>
-            <p className="text-sm text-slate-600">
-              New DSA onboarding requests must be submitted from the public login page and approved through the branch, regional, and credit hierarchy.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  function update(key: keyof typeof form, value: string) {
-    setForm((current) => ({ ...current, [key]: value }));
-  }
-
-  function validate(currentStep: number) {
-    const requiredByStep: Record<number, string[]> = {
-      1: ["name", "businessType", "contactPerson", "mobile", "email"],
-      2: ["pan", "gst", "address", "city", "state", "pincode"],
-      3: ["accountName", "accountNumber", "bankName", "ifsc"],
-    };
-    const nextErrors: Record<string, string> = {};
-    const required = requiredByStep[currentStep] ?? [];
-    required.forEach((field) => {
-      const val = form[field as keyof typeof form];
-      const isEmpty = !val || val === "Draft" || val === "000000" || val === "DUMMY000001" || (field === "pan" && val.startsWith("DFT"));
-      if (isEmpty) nextErrors[field] = "Required";
-    });
-    if (currentStep === 1) {
-      if (form.mobile && !/^[6-9]\d{9}$/.test(form.mobile)) {
-        nextErrors.mobile = "Enter a valid 10 digit Indian mobile number";
-      }
-      if (form.email && !/^\S+@\S+\.\S+$/.test(form.email)) {
-        nextErrors.email = "Enter a valid email";
-      }
-    }
-    if (currentStep === 2) {
-      const actualPan = form.pan?.startsWith("DFT") ? "" : form.pan;
-      if (actualPan && !/^[A-Z]{5}\d{4}[A-Z]$/.test(actualPan)) {
-        nextErrors.pan = "PAN format should be ABCDE1234F";
-      } else if (actualPan && !isPanVerified) {
-        nextErrors.pan = "Please verify your PAN";
-      }
-    }
-    setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
-  }
-
-  function validatePublicDocuments() {
-    if (!publicEntry || missingRequiredDocuments.length === 0) return true;
-
-    setErrors((current) => ({
-      ...current,
-      ...Object.fromEntries(missingRequiredDocuments.map((document) => [document.key, "Required for public onboarding"])),
-    }));
-    return false;
-  }
-
-  const [isStepNavigating, setIsStepNavigating] = useState(false);
-
-  async function goNext(currentStep: number) {
-    if (currentStep > 0 && currentStep < 4 && !validate(currentStep)) return;
-    if (currentStep === 4 && !validatePublicDocuments()) return;
-    setErrors({});
-    setIsStepNavigating(true);
-
-    try {
-      if (currentStep === 1) {
-        const dummyPan = `DFT${Date.now()}${Math.floor(100 + Math.random() * 900)}`;
-        const payload = {
-          name: form.name,
-          business_type: form.businessType,
-          contact_person: form.contactPerson,
-          mobile: form.mobile,
-          email: form.email,
-          pan: form.pan || dummyPan,
-          gst: form.gst || null,
-          address: form.address || "Draft",
-          city: form.city || "Draft",
-          state: form.state || "Draft",
-          pincode: form.pincode || "000000",
-          account_name: form.accountName || form.name || "Draft",
-          account_number: form.accountNumber || "000000",
-          ifsc: form.ifsc || "DUMMY000001",
-          bank_name: form.bankName || "Draft",
-          onboarding_status: "DRAFT",
-        };
-
-        if (dsaDbId === null) {
-          const dsaObj = await createDsa(payload);
-          if (dsaObj) {
-            setDsaDbId(dsaObj.id);
-            if (!form.pan) {
-              setForm((current) => ({ ...current, pan: dummyPan }));
-            }
-          } else {
-            return;
-          }
-        } else {
-          await updateDsaProfile(dsaDbId, {
-            name: form.name,
-            business_type: form.businessType,
-            contact_person: form.contactPerson,
-            mobile: form.mobile,
-            email: form.email,
-          });
-        }
-      } else if (currentStep === 2) {
-        if (dsaDbId !== null) {
-          await updateDsaProfile(dsaDbId, {
-            pan: form.pan,
-            gst: form.gst || null,
-            address: form.address,
-            city: form.city,
-            state: form.state,
-            pincode: form.pincode,
-          });
-        }
-      } else if (currentStep === 3) {
-        if (dsaDbId !== null) {
-          await updateDsaProfile(dsaDbId, {
-            account_name: form.accountName,
-            account_number: form.accountNumber,
-            bank_name: form.bankName,
-            ifsc: form.ifsc,
-          });
-          await updateDsaStatus(dsaDbId, {
-            onboarding_status: "DOCUMENT_VERIFICATION",
-            reason: "Transitioning to document verification stage",
-          });
-        }
-      } else if (currentStep === 4) {
-        if (dsaDbId !== null) {
-          for (const key of Object.keys(uploadedFiles)) {
-            const fileMeta = uploadedFiles[key] as any;
-            if (fileMeta?.file && !fileMeta.uploaded) {
-              const uploadedDoc = await uploadDsaDocument(dsaDbId, {
-                file: fileMeta.file,
-                document_type: dsaDocumentType(key),
-                owner_name: form.name,
-              });
-              if (uploadedDoc) {
-                setUploadedFiles((current) => ({
-                  ...current,
-                  [key]: {
-                    ...current[key],
-                    uploaded: true,
-                  },
-                }));
-              }
-            }
-          }
-        }
-      }
-      setStep(currentStep + 1);
-    } catch (err) {
-      console.error("Failed to progress onboarding API step:", err);
-      return;
-    } finally {
-      setIsStepNavigating(false);
-    }
-  }
-
-  function goBack(currentStep: number) {
-    setErrors({});
-    setStep(Math.max(0, currentStep - 1));
-  }
-
-  function handleFileUpload(key: string, file?: File) {
-    if (!file) return;
-    setUploadedFiles((current) => ({
-      ...current,
-      [key]: {
-        file,
-        name: file.name,
-        size: formatFileSize(file.size),
-      },
-    }));
-    setErrors((current) => {
-      const next = { ...current };
-      delete next[key];
-      return next;
-    });
-  }
-
-  async function handleSubmit() {
-    if (!validatePublicDocuments()) {
-      setStep(4);
-      return;
-    }
-    setIsStepNavigating(true);
-
-    try {
-      let finalDsa = null;
-
-      if (dsaDbId !== null) {
-        finalDsa = await updateDsaStatus(dsaDbId, {
-          onboarding_status: "SUBMITTED",
-          reason: "Onboarding completed by partner",
-        });
-
-        for (const key of Object.keys(uploadedFiles)) {
-          const fileMeta = uploadedFiles[key] as any;
-          if (fileMeta?.file && !fileMeta.uploaded) {
-            await uploadDsaDocument(dsaDbId, {
-              file: fileMeta.file,
-              document_type: dsaDocumentType(key),
-              owner_name: form.name,
-            });
-          }
-        }
-      } else {
-        const payload = {
-          name: form.name,
-          business_type: form.businessType,
-          pan: form.pan,
-          gst: form.gst || null,
-          contact_person: form.contactPerson,
-          mobile: form.mobile,
-          email: form.email,
-          address: form.address,
-          city: form.city,
-          state: form.state,
-          pincode: form.pincode,
-          account_name: form.accountName,
-          account_number: form.accountNumber,
-          ifsc: form.ifsc,
-          bank_name: form.bankName,
-          onboarding_status: "SUBMITTED",
-        };
-        finalDsa = await createDsa(payload);
-        if (finalDsa) {
-          for (const key of Object.keys(uploadedFiles)) {
-            const fileMeta = uploadedFiles[key] as any;
-            if (fileMeta?.file) {
-              await uploadDsaDocument(finalDsa.id, {
-                file: fileMeta.file,
-                document_type: dsaDocumentType(key),
-                owner_name: form.name,
-              });
-            }
-          }
-        }
-      }
-
-      if (!finalDsa) return;
-
-      const existingStoreDsa = store.dsas.find(
-        (item) => String(item.id) === String(finalDsa.id) || item.code === finalDsa.code
-      );
-
-      const dsaStoreData = {
-        id: String(finalDsa.id),
-        code: finalDsa.code,
-        name: finalDsa.name,
-        businessType: finalDsa.business_type as any,
-        pan: finalDsa.pan,
-        gst: finalDsa.gst || "",
-        contactPerson: finalDsa.contact_person,
-        mobile: finalDsa.mobile,
-        email: finalDsa.email,
-        loginUsername: finalDsa.login_username || "",
-        loginPassword: finalDsa.login_password || "",
-        address: finalDsa.address,
-        city: finalDsa.city,
-        state: finalDsa.state,
-        pincode: finalDsa.pincode,
-        bank: {
-          accountName: finalDsa.account_name,
-          accountNumber: finalDsa.account_number,
-          bankName: finalDsa.bank_name,
-          ifsc: finalDsa.ifsc,
-        },
-        status: "Pending Branch Approval" as const,
-        onboardingDate: new Date().toISOString(),
-        manager: finalDsa.manager || "",
-        tier: (finalDsa.tier as any) || "Bronze",
-        riskRating: (finalDsa.risk_rating as any) || "Low",
-        monthlyLeads: finalDsa.monthly_leads || 0,
-        approvalRate: finalDsa.approval_rate || 0,
-        commissionEarned: finalDsa.commission_earned || 0,
-        documents: [],
-        onboarding_status: finalDsa.onboarding_status,
-        operational_status: finalDsa.operational_status,
-      };
-
-      if (existingStoreDsa && updateItem) {
-        updateItem("dsas", existingStoreDsa.id, dsaStoreData);
-      } else if (createItem) {
-        createItem("dsas", dsaStoreData);
-      }
-
-      setSubmittedDsaId(finalDsa.code);
-      setSubmittedDsaStatus(finalDsa.onboarding_status as DsaStatus);
-      setStep(6);
-      localStorage.removeItem(DSA_ONBOARDING_DRAFT_KEY);
-    } finally {
-      setIsStepNavigating(false);
-    }
-  }
-
-  function resetOnboarding() {
-    setErrors({});
-    setForm({ ...initialOnboardingForm });
-    setDsaType("Independent DSA");
-    setUploadedFiles({});
-    setIsPanVerified(false);
-    setIsPanVerifying(false);
-    setIsAbortModalOpen(false);
-    setSubmittedDsaId("");
-    setSubmittedDsaStatus("");
-    setStep(0);
-    setDsaDbId(null);
-    localStorage.removeItem(DSA_ONBOARDING_DRAFT_KEY);
-  }
-
-  const abortOnboardingButton = (
-    <Button
-      onClick={() => setIsAbortModalOpen(true)}
-      type="button"
-      variant="outline"
-      className="h-10 border-rose-200 px-5 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-    >
-      Abort DSA Onboarding
-    </Button>
-  );
-
-  const renderField = (
-    key: keyof typeof form,
-    label: string,
-    props?: { options?: string[]; type?: string },
-  ) => (
-    <Field>
-      <Label htmlFor={key}>{label}</Label>
-      {props?.options ? (
-        <Select id={key} onChange={(event) => update(key, event.target.value)} value={form[key]}>
-          {props.options.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </Select>
-      ) : (
-        <Input id={key} onChange={(event) => update(key, event.target.value)} type={props?.type ?? "text"} value={form[key] === "Draft" || form[key] === "000000" || (key === "ifsc" && form[key] === "DUMMY000001") ? "" : form[key]} />
-      )}
-      {errors[key] ? <p className="text-xs font-medium text-rose-600 mt-1">{errors[key]}</p> : null}
-    </Field>
-  );
-
-  const renderUploadSlot = (key: string, label: string) => {
-    const file = uploadedFiles[key];
-    const inputId = `dsa-doc-${key}`;
-    return (
-      <div key={key} className="space-y-1">
-        <div
-          className={`flex items-center justify-between rounded-xl border border-dashed p-4 transition-all duration-200 ${
-            file
-              ? "border-emerald-300 bg-emerald-50/20"
-              : errors[key]
-                ? "border-rose-300 bg-rose-50/30"
-                : "border-slate-200 bg-slate-50/50 hover:bg-slate-50"
-          }`}
-        >
-          <div className="min-w-0 flex-1 pr-3">
-            <p className="text-xs font-bold text-slate-800 truncate">{label}</p>
-            {file ? (
-              <p className="text-[10px] text-emerald-600 font-semibold truncate">
-                {file.name} ({file.size})
-              </p>
-            ) : (
-              <p className="text-[10px] text-slate-400">Acceptable formats: JPEG, JPG, PNG or PDF.</p>
-            )}
-          </div>
-          {file ? (
-            <button
-              aria-label={`Remove ${label}`}
-              title="Remove document"
-              type="button"
-              onClick={() => {
-                setUploadedFiles((current) => {
-                  const copy = { ...current };
-                  delete copy[key];
-                  return copy;
-                });
-              }}
-              className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-rose-50 hover:text-rose-600 transition"
-            >
-              <Check className="h-4 w-4" />
-            </button>
-          ) : (
-            <div className="flex shrink-0">
-              <input
-                accept=".jpg,.jpeg,.png,.pdf"
-                className="sr-only"
-                id={inputId}
-                onChange={(event) => handleFileUpload(key, event.currentTarget.files?.[0])}
-                type="file"
-              />
-              <label
-                aria-label={`Upload ${label}`}
-                className="grid h-8 w-8 cursor-pointer place-items-center rounded-lg bg-blue-50 text-blue-600 transition hover:bg-blue-100"
-                htmlFor={inputId}
-                title="Upload local file"
-              >
-                <UploadCloud className="h-4 w-4" />
-              </label>
-            </div>
-          )}
-        </div>
-        {errors[key] ? <p className="text-xs font-medium text-rose-600">{errors[key]}</p> : null}
-      </div>
-    );
-  };
-
-  return (
-    <div>
-      <PageHeader
-        description="Capture partner business details, validate KYC identity, collect settlement banking, and upload required documents."
-        eyebrow="DSA onboarding"
-        title="Create DSA"
-      />
-
-      <Card className="max-w-5xl mx-auto shadow-md">
-        <CardContent className="p-6 md:p-8">
-          {/* Top horizontal progress bar */}
-          {step > 0 && step < 6 ? (
-            <div className="mb-8 flex items-center justify-between max-w-xl mx-auto px-4">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="flex items-center flex-1 last:flex-none">
-                  <div className="flex flex-col items-center">
-                    <div
-                      className={`grid h-8 w-8 place-items-center rounded-full text-xs font-semibold transition-colors ${
-                        i <= step
-                          ? "bg-blue-600 text-white shadow-sm"
-                          : "bg-slate-100 text-slate-400"
-                      }`}
-                    >
-                      {i < step ? <Check className="h-4 w-4" /> : i}
-                    </div>
-                    <span className="text-[10px] font-bold text-slate-500 mt-1.5 uppercase tracking-wider text-center">
-                      {["Profile", "KYC", "Bank", "Docs", "Bank Verified"][i - 1]}
-                    </span>
-                  </div>
-                  {i < 5 && (
-                    <div
-                      className={`h-[2px] flex-1 mx-2 -mt-4 transition-colors ${
-                        i < step ? "bg-blue-600" : "bg-slate-200"
-                      }`}
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : null}
-
-          <div>
-            {/* Step 0: Select DSA Type */}
-            {step === 0 ? (
-              <div className="flex flex-col items-center py-6">
-                <h2 className="text-2xl font-bold text-slate-800 text-center">Select DSA Type</h2>
-                <p className="text-sm text-slate-500 text-center mt-2 mb-8 max-w-md">
-                  Select the type of Direct Selling Agent (DSA) that suits your needs.
-                </p>
-
-                <div className="grid gap-6 md:grid-cols-3 w-full max-w-4xl px-4">
-                  {[
-                    {
-                      id: "Independent DSA",
-                      title: "Independent DSA",
-                      badge: (
-                        <svg className="w-24 h-24 mx-auto" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M50 5L55.5 16.5L67.5 13.5L68 26L79.5 28.5L75 40.5L84.5 49L76.5 59L82.5 70L71 73L67.5 85L55.5 83.5L50 95L44.5 83.5L32.5 85L29 73L17.5 70L23.5 59L15.5 49L25 40.5L20.5 28.5L32 26L32.5 13.5L44.5 16.5L50 5Z" fill="#FBBF24" stroke="#D97706" strokeWidth="2" strokeLinejoin="round"/>
-                          <circle cx="50" cy="48" r="32" fill="#F59E0B"/>
-                          <path d="M20 62L50 72L80 62L80 78L50 88L20 78V62Z" fill="#DC2626"/>
-                          <path d="M25 65L50 73.5L75 65" stroke="#FCA5A5" strokeWidth="1.5" strokeLinecap="round"/>
-                          <text x="50" y="77" fill="white" fontSize="7" fontWeight="bold" textAnchor="middle" letterSpacing="0.5">TOP RATED</text>
-                          <g fill="#FEF3C7">
-                            <path d="M50 22L51.5 26.5H56.5L52.5 29.5L54 34L50 31L46 34L47.5 29.5L43.5 26.5H48.5L50 22Z"/>
-                            <path d="M38 27L39 30.5H43L40 32.5L41.2 36L38 33.8L34.8 36L36 32.5L33 30.5H37L38 27Z"/>
-                            <path d="M62 27L63 30.5H67L64 32.5L65.2 36L62 33.8L58.8 36L60 32.5L57 30.5H61L62 27Z"/>
-                          </g>
-                          <path d="M50 38L53.5 45.5H62L55 50L57.5 57.5L50 52.5L42.5 57.5L45 50L38 45.5H46.5L50 38Z" fill="#FFFBEB" stroke="#D97706" strokeWidth="1"/>
-                        </svg>
-                      )
-                    },
-                    {
-                      id: "Exclusive DSA",
-                      title: "Exclusive DSA",
-                      badge: (
-                        <svg className="w-24 h-24 mx-auto" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M50 5L55.5 16.5L67.5 13.5L68 26L79.5 28.5L75 40.5L84.5 49L76.5 59L82.5 70L71 73L67.5 85L55.5 83.5L50 95L44.5 83.5L32.5 85L29 73L17.5 70L23.5 59L15.5 49L25 40.5L20.5 28.5L32 26L32.5 13.5L44.5 16.5L50 5Z" fill="#34D399" stroke="#059669" strokeWidth="2" strokeLinejoin="round"/>
-                          <circle cx="50" cy="50" r="32" fill="#10B981"/>
-                          <path d="M32 65 L44 51 L54 57 L68 36" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M56 36 H68 V48" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"/>
-                          <circle cx="50" cy="50" r="24" stroke="white" strokeWidth="1.5" strokeDasharray="3 3"/>
-                        </svg>
-                      )
-                    },
-                    {
-                      id: "Corporate DSA",
-                      title: "Corporate DSA",
-                      badge: (
-                        <svg className="w-24 h-24 mx-auto" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M50 5L55.5 16.5L67.5 13.5L68 26L79.5 28.5L75 40.5L84.5 49L76.5 59L82.5 70L71 73L67.5 85L55.5 83.5L50 95L44.5 83.5L32.5 85L29 73L17.5 70L23.5 59L15.5 49L25 40.5L20.5 28.5L32 26L32.5 13.5L44.5 16.5L50 5Z" fill="#60A5FA" stroke="#2563EB" strokeWidth="2" strokeLinejoin="round"/>
-                          <circle cx="50" cy="50" r="32" fill="#3B82F6"/>
-                          <rect x="32" y="52" width="8" height="18" fill="white" rx="1"/>
-                          <rect x="44" y="40" width="8" height="30" fill="white" rx="1"/>
-                          <rect x="56" y="32" width="8" height="38" fill="white" rx="1"/>
-                          <circle cx="70" cy="65" r="7" fill="#FBBF24" stroke="#D97706" strokeWidth="1"/>
-                          <circle cx="67" cy="68" r="7" fill="#F59E0B" stroke="#B45309" strokeWidth="1"/>
-                        </svg>
-                      )
-                    }
-                  ].map((type) => (
-                    <button
-                      key={type.id}
-                      type="button"
-                      onClick={() => setDsaType(type.id as DsaType)}
-                      className={`flex flex-col items-center justify-center p-8 rounded-2xl border-2 transition cursor-pointer text-center bg-slate-50/50 ${
-                        dsaType === type.id
-                          ? "border-blue-600 bg-blue-50/20 shadow-md ring-1 ring-blue-100"
-                          : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
-                      }`}
-                    >
-                      {type.badge}
-                      <span className="mt-4 font-bold text-slate-800 text-md">{type.title}</span>
-                    </button>
-                  ))}
-                </div>
-
-                <div className="mt-10 flex justify-center w-full">
-                  <Button
-                    type="button"
-                    onClick={() => setStep(1)}
-                    disabled={actionLoading || isStepNavigating}
-                    className="bg-blue-700 hover:bg-blue-800 text-white font-bold h-11 px-10 rounded-lg shadow-sm flex items-center justify-center gap-2"
-                  >
-                    {(actionLoading || isStepNavigating) ? (
-                      <>
-                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                        <span>Processing...</span>
-                      </>
-                    ) : (
-                      <span>Continue</span>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-
-            {/* Step 1: Business Profile */}
-            {step === 1 ? (
-              <div className="space-y-4">
-                <h3 className="text-base font-bold text-slate-900 border-b pb-2 uppercase tracking-wider">
-                  Partner Profile Details
-                </h3>
-                <div className="grid gap-4 md:grid-cols-2">
-                  {renderField("name", "Legal business name")}
-                  {renderField("businessType", "Business type", { options: businessTypes })}
-                  {renderField("contactPerson", "Contact person")}
-                  {renderField("mobile", "Mobile")}
-                  {renderField("email", "Email", { type: "email" })}
-                </div>
-              </div>
-            ) : null}
-
-            {/* Step 2: KYC Details */}
-            {step === 2 ? (
-              <div className="space-y-4">
-                <h3 className="text-base font-bold text-slate-900 border-b pb-2 uppercase tracking-wider">
-                  KYC & Address Details
-                </h3>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Field>
-                    <Label htmlFor="pan">PAN</Label>
-                    <div className="relative flex items-center">
-                      <Input
-                        id="pan"
-                        onChange={(event) => {
-                          const val = event.target.value.toUpperCase();
-                          update("pan", val);
-                          if (isPanVerified) setIsPanVerified(false);
-                          if (errors.pan) {
-                            setErrors((prev) => {
-                              const copy = { ...prev };
-                              delete copy.pan;
-                              return copy;
-                            });
-                          }
-                        }}
-                        className="pr-28 uppercase font-mono tracking-wider placeholder:font-sans placeholder:tracking-normal"
-                        placeholder="ABCDE1234F"
-                        value={form.pan?.startsWith("DFT") ? "" : form.pan}
-                        disabled={isPanVerifying}
-                      />
-                      <div className="absolute right-1">
-                        {isPanVerified ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1.5 rounded-md border border-emerald-200 mr-1">
-                            <Check className="h-3.5 w-3.5 stroke-[3]" /> Verified
-                          </span>
-                        ) : (
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={!form.pan || isPanVerifying}
-                            onClick={() => {
-                              if (!/^[A-Z]{5}\d{4}[A-Z]$/.test(form.pan)) {
-                                setErrors((prev) => ({ ...prev, pan: "PAN format should be ABCDE1234F" }));
-                                return;
-                              }
-                              setErrors((prev) => {
-                                const copy = { ...prev };
-                                delete copy.pan;
-                                return copy;
-                              });
-                              setIsPanVerifying(true);
-                              setTimeout(() => {
-                                setIsPanVerifying(false);
-                                setIsPanVerified(true);
-                              }, 1000);
-                            }}
-                            className="h-8 text-xs font-semibold px-3"
-                          >
-                            {isPanVerifying ? (
-                              <span className="flex items-center gap-1">
-                                <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                </svg>
-                                verifying
-                              </span>
-                            ) : (
-                              "Verify"
-                            )}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                    {errors.pan ? <p className="text-xs font-medium text-rose-600 mt-1">{errors.pan}</p> : null}
-                  </Field>
-                  {renderField("gst", "GST")}
-                  <div className="md:col-span-2">{renderField("address", "Address")}</div>
-                  <Field>
-                    <Label htmlFor="stateSelect">State</Label>
-                    <Select
-                      id="stateSelect"
-                      value={form.state === "Draft" ? "" : form.state}
-                      onChange={(e) => handleStateChange(e.target.value)}
-                    >
-                      <option value="">Select state</option>
-                      {states.map((s) => (
-                        <option key={s.state_code} value={s.state_name}>{s.state_name}</option>
-                      ))}
-                    </Select>
-                    {errors.state ? <p className="text-xs font-medium text-rose-600 mt-1">{errors.state}</p> : null}
-                  </Field>
-                  <Field>
-                    <Label htmlFor="citySelect">City / District</Label>
-                    <Select
-                      id="citySelect"
-                      value={form.city === "Draft" ? "" : form.city}
-                      onChange={(e) => update("city", e.target.value)}
-                      disabled={!form.state || form.state === "Draft"}
-                    >
-                      <option value="">{form.state ? "Select city/district" : "Select state first"}</option>
-                      {districts.map((d) => (
-                        <option key={d.district_code} value={d.district_name}>{d.district_name}</option>
-                      ))}
-                    </Select>
-                    {errors.city ? <p className="text-xs font-medium text-rose-600 mt-1">{errors.city}</p> : null}
-                  </Field>
-                  {renderField("pincode", "Pincode")}
-                </div>
-              </div>
-            ) : null}
-
-            {/* Step 3: Bank Details */}
-            {step === 3 ? (
-              <div className="space-y-4">
-                <h3 className="text-base font-bold text-slate-900 border-b pb-2 uppercase tracking-wider">
-                  Payout Bank Details
-                </h3>
-                <div className="grid gap-4 md:grid-cols-2">
-                  {renderField("accountName", "Account name")}
-                  {renderField("accountNumber", "Account number")}
-                  {renderField("bankName", "Bank name")}
-                  {renderField("ifsc", "IFSC")}
-                </div>
-              </div>
-            ) : null}
-
-            {/* Step 4: Doc Uploads */}
-            {step === 4 ? (
-              <div className="space-y-6">
-                {requiredDsaDocumentGroups.map((group, index) => (
-                  <div className={index === 0 ? "" : "pt-4"} key={group.title}>
-                    <h3 className="text-sm font-bold text-slate-900 border-b pb-2 uppercase tracking-wider">
-                      {group.title}
-                    </h3>
-                    <p className="mt-2 text-xs font-medium text-slate-500">
-                      Documents are required before approval. Missing files can be completed from the on-hold queue after submission.
-                    </p>
-                    <div className="grid gap-4 md:grid-cols-3 mt-4">
-                      {group.documents.map((document) => renderUploadSlot(document.key, document.label))}
-                    </div>
-                  </div>
-                ))}
-                {missingRequiredDocuments.length ? (
-                  <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-blue-900">
-                    <p className="font-semibold">
-                      {publicEntry ? "All mandatory documents are required before public submission." : "Missing documents will move this DSA to On Hold."}
-                    </p>
-                    <p className="mt-1 text-xs text-blue-800">
-                      {publicEntry
-                        ? "Upload each required document to continue to bank verification and submit this DSA request."
-                        : "DSA Credit, Branch User, or Super Admin can upload the remaining documents from the on-hold list before approval."}
-                    </p>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
-            {/* Step 5: Bank Account Verified Status */}
-            {step === 5 ? (
-              <div className="space-y-6 max-w-xl mx-auto py-4">
-                <div className="text-center space-y-2">
-                  <div className="mx-auto bg-emerald-50 border border-emerald-200 text-emerald-600 rounded-full w-12 h-12 flex items-center justify-center shadow-sm">
-                    <ShieldCheck className="h-6 w-6 stroke-[2.5]" />
-                  </div>
-                  <h3 className="text-xl font-bold text-slate-950">
-                    {missingRequiredDocuments.length ? "Bank Verified - Documents Pending" : "Bank Verification Approved"}
-                  </h3>
-                  <p className="text-sm text-slate-500">
-                    {missingRequiredDocuments.length
-                      ? "Bank details are verified. Because documents are missing, this DSA will be submitted as On Hold."
-                      : "The bank has verified this DSA and it is ready to onboard now."}
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-6 space-y-4 shadow-sm">
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="block text-xs font-semibold uppercase tracking-wider text-slate-400">Account Holder</span>
-                      <span className="font-semibold text-slate-800">{form.accountName || "N/A"}</span>
-                    </div>
-                    <div>
-                      <span className="block text-xs font-semibold uppercase tracking-wider text-slate-400">Account Number</span>
-                      <span className="font-semibold text-slate-800 font-mono">{form.accountNumber || "N/A"}</span>
-                    </div>
-                    <div>
-                      <span className="block text-xs font-semibold uppercase tracking-wider text-slate-400">Bank Name</span>
-                      <span className="font-semibold text-slate-800">{form.bankName || "N/A"}</span>
-                    </div>
-                    <div>
-                      <span className="block text-xs font-semibold uppercase tracking-wider text-slate-400">IFSC Code</span>
-                      <span className="font-semibold text-slate-800 font-mono">{form.ifsc || "N/A"}</span>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-slate-200 pt-4">
-                    <div className="w-full flex items-center gap-3 bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl shadow-sm">
-                      <Check className="h-6 w-6 stroke-[3] text-emerald-600 shrink-0" />
-                      <div className="text-left">
-                        <p className="text-sm font-bold text-emerald-950">Pre-Verified by Bank</p>
-                        <p className="text-xs text-emerald-700 leading-relaxed">
-                          Cosmos Bank has successfully verified the settlement bank details for this DSA. The account is validated and ready for onboarding.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <Button
-                      onClick={() => goBack(5)}
-                      type="button"
-                      variant="secondary"
-                      className="h-10 px-5"
-                    >
-                      Back
-                    </Button>
-                    {abortOnboardingButton}
-                  </div>
-                  <Button
-                    onClick={handleSubmit}
-                    type="button"
-                    disabled={actionLoading || isStepNavigating}
-                    className="h-10 px-6 bg-blue-700 hover:bg-blue-800 text-white font-bold flex items-center justify-center gap-2 min-w-[170px]"
-                  >
-                    {(actionLoading || isStepNavigating) ? (
-                      <>
-                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                        <span>Submitting...</span>
-                      </>
-                    ) : (
-                      <span>Submit Onboarding</span>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-
-            {/* Step 6: Submitted Success Receipt */}
-            {step === 6 ? (
-              <div className="flex flex-col items-center text-center p-8 space-y-6 max-w-md mx-auto">
-                <div className="relative grid h-24 w-24 place-items-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-100">
-                  <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-                  </svg>
-                </div>
-
-                <div className="space-y-3">
-                  <h2 className="text-3xl font-black text-blue-600 tracking-tight">
-                    Submitted !
-                  </h2>
-                  <p className="text-md font-bold text-slate-700">Thank you for onboarding a new DSA.</p>
-                  <p className="text-sm text-slate-500 leading-relaxed">
-                    {missingRequiredDocuments.length
-                      ? "Mandatory documents are missing, so this DSA is now On Hold until the pending documents are uploaded."
-                      : submittedDsaStatus === "Active"
-                        ? "Super Admin has directly activated this DSA. Credentials are available from the DSA Management list."
-                        : submittedDsaStatus === "Pending Branch Approval"
-                          ? "This application is waiting for Branch approval, then BRH approval, then Credit final approval."
-                          : submittedDsaStatus === "Pending BRH Approval"
-                            ? "This application is waiting for Branch Regional Head approval before Credit final approval."
-                            : "This application is waiting with DSA Credit for final approval."}
-                  </p>
-                </div>
-
-                {submittedDsaId ? (
-                  <div className="w-full rounded-xl border border-blue-100 bg-blue-50/70 p-4 text-left">
-                    <p className="text-xs font-semibold uppercase text-blue-700">Generated DSA ID</p>
-                    <p className="mt-1 break-all font-mono text-sm font-bold text-blue-950">
-                      {submittedDsaId}
-                    </p>
-                  </div>
-                ) : null}
-
-                <div className="pt-4 flex flex-col gap-3 w-full max-w-xs">
-                  <Button
-                    type="button"
-                    onClick={() => alert("Receipt PDF downloaded.")}
-                    className="bg-blue-700 hover:bg-blue-800 text-white font-bold h-11 border-none rounded-lg w-full flex items-center justify-center gap-2"
-                  >
-                    <Download className="h-5 w-5" /> DOWNLOAD
-                  </Button>
-                  <div className="flex gap-2 w-full mt-2">
-                    <Button
-                      onClick={resetOnboarding}
-                      type="button"
-                      variant="secondary"
-                      className="flex-1 text-xs"
-                    >
-                      Onboard another
-                    </Button>
-                    {!publicEntry ? (
-                      <Link href="/dsa/management" className="flex-1">
-                        <Button type="button" className="w-full text-xs">
-                          View DSA list
-                        </Button>
-                      </Link>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {/* Bottom Back/Continue Navigation for middle steps */}
-            {step > 0 && step < 5 ? (
-              <div className="mt-8 flex flex-col gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <Button
-                    onClick={() => goBack(step)}
-                    type="button"
-                    variant="secondary"
-                    disabled={actionLoading || isStepNavigating}
-                    className="h-10 px-5"
-                  >
-                    Back
-                  </Button>
-                  {abortOnboardingButton}
-                </div>
-                <Button
-                  onClick={() => goNext(step)}
-                  type="button"
-                  disabled={actionLoading || isStepNavigating}
-                  className="h-10 px-6 bg-blue-700 hover:bg-blue-800 text-white font-bold flex items-center justify-center gap-2 min-w-[130px]"
-                >
-                  {(actionLoading || isStepNavigating) ? (
-                    <>
-                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                      <span>Processing...</span>
-                    </>
-                  ) : (
-                    <span>Continue</span>
-                  )}
-                </Button>
-              </div>
-            ) : null}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Modal
-        onClose={() => setIsAbortModalOpen(false)}
-        open={isAbortModalOpen}
-        title="Abort DSA onboarding?"
-        width="max-w-md"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-slate-600">
-            This will delete all in-progress onboarding data from this session, including profile fields, KYC details, bank details, uploaded document metadata, and the saved draft.
-          </p>
-          <div className="flex justify-end gap-2">
-            <Button onClick={() => setIsAbortModalOpen(false)} type="button" variant="secondary">
-              Cancel
-            </Button>
-            <Button onClick={resetOnboarding} type="button" variant="danger">
-              Abort onboarding
-            </Button>
-          </div>
-        </div>
-      </Modal>
-    </div>
-  );
-}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // DSA RECOVERY REPORTS sub-component (used in the Reports tab)
@@ -2053,7 +1024,7 @@ export function DsaManagementPage() {
                       <tr className="hover:bg-slate-50/50 transition cursor-pointer" key={item.id} onClick={() => router.push(`/dsa/${item.id}`)}>
                         <td className="p-4">
                           <div>
-                            <p className="font-semibold text-blue-700 hover:underline">{item.name}</p>
+                            <p className="font-semibold text-blue-700 hover:underline">{item.name || item.contact_person || item.code}</p>
                             <p className="text-[10px] text-slate-500">{item.contact_person} · {item.email}</p>
                           </div>
                         </td>
@@ -2248,6 +1219,20 @@ export function DsaProfilePage({ id }: { id: string }) {
   }, [id, fetchDsaDetail]);
 
   const [dsaAudit, setDsaAudit] = useState<any[]>([]);
+  const [docChecklist, setDocChecklist] = useState<any>(null);
+  const [previewDoc, setPreviewDoc] = useState<any | null>(null);
+  const [viewedDocIds, setViewedDocIds] = useState<Set<number | string>>(new Set());
+
+  const openDocPreview = (doc: any) => {
+    setPreviewDoc(doc);
+    if (doc?.id) {
+      setViewedDocIds((prev) => {
+        const next = new Set(prev);
+        next.add(doc.id);
+        return next;
+      });
+    }
+  };
 
   useEffect(() => {
     if (!dsa || currentUser?.role !== "DSA Manager") return;
@@ -2262,6 +1247,13 @@ export function DsaProfilePage({ id }: { id: string }) {
     loadDsaAudit();
   }, [dsa, currentUser?.role]);
 
+  useEffect(() => {
+    if (!dsa) return;
+    adminApi.getDsaDocumentChecklist(dsa.id)
+      .then((res: any) => setDocChecklist(res?.data ?? res))
+      .catch(() => { /* non-fatal — checklist stays null */ });
+  }, [dsa]);
+
   if (loading || !dsa) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -2270,14 +1262,21 @@ export function DsaProfilePage({ id }: { id: string }) {
     );
   }
 
-  const uploadedTypes = new Set(dsa.documents?.map((d) => d.document_type) || []);
-  const missingProfileDocuments = requiredDsaDocuments.filter(
-    (req) => !uploadedTypes.has(dsaDocumentType(req.key))
-  );
+  const isBankUser = currentUser?.role !== "DSA Partner" && currentUser?.role !== "Customer";
+
+  // Use backend checklist missing items; filter staff_only documents:
+  // - Non-bank users (e.g. self onboarding applicant or DSA partner) do not see staff_only docs
+  // - Bank staff (Super Admin, Maker, Checker, Credit, etc.) see all required docs plus staff_only docs
+  const missingProfileDocuments: Array<{ document_type: string; display_name: string; requirement: string; staff_only?: boolean }> =
+    docChecklist?.checklist?.filter((item: any) => {
+      if (item.is_uploaded) return false;
+      if (item.staff_only && !isBankUser) return false;
+      return item.is_required || (item.staff_only && isBankUser);
+    }) ?? [];
 
   const workflowLevelInfo = getDsaWorkflowLevelInfo(currentUser?.role, dsa);
   const canDecideDsa = workflowLevelInfo.canUserApprove;
-  const canApproveDsa = canDecideDsa && missingProfileDocuments.length === 0;
+  const canApproveDsa = canDecideDsa && (docChecklist ? docChecklist.is_complete : true);
   const allProductConfigs = store.dsaProductConfigs.filter((config) => config.dsaId === String(dsa.id));
   const productConfigs = allProductConfigs
     .filter((config) => (dsa.onboarding_status === "APPROVED" || dsa.onboarding_status === "AGREEMENT_COMPLETED") && config.status === "Active")
@@ -2357,7 +1356,6 @@ export function DsaProfilePage({ id }: { id: string }) {
   const canManageDsaLifecycle = canLifecycleRoleManageDsa && ["ACTIVE", "SUSPENDED", "TERMINATED"].includes(dsa.operational_status || "");
   const canViewDsaLifecycleReason = canLifecycleRoleManageDsa;
   const canDeleteDsa = currentUser?.role === "DSA Manager";
-  const isBankUser = currentUser?.role !== "DSA Partner" && currentUser?.role !== "Customer";
 
   function closeLifecycleModals() {
     setDeactivatingDsa(null);
@@ -2917,80 +1915,152 @@ export function DsaProfilePage({ id }: { id: string }) {
           {tab === "documents" ? (
             <div className="space-y-4">
               <div className="grid gap-4 lg:grid-cols-2">
-                {(dsa.documents || []).map((doc) => (
-                  <div className="rounded-lg border border-slate-200 p-4" key={doc.id}>
-                    <div className="flex flex-col gap-2 w-full">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-semibold text-slate-950">{doc.document_type}</p>
-                          <p className="text-sm text-slate-500">{doc.file_name}</p>
+                {(dsa.documents || []).map((doc) => {
+                  const isDocViewed = viewedDocIds.has(doc.id);
+                  const isPendingVerification = isBankUser && doc.status !== "Verified" && doc.status !== "Failed";
+
+                  return (
+                    <div className="rounded-lg border border-slate-200 p-4 transition-all hover:border-slate-300" key={doc.id}>
+                      <div className="flex flex-col gap-2 w-full">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-semibold text-slate-950">{doc.document_type}</p>
+                            <p className="text-sm text-slate-500">{doc.file_name} {doc.size ? `• ${doc.size}` : ""}</p>
+                          </div>
+                          <StatusBadge status={doc.status} />
                         </div>
-                        <StatusBadge status={doc.status} />
+                        <div className="flex items-center justify-between pt-2 border-t border-slate-100 mt-2">
+                          <div>
+                            {isPendingVerification ? (
+                              !isDocViewed ? (
+                                <span className="text-[11px] font-medium text-amber-600 flex items-center gap-1.5">
+                                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                  View document to verify
+                                </span>
+                              ) : (
+                                <span className="text-[11px] font-medium text-emerald-600 flex items-center gap-1">
+                                  <Check className="h-3 w-3 text-emerald-600" />
+                                  Viewed • Ready to verify
+                                </span>
+                              )
+                            ) : (
+                              <span className="text-xs text-slate-400">
+                                {doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString() : ""}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              onClick={() => openDocPreview(doc)}
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                              className="text-xs px-2.5 py-0.5 h-auto flex items-center gap-1 text-slate-700 hover:bg-slate-50 border-slate-300"
+                            >
+                              <Eye className="h-3.5 w-3.5 text-slate-500" />
+                              View
+                            </Button>
+                            {isPendingVerification ? (
+                              <>
+                                <Button
+                                  onClick={async () => {
+                                    if (!isDocViewed) {
+                                      toast({
+                                        title: "Document Not Viewed",
+                                        description: "Please view the uploaded document in the viewer before verifying.",
+                                        variant: "warning",
+                                      });
+                                      return;
+                                    }
+                                    await updateDsaDocumentStatus(dsa.id, {
+                                      document_id: doc.id,
+                                      status: "Verified",
+                                      remarks: `Verified by ${currentUser?.name}`,
+                                    });
+                                    await fetchDsaDetail(dsa.id);
+                                    toast({
+                                      title: "Document Verified",
+                                      description: `${doc.document_type} has been verified successfully.`,
+                                      variant: "success",
+                                    });
+                                  }}
+                                  disabled={!isDocViewed}
+                                  size="sm"
+                                  type="button"
+                                  className={cn(
+                                    "font-semibold text-xs px-2.5 py-0.5 h-auto transition-all",
+                                    isDocViewed
+                                      ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                                      : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-60"
+                                  )}
+                                  title={!isDocViewed ? "You must view the document before verifying" : "Verify this document"}
+                                >
+                                  Verify
+                                </Button>
+                                <Button
+                                  onClick={async () => {
+                                    await updateDsaDocumentStatus(dsa.id, {
+                                      document_id: doc.id,
+                                      status: "Failed",
+                                      remarks: `Rejected by ${currentUser?.name}`,
+                                    });
+                                    await fetchDsaDetail(dsa.id);
+                                    toast({
+                                      title: "Document Rejected",
+                                      description: `${doc.document_type} has been marked as failed/rejected.`,
+                                      variant: "warning",
+                                    });
+                                  }}
+                                  size="sm"
+                                  type="button"
+                                  variant="danger"
+                                  className="font-semibold text-xs px-2 py-0.5 h-auto"
+                                >
+                                  Fail
+                                </Button>
+                              </>
+                            ) : null}
+                          </div>
+                        </div>
                       </div>
-                      {isBankUser && doc.status !== "Verified" && doc.status !== "Failed" ? (
-                        <div className="flex justify-end gap-2 pt-1 border-t border-slate-100 mt-2">
-                          <Button
-                            onClick={async () => {
-                              await updateDsaDocumentStatus(dsa.id, {
-                                document_id: doc.id,
-                                status: "Verified",
-                                remarks: `Verified by ${currentUser?.name}`,
-                              });
-                              await fetchDsaDetail(dsa.id);
-                              toast({
-                                title: "Document Verified",
-                                description: `${doc.document_type} has been verified successfully.`,
-                                variant: "success",
-                              });
-                            }}
-                            size="sm"
-                            type="button"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-2 py-0.5 h-auto"
-                          >
-                            Verify
-                          </Button>
-                          <Button
-                            onClick={async () => {
-                              await updateDsaDocumentStatus(dsa.id, {
-                                document_id: doc.id,
-                                status: "Failed",
-                                remarks: `Rejected by ${currentUser?.name}`,
-                              });
-                              await fetchDsaDetail(dsa.id);
-                              toast({
-                                title: "Document Rejected",
-                                description: `${doc.document_type} has been marked as failed/rejected.`,
-                                variant: "warning",
-                              });
-                            }}
-                            size="sm"
-                            type="button"
-                            variant="danger"
-                            className="font-semibold text-xs px-2 py-0.5 h-auto"
-                          >
-                            Fail
-                          </Button>
-                        </div>
-                      ) : null}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {(dsa.documents || []).length === 0 ? (
                   <p className="text-sm text-slate-500">No documents uploaded for this partner.</p>
                 ) : null}
               </div>
 
-              {missingProfileDocuments.length ? (
+              {missingProfileDocuments.length > 0 ? (
                 <div className="pt-4 border-t border-slate-100">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Upload Missing Documents</h4>
                   <div className="grid gap-4 lg:grid-cols-2">
                     {missingProfileDocuments.map((document) => {
-                      const inputId = `profile-doc-${dsa.id}-${document.key}`;
+                      const inputId = `profile-doc-${dsa.id}-${document.document_type}`;
+                      const isStaffOnly = Boolean(document.staff_only);
+
                       return (
-                        <div className="rounded-lg border border-dashed border-sky-100 bg-sky-50/50 p-4 flex items-center justify-between" key={document.key}>
+                        <div
+                          className={cn(
+                            "rounded-lg border border-dashed p-4 flex items-center justify-between",
+                            isStaffOnly
+                              ? "border-amber-200 bg-amber-50/60"
+                              : "border-sky-100 bg-sky-50/50"
+                          )}
+                          key={document.document_type}
+                        >
                           <div>
-                            <p className="font-semibold text-slate-800 text-sm">{document.label}</p>
-                            <p className="text-xs text-sky-700">Missing - Required document</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold text-slate-800 text-sm">{document.display_name}</p>
+                              {isStaffOnly ? (
+                                <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                                  Bank Staff Only
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className={cn("text-xs mt-0.5", isStaffOnly ? "text-amber-700" : "text-sky-700")}>
+                              {document.requirement}
+                            </p>
                           </div>
                           <div>
                             <input
@@ -3002,10 +2072,14 @@ export function DsaProfilePage({ id }: { id: string }) {
                                 if (file) {
                                   await uploadDsaDocument(dsa.id, {
                                     file,
-                                    document_type: dsaDocumentType(document.key),
+                                    document_type: document.document_type,
                                     owner_name: dsa.name,
                                   });
                                   await fetchDsaDetail(dsa.id);
+                                  // Refresh checklist after upload
+                                  adminApi.getDsaDocumentChecklist(dsa.id)
+                                    .then((res: any) => setDocChecklist(res?.data ?? res))
+                                    .catch(() => {});
                                 }
                               }}
                               type="file"
@@ -4006,6 +3080,163 @@ export function DsaProfilePage({ id }: { id: string }) {
             <Button onClick={submitCounter} type="button">Submit Counter</Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Document Viewer Modal */}
+      <Modal
+        onClose={() => setPreviewDoc(null)}
+        open={Boolean(previewDoc)}
+        title={previewDoc ? `${previewDoc.document_type || "Document Preview"}` : "Document Preview"}
+        description={previewDoc ? `${previewDoc.file_name || ""}${previewDoc.size ? ` • ${previewDoc.size}` : ""}` : ""}
+        width="max-w-4xl"
+      >
+        {previewDoc ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+              <div className="flex items-center gap-2">
+                <StatusBadge status={previewDoc.status} />
+                {previewDoc.owner_name ? (
+                  <span className="text-xs text-slate-600 font-mono">
+                    Owner: {previewDoc.owner_name}
+                  </span>
+                ) : null}
+              </div>
+              <div className="flex items-center gap-2">
+                {getDocumentUrl(previewDoc) ? (
+                  <a
+                    href={getDocumentUrl(previewDoc)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 font-medium px-2.5 py-1 rounded bg-white border border-slate-200 shadow-sm hover:bg-slate-50"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Open in new tab
+                  </a>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="w-full min-h-[380px] max-h-[68vh] overflow-auto bg-slate-100 rounded-lg border border-slate-200 flex items-center justify-center p-2">
+              {(() => {
+                const url = getDocumentUrl(previewDoc);
+                const fileName = (previewDoc.file_name || previewDoc.file_path || "").toLowerCase();
+                const isImage =
+                  fileName.endsWith(".jpg") ||
+                  fileName.endsWith(".jpeg") ||
+                  fileName.endsWith(".png") ||
+                  fileName.endsWith(".webp") ||
+                  fileName.endsWith(".gif") ||
+                  fileName.endsWith(".svg");
+                const isPdf = fileName.endsWith(".pdf") || (!isImage && url.includes(".pdf"));
+
+                if (!url) {
+                  return (
+                    <div className="p-8 text-center text-slate-500">
+                      <FileText className="h-12 w-12 mx-auto mb-2 text-slate-400" />
+                      <p className="text-sm font-medium">No preview URL available for this document.</p>
+                    </div>
+                  );
+                }
+
+                if (isImage) {
+                  return (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={url}
+                      alt={previewDoc.file_name || "Document preview"}
+                      className="max-h-[64vh] w-auto max-w-full object-contain rounded shadow-sm"
+                    />
+                  );
+                }
+
+                if (isPdf) {
+                  return (
+                    <iframe
+                      src={url}
+                      title={previewDoc.file_name || "PDF Document"}
+                      className="w-full h-[64vh] rounded border-0 bg-white shadow-sm"
+                    />
+                  );
+                }
+
+                return (
+                  <iframe
+                    src={url}
+                    title={previewDoc.file_name || "Document"}
+                    className="w-full h-[64vh] rounded border-0 bg-white shadow-sm"
+                  />
+                );
+              })()}
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+              <span className="text-xs text-slate-500">
+                {previewDoc.uploaded_at ? `Uploaded: ${new Date(previewDoc.uploaded_at).toLocaleString()}` : ""}
+              </span>
+              <div className="flex items-center gap-2">
+                {isBankUser && previewDoc.status !== "Verified" && previewDoc.status !== "Failed" ? (
+                  <>
+                    <Button
+                      onClick={async () => {
+                        const targetDoc = previewDoc;
+                        await updateDsaDocumentStatus(dsa.id, {
+                          document_id: targetDoc.id,
+                          status: "Verified",
+                          remarks: `Verified by ${currentUser?.name} in viewer modal`,
+                        });
+                        await fetchDsaDetail(dsa.id);
+                        setPreviewDoc(null);
+                        toast({
+                          title: "Document Verified",
+                          description: `${targetDoc.document_type} has been verified successfully.`,
+                          variant: "success",
+                        });
+                      }}
+                      size="sm"
+                      type="button"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-3 py-1.5 h-auto"
+                    >
+                      <Check className="h-3.5 w-3.5 mr-1" />
+                      Verify Document
+                    </Button>
+                    <Button
+                      onClick={async () => {
+                        const targetDoc = previewDoc;
+                        await updateDsaDocumentStatus(dsa.id, {
+                          document_id: targetDoc.id,
+                          status: "Failed",
+                          remarks: `Rejected by ${currentUser?.name} in viewer modal`,
+                        });
+                        await fetchDsaDetail(dsa.id);
+                        setPreviewDoc(null);
+                        toast({
+                          title: "Document Rejected",
+                          description: `${targetDoc.document_type} has been marked as failed/rejected.`,
+                          variant: "warning",
+                        });
+                      }}
+                      size="sm"
+                      type="button"
+                      variant="danger"
+                      className="font-semibold text-xs px-3 py-1.5 h-auto"
+                    >
+                      Reject Document
+                    </Button>
+                  </>
+                ) : null}
+                <Button
+                  onClick={() => setPreviewDoc(null)}
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="text-xs px-3 py-1.5 h-auto"
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </Modal>
     </div>
   );

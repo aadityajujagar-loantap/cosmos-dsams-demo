@@ -1,5 +1,7 @@
-import { DsaOnboardingPage } from "@/components/screens/dsa-pages";
+"use client";
 
-export default function Page() {
-  return <DsaOnboardingPage />;
+import { DsaOnboardingForm } from "@/components/screens/dsa-onboarding-form";
+
+export default function DsaOnboardingPage() {
+  return <DsaOnboardingForm mode="branch" />;
 }

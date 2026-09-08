@@ -13,6 +13,7 @@ import {
 import { ToastProvider, useToast } from "@/components/ui/toast";
 import { authService } from "@/services/authService";
 import { authApi } from "@/apis/auth";
+import { adminApi } from "@/apis/admin";
 import type { AuthSession } from "@/types/auth";
 import {
   DEFAULT_DSA_ID,
@@ -68,7 +69,7 @@ interface StoreContextValue {
 const StoreContext = createContext<StoreContextValue | undefined>(undefined);
 const STORE_STORAGE_KEY = "cosmos_dsa_store";
 const STORE_SCHEMA_VERSION_KEY = `${STORE_STORAGE_KEY}_schema_version`;
-const STORE_SCHEMA_VERSION = "cosmos-25-dsa-agent-kit-v2";
+const STORE_SCHEMA_VERSION = "cosmos-dsa-live-v4";
 const USER_STORAGE_KEY = "cosmos_dsa_user";
 const COLON_DSA_ID_PATTERN = /^COSDSA(\d{8})(\d{2}):(\d{2}):(\d{2}):(\d{3})$/;
 const LEGACY_DSA_ID_PATTERN = /^dsa-(\d+)$/;
@@ -156,25 +157,29 @@ function ensureApplicationJourneys(store: MockStore): MockStore {
 }
 
 function legacyDsaIdToSeededId(id: string) {
-  const match = LEGACY_DSA_ID_PATTERN.exec(id);
-  if (!match) return id;
+  const strId = String(id ?? "");
+  const match = LEGACY_DSA_ID_PATTERN.exec(strId);
+  if (!match) return strId;
 
   const index = Number(match[1]) - 1;
-  if (!Number.isInteger(index) || index < 0) return id;
+  if (!Number.isInteger(index) || index < 0) return strId;
   return seededDsaId(index);
 }
 
 function normalizeDsaId(id: string) {
-  const colonMatch = COLON_DSA_ID_PATTERN.exec(id);
+  const strId = String(id ?? "");
+  const colonMatch = COLON_DSA_ID_PATTERN.exec(strId);
   if (colonMatch) {
     return `COSDSA${colonMatch.slice(1).join("")}`;
   }
 
-  return legacyDsaIdToSeededId(id);
+  return legacyDsaIdToSeededId(strId);
 }
 
 function shouldReplaceLegacyDsaCode(code: string, oldId: string) {
-  return code === oldId || normalizeDsaId(code) !== code || LEGACY_DSA_CODE_PATTERN.test(code);
+  const strCode = String(code ?? "");
+  const strOldId = String(oldId ?? "");
+  return strCode === strOldId || normalizeDsaId(strCode) !== strCode || LEGACY_DSA_CODE_PATTERN.test(strCode);
 }
 
 function migrateLegacyDsaIds(store: MockStore): MockStore {
@@ -218,7 +223,7 @@ function migrateLegacyDsaIds(store: MockStore): MockStore {
       return {
         ...dsa,
         code: shouldReplaceLegacyDsaCode(dsa.code, dsa.id) ? id : dsa.code,
-        documents: dsa.documents.map((document) => ({
+        documents: (dsa.documents || []).map((document) => ({
           ...document,
           dsaId: document.dsaId ? mapDsaId(document.dsaId) : document.dsaId,
         })),
@@ -233,8 +238,8 @@ function migrateLegacyDsaIds(store: MockStore): MockStore {
 }
 
 function hasMissingDsaDocumentPlaceholder(dsa: MockStore["dsas"][number]) {
-  return dsa.documents.some(
-    (document) => document.size === "0 KB" || document.remarks.includes("Mandatory document missing"),
+  return (dsa.documents || []).some(
+    (document) => document.size === "0 KB" || document.remarks?.includes("Mandatory document missing"),
   );
 }
 
@@ -254,13 +259,14 @@ function migrateOnHoldDsaStatuses(store: MockStore): MockStore {
 
 function ensureDsaCredentials(dsa: Dsa, fallbackBranchNumber = 1): Dsa {
   const fallbackCredentials = makeDsaCredentials(fallbackBranchNumber);
-  const loginUsername = (dsa.loginUsername || dsa.email).trim().toLowerCase();
+  const loginUsername = String(dsa.loginUsername || dsa.email || fallbackCredentials.loginUsername).trim().toLowerCase();
   const fallbackPassword =
-    dsa.id === DEFAULT_DSA_ID ? DEFAULT_DSA_LOGIN_PASSWORD : fallbackCredentials.loginPassword;
-  const loginPassword = (dsa.loginPassword || fallbackPassword).trim() || fallbackPassword;
+    String(dsa.id) === String(DEFAULT_DSA_ID) ? DEFAULT_DSA_LOGIN_PASSWORD : fallbackCredentials.loginPassword;
+  const loginPassword = String(dsa.loginPassword || fallbackPassword).trim() || fallbackPassword;
 
   return {
     ...dsa,
+    id: String(dsa.id ?? makeId("dsa")),
     loginPassword,
     loginUsername,
   };
@@ -274,27 +280,30 @@ function dsaAccountUserStatus(status: DsaStatus): User["status"] {
 
 function isDsaPartnerUserForDsa(user: User, dsa: Dsa, previous?: Dsa) {
   if (user.role !== "DSA Partner") return false;
-  const userEmail = user.email.trim().toLowerCase();
+  const userEmail = String(user.email ?? "").trim().toLowerCase();
+  const dsaLogin = String(dsa.loginUsername ?? "").trim().toLowerCase();
+  const dsaEmail = String(dsa.email ?? "").trim().toLowerCase();
+  const prevLogin = String(previous?.loginUsername ?? "").trim().toLowerCase();
+  const prevEmail = String(previous?.email ?? "").trim().toLowerCase();
+
   return (
-    user.id === dsa.id ||
-    user.dsaId === dsa.id ||
-    userEmail === dsa.loginUsername.trim().toLowerCase() ||
-    userEmail === dsa.email.trim().toLowerCase() ||
+    String(user.id) === String(dsa.id) ||
+    String(user.dsaId) === String(dsa.id) ||
+    (Boolean(userEmail) && (userEmail === dsaLogin || userEmail === dsaEmail)) ||
     Boolean(
       previous &&
-        (user.id === previous.id ||
-          user.dsaId === previous.id ||
-          userEmail === previous.loginUsername.trim().toLowerCase() ||
-          userEmail === previous.email.trim().toLowerCase()),
+        (String(user.id) === String(previous.id) ||
+          String(user.dsaId) === String(previous.id) ||
+          (Boolean(userEmail) && (userEmail === prevLogin || userEmail === prevEmail))),
     )
   );
 }
 
 function dsaPartnerUserFromDsa(dsa: Dsa, existing?: User): User {
   return {
-    dsaId: dsa.id,
-    email: dsa.loginUsername,
-    id: dsa.id,
+    dsaId: String(dsa.id),
+    email: String(dsa.loginUsername || dsa.email || ""),
+    id: String(dsa.id),
     lastLogin: existing?.lastLogin ?? dsa.onboardingDate,
     name: dsa.name,
     region: dsa.manager || dsa.city || dsa.state,
@@ -353,8 +362,8 @@ const agentLastNames = [
   "Verma",
 ];
 
-function stableNumber(value: string) {
-  return value.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+function stableNumber(value: unknown) {
+  return String(value ?? "").split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
 }
 
 function dsaAgentTargetCount(dsa: Pick<Dsa, "id">) {
@@ -368,12 +377,14 @@ function dsaAgentStatus(status: DsaStatus): User["status"] {
 }
 
 function dsaAgentUserFromDsa(dsa: Dsa, index: number, existing?: User): User {
-  const firstName = agentFirstNames[(stableNumber(dsa.id) + index) % agentFirstNames.length];
-  const lastName = agentLastNames[(stableNumber(dsa.code) + index * 2) % agentLastNames.length];
-  const safeCode = slug(dsa.code || dsa.id);
+  const dsaIdStr = String(dsa.id ?? "");
+  const dsaCodeStr = String(dsa.code ?? dsa.id ?? "");
+  const firstName = agentFirstNames[(stableNumber(dsaIdStr) + index) % agentFirstNames.length];
+  const lastName = agentLastNames[(stableNumber(dsaCodeStr) + index * 2) % agentLastNames.length];
+  const safeCode = slug(dsaCodeStr || dsaIdStr);
 
   return {
-    dsaId: dsa.id,
+    dsaId: dsaIdStr,
     email: existing?.email ?? `agent${index + 1}.${safeCode}@cosdsa.in`,
     id: existing?.id ?? `usr-agent-${safeCode}-${String(index + 1).padStart(2, "0")}`,
     lastLogin: existing?.lastLogin ?? dsa.onboardingDate,
@@ -385,15 +396,16 @@ function dsaAgentUserFromDsa(dsa: Dsa, index: number, existing?: User): User {
 }
 
 function defaultDsaProductConfig(dsa: Dsa, product: Product, index: number): DsaProductConfig {
-  const id = `config-${slug(dsa.id)}-${slug(product)}`;
+  const dsaIdStr = String(dsa.id ?? "");
+  const id = `config-${slug(dsaIdStr)}-${slug(product)}`;
 
   return {
     bannerName: `${dsa.city || dsa.name} ${product} Campaign`,
     commissionType: index % 3 === 0 ? "Percentage-based" : index % 3 === 1 ? "Tiered" : "Fixed-fee",
     configuredAt: dsa.onboardingDate,
     configuredBy: DEMO_USERS.admin.name,
-    dsaCode: dsa.code,
-    dsaId: dsa.id,
+    dsaCode: String(dsa.code ?? ""),
+    dsaId: dsaIdStr,
     dsaName: dsa.name,
     id,
     loanUrl: journeyPath(id),
@@ -542,9 +554,9 @@ function findAuditDsa(store: MockStore, collection: CollectionName, item: unknow
     };
   }
 
-  const directDsaId = typeof record.dsaId === "string" ? record.dsaId : "";
+  const directDsaId = record.dsaId !== undefined && record.dsaId !== null ? String(record.dsaId) : "";
   if (directDsaId) {
-    const dsa = store.dsas.find((row) => row.id === directDsaId);
+    const dsa = store.dsas.find((row) => String(row.id) === directDsaId);
     return {
       affectedDsaId: directDsaId,
       affectedDsaName: dsa?.name ?? String(record.dsaName ?? ""),
@@ -722,8 +734,11 @@ function isClosedApplicationStatus(status: Application["status"]) {
   return CLOSED_APPLICATION_STATUSES.includes(status);
 }
 
-function slug(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+function slug(value: unknown) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 function addDays(value: string, days: number) {
@@ -753,8 +768,11 @@ function prependTimeline(application: Application, actor: string, title: string,
   return [event(actor, title, note, at), ...application.timeline];
 }
 
-function carryDisplayName(value: string, previousName: string | undefined, nextName: string) {
-  return !value || (previousName && value === previousName) ? nextName : value;
+function carryDisplayName(value?: string | null, previousName?: string | null, nextName?: string | null) {
+  const val = String(value ?? "");
+  const prev = previousName ? String(previousName) : "";
+  const next = String(nextName ?? "");
+  return !val || (prev && val === prev) ? next : val;
 }
 
 function findApplicationByReference(store: MockStore, reference?: string | null) {
@@ -797,12 +815,14 @@ function normalizeLinkedEntity<K extends CollectionName>(
   const next = { ...(item as unknown as Record<string, unknown>) };
 
   if (collection === "dsas") {
+    next.id = String(next.id ?? makeId("dsa"));
     const fallbackCredentials = generateDsaCredentials(
-      store.dsas.filter((dsa) => dsa.id !== String(next.id ?? "")),
+      store.dsas.filter((dsa) => String(dsa.id) !== String(next.id)),
     );
     next.loginUsername =
       String(next.loginUsername ?? "").trim().toLowerCase() || fallbackCredentials.loginUsername;
     next.loginPassword = String(next.loginPassword ?? "").trim() || fallbackCredentials.loginPassword;
+    if (!Array.isArray(next.documents)) next.documents = [];
   }
 
   if (collection === "dsaInvoices") {
@@ -820,8 +840,9 @@ function normalizeLinkedEntity<K extends CollectionName>(
     if (!Array.isArray(next.history)) next.history = [];
   }
 
-  if ("dsaId" in next && typeof next.dsaId === "string" && next.dsaId.trim()) {
-    const dsa = store.dsas.find((row) => row.id === next.dsaId);
+  if ("dsaId" in next && (typeof next.dsaId === "string" || typeof next.dsaId === "number") && String(next.dsaId).trim()) {
+    const dsaIdStr = String(next.dsaId).trim();
+    const dsa = store.dsas.find((row) => String(row.id) === dsaIdStr);
     if (!dsa && isDsaLinkedCollection(collection)) {
       return {
         blockedReason: `Cannot save ${titleCase(collection)} because linked DSA ${next.dsaId} was not found.`,
@@ -871,7 +892,8 @@ function normalizeLinkedEntity<K extends CollectionName>(
 }
 
 function ensureDsaAgents(store: MockStore, dsa: Dsa): MockStore {
-  const existingAgents = store.users.filter((user) => user.role === "DSA Agent" && user.dsaId === dsa.id);
+  const dsaIdStr = String(dsa.id);
+  const existingAgents = store.users.filter((user) => user.role === "DSA Agent" && String(user.dsaId) === dsaIdStr);
   const targetCount = dsaAgentTargetCount(dsa);
   if (existingAgents.length >= targetCount) return store;
 
@@ -895,18 +917,19 @@ function ensureDsaAgents(store: MockStore, dsa: Dsa): MockStore {
 }
 
 function ensureDsaProductConfigs(store: MockStore, dsa: Dsa): MockStore {
+  const dsaIdStr = String(dsa.id);
   if (shouldClearDsaProductConfigs(dsa.status)) {
     return {
       ...store,
-      dsaProductConfigs: store.dsaProductConfigs.filter((config) => config.dsaId !== dsa.id),
+      dsaProductConfigs: store.dsaProductConfigs.filter((config) => String(config.dsaId) !== dsaIdStr),
     };
   }
 
   if (!canCreateDsaProductConfig(dsa)) return store;
 
-  const existingConfigs = store.dsaProductConfigs.filter((config) => config.dsaId === dsa.id);
+  const existingConfigs = store.dsaProductConfigs.filter((config) => String(config.dsaId) === dsaIdStr);
   const syncedConfigs = store.dsaProductConfigs.map((config) =>
-    config.dsaId === dsa.id
+    String(config.dsaId) === dsaIdStr
       ? {
           ...config,
           dsaCode: dsa.code,
@@ -948,55 +971,57 @@ function syncDsaRecordReferences(
   const partnerUser = dsaPartnerUserFromDsa(syncedDsa, existingPartnerUser);
   const shouldSyncAgentStatus = previous ? previous.status !== syncedDsa.status : false;
   const nextAgentStatus = dsaAgentStatus(syncedDsa.status);
+  const dsaIdStr = String(syncedDsa.id);
+  const prevIdStr = previous ? String(previous.id) : undefined;
 
   const referencedStore = {
     ...store,
     applications: store.applications.map((application) =>
-      application.dsaId === syncedDsa.id ? { ...application, dsaName: syncedDsa.name } : application,
+      String(application.dsaId) === dsaIdStr ? { ...application, dsaName: syncedDsa.name } : application,
     ),
     commissions: store.commissions.map((commission) =>
-      commission.dsaId === syncedDsa.id ? { ...commission, dsaName: syncedDsa.name } : commission,
+      String(commission.dsaId) === dsaIdStr ? { ...commission, dsaName: syncedDsa.name } : commission,
     ),
     documents: store.documents.map((document) =>
-      document.dsaId === syncedDsa.id
+      String(document.dsaId) === dsaIdStr
         ? { ...document, ownerName: carryDisplayName(document.ownerName, previous?.name, syncedDsa.name) }
         : document,
     ),
     dsaProductConfigs: store.dsaProductConfigs
-      .filter((config) => config.dsaId !== syncedDsa.id || !shouldClearDsaProductConfigs(syncedDsa.status))
+      .filter((config) => String(config.dsaId) !== dsaIdStr || !shouldClearDsaProductConfigs(syncedDsa.status))
       .map((config) =>
-        config.dsaId === syncedDsa.id ? { ...config, dsaCode: syncedDsa.code, dsaName: syncedDsa.name } : config,
+        String(config.dsaId) === dsaIdStr ? { ...config, dsaCode: syncedDsa.code, dsaName: syncedDsa.name } : config,
       ),
     dsaRecovery: store.dsaRecovery.map((recovery) =>
-      recovery.dsaId === syncedDsa.id ? { ...recovery, dsaName: syncedDsa.name } : recovery,
+      String(recovery.dsaId) === dsaIdStr ? { ...recovery, dsaName: syncedDsa.name } : recovery,
     ),
     dsaInvoices: store.dsaInvoices.map((invoice) =>
-      invoice.dsaId === syncedDsa.id
+      String(invoice.dsaId) === dsaIdStr
         ? { ...invoice, dsaCode: syncedDsa.code, dsaName: syncedDsa.name }
         : invoice,
     ),
     dsas: store.dsas.map((row) =>
-      row.id === syncedDsa.id
+      String(row.id) === dsaIdStr
         ? {
             ...syncedDsa,
-            documents: row.documents.map((document) => ({
+            documents: (row.documents || syncedDsa.documents || []).map((document) => ({
               ...document,
-              dsaId: syncedDsa.id,
+              dsaId: dsaIdStr,
               ownerName: carryDisplayName(document.ownerName, previous?.name, syncedDsa.name),
             })),
           }
         : row,
     ),
-    leads: store.leads.map((lead) => (lead.dsaId === syncedDsa.id ? { ...lead, dsaName: syncedDsa.name } : lead)),
+    leads: store.leads.map((lead) => (String(lead.dsaId) === dsaIdStr ? { ...lead, dsaName: syncedDsa.name } : lead)),
     users: [
       partnerUser,
       ...store.users
         .filter((user) => !isDsaPartnerUserForDsa(user, syncedDsa, previous))
         .map((user) =>
-          user.role === "DSA Agent" && (user.dsaId === syncedDsa.id || user.dsaId === previous?.id)
+          user.role === "DSA Agent" && (String(user.dsaId) === dsaIdStr || (prevIdStr && String(user.dsaId) === prevIdStr))
             ? {
                 ...user,
-                dsaId: syncedDsa.id,
+                dsaId: dsaIdStr,
                 region: carryDisplayName(user.region, previous?.city || previous?.name, syncedDsa.city || syncedDsa.name),
                 status: shouldSyncAgentStatus ? nextAgentStatus : user.status,
               }
@@ -1047,7 +1072,7 @@ function defaultVerificationCheck(
   index: number,
   actor: string,
 ): VerificationCheck {
-  const numericId = application.applicationId.replace(/\D/g, "").slice(-5).padStart(5, "0");
+  const numericId = String(application.applicationId ?? "").replace(/\D/g, "").slice(-5).padStart(5, "0");
   return {
     applicationId: application.applicationId,
     assignedTo: actor,
@@ -1062,7 +1087,7 @@ function defaultVerificationCheck(
 }
 
 function defaultApprovalWorkflow(application: Application, actor: string): ApprovalItem {
-  const numericId = application.applicationId.replace(/\D/g, "").slice(-5).padStart(5, "0");
+  const numericId = String(application.applicationId ?? "").replace(/\D/g, "").slice(-5).padStart(5, "0");
   const stage: ApprovalItem["stage"] = application.deviation?.required ? "Risk Review" : "Maker";
   return {
     applicationId: application.applicationId,
@@ -1297,10 +1322,10 @@ function syncDsaLifecycle(store: MockStore, previousStatus: DsaStatus, dsa: Dsa,
     return {
       ...store,
       applications: store.applications.map((application) =>
-        application.dsaId === dsa.id &&
+        String(application.dsaId) === String(dsa.id) &&
         application.status === "On Hold" &&
-        (application.decisionSummary.startsWith(DSA_LIFECYCLE_HOLD_PREFIX) ||
-          application.notes.some((note) => note.startsWith(DSA_LIFECYCLE_HOLD_PREFIX))) &&
+        (Boolean(application.decisionSummary?.startsWith(DSA_LIFECYCLE_HOLD_PREFIX)) ||
+          application.notes?.some((note) => note?.startsWith(DSA_LIFECYCLE_HOLD_PREFIX))) &&
         application.deviation?.status !== "Pending" &&
         application.verificationStatus !== "Failed"
           ? {
@@ -1314,7 +1339,7 @@ function syncDsaLifecycle(store: MockStore, previousStatus: DsaStatus, dsa: Dsa,
           : application,
       ),
       leads: store.leads.map((lead) =>
-        lead.dsaId === dsa.id && lead.nextAction.startsWith(DSA_LIFECYCLE_HOLD_PREFIX)
+        String(lead.dsaId) === String(dsa.id) && Boolean(lead.nextAction?.startsWith(DSA_LIFECYCLE_HOLD_PREFIX))
           ? { ...lead, nextAction: "DSA reactivated. Resume customer follow-up or reassign if needed." }
           : lead,
       ),
@@ -1527,6 +1552,53 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Synchronize store.dsas with live backend DSAs when authenticated
+  useEffect(() => {
+    let isMounted = true;
+    async function syncLiveDsas() {
+      try {
+        if (typeof window === "undefined") return;
+        const token = localStorage.getItem("auth_token");
+        if (!token) return;
+        const response = await adminApi.getDsas({ per_page: 100 });
+        const liveItems = response?.data?.items;
+        if (isMounted && Array.isArray(liveItems) && liveItems.length > 0) {
+          setStore((current) => {
+            const liveMap = new Map(liveItems.map((item) => [String(item.code || item.id), item]));
+            let changed = false;
+            const updatedDsas = current.dsas.map((dsa) => {
+              const live = liveMap.get(dsa.code) || liveMap.get(dsa.id);
+              if (!live) return dsa;
+              const nextStatus: DsaStatus =
+                live.operational_status === "ACTIVE" || live.onboarding_status === "APPROVED"
+                  ? "Active"
+                  : live.onboarding_status === "ON_HOLD"
+                  ? "On Hold"
+                  : live.onboarding_status === "REJECTED"
+                  ? "Rejected"
+                  : "Pending Branch Approval";
+              if (dsa.status !== nextStatus) {
+                changed = true;
+                return { ...dsa, status: nextStatus };
+              }
+              return dsa;
+            });
+            if (!changed) return current;
+            const next = { ...current, dsas: updatedDsas };
+            persistStoreSnapshot(next);
+            return next;
+          });
+        }
+      } catch {
+        // Silently ignore if offline or unauthenticated
+      }
+    }
+    syncLiveDsas();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const login = useCallback(
     (session: AuthSession) => {
       const user = sessionUserFromAuthSession(session);
@@ -1621,7 +1693,11 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
         if (collection !== "auditLogs") {
           next.auditLogs = [audit("Created", collection, currentUser, normalized.item, undefined, current), ...current.auditLogs];
         }
-        next = syncAfterWrite(next, collection, undefined, normalized.item as StoreEntity, actor, "create");
+        try {
+          next = syncAfterWrite(next, collection, undefined, normalized.item as StoreEntity, actor, "create");
+        } catch (syncErr) {
+          console.error(`syncAfterWrite error in createItem (${collection}):`, syncErr);
+        }
         persistStoreSnapshot(next);
         console.log(`Mock store: item created in collection "${collection}":`, normalized.item);
         return next;
@@ -1674,7 +1750,12 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
         if (collection !== "auditLogs") {
           next.auditLogs = [audit("Updated", collection, currentUser, normalized.item, existing, current), ...current.auditLogs];
         }
-        const synced = syncAfterWrite(next, collection, existing as StoreEntity, normalized.item as StoreEntity, actor, "update");
+        let synced = next;
+        try {
+          synced = syncAfterWrite(next, collection, existing as StoreEntity, normalized.item as StoreEntity, actor, "update");
+        } catch (syncErr) {
+          console.error(`syncAfterWrite error in updateItem (${collection}):`, syncErr);
+        }
         persistStoreSnapshot(synced);
         return synced;
       });

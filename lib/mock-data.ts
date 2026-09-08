@@ -74,33 +74,7 @@ type DsaProfile = {
   tier: Dsa["tier"];
 };
 
-const cosmosDsaProfiles: DsaProfile[] = [
-  { businessType: "Private Limited", city: "Mumbai", cityCode: "MUM", contactPerson: "Aarav Mehta", name: "Aarohi Financial Services Pvt Ltd", pincode: "400001", state: "Maharashtra", stateCode: "MH", status: "Active", tier: "Platinum" },
-  { businessType: "LLP", city: "Pune", cityCode: "PUN", contactPerson: "Nisha Kulkarni", name: "Sahyadri Credit Associates LLP", pincode: "411001", state: "Maharashtra", stateCode: "MH", status: "Active", tier: "Gold" },
-  { businessType: "Partnership", city: "Nagpur", cityCode: "NAG", contactPerson: "Rohit Deshmukh", name: "Vidarbha Loan Connect", pincode: "440001", state: "Maharashtra", stateCode: "MH", status: "Active", tier: "Silver" },
-  { businessType: "Private Limited", city: "Ahmedabad", cityCode: "AHM", contactPerson: "Mehul Shah", name: "Amdavad Capital Partners Pvt Ltd", pincode: "380009", state: "Gujarat", stateCode: "GJ", status: "Active", tier: "Gold" },
-  { businessType: "Sole Proprietor", city: "Surat", cityCode: "SUR", contactPerson: "Krina Patel", name: "Surat Growth Finance", pincode: "395003", state: "Gujarat", stateCode: "GJ", status: "Pending Branch Approval", tier: "Bronze" },
-  { businessType: "Private Limited", city: "Bengaluru", cityCode: "BLR", contactPerson: "Karthik Rao", name: "Namma Finserve Pvt Ltd", pincode: "560001", state: "Karnataka", stateCode: "KA", status: "Active", tier: "Platinum" },
-  { businessType: "LLP", city: "Mysuru", cityCode: "MYS", contactPerson: "Divya Hegde", name: "Mysuru Credit Network LLP", pincode: "570001", state: "Karnataka", stateCode: "KA", status: "Active", tier: "Silver" },
-  { businessType: "Private Limited", city: "Hyderabad", cityCode: "HYD", contactPerson: "Saanvi Reddy", name: "Charminar Loan Services Pvt Ltd", pincode: "500001", state: "Telangana", stateCode: "TS", status: "Active", tier: "Gold" },
-  { businessType: "Sole Proprietor", city: "Warangal", cityCode: "WGL", contactPerson: "Arjun Naik", name: "Kakatiya Finance Desk", pincode: "506002", state: "Telangana", stateCode: "TS", status: "On Hold", tier: "Bronze" },
-  { businessType: "Private Limited", city: "New Delhi", cityCode: "DEL", contactPerson: "Ishaan Malhotra", name: "Capital Bridge DSA Pvt Ltd", pincode: "110001", state: "Delhi", stateCode: "DL", status: "Active", tier: "Gold" },
-  { businessType: "Partnership", city: "Jaipur", cityCode: "JAI", contactPerson: "Mahi Rathore", name: "Pinkcity Credit Hub", pincode: "302001", state: "Rajasthan", stateCode: "RJ", status: "Active", tier: "Silver" },
-  { businessType: "Private Limited", city: "Jodhpur", cityCode: "JOD", contactPerson: "Kabir Singhvi", name: "Marwar Lending Partners Pvt Ltd", pincode: "342001", state: "Rajasthan", stateCode: "RJ", status: "Pending BRH Approval", tier: "Bronze" },
-  { businessType: "LLP", city: "Chennai", cityCode: "CHN", contactPerson: "Ananya Iyer", name: "Marina Retail Finance LLP", pincode: "600001", state: "Tamil Nadu", stateCode: "TN", status: "Active", tier: "Gold" },
-  { businessType: "Private Limited", city: "Coimbatore", cityCode: "CBE", contactPerson: "Vikram Narayanan", name: "Kovai Loan Channels Pvt Ltd", pincode: "641001", state: "Tamil Nadu", stateCode: "TN", status: "Active", tier: "Silver" },
-  { businessType: "Partnership", city: "Kochi", cityCode: "COK", contactPerson: "Neha Menon", name: "Malabar Credit Links", pincode: "682001", state: "Kerala", stateCode: "KL", status: "Active", tier: "Silver" },
-  { businessType: "LLP", city: "Thiruvananthapuram", cityCode: "TRV", contactPerson: "Aditya Nair", name: "Travancore Lending LLP", pincode: "695001", state: "Kerala", stateCode: "KL", status: "Active", tier: "Bronze" },
-  { businessType: "Private Limited", city: "Indore", cityCode: "IDR", contactPerson: "Suhani Jain", name: "Malwa Finance Channels Pvt Ltd", pincode: "452001", state: "Madhya Pradesh", stateCode: "MP", status: "Active", tier: "Gold" },
-  { businessType: "Sole Proprietor", city: "Bhopal", cityCode: "BHO", contactPerson: "Harsh Tiwari", name: "Lakecity Loan Desk", pincode: "462001", state: "Madhya Pradesh", stateCode: "MP", status: "Pending Credit Approval", tier: "Bronze" },
-  { businessType: "Private Limited", city: "Kolkata", cityCode: "KOL", contactPerson: "Riya Banerjee", name: "Hooghly Capital Services Pvt Ltd", pincode: "700001", state: "West Bengal", stateCode: "WB", status: "Active", tier: "Gold" },
-  { businessType: "LLP", city: "Siliguri", cityCode: "SLG", contactPerson: "Debjit Roy", name: "North Bengal Credit LLP", pincode: "734001", state: "West Bengal", stateCode: "WB", status: "Active", tier: "Silver" },
-  { businessType: "Private Limited", city: "Lucknow", cityCode: "LKO", contactPerson: "Prisha Srivastava", name: "Awadh Finserve Pvt Ltd", pincode: "226001", state: "Uttar Pradesh", stateCode: "UP", status: "Active", tier: "Silver" },
-  { businessType: "Partnership", city: "Noida", cityCode: "NOI", contactPerson: "Raghav Bansal", name: "Noida Retail Loan Partners", pincode: "201301", state: "Uttar Pradesh", stateCode: "UP", status: "Active", tier: "Gold" },
-  { businessType: "Private Limited", city: "Ludhiana", cityCode: "LDH", contactPerson: "Simran Gill", name: "Punjab Growth Finance Pvt Ltd", pincode: "141001", state: "Punjab", stateCode: "PB", status: "Active", tier: "Silver" },
-  { businessType: "Sole Proprietor", city: "Amritsar", cityCode: "ASR", contactPerson: "Gurpreet Sandhu", name: "Amritsar Loan Bazaar", pincode: "143001", state: "Punjab", stateCode: "PB", status: "Active", tier: "Bronze" },
-  { businessType: "Private Limited", city: "Vadodara", cityCode: "BDQ", contactPerson: "Hetal Trivedi", name: "Baroda Credit Square Pvt Ltd", pincode: "390001", state: "Gujarat", stateCode: "GJ", status: "Active", tier: "Silver" },
-];
+const cosmosDsaProfiles: DsaProfile[] = [];
 
 const customerNames = [
   "Rohan Sharma",
@@ -174,13 +148,23 @@ function money(seed: number, min: number, spread: number) {
   return min + ((seed * 137000) % spread);
 }
 
+const realBackendCodes = ["APEX01", "COSDSA202609027YW9", "COSDSA20260902EMVI"];
+const realBackendPans = ["APEXS1234F", "CMPLJ0446A", "ALWPG5809L"];
+const realBackendGsts = ["27APEXS1234F1Z5", "2743XIWVIXPY1W", "2743XIWVIXPY1X"];
+const realBackendBanks = [
+  { bankName: "HDFC Bank", accountNumber: "987654321", ifsc: "HDFC0000123" },
+  { bankName: "IDFC", accountNumber: "9857458473434", ifsc: "IDBF0000123" },
+  { bankName: "IDFC", accountNumber: "9857458473434", ifsc: "IDBF0000123" },
+];
+const realBackendEmails = ["dsa@apex.com", "aditya.jujagar@loantap.in", "aa@iloan.Mosin.com"];
+const realBackendMobiles = ["9876543210", "9130656630", "8765432123"];
+
 function dsaCode(index: number, profile: DsaProfile) {
-  return `COS-DSA-${profile.stateCode}-${profile.cityCode}-${String(index + 1).padStart(3, "0")}`;
+  return realBackendCodes[index] ?? `COS-DSA-${profile.stateCode}-${profile.cityCode}-${String(index + 1).padStart(3, "0")}`;
 }
 
 function pan(index: number) {
-  const prefixes = ["AAROH", "SAHYA", "VIDAR", "AMDAV", "SURAT", "NAMMA", "MYSUR", "CHARM", "KAKAT", "CAPIT"];
-  return `${prefixes[index % prefixes.length]}${String(1000 + index * 37).slice(-4)}${String.fromCharCode(65 + (index % 26))}`;
+  return realBackendPans[index] ?? "APEXS1234F";
 }
 
 function createDsas(): Dsa[] {
@@ -190,14 +174,24 @@ function createDsas(): Dsa[] {
     const dsaPan = pan(index);
     const status = profile.status;
     const hasHoldDocs = status === "On Hold";
+    const bankInfo = realBackendBanks[index] ?? {
+      accountName: profile.name,
+      accountNumber: `1029${String(28374650 + index * 3197).padStart(8, "0")}`,
+      bankName: "Cosmos Co-operative Bank",
+      ifsc: `COSB${String(branch).padStart(7, "0")}`,
+    };
+    const email = realBackendEmails[index] ?? `partner${branch}@${profile.cityCode.toLowerCase()}-cosdsa.in`;
+    const mobile = realBackendMobiles[index] ?? `88${String(70000000 + index * 7919).slice(-8)}`;
+    const gst = realBackendGsts[index] ?? `${stateGstCodes[profile.state] ?? "27"}${dsaPan}1Z${(index % 9) + 1}`;
+
     return {
       address: `${profile.name}, ${profile.city} Business District`,
       approvalRate: 0,
       bank: {
         accountName: profile.name,
-        accountNumber: `1029${String(28374650 + index * 3197).padStart(8, "0")}`,
-        bankName: "Cosmos Co-operative Bank",
-        ifsc: `COSB${String(branch).padStart(7, "0")}`,
+        accountNumber: bankInfo.accountNumber,
+        bankName: bankInfo.bankName,
+        ifsc: bankInfo.ifsc,
       },
       businessType: profile.businessType,
       city: profile.city,
@@ -216,19 +210,19 @@ function createDsas(): Dsa[] {
         type: type as DocumentRecord["type"],
         uploadedAt: isoDay(30 - (index % 12), 11),
       })),
-      email: `partner${branch}@${profile.cityCode.toLowerCase()}-cosdsa.in`,
-      gst: `${stateGstCodes[profile.state] ?? "27"}${dsaPan}1Z${(index % 9) + 1}`,
+      email,
+      gst,
       id: code,
       loginPassword: `branch${branch}@123`,
-      loginUsername: `cosdsa@branch${branch}.in`,
+      loginUsername: email,
       manager: index % 5 === 0 ? DEMO_USERS.admin.name : DEMO_USERS.branch.name,
-      mobile: `88${String(70000000 + index * 7919).slice(-8)}`,
+      mobile,
       monthlyLeads: 0,
       name: profile.name,
       onboardingDate: isoDay(45 - (index % 20), 10),
       pan: dsaPan,
       pincode: profile.pincode,
-      riskRating: index % 11 === 0 ? "Medium" : "Low",
+      riskRating: "Low",
       state: profile.state,
       status,
       tier: profile.tier,

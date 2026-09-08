@@ -2,11 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { KeyRound, Lock, RefreshCw, ShieldCheck, User } from "lucide-react";
 
-import { DsaOnboardingPage } from "@/components/screens/dsa-pages";
-import { Modal } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { useMockStore } from "@/lib/store";
 import { withBasePath } from "@/lib/base-path";
@@ -41,7 +40,6 @@ export default function LoginPage() {
   const [mobileHint, setMobileHint] = useState("");
   const [otpDigits, setOtpDigits] = useState<string[]>(EMPTY_OTP);
   const [error, setError] = useState("");
-  const [publicOnboardingOpen, setPublicOnboardingOpen] = useState(false);
   const [verifying, setVerifying] = useState(false);
 
   const refreshCaptcha = useCallback(async () => {
@@ -467,30 +465,20 @@ export default function LoginPage() {
               </div>
             </form>
           )}
-          {step === "credentials" ? (
-            <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-center">
-              <p className="text-sm font-bold text-blue-950">New DSA partner?</p>
-              <p className="mt-1 text-xs text-blue-800">Start the onboarding journey without signing in.</p>
-              <button
-                className="mt-2 h-9 rounded-xl border border-blue-200 bg-white px-4 text-xs font-bold text-blue-700 transition hover:bg-blue-100"
-                onClick={() => setPublicOnboardingOpen(true)}
-                type="button"
-              >
-                Apply for DSA onboarding
-              </button>
-            </div>
-          ) : null}
+
+          <div className="mt-6 pt-5 border-t border-slate-100 text-center">
+            <p className="text-xs text-slate-500">
+              Want to partner with Cosmos Bank as a Direct Selling Agent?
+            </p>
+            <Link
+              href="/dsa/self-onboarding"
+              className="mt-1.5 inline-flex items-center gap-1 text-xs font-bold text-blue-700 hover:text-blue-900 transition-colors"
+            >
+              Apply for DSA Onboarding →
+            </Link>
+          </div>
         </div>
       </div>
-      <Modal
-        description="Public DSA onboarding only. Login access is generated after hierarchy approval."
-        onClose={() => setPublicOnboardingOpen(false)}
-        open={publicOnboardingOpen}
-        title="DSA Onboarding Journey"
-        width="max-w-6xl"
-      >
-        <DsaOnboardingPage publicEntry />
-      </Modal>
     </div>
   );
 }

@@ -5,7 +5,6 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
-  Building2,
   ChevronDown,
   ClipboardCheck,
   FileText,
@@ -16,6 +15,7 @@ import {
   Send,
   Settings,
   ShieldCheck,
+  UserPlus,
   Users,
   Wallet,
   type LucideIcon,
@@ -66,7 +66,7 @@ function isPathAllowedForRole(role: string, pathname: string) {
   if (role === "Branch Regional Head") {
     const brhDsaProfile =
       pathname.startsWith("/dsa/") &&
-      !["/dsa/management", "/dsa/onboarding", "/dsa/product-setting"].some(
+      !["/dsa/management", "/dsa/product-setting"].some(
         (path) => pathname === path || pathname.startsWith(`${path}/`),
       );
 
@@ -76,7 +76,7 @@ function isPathAllowedForRole(role: string, pathname: string) {
   if (role === "DSA Partner" || role === "DSA Agent") {
     const partnerDsaProfile =
       pathname.startsWith("/dsa/") &&
-      !["/dsa/management", "/dsa/onboarding", "/dsa/product-setting"].some(
+      !["/dsa/management", "/dsa/product-setting"].some(
         (path) => pathname === path || pathname.startsWith(`${path}/`),
       );
 
@@ -97,11 +97,11 @@ function isPathAllowedForRole(role: string, pathname: string) {
 
   const branchDsaProfile =
     pathname.startsWith("/dsa/") &&
-    !["/dsa/management", "/dsa/onboarding", "/dsa/product-setting"].some(
+    !["/dsa/management", "/dsa/product-setting"].some(
       (path) => pathname === path || pathname.startsWith(`${path}/`),
     );
 
-  return pathname === "/" || pathname === "/dsa/management" || pathname === "/dsa/onboarding" || branchDsaProfile;
+  return pathname === "/" || pathname === "/dsa/management" || branchDsaProfile;
 }
 
 function defaultPathForRole(role: string) {
@@ -195,10 +195,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         },
         {
           items: [
-            ...(currentUser.role === "DSA Manager" || currentUser.role === "DSA Credit"
-              ? [{ href: "/dsa/onboarding", icon: Building2, label: "Onboard DSA" }]
-              : []),
             { href: "/dsa/management", icon: Users, label: "DSA Management" },
+            { href: "/dsa/onboarding", icon: UserPlus, label: "Onboard DSA" },
             { href: "/dsa/product-setting", icon: Settings, label: "Product Setting" },
           ],
           label: "Partners",
@@ -265,8 +263,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         },
         {
           items: [
-            { href: "/dsa/onboarding", icon: Building2, label: "Onboard DSA" },
             { href: "/dsa/management", icon: Users, label: "DSA Management" },
+            { href: "/dsa/onboarding", icon: UserPlus, label: "Onboard DSA" },
           ],
           label: "Branch DSA",
         },
@@ -641,7 +639,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {navigation}
       </aside>
 
-      <div className="min-h-screen lg:pl-64">
+      <div className="flex min-h-screen flex-col lg:pl-64">
         <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
           <div className="flex h-16 items-center gap-3 px-4 lg:px-5">
             <Button
@@ -702,7 +700,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
         </header>
-        <main className="compact-dashboard w-full px-3 py-3 sm:px-4 sm:py-3.5 lg:px-5 lg:py-4">{children}</main>
+        <main className="compact-dashboard flex flex-1 flex-col w-full px-3 py-3 sm:px-4 sm:py-3.5 lg:px-5 lg:py-4">{children}</main>
       </div>
 
       {mobileOpen ? (

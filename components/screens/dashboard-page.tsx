@@ -21,13 +21,13 @@ import {
   TrendingDown,
   Info,
   ChevronDown,
+  UserPlus,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { BarChartCard, KpiCard, PieChartCard, TrendCard } from "@/components/charts";
 import { PageHeader } from "@/components/module";
-import { OnHoldDsaDocuments } from "@/components/screens/on-hold-dsa-documents";
 import {
   Card,
   CardContent,
@@ -48,14 +48,22 @@ import { compactNumber, formatCurrency, formatDate, makeId } from "@/lib/utils";
 import { Application, Product, Lead } from "@/lib/types";
 import { adminApi } from "@/apis/admin";
 import type { ActivityLog } from "@/types/activityLog";
+import { useDsa } from "@/hooks/useDsa";
+import type { Dsa as LiveDsa } from "@/types/dsa";
 
 const CUSTOMER_DSA_DISPLAY_NAME = "Assigned DSA";
 
 export function DashboardPage() {
   const { store, currentUser, createItem } = useMockStore();
+  const { dsas: liveDsas, fetchDsas: fetchLiveDsas } = useDsa();
 
   const [recentLogs, setRecentLogs] = useState<ActivityLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(true);
+
+  // Fetch live DSA list on mount for verification queue and stats
+  useEffect(() => {
+    fetchLiveDsas({ per_page: 200 });
+  }, [fetchLiveDsas]);
 
   useEffect(() => {
     if (currentUser?.role !== "DSA Manager") {
@@ -93,28 +101,26 @@ export function DashboardPage() {
   // 1. DSA MANAGER (SUPER ADMIN) CALCULATIONS & RENDER
   // ----------------------------------------------------
   const stats = useMemo(() => {
-    const activeDsas = store.dsas.filter((item) => item.status === "Active").length;
+    // Use live API count for active DSAs; fall back to store if live not loaded yet
+    const activeDsas = liveDsas.length > 0
+      ? liveDsas.filter((item) => item.operational_status === "ACTIVE" || item.onboarding_status === "APPROVED").length
+      : store.dsas.filter((item) => item.status === "Active").length;
     const approved = store.applications.filter((item) => item.status === "Approved" || item.status === "Disbursed");
     const totalPayout = store.commissions.reduce((sum, item) => sum + item.payout, 0);
     const riskQueue = store.applications.filter((item) => item.riskScore > 78 || item.status === "On Hold").length;
     return { activeDsas, approved: approved.length, riskQueue, totalPayout };
-  }, [store]);
+  }, [store, liveDsas]);
 
-  const pendingDsas = useMemo(() => {
-    let result: typeof store.dsas = [];
+  // Pending DSAs: sourced from live API data
+  const pendingDsas = useMemo((): LiveDsa[] => {
+    const PENDING_STATUSES = ["SUBMITTED", "DOCUMENT_VERIFICATION", "COMPLIANCE_CHECK", "PENDING_APPROVAL"];
+    const CREDIT_STATUSES = ["COMPLIANCE_CHECK", "PENDING_APPROVAL"];
+    let result: LiveDsa[];
     if (currentUser?.role === "DSA Credit") {
-      result = store.dsas.filter(
-        (item) => item.status === "Pending Credit Approval" || item.status === "KYC Pending",
-      );
-    } else if (currentUser?.role === "DSA Manager") {
-      result = store.dsas.filter(
-        (item) =>
-          item.status === "Submitted" ||
-          item.status === "Pending Branch Approval" ||
-          item.status === "Pending BRH Approval" ||
-          item.status === "KYC Pending" ||
-          item.status === "Pending Credit Approval",
-      );
+      result = liveDsas.filter((item) => CREDIT_STATUSES.includes(item.onboarding_status?.toUpperCase() ?? ""));
+    } else {
+      // DSA Manager, Branch User, Branch Regional Head, etc.
+      result = liveDsas.filter((item) => PENDING_STATUSES.includes(item.onboarding_status?.toUpperCase() ?? ""));
     }
     const seen = new Set<string>();
     return result.filter((item) => {
@@ -122,18 +128,21 @@ export function DashboardPage() {
       seen.add(String(item.id));
       return true;
     });
-  }, [currentUser?.role, store.dsas]);
+  }, [currentUser?.role, liveDsas]);
 
-  const onHoldDsas = useMemo(() => {
-    let result: typeof store.dsas = [];
+  // On-hold DSAs: sourced from live API data
+  const onHoldDsas = useMemo((): LiveDsa[] => {
+    let result: LiveDsa[];
     if (currentUser?.role === "Branch User") {
-      result = store.dsas
-        .filter((item) => item.status === "On Hold" && item.manager === currentUser.name)
-        .sort((left, right) => right.onboardingDate.localeCompare(left.onboardingDate));
-    } else if (currentUser?.role === "DSA Credit" || currentUser?.role === "DSA Manager") {
-      result = store.dsas
-        .filter((item) => item.status === "On Hold")
-        .sort((left, right) => right.onboardingDate.localeCompare(left.onboardingDate));
+      result = liveDsas
+        .filter((item) => item.onboarding_status?.toUpperCase() === "ON_HOLD" && (item.manager === currentUser.name || !item.manager))
+        .sort((a, b) => (b.onboarding_date ?? "").localeCompare(a.onboarding_date ?? ""));
+    } else if (currentUser?.role === "DSA Credit" || currentUser?.role === "DSA Manager" || currentUser?.role === "Branch Regional Head") {
+      result = liveDsas
+        .filter((item) => item.onboarding_status?.toUpperCase() === "ON_HOLD")
+        .sort((a, b) => (b.onboarding_date ?? "").localeCompare(a.onboarding_date ?? ""));
+    } else {
+      result = [];
     }
     const seen = new Set<string>();
     return result.filter((item) => {
@@ -141,31 +150,53 @@ export function DashboardPage() {
       seen.add(String(item.id));
       return true;
     });
-  }, [currentUser, store.dsas]);
+  }, [currentUser, liveDsas]);
 
   const branchDsas = useMemo(() => {
-    if (currentUser?.role !== "Branch User") return [];
-    const result = store.dsas
-      .filter((item) => item.manager === currentUser.name)
-      .sort((left, right) => right.onboardingDate.localeCompare(left.onboardingDate));
-    const seen = new Set<string>();
-    return result.filter((item) => {
-      if (seen.has(String(item.id))) return false;
-      seen.add(String(item.id));
-      return true;
+    if (currentUser?.role !== "Branch User" && currentUser?.role !== "Branch Regional Head") return [];
+
+    const liveMapped: any[] = liveDsas.map((item: any) => {
+      const applicantName = item.name || item.contact_person || item.entity_name || item.code;
+      const isSub = item.onboarding_status === "SUBMITTED";
+      const isApp = item.onboarding_status === "APPROVED";
+      return {
+        id: String(item.id),
+        code: item.code,
+        name: applicantName,
+        businessType: item.business_type || item.dsa_type || "Individual",
+        status: isSub ? "Submitted" : (isApp ? "Active" : item.onboarding_status),
+        onboardingDate: item.created_at || item.onboarding_date || new Date().toISOString(),
+        manager: item.manager || currentUser?.name,
+        city: item.city,
+        state: item.state,
+      };
     });
-  }, [currentUser, store.dsas]);
+
+    const combined = [...liveMapped, ...store.dsas];
+    const seen = new Set<string>();
+    const result = combined
+      .filter((item) => {
+        if (!item || seen.has(String(item.id))) return false;
+        seen.add(String(item.id));
+        return true;
+      })
+      .sort((left, right) => (right.onboardingDate ?? "").localeCompare(left.onboardingDate ?? ""));
+
+    return result;
+  }, [currentUser, liveDsas, store.dsas]);
 
   const branchStats = useMemo(
     () => ({
-      active: branchDsas.filter((item) => item.status === "Active").length,
-      blacklisted: branchDsas.filter((item) => item.status === "Blacklisted").length,
-      onHold: branchDsas.filter((item) => item.status === "On Hold").length,
+      active: branchDsas.filter((item) => item.status === "Active" || item.status === "APPROVED").length,
+      blacklisted: branchDsas.filter((item) => item.status === "Blacklisted" || item.status === "BLACKLISTED").length,
+      onHold: branchDsas.filter((item) => item.status === "On Hold" || item.status === "ON_HOLD").length,
       pendingCredit: branchDsas.filter(
         (item) =>
           item.status === "Pending Branch Approval" ||
           item.status === "Pending BRH Approval" ||
-          item.status === "Pending Credit Approval",
+          item.status === "Pending Credit Approval" ||
+          item.status === "Submitted" ||
+          item.status === "SUBMITTED",
       ).length,
       total: branchDsas.length,
     }),
@@ -661,7 +692,7 @@ export function DashboardPage() {
                         <tr key={dsa.id} className="hover:bg-slate-50/40 transition">
                           <td className="p-4 pl-6">
                             <div className="font-semibold text-slate-800">{dsa.name}</div>
-                            <div className="text-xs text-slate-500">{dsa.businessType}</div>
+                            <div className="text-xs text-slate-500">{dsa.business_type}</div>
                           </td>
                           <td className="p-4 font-mono text-xs text-slate-600">{dsa.code}</td>
                           <td className="p-4 text-xs text-slate-600">
@@ -670,7 +701,7 @@ export function DashboardPage() {
                           </td>
                           <td className="p-4 text-slate-700 font-medium">{dsa.city}</td>
                           <td className="p-4">
-                            <StatusBadge status={dsa.status} />
+                            <StatusBadge status={dsa.onboarding_status} />
                           </td>
                           <td className="p-4 text-right pr-6">
                             <Link href={`/dsa/${dsa.id}`}>
@@ -724,12 +755,69 @@ export function DashboardPage() {
             </Button>
           </div>
 
-          <OnHoldDsaDocuments
-            description="Upload remaining documents here. Once completed, the DSA moves back to approval review."
-            dsas={onHoldDsas}
-            emptyDescription="No DSAs are currently waiting for missing documents."
-            title="On-Hold DSA Document Queue"
-          />
+          <Card className="shadow-md">
+            <CardHeader className="flex-row items-center justify-between border-b border-slate-100 pb-4">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">On-Hold DSA Document Queue</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Open each profile to upload missing mandatory documents before moving the partner back to approval review.
+                </p>
+              </div>
+              <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                {onHoldDsas.length} on hold
+              </span>
+            </CardHeader>
+            <CardContent className="p-0">
+              {onHoldDsas.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-slate-50/75 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        <th className="p-4 pl-6">Partner</th>
+                        <th className="p-4">Code</th>
+                        <th className="p-4">Contact</th>
+                        <th className="p-4">City</th>
+                        <th className="p-4">Status</th>
+                        <th className="p-4 text-right pr-6">Profile Review</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {onHoldDsas.map((dsa) => (
+                        <tr key={dsa.id} className="hover:bg-slate-50/40 transition">
+                          <td className="p-4 pl-6">
+                            <div className="font-semibold text-slate-800">{dsa.name}</div>
+                            <div className="text-xs text-slate-500">{dsa.business_type}</div>
+                          </td>
+                          <td className="p-4 font-mono text-xs text-slate-600">{dsa.code}</td>
+                          <td className="p-4 text-xs text-slate-600">
+                            <div>{dsa.email}</div>
+                            <div>{dsa.mobile}</div>
+                          </td>
+                          <td className="p-4 text-slate-700 font-medium">{dsa.city}</td>
+                          <td className="p-4">
+                            <StatusBadge status={dsa.onboarding_status} />
+                          </td>
+                          <td className="p-4 text-right pr-6">
+                            <Link href={`/dsa/${dsa.id}`}>
+                              <Button size="sm" type="button" variant="outline">
+                                Upload docs
+                              </Button>
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-8 text-center text-slate-500">
+                  <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto mb-2" />
+                  <p className="text-sm font-semibold text-slate-700">No DSAs are currently on hold.</p>
+                  <p className="text-xs text-slate-400 mt-0.5">All partners have been processed.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       );
     }
@@ -746,22 +834,30 @@ export function DashboardPage() {
           title="Dashboard"
         />
 
-        <div className="mb-6 inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
-          <Button onClick={() => setManagerView("overview")} size="sm" type="button" variant="secondary">
-            Overview
-          </Button>
-          <Button onClick={() => setManagerView("verificationQueue")} size="sm" type="button" variant="ghost">
-            Verification Queue
-            <span className="ml-1 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
-              {pendingDsas.length}
-            </span>
-          </Button>
-          <Button onClick={() => setManagerView("onHoldQueue")} size="sm" type="button" variant="ghost">
-            On-Hold Queue
-            <span className="ml-1 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
-              {onHoldDsas.length}
-            </span>
-          </Button>
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+            <Button onClick={() => setManagerView("overview")} size="sm" type="button" variant="secondary">
+              Overview
+            </Button>
+            <Button onClick={() => setManagerView("verificationQueue")} size="sm" type="button" variant="ghost">
+              Verification Queue
+              <span className="ml-1 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
+                {pendingDsas.length}
+              </span>
+            </Button>
+            <Button onClick={() => setManagerView("onHoldQueue")} size="sm" type="button" variant="ghost">
+              On-Hold Queue
+              <span className="ml-1 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
+                {onHoldDsas.length}
+              </span>
+            </Button>
+          </div>
+
+          <Link href="/dsa/onboarding">
+            <Button size="sm" className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-sm">
+              <UserPlus className="h-4 w-4" /> Onboard DSA
+            </Button>
+          </Link>
         </div>
 
         {/* Verification Alert Banner */}
@@ -1139,22 +1235,10 @@ export function DashboardPage() {
               <div className="space-y-3">
                 {[
                   [
-                    currentUser.role === "DSA Credit" ? "Pending credit approvals" : "KYC pending DSAs",
-                    currentUser.role === "DSA Credit"
-                      ? store.dsas.filter(
-                          (item) =>
-                            item.status === "Pending Credit Approval" ||
-                            item.status === "Submitted" ||
-                            item.status === "KYC Pending",
-                        ).length
-                      : store.dsas.filter(
-                          (item) =>
-                            item.status === "KYC Pending" ||
-                            item.status === "Submitted" ||
-                            item.status === "Pending Credit Approval",
-                        ).length,
+                    currentUser.role === "DSA Credit" ? "Pending credit approvals" : "Pending verification DSAs",
+                    pendingDsas.length,
                   ],
-                  ["On-hold DSAs", store.dsas.filter((item) => item.status === "On Hold").length],
+                  ["On-hold DSAs", onHoldDsas.length],
                   ["Verification checks", store.verificationChecks.filter((item) => item.status !== "Verified").length],
                   ["Pending approvals", store.approvals.filter((item) => item.status === "Pending").length],
                 ].map(([label, value]) => (
@@ -1192,18 +1276,13 @@ export function DashboardPage() {
 
         <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_360px]">
           <Card className="shadow-md">
-            <CardHeader className="flex-row items-center justify-between border-b border-slate-100 pb-4">
+            <CardHeader className="border-b border-slate-100 pb-4">
               <div>
                 <h2 className="text-base font-bold text-slate-900">Branch DSA onboarding tracker</h2>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Credit decisions update here as DSA Credit reviews each submitted profile.
                 </p>
               </div>
-              <Link href="/dsa/onboarding">
-                <Button size="sm" type="button">
-                  Onboard DSA
-                </Button>
-              </Link>
             </CardHeader>
             <CardContent className="p-0">
               {branchDsas.length ? (
@@ -1245,7 +1324,7 @@ export function DashboardPage() {
                 <div className="p-8 text-center text-slate-500">
                   <Users className="h-10 w-10 text-slate-300 mx-auto mb-2" />
                   <p className="text-sm font-semibold text-slate-700">No DSAs submitted from this branch yet.</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Use Onboard DSA to submit the first profile to DSA Credit.</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Profiles submitted for this branch will appear here.</p>
                 </div>
               )}
             </CardContent>
@@ -1270,15 +1349,65 @@ export function DashboardPage() {
           </Card>
         </div>
 
-        <div className="mt-6">
-          <OnHoldDsaDocuments
-            description="Upload remaining documents for branch-submitted DSAs. They stay On Hold until all missing files are uploaded."
-            dsas={onHoldDsas}
-            emptyDescription="No branch DSAs are currently on hold."
-            maxRows={6}
-            title="Branch On-Hold DSA Documents"
-          />
-        </div>
+        {onHoldDsas.length > 0 && (
+          <div className="mt-6">
+            <Card className="shadow-md">
+              <CardHeader className="flex-row items-center justify-between border-b border-slate-100 pb-4">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">Branch On-Hold DSA Documents</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Upload remaining documents for branch-submitted DSAs. They stay On Hold until all missing files are uploaded.
+                  </p>
+                </div>
+                <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                  {onHoldDsas.length} on hold
+                </span>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-slate-50/75 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        <th className="p-4 pl-6">Partner</th>
+                        <th className="p-4">Code</th>
+                        <th className="p-4">Contact</th>
+                        <th className="p-4">City</th>
+                        <th className="p-4">Status</th>
+                        <th className="p-4 text-right pr-6">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {onHoldDsas.map((dsa) => (
+                        <tr key={dsa.id} className="hover:bg-slate-50/40 transition">
+                          <td className="p-4 pl-6">
+                            <div className="font-semibold text-slate-800">{dsa.name}</div>
+                            <div className="text-xs text-slate-500">{dsa.business_type}</div>
+                          </td>
+                          <td className="p-4 font-mono text-xs text-slate-600">{dsa.code}</td>
+                          <td className="p-4 text-xs text-slate-600">
+                            <div>{dsa.email}</div>
+                            <div>{dsa.mobile}</div>
+                          </td>
+                          <td className="p-4 text-slate-700 font-medium">{dsa.city}</td>
+                          <td className="p-4">
+                            <StatusBadge status={dsa.onboarding_status} />
+                          </td>
+                          <td className="p-4 text-right pr-6">
+                            <Link href={`/dsa/${dsa.id}`}>
+                              <Button size="sm" type="button" variant="outline">
+                                Upload docs
+                              </Button>
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     );
   } else if (currentUser.role === "DSA Partner") {

@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Info, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, Info, X } from "lucide-react";
 import {
   createContext,
   ReactNode,
@@ -16,7 +16,7 @@ interface Toast {
   id: string;
   title: string;
   description?: string;
-  variant?: "success" | "info" | "warning";
+  variant?: "success" | "info" | "warning" | "destructive" | "error";
 }
 
 interface ToastContextValue {
@@ -46,14 +46,19 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             className={cn(
               "pointer-events-auto flex items-start gap-3 rounded-lg border bg-white p-4 text-sm shadow-xl shadow-slate-900/10",
-              item.variant === "warning" && "border-sky-200 bg-sky-50",
-              item.variant === "success" && "border-emerald-200 bg-emerald-50",
+              item.variant === "warning" && "border-amber-200 bg-amber-50 text-amber-950",
+              (item.variant === "destructive" || item.variant === "error") && "border-rose-200 bg-rose-50 text-rose-950",
+              item.variant === "success" && "border-emerald-200 bg-emerald-50 text-emerald-950",
             )}
             key={item.id}
             role="status"
           >
             {item.variant === "success" ? (
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+            ) : item.variant === "destructive" || item.variant === "error" ? (
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+            ) : item.variant === "warning" ? (
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
             ) : (
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
             )}

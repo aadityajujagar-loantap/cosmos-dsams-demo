@@ -165,9 +165,15 @@ export function Select({
     Children.forEach(children, (child) => {
       if (isValidElement(child) && child.type === "option") {
         const props = child.props as any;
+        let label = "";
+        if (Array.isArray(props.children)) {
+          label = props.children.map((c: any) => (typeof c === "object" ? "" : String(c ?? ""))).join("");
+        } else {
+          label = String(props.children ?? props.value ?? "");
+        }
         list.push({
           value: String(props.value ?? ""),
-          label: String(props.children ?? props.value ?? ""),
+          label: label.trim(),
         });
       }
     });

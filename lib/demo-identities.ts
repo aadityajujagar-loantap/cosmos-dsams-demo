@@ -26,10 +26,10 @@ export interface DemoSessionUser {
 
 const internalUsers = seedData.sessions.internalUsers;
 export const HEAD_BANK = seedData.bank;
-export const SEED_DSA = seedData.modules.dsa.seedDsas[0];
-export const DEFAULT_DSA_ID = SEED_DSA.id;
-export const DEFAULT_DSA_LOGIN_USERNAME = SEED_DSA.credentials.loginUsername;
-export const DEFAULT_DSA_LOGIN_PASSWORD = SEED_DSA.credentials.loginPassword;
+export const SEED_DSA = (seedData.modules.dsa.seedDsas?.[0] as any) ?? null;
+export const DEFAULT_DSA_ID = SEED_DSA?.id ?? "";
+export const DEFAULT_DSA_LOGIN_USERNAME = SEED_DSA?.credentials?.loginUsername ?? "";
+export const DEFAULT_DSA_LOGIN_PASSWORD = SEED_DSA?.credentials?.loginPassword ?? "";
 
 export const DEMO_USERS: Record<DemoUserName, DemoSessionUser> = {
   admin: {
@@ -73,8 +73,8 @@ export const DEFAULT_DSA_SESSION_USER: DemoSessionUser = {
   code: DEFAULT_DSA_ID,
   email: DEFAULT_DSA_LOGIN_USERNAME,
   id: DEFAULT_DSA_ID,
-  mobile: SEED_DSA.contact.mobile,
-  name: SEED_DSA.name,
+  mobile: SEED_DSA?.contact?.mobile ?? "",
+  name: SEED_DSA?.name ?? "DSA Partner",
   role: "DSA Partner",
 };
 
@@ -93,7 +93,7 @@ export function demoActor(index = 0): DemoUserName {
 }
 
 export function getDemoUserForCredentials(identifier: string, password: string): DemoSessionUser | null {
-  const username = identifier.trim().toLowerCase() as DemoUserName;
+  const username = String(identifier || "").trim().toLowerCase() as DemoUserName;
   if (!DEMO_USER_NAMES.includes(username)) return null;
   if (DEMO_PASSWORDS[username] !== password) return null;
   return { ...DEMO_USERS[username] };

@@ -17,12 +17,12 @@ const AGENT_NAMES = [
   "Meera Chawla",
 ];
 
-export function demoAgentName(id: string) {
-  const seed = id.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+export function demoAgentName(id: unknown) {
+  const seed = String(id ?? "").split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
   return AGENT_NAMES[seed % AGENT_NAMES.length];
 }
 
-export function demoAgentEmail(id: string) {
+export function demoAgentEmail(id: unknown) {
   const localPart = demoAgentName(id)
     .trim()
     .toLowerCase()

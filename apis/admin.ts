@@ -388,8 +388,9 @@ export const adminApi = {
     });
   },
 
-  getBranchesDropdown: async (districtCode: string): Promise<BackendResponse<BranchOption[]>> => {
-    return request<BackendResponse<BranchOption[]>>(`/branches/dropdown?district_code=${districtCode}`, {
+  getBranchesDropdown: async (districtCode?: string): Promise<BackendResponse<BranchOption[]>> => {
+    const query = districtCode ? `?district_code=${districtCode}` : "";
+    return request<BackendResponse<BranchOption[]>>(`/branches/dropdown${query}`, {
       method: "GET",
     });
   },
@@ -416,13 +417,13 @@ export const adminApi = {
     sort_by?: string;
     sort_order?: string;
   }): Promise<BackendResponse<DsaListResponse>> => {
-    return request<BackendResponse<DsaListResponse>>(`/v1/dsas${compactParams(params)}`, {
+    return request<BackendResponse<DsaListResponse>>(`/v1/dsa${compactParams(params)}`, {
       method: "GET",
     });
   },
 
   getDsaDetail: async (idOrCode: number | string): Promise<BackendResponse<Dsa & { related_users?: any[] }>> => {
-    return request<BackendResponse<Dsa & { related_users?: any[] }>>(`/v1/dsas/${idOrCode}`, {
+    return request<BackendResponse<Dsa & { related_users?: any[] }>>(`/v1/dsa/${idOrCode}`, {
       method: "GET",
     });
   },
@@ -434,9 +435,66 @@ export const adminApi = {
     });
   },
 
-  updateDsaProfile: async (idOrCode: number | string, payload: Partial<Dsa> & { action?: string; remarks?: string; query?: string }): Promise<BackendResponse<Dsa>> => {
-    return request<BackendResponse<Dsa>>(`/v1/dsas/${idOrCode}/update-profile`, {
+  // ── DSA Onboarding (V1 Multi-Step Architecture) ───────────────────────────
+  sendSelfOnboardingOtp: async (payload: { mobile: string; branch_id: number }): Promise<BackendResponse<{ mobile: string; reference_id: string; expires_at: string }>> => {
+    return request<BackendResponse<any>>("/v1/dsa/self/send-otp", {
       method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  verifySelfOnboardingOtp: async (payload: {
+    mobile: string;
+    otp: string;
+    reference_id?: string;
+    branch_id: number;
+    dsa_type?: string;
+  }): Promise<BackendResponse<{ mobile: string; verified_at: string }>> => {
+    return request<BackendResponse<any>>("/v1/dsa/self/verify-otp", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  submitSelfOnboarding: async (payload: any): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>("/v1/dsa/self/submit", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  submitBranchOnboarding: async (payload: any): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>("/v1/dsa/branch/submit", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  uploadDsaVisitReport: async (
+    idOrCode: number | string,
+    file: File,
+    remarks?: string
+  ): Promise<BackendResponse<any>> => {
+    const formData = new FormData();
+    formData.append("visit_report_file", file);
+    if (remarks) {
+      formData.append("visit_report_remarks", remarks);
+    }
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/visit-report`, {
+      method: "POST",
+      body: formData,
+    });
+  },
+
+  getDsaDocumentChecklist: async (idOrCode: number | string): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/documents/checklist`, {
+      method: "GET",
+    });
+  },
+
+  updateDsaProfile: async (idOrCode: number | string, payload: Partial<Dsa> & { action?: string; remarks?: string; query?: string }): Promise<BackendResponse<Dsa>> => {
+    return request<BackendResponse<Dsa>>(`/v1/dsa/${idOrCode}`, {
+      method: "PUT",
       body: JSON.stringify(payload),
     });
   },
@@ -445,21 +503,21 @@ export const adminApi = {
     idOrCode: number | string,
     payload: { onboarding_status?: string; operational_status?: string; reason: string }
   ): Promise<BackendResponse<Dsa>> => {
-    return request<BackendResponse<Dsa>>(`/v1/dsas/${idOrCode}/update-status`, {
+    return request<BackendResponse<Dsa>>(`/v1/dsa/${idOrCode}/update-status`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
   },
 
-  // â”€â”€ DSA Agreements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── DSA Agreements ──────────────────────────────────────────────────────────
   generateDsaAgreement: async (idOrCode: number | string): Promise<BackendResponse<any>> => {
-    return request<BackendResponse<any>>(`/v1/dsas/${idOrCode}/agreements/generate`, {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/agreements/generate`, {
       method: "POST",
     });
   },
 
   downloadDsaAgreement: async (idOrCode: number | string): Promise<BackendResponse<{ file_url: string; agreement_status: string }>> => {
-    return request<BackendResponse<{ file_url: string; agreement_status: string }>>(`/v1/dsas/${idOrCode}/agreements/download`, {
+    return request<BackendResponse<{ file_url: string; agreement_status: string }>>(`/v1/dsa/${idOrCode}/agreements/download`, {
       method: "GET",
     });
   },
@@ -476,7 +534,7 @@ export const adminApi = {
 
     const base64Data = await fileToBase64(file);
 
-    return request<BackendResponse<any>>(`/v1/dsas/${idOrCode}/agreements/upload-signed`, {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/agreements/upload-signed`, {
       method: "POST",
       body: JSON.stringify({
         document_base64: base64Data,
@@ -486,36 +544,41 @@ export const adminApi = {
     });
   },
 
-  // â”€â”€ DSA Documents â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── DSA Documents ───────────────────────────────────────────────────────────
   getDsaDocuments: async (idOrCode: number | string): Promise<BackendResponse<DsaDocument[]>> => {
-    return request<BackendResponse<DsaDocument[]>>(`/v1/dsas/${idOrCode}/documents`, {
+    return request<BackendResponse<DsaDocument[]>>(`/v1/dsa/${idOrCode}/documents`, {
       method: "GET",
     });
   },
 
   uploadDsaDocument: async (
     idOrCode: number | string,
-    payload: { file: File; document_type: string; owner_name?: string }
+    payload: { file?: File; document_base64?: string; file_name?: string; document_type: string; owner_name?: string; remarks?: string }
   ): Promise<BackendResponse<DsaDocument>> => {
-    const fileToBase64 = (file: File): Promise<string> => {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = (error) => reject(error);
-      });
-    };
+    let base64Data = payload.document_base64;
+    let fileName = payload.file_name;
 
-    const base64Data = await fileToBase64(payload.file);
+    if (payload.file && !base64Data) {
+      const fileToBase64 = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (error) => reject(error);
+        });
+      };
+      base64Data = await fileToBase64(payload.file);
+      fileName = payload.file.name;
+    }
 
-    return request<BackendResponse<DsaDocument>>(`/v1/dsas/${idOrCode}/documents`, {
+    return request<BackendResponse<DsaDocument>>(`/v1/dsa/${idOrCode}/documents`, {
       method: "POST",
       body: JSON.stringify({
         document_type: payload.document_type,
-        file_name: payload.file.name,
+        file_name: fileName || "document.pdf",
         document_base64: base64Data,
         owner_name: payload.owner_name || null,
-        remarks: "Uploaded during onboarding"
+        remarks: payload.remarks || "Uploaded during onboarding"
       }),
     });
   },
@@ -524,7 +587,7 @@ export const adminApi = {
     idOrCode: number | string,
     payload: { document_id: number; status: string; remarks?: string }
   ): Promise<BackendResponse<any>> => {
-    return request<BackendResponse<any>>(`/v1/dsas/${idOrCode}/documents/update-status`, {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/documents/update-status`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
@@ -534,7 +597,7 @@ export const adminApi = {
     idOrCode: number | string,
     payload: { document_id: number }
   ): Promise<BackendResponse<any>> => {
-    return request<BackendResponse<any>>(`/v1/dsas/${idOrCode}/documents/delete`, {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/documents/delete`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
