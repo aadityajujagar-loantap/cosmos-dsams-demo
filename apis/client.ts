@@ -87,7 +87,20 @@ export async function request<T = unknown>(
       normalizedEndpoint.startsWith("auth/captcha") ||
       normalizedEndpoint === "logout";
 
-    if (response.status === 401 && !isAuthAttemptOrLogout) {
+    const isLoanJourneyEndpoint = normalizedEndpoint.startsWith("v1/loan/");
+    const isSanctumUnauthenticated =
+      serverMsg === "Unauthenticated." ||
+      serverMsg.toLowerCase().includes("unauthenticated") ||
+      errorData.message === "Unauthenticated." ||
+      errorData.error === "Please provide a valid authentication token.";
+
+    if (
+      response.status === 401 &&
+      Boolean(token) &&
+      !isAuthAttemptOrLogout &&
+      !isLoanJourneyEndpoint &&
+      isSanctumUnauthenticated
+    ) {
       handleUnauthorizedSession();
     }
 

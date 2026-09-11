@@ -39,16 +39,23 @@ export default function LoginPage() {
   const [otpRefId, setOtpRefId] = useState("");
   const [mobileHint, setMobileHint] = useState("");
   const [otpDigits, setOtpDigits] = useState<string[]>(EMPTY_OTP);
-  const [error, setError] = useState(() => {
-    if (typeof window === "undefined") return "";
-    const notice = sessionStorage.getItem("auth_expired_notice");
-    if (notice) {
-      sessionStorage.removeItem("auth_expired_notice");
-      return notice;
-    }
-    return "";
-  });
+  const [error, setError] = useState("");
   const [verifying, setVerifying] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        const notice = sessionStorage.getItem("auth_expired_notice");
+        if (notice) {
+          sessionStorage.removeItem("auth_expired_notice");
+          setError(notice);
+        }
+      } catch {
+        // Ignore storage errors
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const refreshCaptcha = useCallback(async () => {
     try {
