@@ -1477,6 +1477,15 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const handleUnauthorized = () => {
+      setCurrentUser(null);
+    };
+    window.addEventListener("auth:unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("auth:unauthorized", handleUnauthorized);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
 
     const serializedStore = JSON.stringify(store);
     if (localStorage.getItem(STORE_STORAGE_KEY) !== serializedStore) {

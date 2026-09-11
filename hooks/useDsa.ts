@@ -79,6 +79,9 @@ export function useDsa() {
         });
         return response.data.items;
       } catch (error: unknown) {
+        if (error && typeof error === "object" && "status" in error && (error as { status?: unknown }).status === 401) {
+          return [];
+        }
         const message = errorMessage(error, "Failed to load DSA list.");
         setDsaListError(message);
         setDsas([]);

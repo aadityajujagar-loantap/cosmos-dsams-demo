@@ -49,6 +49,7 @@ export const authService = {
     localStorage.removeItem(USER_KEY);
     localStorage.removeItem(ROLES_KEY);
     localStorage.removeItem(PERMISSIONS_KEY);
+    localStorage.removeItem("cosmos_dsa_user");
   },
 
   isLoggedIn(): boolean {
