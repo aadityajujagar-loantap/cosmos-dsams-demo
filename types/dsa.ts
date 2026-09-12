@@ -17,13 +17,46 @@ export interface DsaApproval {
   dsa_id: number;
   approval_level: number;
   assigned_role: string;
-  status: "PENDING" | "APPROVED" | "QUERY" | "REJECTED";
+  status: "PENDING" | "APPROVED" | "RECOMMENDED" | "QUERY" | "REJECTED" | "REVERTED" | "SKIPPED";
+  action?: string | null;
   remarks: string | null;
-  query_response: string | null;
-  action_by: number | null;
-  action_at: string | null;
+  query_response?: string | null;
+  action_by?: number | null;
+  action_at?: string | null;
+  actioned_at?: string | null;
+  actioned_by?: string | number | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface DsaVerification {
+  id: number;
+  dsa_id: number;
+  verification_code: string;
+  execution_status: string;
+  is_success: boolean;
+  attempt_number?: number;
+  request_reference?: string | null;
+  normalized_data?: any;
+  error_code?: string | null;
+  error_message?: string | null;
+  executed_at?: string | null;
+  execution_duration_ms?: number | null;
+}
+
+export interface DsaDueDiligenceNote {
+  id: number;
+  dsa_id: number;
+  approval_id?: number | null;
+  checker_user_id?: string | null;
+  observations?: string | null;
+  remarks?: string | null;
+  exception_remarks?: string | null;
+  recommendation?: string | null;
+  structured_data?: any;
+  submitted_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Dsa {
@@ -68,6 +101,8 @@ export interface Dsa {
   login_password?: string;
   documents?: DsaDocument[];
   approvals?: DsaApproval[];
+  verifications?: DsaVerification[];
+  due_diligence_notes?: DsaDueDiligenceNote[];
   related_users?: {
     id: number;
     name: string;
@@ -77,6 +112,18 @@ export interface Dsa {
     deactivated_at: string | null;
     created_at: string;
   }[];
+  branch_id?: number | null;
+  branch_name?: string | null;
+  branch_code?: string | null;
+  branchId?: number | null;
+  entity_type?: string | null;
+  dsa_type?: string | null;
+  latest_due_diligence_note?: DsaDueDiligenceNote | null;
+  branch?: {
+    id?: number;
+    branch_code?: string;
+    branch_name?: string;
+  } | null;
 }
 
 export interface StateOption {
@@ -91,12 +138,13 @@ export interface DistrictOption {
 }
 
 export interface BranchOption {
+  id?: number;
   branch_code: string;
   branch_name: string;
-  branch_number: string | null;
-  region_code: string;
-  sub_region_code: string;
-  district_code: string;
+  branch_number?: string | null;
+  region_code?: string;
+  sub_region_code?: string;
+  district_code?: string;
 }
 
 export interface SubRegionOption {

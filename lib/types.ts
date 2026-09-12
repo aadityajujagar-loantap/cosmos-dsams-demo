@@ -88,6 +88,10 @@ export type UserRole =
   | "Admin"
   | "DSA Credit"
   | "Branch Regional Head"
+  | "Region Head"
+  | "Sub-Region Head"
+  | "HO Credit Officer"
+  | "HO Credit Head"
   | "Branch User"
   | "Assistant Manager"
   | "Manager"
@@ -95,7 +99,9 @@ export type UserRole =
   | "DGM"
   | "DSA Partner"
   | "DSA Agent"
-  | "Customer";
+  | "Customer"
+  | "Checker"
+  | "Maker";
 
 export type PermissionAction = "View" | "Create" | "Edit" | "Delete" | "Approve";
 export type NotificationStatus = "Unread" | "Read" | "Archived";
@@ -120,7 +126,8 @@ export interface DsaApprovalRecord {
   approval_level: number;
   assigned_role: string;
   condition_type?: string | null;
-  status: "PENDING" | "APPROVED" | "REJECTED" | "QUERY" | "SKIPPED" | "RESUBMITTED";
+  status: "PENDING" | "APPROVED" | "RECOMMENDED" | "REJECTED" | "REVERTED" | "QUERY" | "SKIPPED" | "RESUBMITTED";
+  action?: string | null;
   remarks?: string | null;
   query?: string | null;
   actioned_by?: string | null;

@@ -498,6 +498,200 @@ export const adminApi = {
     });
   },
 
+  submitMakerApplication: async (
+    idOrCode: number | string,
+    payload?: { remarks?: string; verification_context?: any }
+  ): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/maker/submit`, {
+      method: "POST",
+      body: JSON.stringify(payload ?? {}),
+    });
+  },
+
+  getMakerDeviationReport: async (idOrCode: number | string): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/maker/deviation-report`, {
+      method: "GET",
+    });
+  },
+
+  getMakerBucket: async (params?: { page?: number; per_page?: number; search?: string; status?: string; dsa_type?: string }): Promise<BackendResponse<any>> => {
+    const query = params ? `?${new URLSearchParams(params as any).toString()}` : "";
+    return request<BackendResponse<any>>(`/v1/dsa/maker/bucket${query}`, { method: "GET" });
+  },
+
+  // ── Checker Workflow APIs ──────────────────────────────────────────────────
+  getCheckerBucket: async (params?: { page?: number; per_page?: number }): Promise<BackendResponse<any>> => {
+    const query = params ? `?${new URLSearchParams(params as any).toString()}` : "";
+    return request<BackendResponse<any>>(`/v1/dsa/checker/bucket${query}`, { method: "GET" });
+  },
+
+  getCheckerApplicationDetails: async (idOrCode: number | string): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/checker`, { method: "GET" });
+  },
+
+  triggerCheckerVerification: async (
+    idOrCode: number | string,
+    code: string,
+    context?: Record<string, any>
+  ): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/checker/verification/${code}`, {
+      method: "POST",
+      body: JSON.stringify(context ?? {}),
+    });
+  },
+
+  getCheckerDdNote: async (idOrCode: number | string): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/checker/dd-note`, { method: "GET" });
+  },
+
+  saveCheckerDdNote: async (
+    idOrCode: number | string,
+    payload: {
+      observations?: string;
+      remarks?: string;
+      exception_remarks?: string;
+      recommendation?: string;
+      structured_data?: any;
+    }
+  ): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/checker/dd-note`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getCheckerDdReviewReport: async (idOrCode: number | string, evaluationId?: string): Promise<BackendResponse<any>> => {
+    const query = evaluationId ? `?evaluation_id=${evaluationId}` : "";
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/checker/dd-review-report${query}`, { method: "GET" });
+  },
+
+  submitCheckerApplication: async (
+    idOrCode: number | string,
+    payload?: { remarks?: string; dd_note?: any }
+  ): Promise<BackendResponse<any>> => {
+    const formattedDdNote =
+      typeof payload?.dd_note === "string"
+        ? {
+            observations: payload.dd_note,
+            remarks: payload.remarks || payload.dd_note,
+            recommendation: "RECOMMEND",
+          }
+        : payload?.dd_note && typeof payload.dd_note === "object"
+        ? {
+            recommendation: "RECOMMEND",
+            remarks: payload.remarks,
+            ...payload.dd_note,
+          }
+        : undefined;
+
+    const body: Record<string, any> = {};
+    if (payload?.remarks) body.remarks = payload.remarks;
+    if (formattedDdNote) body.dd_note = formattedDdNote;
+
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/checker/submit`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  updateWorkflowAction: async (
+    idOrCode: number | string,
+    payload: {
+      action: "RECOMMEND" | "APPROVE" | "REJECT" | "REVERT" | "QUERY" | "RESUBMIT";
+      remarks?: string;
+      query?: string;
+    }
+  ): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/update-workflow-action`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getEmailActionDetails: async (token: string): Promise<BackendResponse<{
+    dsa_id: number;
+    dsa_code: string;
+    applicant_name: string;
+    dsa_type: string;
+    branch_name: string;
+    stage_level: number;
+    stage_name: string;
+    token_action: string;
+    allowed_actions: string[];
+    expires_at: string;
+    designated_user: string;
+  }>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/email-action/${token}`, {
+      method: "GET",
+    });
+  },
+
+  submitEmailAction: async (
+    token: string,
+    payload: { action?: string; remarks?: string }
+  ): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/email-action/${token}`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getFinalApprovalReview: async (idOrCode: number | string): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/final-approval-review`, {
+      method: "GET",
+    });
+  },
+
+  getEmpanelmentLetter: async (idOrCode: number | string): Promise<BackendResponse<{
+    dsa_id: number;
+    document_id: number;
+    document_type: string;
+    file_name: string;
+    file_path: string;
+    file_url: string;
+    size: number;
+    status: string;
+    uploaded_at?: string;
+  }>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/empanelment-letter`, {
+      method: "GET",
+    });
+  },
+
+  getDigitalAcceptance: async (token: string): Promise<BackendResponse<{
+    valid: boolean;
+    dsa_id: number;
+    dsa_code: string;
+    applicant_name: string;
+    company_name: string;
+    email: string;
+    mobile_no: string;
+    branch_code: string;
+    branch_name: string;
+    letter_document_id: number | null;
+    letter_file_name: string | null;
+    letter_file_url: string | null;
+    digital_acceptance_status: string;
+    expires_at: string;
+  }>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/digital-acceptance/${token}`, {
+      method: "GET",
+    });
+  },
+
+  submitDigitalAcceptance: async (token: string): Promise<BackendResponse<{
+    success: boolean;
+    message: string;
+    dsa_id: number;
+    dsa_code: string;
+    digital_acceptance_status: string;
+    digital_accepted_at: string;
+  }>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/digital-acceptance/${token}`, {
+      method: "POST",
+    });
+  },
+
   updateDsaProfile: async (idOrCode: number | string, payload: Partial<Dsa> & { action?: string; remarks?: string; query?: string }): Promise<BackendResponse<Dsa>> => {
     return request<BackendResponse<Dsa>>(`/v1/dsa/${idOrCode}`, {
       method: "PUT",

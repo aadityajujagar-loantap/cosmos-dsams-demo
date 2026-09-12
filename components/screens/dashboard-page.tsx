@@ -101,8 +101,11 @@ export function DashboardPage() {
   // 1. DSA MANAGER (SUPER ADMIN) CALCULATIONS & RENDER
   // ----------------------------------------------------
   const stats = useMemo(() => {
-    // Use live API count for active DSAs; fall back to store if live not loaded yet
-    const activeDsas = liveDsas.length > 0
+    // Use live API count for active DSAs when authenticated; fall back to store if offline/unauthenticated
+    const isLive = typeof window !== "undefined" && Boolean(localStorage.getItem("auth_token"));
+    const activeDsas = isLive
+      ? liveDsas.filter((item) => item.operational_status === "ACTIVE" || item.onboarding_status === "APPROVED").length
+      : liveDsas.length > 0
       ? liveDsas.filter((item) => item.operational_status === "ACTIVE" || item.onboarding_status === "APPROVED").length
       : store.dsas.filter((item) => item.status === "Active").length;
     const approved = store.applications.filter((item) => item.status === "Approved" || item.status === "Disbursed");
@@ -153,7 +156,7 @@ export function DashboardPage() {
   }, [currentUser, liveDsas]);
 
   const branchDsas = useMemo(() => {
-    if (currentUser?.role !== "Branch User" && currentUser?.role !== "Branch Regional Head") return [];
+    if (currentUser?.role !== "Branch User" && currentUser?.role !== "Checker" && currentUser?.role !== "Branch Regional Head") return [];
 
     const liveMapped: any[] = liveDsas.map((item: any) => {
       const applicantName = item.name || item.contact_person || item.entity_name || item.code;
@@ -169,12 +172,16 @@ export function DashboardPage() {
         manager: item.manager || currentUser?.name,
         city: item.city,
         state: item.state,
+        branch_id: item.branch_id,
+        branch_name: item.branch_name,
+        current_approval_level: item.current_approval_level,
       };
     });
 
-    const combined = [...liveMapped, ...store.dsas];
+    const isLive = typeof window !== "undefined" && Boolean(localStorage.getItem("auth_token"));
+    const source = isLive ? liveMapped : (liveMapped.length > 0 ? liveMapped : store.dsas);
     const seen = new Set<string>();
-    const result = combined
+    const result = source
       .filter((item) => {
         if (!item || seen.has(String(item.id))) return false;
         seen.add(String(item.id));
@@ -190,6 +197,9 @@ export function DashboardPage() {
       active: branchDsas.filter((item) => item.status === "Active" || item.status === "APPROVED").length,
       blacklisted: branchDsas.filter((item) => item.status === "Blacklisted" || item.status === "BLACKLISTED").length,
       onHold: branchDsas.filter((item) => item.status === "On Hold" || item.status === "ON_HOLD").length,
+      pendingChecker: branchDsas.filter(
+        (item) => Number(item.current_approval_level) === 2 || item.status === "Submitted" || item.status === "SUBMITTED"
+      ).length,
       pendingCredit: branchDsas.filter(
         (item) =>
           item.status === "Pending Branch Approval" ||
@@ -1257,18 +1267,29 @@ export function DashboardPage() {
         </div>
       </div>
     );
-  } else if (currentUser.role === "Branch User") {
+  } else if (currentUser.role === "Branch User" || currentUser.role === "Checker") {
+    const isChecker = currentUser.role === "Checker";
     return (
       <div>
         <PageHeader
-          description="Onboard DSAs from the branch and track the internal approval handoff to DSA Credit."
-          eyebrow="Branch DSA desk"
-          title={`Branch Dashboard: ${currentUser.name}`}
+          description={
+            isChecker
+              ? "Review and recommend branch DSA applications at Level 2 (Checker Due Diligence)."
+              : "Onboard DSAs from the branch and track the internal approval handoff to Level 2 (Checker)."
+          }
+          eyebrow={isChecker ? "Branch Checker desk" : "Branch DSA desk"}
+          title={`${isChecker ? "Checker" : "Branch"} Dashboard: ${currentUser.name}`}
         />
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <KpiCard change="Submitted" icon={Building2} label="Branch onboarded" tone="blue" value={String(branchStats.total)} />
-          <KpiCard change="Credit queue" icon={Clock} label="Pending Credit" tone="amber" value={String(branchStats.pendingCredit)} />
+          <KpiCard change="Branch scope" icon={Building2} label="Branch DSAs" tone="blue" value={String(branchStats.total)} />
+          <KpiCard
+            change={isChecker ? "L2 Review" : "Checker queue"}
+            icon={Clock}
+            label={isChecker ? "Pending Checker" : "Pending L2"}
+            tone="amber"
+            value={String(isChecker ? branchStats.pendingChecker : branchStats.pendingCredit)}
+          />
           <KpiCard change="Docs hold" icon={FileWarning} label="On-Hold DSAs" tone="amber" value={String(branchStats.onHold)} />
           <KpiCard change="Approved" icon={CheckCircle2} label="Activated DSAs" tone="green" value={String(branchStats.active)} />
           <KpiCard change="Restricted" icon={FileWarning} label="Blacklisted" tone="slate" value={String(branchStats.blacklisted)} />
@@ -1278,9 +1299,13 @@ export function DashboardPage() {
           <Card className="shadow-md">
             <CardHeader className="border-b border-slate-100 pb-4">
               <div>
-                <h2 className="text-base font-bold text-slate-900">Branch DSA onboarding tracker</h2>
+                <h2 className="text-base font-bold text-slate-900">
+                  {isChecker ? "Branch Checker Review Queue" : "Branch DSA onboarding tracker"}
+                </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Credit decisions update here as DSA Credit reviews each submitted profile.
+                  {isChecker
+                    ? "Applications submitted by branch Makers pending Level 2 Checker Due Diligence."
+                    : "Track DSA applications submitted from your branch through Maker & Checker stages."}
                 </p>
               </div>
             </CardHeader>
@@ -1291,9 +1316,10 @@ export function DashboardPage() {
                     <thead>
                       <tr className="bg-slate-50/75 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                         <th className="p-4 pl-6">Partner</th>
+                        <th className="p-4">Code</th>
                         <th className="p-4">Submitted</th>
                         <th className="p-4">Status</th>
-                        <th className="p-4 text-right pr-6">Profile</th>
+                        <th className="p-4 text-right pr-6">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -1310,8 +1336,8 @@ export function DashboardPage() {
                           </td>
                           <td className="p-4 text-right pr-6">
                             <Link href={`/dsa/${dsa.id}`}>
-                              <Button size="sm" type="button" variant="outline">
-                                Open
+                              <Button size="sm" type="button" variant={isChecker && Number(dsa.current_approval_level) === 2 ? "primary" : "outline"}>
+                                {isChecker && Number(dsa.current_approval_level) === 2 ? "Review L2" : "Open"}
                               </Button>
                             </Link>
                           </td>
@@ -1323,8 +1349,8 @@ export function DashboardPage() {
               ) : (
                 <div className="p-8 text-center text-slate-500">
                   <Users className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm font-semibold text-slate-700">No DSAs submitted from this branch yet.</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Profiles submitted for this branch will appear here.</p>
+                  <p className="text-sm font-semibold text-slate-700">No DSAs found for this branch.</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Only DSAs assigned to your branch will appear here.</p>
                 </div>
               )}
             </CardContent>
@@ -1332,18 +1358,28 @@ export function DashboardPage() {
 
           <Card className="shadow-md">
             <CardHeader className="border-b border-slate-100 pb-4">
-              <h2 className="text-base font-bold text-slate-900">Internal handoff</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Branch submissions remain inactive until DSA Credit approves them.</p>
+              <h2 className="text-base font-bold text-slate-900">
+                {isChecker ? "Checker Due Diligence" : "Internal handoff"}
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {isChecker
+                  ? "Level 2 verification & recommendation workflow."
+                  : "Branch submissions remain inactive until DSA Credit approves them."}
+              </p>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="rounded-md bg-sky-50 p-4">
-                <p className="text-sm font-semibold text-blue-950">Current credit queue</p>
-                <p className="mt-1 text-2xl font-semibold text-blue-700">{branchStats.pendingCredit}</p>
+                <p className="text-sm font-semibold text-blue-950">
+                  {isChecker ? "Pending Checker Queue (L2)" : "Current L2 queue"}
+                </p>
+                <p className="mt-1 text-2xl font-semibold text-blue-700">
+                  {isChecker ? branchStats.pendingChecker : branchStats.pendingCredit}
+                </p>
               </div>
               <div className="space-y-2 text-xs text-slate-600">
-                <p className="rounded-md border border-slate-100 p-3">1. Branch submits onboarding details and documents.</p>
-                <p className="rounded-md border border-slate-100 p-3">2. DSA Credit receives a workflow notification and reviews the profile.</p>
-                <p className="rounded-md border border-slate-100 p-3">3. Approved DSAs become active and appear in product and journey dropdowns.</p>
+                <p className="rounded-md border border-slate-100 p-3">1. Maker (L1) verifies documents and KYC, then submits to Checker.</p>
+                <p className="rounded-md border border-slate-100 p-3">2. Checker (L2) runs due diligence checks and recommends to Sub-Region Head.</p>
+                <p className="rounded-md border border-slate-100 p-3">3. Sub-Region Head (L3) through Credit Head (L7) finalize approval.</p>
               </div>
             </CardContent>
           </Card>

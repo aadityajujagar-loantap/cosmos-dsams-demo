@@ -1,5 +1,7 @@
 import { useCallback, useState } from "react";
 import { adminApi } from "@/apis/admin";
+import { authService } from "@/services/authService";
+import { getUserBranchScope, isDsaInBranchScope, type UserBranchScope } from "@/lib/branch-scope";
 import type {
   Dsa,
   DsaDocument,
@@ -34,6 +36,7 @@ export function useDsa() {
   const [listLoading, setListLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [dsaListError, setDsaListError] = useState("");
+  const [userBranchScope, setUserBranchScope] = useState<UserBranchScope | null>(null);
   const [pagination, setPagination] = useState({
     total: 0,
     count: 0,
@@ -60,6 +63,7 @@ export function useDsa() {
       city?: string;
       state?: string;
       business_type?: string;
+      approval_bucket?: number;
       per_page?: number;
       page?: number;
       sort_by?: string;
@@ -67,17 +71,47 @@ export function useDsa() {
     }) => {
       setListLoading(true);
       try {
-        const response = await adminApi.getDsas(params);
+        const user = authService.getUser();
+        const demoUser = user ? { id: String(user.id), name: user.name, email: user.email, mobile: user.phone ?? "", code: user.branch_code ?? undefined, role: "" as any } : null;
+        const scope = await getUserBranchScope(demoUser);
+        setUserBranchScope(scope);
+
+        const fetchQuery = scope.isBranchRestricted
+          ? { ...params, per_page: 200 }
+          : params;
+
+        const response = await adminApi.getDsas(fetchQuery);
         setDsaListError("");
-        setDsas(response.data.items);
-        setPagination({
-          total: response.data.pagination.total,
-          count: response.data.pagination.count,
-          perPage: response.data.pagination.per_page,
-          currentPage: response.data.pagination.current_page,
-          totalPages: response.data.pagination.total_pages,
-        });
-        return response.data.items;
+
+        let items = response.data.items;
+        if (scope.isBranchRestricted) {
+          items = items.filter((item: any) => isDsaInBranchScope(item, scope));
+          const total = items.length;
+          const perPage = params?.per_page ?? 20;
+          const currentPage = params?.page ?? 1;
+          const totalPages = Math.max(1, Math.ceil(total / perPage));
+          const pagedItems = items.slice((currentPage - 1) * perPage, currentPage * perPage);
+
+          setDsas(pagedItems);
+          setPagination({
+            total,
+            count: pagedItems.length,
+            perPage,
+            currentPage,
+            totalPages,
+          });
+          return pagedItems;
+        } else {
+          setDsas(items);
+          setPagination({
+            total: response.data.pagination.total,
+            count: response.data.pagination.count,
+            perPage: response.data.pagination.per_page,
+            currentPage: response.data.pagination.current_page,
+            totalPages: response.data.pagination.total_pages,
+          });
+          return items;
+        }
       } catch (error: unknown) {
         if (error && typeof error === "object" && "status" in error && (error as { status?: unknown }).status === 401) {
           return [];
@@ -175,6 +209,212 @@ export function useDsa() {
       }
     },
     [toast]
+  );
+
+  const submitMakerApplication = useCallback(
+    async (idOrCode: number | string, remarks?: string) => {
+      setActionLoading(true);
+      try {
+        const response = await adminApi.submitMakerApplication(idOrCode, { remarks });
+        toast({
+          title: "Submitted to Checker",
+          description: "Application successfully submitted to Level 2 (Checker).",
+          variant: "success",
+        });
+        if (response.data?.dsa) {
+          setCurrentDsa(response.data.dsa);
+        }
+        return response.data;
+      } catch (error: unknown) {
+        toast({
+          title: "Submission failed",
+          description: errorMessage(error, "Failed to submit application to Checker."),
+          variant: "warning",
+        });
+        return null;
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [toast]
+  );
+
+  const submitCheckerApplication = useCallback(
+    async (idOrCode: number | string, payload?: { remarks?: string; dd_note?: any }) => {
+      setActionLoading(true);
+      try {
+        const response = await adminApi.submitCheckerApplication(idOrCode, payload);
+        toast({
+          title: "Application Recommended",
+          description: "Application successfully submitted to Level 3 (Sub-Region Head).",
+          variant: "success",
+        });
+        if (response.data?.dsa) {
+          setCurrentDsa(response.data.dsa);
+        }
+        return response.data;
+      } catch (error: unknown) {
+        toast({
+          title: "Submission failed",
+          description: errorMessage(error, "Failed to submit application to Level 3."),
+          variant: "warning",
+        });
+        return null;
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [toast]
+  );
+
+  const updateWorkflowAction = useCallback(
+    async (
+      idOrCode: number | string,
+      payload: {
+        action: "RECOMMEND" | "APPROVE" | "REJECT" | "REVERT" | "QUERY" | "RESUBMIT";
+        remarks?: string;
+        query?: string;
+      }
+    ) => {
+      setActionLoading(true);
+      try {
+        const response = await adminApi.updateWorkflowAction(idOrCode, payload);
+        toast({
+          title: `Action [${payload.action}] processed`,
+          description: response.message || "Workflow updated successfully.",
+          variant: "success",
+        });
+        if (response.data) {
+          setCurrentDsa(response.data);
+        }
+        return response.data;
+      } catch (error: unknown) {
+        toast({
+          title: `Action failed`,
+          description: errorMessage(error, "Failed to process workflow action."),
+          variant: "warning",
+        });
+        return null;
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [toast]
+  );
+
+  const fetchDeviationReport = useCallback(
+    async (idOrCode: number | string) => {
+      try {
+        const response = await adminApi.getCheckerDdReviewReport(idOrCode);
+        return response.data;
+      } catch {
+        try {
+          const fallback = await adminApi.getMakerDeviationReport(idOrCode);
+          return fallback.data;
+        } catch {
+          return null;
+        }
+      }
+    },
+    []
+  );
+
+  const triggerCheckerVerification = useCallback(
+    async (idOrCode: number | string, code: string, context?: Record<string, any>) => {
+      setActionLoading(true);
+      try {
+        const response = await adminApi.triggerCheckerVerification(idOrCode, code, context);
+        toast({
+          title: `Verification [${code}] executed`,
+          description: response.message || "Verification completed successfully.",
+          variant: "success",
+        });
+        return response.data;
+      } catch (error: unknown) {
+        toast({
+          title: `Verification [${code}] failed`,
+          description: errorMessage(error, `Failed to execute verification [${code}].`),
+          variant: "warning",
+        });
+        return null;
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [toast]
+  );
+
+  const fetchCheckerDdNote = useCallback(
+    async (idOrCode: number | string) => {
+      try {
+        const response = await adminApi.getCheckerDdNote(idOrCode);
+        return response.data;
+      } catch {
+        return null;
+      }
+    },
+    []
+  );
+
+  const saveCheckerDdNote = useCallback(
+    async (idOrCode: number | string, payload: any) => {
+      setActionLoading(true);
+      try {
+        const response = await adminApi.saveCheckerDdNote(idOrCode, payload);
+        toast({
+          title: "Due Diligence Note Saved",
+          description: "DD Note draft updated successfully.",
+          variant: "success",
+        });
+        return response.data;
+      } catch (error: unknown) {
+        toast({
+          title: "Failed to save DD Note",
+          description: errorMessage(error, "Could not save Due Diligence Note."),
+          variant: "warning",
+        });
+        return null;
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [toast]
+  );
+
+  const fetchCheckerReviewReport = useCallback(
+    async (idOrCode: number | string, evaluationId?: string) => {
+      try {
+        const response = await adminApi.getCheckerDdReviewReport(idOrCode, evaluationId);
+        return response.data;
+      } catch {
+        return null;
+      }
+    },
+    []
+  );
+
+  const fetchMakerBucket = useCallback(
+    async (params?: { page?: number; per_page?: number; search?: string; status?: string; dsa_type?: string }) => {
+      try {
+        const response = await adminApi.getMakerBucket(params);
+        return response.data;
+      } catch {
+        return null;
+      }
+    },
+    []
+  );
+
+  const fetchCheckerBucket = useCallback(
+    async (params?: { page?: number; per_page?: number }) => {
+      try {
+        const response = await adminApi.getCheckerBucket(params);
+        return response.data;
+      } catch {
+        return null;
+      }
+    },
+    []
   );
 
   const updateDsaStatus = useCallback(
@@ -303,6 +543,17 @@ export function useDsa() {
       setActionLoading(true);
       try {
         const response = await adminApi.updateDsaDocumentStatus(idOrCode, payload);
+        setCurrentDsa((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            documents: (prev.documents || []).map((doc: any) =>
+              String(doc.id) === String(payload.document_id)
+                ? { ...doc, status: payload.status, remarks: payload.remarks }
+                : doc
+            ),
+          };
+        });
         toast({
           title: "Document verified",
           description: "Document verification status updated.",
@@ -407,6 +658,7 @@ export function useDsa() {
     listLoading,
     actionLoading,
     dsaListError,
+    userBranchScope,
     pagination,
     states,
     districts,
@@ -417,6 +669,16 @@ export function useDsa() {
     fetchDsaDetail,
     createDsa,
     updateDsaProfile,
+    submitMakerApplication,
+    submitCheckerApplication,
+    updateWorkflowAction,
+    fetchDeviationReport,
+    triggerCheckerVerification,
+    fetchCheckerDdNote,
+    saveCheckerDdNote,
+    fetchCheckerReviewReport,
+    fetchMakerBucket,
+    fetchCheckerBucket,
     updateDsaStatus,
     generateAgreement,
     downloadAgreement,

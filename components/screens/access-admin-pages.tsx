@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import type { Permission, Role, User, BranchRole } from "@/types/auth";
+import type { BranchOption } from "@/types/dsa";
 
 interface AdminUserRow {
   branchCode: string;
@@ -139,9 +140,12 @@ export function UsersPage() {
   const { toast } = useToast();
   const [rows, setRows] = useState<AdminUserRow[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [branches, setBranches] = useState<BranchOption[]>([]);
+  const [branchRoles, setBranchRoles] = useState<BranchRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"" | "active" | "deactivated">("");
+  const [branchFilter, setBranchFilter] = useState<string>("");
   const [editing, setEditing] = useState<AdminUserRow | null>(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<UserFormState>(() => emptyUserForm());
@@ -149,15 +153,28 @@ export function UsersPage() {
 
   const roleOptions = useMemo(() => roles.map((role) => role.name).sort(), [roles]);
 
+  const filteredRows = useMemo(() => {
+    if (!branchFilter) return rows;
+    return rows.filter((r) => r.branchCode === branchFilter);
+  }, [rows, branchFilter]);
+
   async function loadUsers() {
     setLoading(true);
     try {
-      const [page, roleList] = await Promise.all([
+      const [page, roleList, branchRes, branchRoleRes] = await Promise.all([
         adminApi.getUsersPage({ per_page: 100, status: statusFilter || undefined }),
         adminApi.getRoles(),
+        adminApi.getBranchesDropdown().catch(() => adminApi.getAdminBranchesDropdown()).catch(() => ({ data: [] })),
+        adminApi.getBranchRolesDropdown().catch(() => ({ data: [] })),
       ]);
       setRows(page.data.map(userToRow));
       setRoles(roleList);
+      if (branchRes && Array.isArray((branchRes as any).data)) {
+        setBranches((branchRes as any).data);
+      }
+      if (branchRoleRes && Array.isArray((branchRoleRes as any).data)) {
+        setBranchRoles((branchRoleRes as any).data);
+      }
     } catch (error: any) {
       toast({
         title: "User API failed",
@@ -385,13 +402,26 @@ export function UsersPage() {
 
       <Card>
         <CardContent>
-          <div className="mb-3 max-w-xs">
-            <Label>Status</Label>
-            <Select onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} value={statusFilter}>
-              <option value="">All users</option>
-              <option value="active">Active</option>
-              <option value="deactivated">Deactivated</option>
-            </Select>
+          <div className="mb-3 flex flex-wrap items-end gap-3">
+            <div className="w-full sm:w-48">
+              <Label>Status</Label>
+              <Select onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} value={statusFilter}>
+                <option value="">All users</option>
+                <option value="active">Active</option>
+                <option value="deactivated">Deactivated</option>
+              </Select>
+            </div>
+            <div className="w-full sm:w-64">
+              <Label>Branch</Label>
+              <Select onChange={(event) => setBranchFilter(event.target.value)} value={branchFilter}>
+                <option value="">All branches</option>
+                {branches.map((b) => (
+                  <option key={b.branch_code} value={b.branch_code}>
+                    {b.branch_name ? `${b.branch_name} (${b.branch_code})` : b.branch_code}
+                  </option>
+                ))}
+              </Select>
+            </div>
           </div>
 
           {loading ? (
@@ -420,7 +450,7 @@ export function UsersPage() {
               columns={columns}
               emptyDescription="Create the first backend user or adjust your filters."
               emptyTitle="No backend users found"
-              items={rows}
+              items={filteredRows}
               searchKeys={["name", "email", "phone", "ticketNo", "branchCode", "status"]}
             />
           )}
@@ -459,16 +489,42 @@ export function UsersPage() {
               <Input onChange={(event) => updateForm("ticket_no", event.target.value)} value={form.ticket_no} />
             </Field>
             <Field className="sm:col-span-1">
-              <Label>Branch code</Label>
-              <Input onChange={(event) => updateForm("branch_code", event.target.value)} value={form.branch_code} />
+              <Label>Branch</Label>
+              <Select
+                onChange={(event) => updateForm("branch_code", event.target.value)}
+                value={form.branch_code}
+              >
+                <option value="">Select Branch (or None)</option>
+                {branches.map((b) => (
+                  <option key={b.branch_code} value={b.branch_code}>
+                    {b.branch_name ? `${b.branch_name} (${b.branch_code})` : b.branch_code}
+                  </option>
+                ))}
+                {form.branch_code && !branches.some((b) => b.branch_code === form.branch_code) && (
+                  <option value={form.branch_code}>{form.branch_code} (Current)</option>
+                )}
+              </Select>
             </Field>
             <Field className="sm:col-span-1">
               <Label>Zone code</Label>
               <Input onChange={(event) => updateForm("zone_code", event.target.value)} value={form.zone_code} />
             </Field>
             <Field className="sm:col-span-1">
-              <Label>Branch role ID</Label>
-              <Input onChange={(event) => updateForm("branch_role_id", event.target.value)} value={form.branch_role_id} />
+              <Label>Branch role</Label>
+              <Select
+                onChange={(event) => updateForm("branch_role_id", event.target.value)}
+                value={form.branch_role_id}
+              >
+                <option value="">Select Branch Role (or None)</option>
+                {branchRoles.map((br) => (
+                  <option key={br.branch_role_id} value={br.branch_role_id}>
+                    {br.rolename ? `${br.rolename} (${br.branch_role_id})` : br.branch_role_id}
+                  </option>
+                ))}
+                {form.branch_role_id && !branchRoles.some((br) => String(br.branch_role_id) === String(form.branch_role_id)) && (
+                  <option value={form.branch_role_id}>{form.branch_role_id} (Current)</option>
+                )}
+              </Select>
             </Field>
             <Field className="sm:col-span-1">
               <Label>Status</Label>
@@ -1136,6 +1192,18 @@ export function UserBranchMappingsPage() {
   // ── create single form ────────────────────────────────────────────────────
   const [createForm, setCreateForm] = useState({ user_id: "", branch_code: "" });
   const [creating, setCreating] = useState(false);
+  const [branches, setBranches] = useState<BranchOption[]>([]);
+
+  useEffect(() => {
+    adminApi.getBranchesDropdown()
+      .catch(() => adminApi.getAdminBranchesDropdown())
+      .then((res: any) => {
+        if (res && Array.isArray(res.data)) {
+          setBranches(res.data);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // ── bulk assign form ──────────────────────────────────────────────────────
   const [bulkForm, setBulkForm] = useState({ user_id: "", branch_codes: "" });
@@ -1506,15 +1574,20 @@ export function UserBranchMappingsPage() {
             <p className="text-xs text-slate-500 mt-1">Enter the numeric user ID to assign.</p>
           </Field>
           <Field>
-            <Label>Branch Code</Label>
-            <Input
+            <Label>Branch *</Label>
+            <Select
               required
-              placeholder="e.g. BR001"
-              maxLength={20}
               value={createForm.branch_code}
               onChange={(e) => setCreateForm((f) => ({ ...f, branch_code: e.target.value }))}
-            />
-            <p className="text-xs text-slate-500 mt-1">Must match an existing branch code.</p>
+            >
+              <option value="">Select a branch…</option>
+              {branches.map((b) => (
+                <option key={b.branch_code} value={b.branch_code}>
+                  {b.branch_name ? `${b.branch_name} (${b.branch_code})` : b.branch_code}
+                </option>
+              ))}
+            </Select>
+            <p className="text-xs text-slate-500 mt-1">Select from active branches.</p>
           </Field>
           <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
             <Button onClick={() => setCreateOpen(false)} type="button" variant="secondary">
@@ -1548,6 +1621,28 @@ export function UserBranchMappingsPage() {
             />
           </Field>
           <Field>
+            <Label>Quick Add Branch</Label>
+            <Select
+              value=""
+              onChange={(e) => {
+                const code = e.target.value;
+                if (!code) return;
+                setBulkForm((f) => {
+                  const existing = f.branch_codes.split(",").map((s) => s.trim()).filter(Boolean);
+                  if (existing.includes(code)) return f;
+                  return { ...f, branch_codes: [...existing, code].join(",") };
+                });
+              }}
+            >
+              <option value="">Select branch to add to list…</option>
+              {branches.map((b) => (
+                <option key={b.branch_code} value={b.branch_code}>
+                  {b.branch_name ? `${b.branch_name} (${b.branch_code})` : b.branch_code}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field>
             <Label>Branch Codes (comma-separated)</Label>
             <Textarea
               required
@@ -1556,7 +1651,7 @@ export function UserBranchMappingsPage() {
               value={bulkForm.branch_codes}
               onChange={(e) => setBulkForm((f) => ({ ...f, branch_codes: e.target.value }))}
             />
-            <p className="text-xs text-slate-500 mt-1">Separate branch codes with commas. Duplicates are automatically skipped.</p>
+            <p className="text-xs text-slate-500 mt-1">Separate branch codes with commas or select from dropdown above. Duplicates are automatically skipped.</p>
           </Field>
 
           {bulkResult && (

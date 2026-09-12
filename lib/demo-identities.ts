@@ -5,6 +5,10 @@ export type SessionRole =
   | "DSA Manager"
   | "DSA Credit"
   | "Branch Regional Head"
+  | "Region Head"
+  | "Sub-Region Head"
+  | "HO Credit Officer"
+  | "HO Credit Head"
   | "Branch User"
   | "Assistant Manager"
   | "Manager"
@@ -12,7 +16,9 @@ export type SessionRole =
   | "DGM"
   | "DSA Partner"
   | "DSA Agent"
-  | "Customer";
+  | "Customer"
+  | "Checker"
+  | "Maker";
 export type DemoUserName = "admin" | "credit" | "brh" | "branch" | "user";
 
 export interface DemoSessionUser {
@@ -22,6 +28,8 @@ export interface DemoSessionUser {
   email: string;
   mobile: string;
   code?: string;
+  branchId?: number;
+  branchName?: string;
 }
 
 const internalUsers = seedData.sessions.internalUsers;

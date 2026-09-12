@@ -69,7 +69,7 @@ interface StoreContextValue {
 const StoreContext = createContext<StoreContextValue | undefined>(undefined);
 const STORE_STORAGE_KEY = "cosmos_dsa_store";
 const STORE_SCHEMA_VERSION_KEY = `${STORE_STORAGE_KEY}_schema_version`;
-const STORE_SCHEMA_VERSION = "cosmos-dsa-live-v4";
+const STORE_SCHEMA_VERSION = "cosmos-dsa-live-v6";
 const USER_STORAGE_KEY = "cosmos_dsa_user";
 const COLON_DSA_ID_PATTERN = /^COSDSA(\d{8})(\d{2}):(\d{2}):(\d{2}):(\d{3})$/;
 const LEGACY_DSA_ID_PATTERN = /^dsa-(\d+)$/;
@@ -79,20 +79,33 @@ function sessionRoleFromBackendRoles(
   roleNames: string[],
   user?: { email?: string; name?: string; ticket_no?: string | null; branch_code?: string | null }
 ): DemoSessionUser["role"] {
-  const lowerRoles = roleNames.map((r) => r.toLowerCase());
+  const normRoles = roleNames.map((r) => r.toLowerCase().replace(/[\s_-]+/g, ""));
 
-  if (lowerRoles.some((role) => ["super_admin", "admin", "checker"].includes(role))) return "DSA Manager";
-  if (lowerRoles.some((role) => ["dgm", "dgm_user"].includes(role))) return "DGM";
-  if (lowerRoles.some((role) => ["agm", "dsa_credit"].includes(role))) return "DSA Credit";
-  if (lowerRoles.some((role) => ["manager", "branch_regional_head"].includes(role))) return "Branch Regional Head";
-  if (lowerRoles.some((role) => ["assistant_manager", "assistant manager", "maker", "branch_user"].includes(role))) return "Branch User";
-  if (lowerRoles.some((role) => ["dsa_agent", "dsa agent", "agent"].includes(role))) return "DSA Agent" as any;
-  if (lowerRoles.some((role) => ["dsa_partner", "dsa partner", "dsa", "dsa_admin", "dsa_staff", "dsa admin", "partner"].includes(role))) return "DSA Partner";
+  if (normRoles.some((role) => ["superadmin", "admin", "dsamanager"].includes(role))) return "DSA Manager";
+  if (normRoles.some((role) => ["hocredithead", "credithead"].includes(role))) return "HO Credit Head";
+  if (normRoles.some((role) => ["hocreditofficer", "creditofficer"].includes(role))) return "HO Credit Officer";
+  if (normRoles.some((role) => ["regionhead", "regionalhead", "branchregionalhead"].includes(role))) return "Region Head";
+  if (normRoles.some((role) => ["dgm", "dgmuser", "deputygeneralmanager"].includes(role))) return "DGM";
+  if (normRoles.some((role) => ["subregionhead", "subregionalhead", "subregionchecker"].includes(role))) return "Sub-Region Head";
+  if (normRoles.some((role) => ["checker", "branchchecker", "manager"].includes(role))) return "Checker";
+  if (normRoles.some((role) => ["maker", "branchmaker", "branchuser", "assistantmanager", "staff"].includes(role))) return "Branch User";
+  if (normRoles.some((role) => ["agm", "dsacredit"].includes(role))) return "DSA Credit";
+  if (normRoles.some((role) => ["dsaagent", "agent"].includes(role))) return "DSA Agent" as any;
+  if (normRoles.some((role) => ["dsapartner", "dsa", "dsaadmin", "dsastaff", "partner"].includes(role))) return "DSA Partner";
 
   const emailLower = (user?.email || "").toLowerCase();
   const nameLower = (user?.name || "").toLowerCase();
   const ticketLower = (user?.ticket_no || "").toLowerCase();
   const codeLower = (user?.branch_code || "").toLowerCase();
+
+  // Pattern detection for seeded & enterprise workflow authorities
+  if (ticketLower.startsWith("srh") || emailLower.includes("srh") || nameLower.includes("sub-region")) return "Sub-Region Head";
+  if (ticketLower.startsWith("dgm") || emailLower.includes("dgm") || nameLower.includes("dgm")) return "DGM";
+  if (ticketLower.startsWith("rh") || emailLower.includes("rgnhead") || nameLower.includes("region head")) return "Region Head";
+  if (ticketLower.startsWith("ho_officer") || emailLower.includes("creditofficer") || nameLower.includes("credit officer")) return "HO Credit Officer";
+  if (ticketLower.startsWith("ho_head") || emailLower.includes("credithead") || nameLower.includes("credit head")) return "HO Credit Head";
+  if (ticketLower.startsWith("chk") || emailLower.includes("checker") || nameLower.includes("checker")) return "Checker";
+  if (ticketLower.startsWith("mkr") || emailLower.includes("maker") || nameLower.includes("maker")) return "Branch User";
 
   if (
     ticketLower.startsWith("cosdsa") ||
@@ -104,7 +117,7 @@ function sessionRoleFromBackendRoles(
     return "DSA Partner";
   }
 
-  if (lowerRoles.length === 0 && emailLower && !emailLower.endsWith("@cosmosbank.example")) {
+  if (normRoles.length === 0 && emailLower && !emailLower.endsWith("@cosmosbank.example")) {
     return "DSA Partner";
   }
 
@@ -891,73 +904,16 @@ function normalizeLinkedEntity<K extends CollectionName>(
   return { item: next as unknown as EntityMap[K] };
 }
 
-function ensureDsaAgents(store: MockStore, dsa: Dsa): MockStore {
-  const dsaIdStr = String(dsa.id);
-  const existingAgents = store.users.filter((user) => user.role === "DSA Agent" && String(user.dsaId) === dsaIdStr);
-  const targetCount = dsaAgentTargetCount(dsa);
-  if (existingAgents.length >= targetCount) return store;
-
-  const existingAgentIds = new Set(existingAgents.map((user) => user.id));
-  const missingAgents = Array.from({ length: targetCount - existingAgents.length }, (_, offset) => {
-    const agentIndex = existingAgents.length + offset;
-    let agent = dsaAgentUserFromDsa(dsa, agentIndex);
-
-    while (store.users.some((user) => user.id === agent.id) || existingAgentIds.has(agent.id)) {
-      agent = { ...agent, id: makeId("usr-agent") };
-    }
-
-    existingAgentIds.add(agent.id);
-    return agent;
-  });
-
-  return {
-    ...store,
-    users: [...store.users, ...missingAgents],
-  };
+function ensureDsaAgents(store: MockStore, _dsa: Dsa): MockStore {
+  return store;
 }
 
-function ensureDsaProductConfigs(store: MockStore, dsa: Dsa): MockStore {
-  const dsaIdStr = String(dsa.id);
-  if (shouldClearDsaProductConfigs(dsa.status)) {
-    return {
-      ...store,
-      dsaProductConfigs: store.dsaProductConfigs.filter((config) => String(config.dsaId) !== dsaIdStr),
-    };
-  }
-
-  if (!canCreateDsaProductConfig(dsa)) return store;
-
-  const existingConfigs = store.dsaProductConfigs.filter((config) => String(config.dsaId) === dsaIdStr);
-  const syncedConfigs = store.dsaProductConfigs.map((config) =>
-    String(config.dsaId) === dsaIdStr
-      ? {
-          ...config,
-          dsaCode: dsa.code,
-          dsaName: dsa.name,
-          loanUrl: journeyPath(config.id),
-        }
-      : config,
-  );
-
-  if (existingConfigs.length > 0) {
-    return {
-      ...store,
-      dsaProductConfigs: syncedConfigs,
-    };
-  }
-
-  return {
-    ...store,
-    dsaProductConfigs: [
-      ...syncedConfigs,
-      ...DEFAULT_DSA_PRODUCTS.map((product, index) => defaultDsaProductConfig(dsa, product, index)),
-    ],
-  };
+function ensureDsaProductConfigs(store: MockStore, _dsa: Dsa): MockStore {
+  return store;
 }
 
-function ensureDsaStarterRecords(store: MockStore, dsa: Dsa): MockStore {
-  const withAgents = ensureDsaAgents(store, dsa);
-  return ensureDsaProductConfigs(withAgents, dsa);
+function ensureDsaStarterRecords(store: MockStore, _dsa: Dsa): MockStore {
+  return store;
 }
 
 function syncDsaRecordReferences(
@@ -1440,7 +1396,7 @@ function ensureStoreRelationships(store: MockStore): MockStore {
   };
 
   next.dsas.forEach((dsa) => {
-    next = syncDsaRecordReferences(next, undefined, dsa, true);
+    next = syncDsaRecordReferences(next, undefined, dsa, false);
   });
 
   next.applications.forEach((application) => {
@@ -1475,10 +1431,43 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     return null;
   });
 
+  const [userPermissions, setUserPermissions] = useState<string[]>(() => {
+    return authService.getPermissions();
+  });
+
+  // Sync roles and permissions from GET /api/user/roles-permissions
+  useEffect(() => {
+    if (typeof window === "undefined" || !authService.getToken()) return;
+
+    let isMounted = true;
+    authApi
+      .getRolesPermissions()
+      .then((response) => {
+        if (!isMounted || !response || response.status !== "0" || !response.respData) return;
+        const roles = response.respData.roles || [];
+        const roleNames = roles.map((r) => r.name);
+        const permissionNames = Array.from(
+          new Set(roles.flatMap((r) => (r.permissions || []).map((p) => p.name)))
+        );
+
+        localStorage.setItem("auth_roles", JSON.stringify(roleNames));
+        localStorage.setItem("auth_permissions", JSON.stringify(permissionNames));
+        setUserPermissions(permissionNames);
+      })
+      .catch((err) => {
+        console.warn("Failed to fetch roles-permissions:", err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser?.id]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const handleUnauthorized = () => {
       setCurrentUser(null);
+      setUserPermissions([]);
     };
     window.addEventListener("auth:unauthorized", handleUnauthorized);
     return () => window.removeEventListener("auth:unauthorized", handleUnauthorized);
@@ -1569,31 +1558,60 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
         if (typeof window === "undefined") return;
         const token = localStorage.getItem("auth_token");
         if (!token) return;
-        const response = await adminApi.getDsas({ per_page: 100 });
+        const response = await adminApi.getDsas({ per_page: 200 });
         const liveItems = response?.data?.items;
-        if (isMounted && Array.isArray(liveItems) && liveItems.length > 0) {
+        if (isMounted && Array.isArray(liveItems)) {
           setStore((current) => {
-            const liveMap = new Map(liveItems.map((item) => [String(item.code || item.id), item]));
-            let changed = false;
-            const updatedDsas = current.dsas.map((dsa) => {
-              const live = liveMap.get(dsa.code) || liveMap.get(dsa.id);
-              if (!live) return dsa;
-              const nextStatus: DsaStatus =
-                live.operational_status === "ACTIVE" || live.onboarding_status === "APPROVED"
-                  ? "Active"
-                  : live.onboarding_status === "ON_HOLD"
-                  ? "On Hold"
-                  : live.onboarding_status === "REJECTED"
-                  ? "Rejected"
-                  : "Pending Branch Approval";
-              if (dsa.status !== nextStatus) {
-                changed = true;
-                return { ...dsa, status: nextStatus };
-              }
-              return dsa;
+            const mappedLiveDsas: Dsa[] = liveItems.map((item: any) => {
+              const applicantName = item.name || item.contact_person || item.entity_name || item.code || "Partner";
+              const isSub = item.onboarding_status === "SUBMITTED";
+              const isApp = item.onboarding_status === "APPROVED";
+              const isHold = item.onboarding_status === "ON_HOLD";
+              const isRej = item.onboarding_status === "REJECTED";
+              const status: DsaStatus = isApp || item.operational_status === "ACTIVE"
+                ? "Active"
+                : isHold
+                ? "On Hold"
+                : isRej
+                ? "Rejected"
+                : isSub
+                ? "Submitted"
+                : "Pending Branch Approval";
+
+              return {
+                id: String(item.id),
+                code: item.code || `DSA-${item.id}`,
+                name: applicantName,
+                businessType: item.business_type || item.dsa_type || "Individual",
+                pan: item.pan || "",
+                gst: item.gst || "",
+                contactPerson: item.contact_person || applicantName,
+                mobile: item.mobile || "",
+                email: item.email || "",
+                loginUsername: item.email || "",
+                loginPassword: "",
+                address: item.address || "",
+                city: item.city || "",
+                state: item.state || "",
+                pincode: item.pincode || "",
+                bank: item.bank || { bankName: "", accountName: "", accountNumber: "", ifsc: "" },
+                status,
+                onboarding_status: item.onboarding_status,
+                operational_status: item.operational_status,
+                current_approval_level: item.current_approval_level,
+                current_workflow_step_id: item.current_workflow_step_id,
+                onboardingDate: item.created_at || item.onboarding_date || new Date().toISOString(),
+                manager: item.manager || "",
+                tier: item.tier || "Bronze",
+                riskRating: item.riskRating || "Low",
+                monthlyLeads: item.monthlyLeads || 0,
+                approvalRate: item.approval_rate || 0,
+                commissionEarned: item.commission_earned || 0,
+                documents: item.documents || [],
+              };
             });
-            if (!changed) return current;
-            const next = { ...current, dsas: updatedDsas };
+
+            const next = { ...current, dsas: mappedLiveDsas };
             persistStoreSnapshot(next);
             return next;
           });
@@ -1606,13 +1624,17 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser]);
 
   const login = useCallback(
     (session: AuthSession) => {
       const user = sessionUserFromAuthSession(session);
 
       authService.startSession(session);
+      const permNames = Array.from(
+        new Set(session.roles.flatMap((r) => (r.permissions || []).map((p) => p.name)))
+      );
+      setUserPermissions(permNames);
       setCurrentUser(user);
       if (typeof window !== "undefined") {
         localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
@@ -1631,6 +1653,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     authApi.logout().catch((err) => console.warn("Backend logout request failed:", err));
 
     authService.endSession();
+    setUserPermissions([]);
     setCurrentUser(null);
     if (typeof window !== "undefined") {
       localStorage.removeItem(USER_STORAGE_KEY);
@@ -1643,8 +1666,12 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
   }, [toast]);
 
   const hasPermission = useCallback((permission: string) => {
-    return authService.hasPermission(permission);
-  }, []);
+    const roles = authService.getRoles();
+    if (roles.includes("super_admin") || roles.includes("admin")) {
+      return true;
+    }
+    return userPermissions.includes(permission) || authService.hasPermission(permission);
+  }, [userPermissions]);
 
   const hasRole = useCallback((role: string | string[]) => {
     return authService.hasRole(role);

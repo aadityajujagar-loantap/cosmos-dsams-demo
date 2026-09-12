@@ -63,15 +63,16 @@ function isActive(pathname: string, href: string) {
 }
 
 function isPathAllowedForRole(role: string, pathname: string) {
-  if (role === "Branch Regional Head") {
-    const brhDsaProfile =
-      pathname.startsWith("/dsa/") &&
-      !["/dsa/management", "/dsa/product-setting"].some(
+  // Universal: All internal workflow authorities (L1–L7) & admin can ALWAYS access DSA approval/management pages
+  const isDsaApprovalPage =
+    pathname === "/dsa" ||
+    pathname === "/dsa/management" ||
+    (pathname.startsWith("/dsa/") &&
+      !["/dsa/onboarding", "/dsa/product-setting"].some(
         (path) => pathname === path || pathname.startsWith(`${path}/`),
-      );
+      ));
 
-    return pathname === "/dsa/management" || brhDsaProfile;
-  }
+  if (isDsaApprovalPage) return true;
 
   if (role === "DSA Partner" || role === "DSA Agent") {
     const partnerDsaProfile =
@@ -93,15 +94,41 @@ function isPathAllowedForRole(role: string, pathname: string) {
     );
   }
 
-  if (role !== "Branch User") return true;
-
-  const branchDsaProfile =
-    pathname.startsWith("/dsa/") &&
-    !["/dsa/management", "/dsa/product-setting"].some(
-      (path) => pathname === path || pathname.startsWith(`${path}/`),
+  if (role === "Customer") {
+    return (
+      pathname === "/" ||
+      pathname === "/applications" ||
+      pathname.startsWith("/applications/") ||
+      pathname.startsWith("/journey/")
     );
+  }
 
-  return pathname === "/" || pathname === "/dsa/management" || branchDsaProfile;
+  if (role === "Branch User") {
+    return (
+      pathname === "/" ||
+      pathname === "/dsa/management" ||
+      pathname.startsWith("/dsa/") ||
+      pathname === "/applications" ||
+      pathname.startsWith("/applications/") ||
+      pathname.startsWith("/administration/location-hierarchy")
+    );
+  }
+
+  if (role === "Checker") {
+    return (
+      pathname === "/" ||
+      pathname === "/dsa/management" ||
+      pathname.startsWith("/dsa/") ||
+      pathname === "/applications" ||
+      pathname.startsWith("/applications/") ||
+      pathname.startsWith("/administration/maker-requests") ||
+      pathname.startsWith("/administration/location-hierarchy") ||
+      pathname.startsWith("/administration/audit-logs") ||
+      pathname.startsWith("/administration/users")
+    );
+  }
+
+  return true;
 }
 
 function defaultPathForRole(role: string) {
@@ -248,11 +275,113 @@ export function AppShell({ children }: { children: ReactNode }) {
             ]
           : []),
       ];
-    } else if (currentUser.role === "Branch Regional Head") {
+    } else if (currentUser.role === "Sub-Region Head") {
       return [
         {
-          items: [{ href: "/dsa/management", icon: Users, label: "DSA Management" }],
-          label: "Regional DSA",
+          items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
+          label: "Overview",
+        },
+        {
+          items: [{ href: "/dsa/management", icon: Users, label: "DSA Approval Queue" }],
+          label: "Sub-Region Queue (L3)",
+        },
+        {
+          items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications" }],
+          label: "Applications",
+        },
+        {
+          items: [{ href: "/analytics/reports", icon: LineChart, label: "Reports" }],
+          label: "Analytics",
+        },
+      ];
+    } else if (currentUser.role === "DGM") {
+      return [
+        {
+          items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
+          label: "Overview",
+        },
+        {
+          items: [{ href: "/dsa/management", icon: Users, label: "DSA Approval Queue" }],
+          label: "DGM Queue (L4)",
+        },
+        {
+          items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications" }],
+          label: "Applications",
+        },
+        {
+          items: [{ href: "/analytics/reports", icon: LineChart, label: "Reports" }],
+          label: "Analytics",
+        },
+      ];
+    } else if (currentUser.role === "Region Head" || currentUser.role === "Branch Regional Head") {
+      return [
+        {
+          items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
+          label: "Overview",
+        },
+        {
+          items: [{ href: "/dsa/management", icon: Users, label: "DSA Approval Queue" }],
+          label: "Regional Queue (L5)",
+        },
+        {
+          items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications" }],
+          label: "Applications",
+        },
+        {
+          items: [{ href: "/analytics/reports", icon: LineChart, label: "Reports" }],
+          label: "Analytics",
+        },
+      ];
+    } else if (currentUser.role === "HO Credit Officer") {
+      return [
+        {
+          items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
+          label: "Overview",
+        },
+        {
+          items: [
+            { href: "/dsa/management", icon: Users, label: "DSA Approval Queue" },
+            { href: "/dsa/product-setting", icon: Settings, label: "Product Setting" },
+          ],
+          label: "Credit Appraisal (L6)",
+        },
+        {
+          items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications" }],
+          label: "Applications",
+        },
+        {
+          items: [{ href: "/bre/rules", icon: ShieldCheck, label: "BRE Rules" }],
+          label: "Rules",
+        },
+        {
+          items: [{ href: "/analytics/reports", icon: LineChart, label: "Reports" }],
+          label: "Analytics",
+        },
+      ];
+    } else if (currentUser.role === "HO Credit Head") {
+      return [
+        {
+          items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
+          label: "Overview",
+        },
+        {
+          items: [
+            { href: "/dsa/management", icon: Users, label: "Final Approval Queue" },
+            { href: "/dsa/product-setting", icon: Settings, label: "Product Setting" },
+          ],
+          label: "Final Sanction (L7)",
+        },
+        {
+          items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications" }],
+          label: "Applications",
+        },
+        {
+          items: [{ href: "/bre/rules", icon: ShieldCheck, label: "BRE Rules" }],
+          label: "Rules",
+        },
+        {
+          items: [{ href: "/analytics/reports", icon: LineChart, label: "Reports" }],
+          label: "Analytics",
         },
       ];
     } else if (currentUser.role === "Branch User") {
@@ -265,8 +394,44 @@ export function AppShell({ children }: { children: ReactNode }) {
           items: [
             { href: "/dsa/management", icon: Users, label: "DSA Management" },
             { href: "/dsa/onboarding", icon: UserPlus, label: "Onboard DSA" },
+            { href: "/dsa/product-setting", icon: Settings, label: "Product Setting" },
           ],
-          label: "Branch DSA",
+          label: "Branch Initiator (L1)",
+        },
+        {
+          items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications & Leads" }],
+          label: "Sourcing",
+        },
+        {
+          items: [{ href: "/administration/location-hierarchy", icon: MapPin, label: "Location Hierarchy" }],
+          label: "Master Data",
+        },
+      ];
+    } else if (currentUser.role === "Checker") {
+      return [
+        {
+          items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
+          label: "Overview",
+        },
+        {
+          items: [
+            { href: "/dsa/management", icon: Users, label: "DSA Approval Queue" },
+            { href: "/dsa/product-setting", icon: Settings, label: "Product Setting" },
+          ],
+          label: "Checker Review (L2)",
+        },
+        {
+          items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications & Leads" }],
+          label: "Applications",
+        },
+        {
+          items: [
+            { href: "/administration/maker-requests", icon: ClipboardCheck, label: "Maker Requests" },
+            { href: "/administration/location-hierarchy", icon: MapPin, label: "Location Hierarchy" },
+            { href: "/administration/audit-logs", icon: FileText, label: "Audit Logs" },
+            { href: "/administration/users", icon: Users, label: "User Directory" },
+          ],
+          label: "Operations & Verification",
         },
       ];
     } else if (currentUser.role === "DSA Partner") {
@@ -398,7 +563,18 @@ export function AppShell({ children }: { children: ReactNode }) {
       });
     };
 
-    const canSeeInternal = ["DSA Manager", "DSA Credit", "Branch User", "Branch Regional Head"].includes(currentUser.role);
+    const canSeeInternal = [
+      "DSA Manager",
+      "DSA Credit",
+      "Branch User",
+      "Branch Regional Head",
+      "Checker",
+      "Sub-Region Head",
+      "DGM",
+      "Region Head",
+      "HO Credit Officer",
+      "HO Credit Head",
+    ].includes(currentUser.role);
     store.dsas.forEach((dsa) => {
       const ownsDsa = currentUser.role === "DSA Partner" && currentUser.id === dsa.id;
       if ((canSeeInternal || ownsDsa) && !["Active", "Rejected", "Blacklisted"].includes(dsa.status) && stale(dsa.onboardingDate)) {
