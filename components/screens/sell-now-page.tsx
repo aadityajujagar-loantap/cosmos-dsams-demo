@@ -77,7 +77,6 @@ import {
   Tabs,
 } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
-import { DEFAULT_DSA_ID, DEMO_USERS } from "@/lib/demo-identities";
 import { configJourneyUrl } from "@/lib/journey-links";
 import { getActiveProductConfigs } from "@/lib/product-configs";
 import {
@@ -169,7 +168,7 @@ const apiReferenceSections = [
     summary: "Create one application against an active configured product journey.",
     request: JSON.stringify(
       {
-        dsaCode: DEFAULT_DSA_ID,
+        dsaCode: "DSA-2026-0001",
         product: "Personal Loan",
         customer: {
           name: "Aarav Sharma",
@@ -207,7 +206,7 @@ const apiReferenceSections = [
     request: [
       "curl --request POST https://api.cosmosbank.in/dsa/api/v1/applications/bulk-upload \\",
       "  --header 'Authorization: Bearer <token>' \\",
-      `  --header 'X-DSA-Code: ${DEFAULT_DSA_ID}' \\`,
+      "  --header 'X-DSA-Code: DSA-2026-0001' \\",
       "  --form 'product=Personal Loan' \\",
       "  --form 'file=@applications.csv'",
     ].join("\n"),
@@ -231,7 +230,7 @@ const apiReferenceSections = [
     request: [
       "curl --request GET https://api.cosmosbank.in/dsa/api/v1/products \\",
       "  --header 'Authorization: Bearer <token>' \\",
-      `  --header 'X-DSA-Code: ${DEFAULT_DSA_ID}'`,
+      "  --header 'X-DSA-Code: DSA-2026-0001'",
     ].join("\n"),
     response: JSON.stringify(
       {
@@ -4382,7 +4381,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
 
       // 5. Generate mock application containing the backend application ID
       const nextApplication = createJourneyApplication({
-        actor: currentUser?.name ?? DEMO_USERS.admin.name,
+        actor: currentUser?.name ?? "System",
         applicant: toApplicant(applicant),
         dsaId: effectiveConfig.dsaId,
         dsaName: effectiveConfig.dsaName,

@@ -744,6 +744,162 @@ export const adminApi = {
     });
   },
 
+  getDsaAgreement: async (idOrCode: number | string): Promise<BackendResponse<{
+    dsa_id: number;
+    document_id: number;
+    document_type: string;
+    file_name: string;
+    file_path: string;
+    file_url: string;
+    size: string;
+    status: string;
+    uploaded_at: string;
+  }>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/agreement`, {
+      method: "GET",
+    });
+  },
+
+  getSignedAgreementUploadPreview: async (token: string): Promise<BackendResponse<{
+    valid: boolean;
+    dsa_id: number;
+    dsa_code: string;
+    applicant_name: string;
+    company_name: string | null;
+    email: string;
+    mobile_no: string;
+    branch_code: string;
+    branch_name: string;
+    agreement_document_id: number;
+    agreement_file_name: string;
+    agreement_file_url: string;
+    agreement_status: string;
+    expires_at: string;
+  }>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/upload-signed-agreement/${token}`, {
+      method: "GET",
+    });
+  },
+
+  uploadPartnerSignedAgreement: async (
+    token: string,
+    payload: { file?: File; document_base64?: string; file_name?: string; remarks?: string }
+  ): Promise<BackendResponse<{
+    success: boolean;
+    message: string;
+    dsa_id: number;
+    dsa_code: string;
+    agreement_status: string;
+    document: {
+      document_id: number;
+      file_name: string;
+      file_path: string;
+      file_url: string;
+      size: string;
+      status: string;
+      uploaded_at: string;
+    };
+  }>> => {
+    if (payload.file) {
+      const formData = new FormData();
+      formData.append("file", payload.file);
+      if (payload.remarks) {
+        formData.append("remarks", payload.remarks);
+      }
+      return request<BackendResponse<any>>(`/v1/dsa/upload-signed-agreement/${token}`, {
+        method: "POST",
+        body: formData,
+      });
+    }
+
+    return request<BackendResponse<any>>(`/v1/dsa/upload-signed-agreement/${token}`, {
+      method: "POST",
+      body: JSON.stringify({
+        document_base64: payload.document_base64,
+        file_name: payload.file_name,
+        remarks: payload.remarks,
+      }),
+    });
+  },
+
+  getSignedAgreementReview: async (idOrCode: number | string): Promise<BackendResponse<{
+    dsa_id: number;
+    dsa_code: string;
+    applicant_name: string;
+    company_name: string | null;
+    email: string;
+    mobile_no: string;
+    branch_code: string;
+    branch_name: string;
+    onboarding_status: string;
+    operational_status: string;
+    agreement_status: string;
+    digital_acceptance_status: string;
+    digital_accepted_at: string;
+    generated_agreement: {
+      document_id: number;
+      file_name: string;
+      file_url: string;
+      size: string;
+      status: string;
+      uploaded_at: string;
+    } | null;
+    latest_signed_agreement: {
+      document_id: number;
+      file_name: string;
+      file_url: string;
+      size: string;
+      status: string;
+      remarks?: string;
+      uploaded_at: string;
+    } | null;
+    signed_agreement_history: Array<{
+      document_id: number;
+      file_name: string;
+      file_path?: string;
+      file_url: string;
+      size: string;
+      status: string;
+      remarks?: string;
+      uploaded_at: string;
+    }>;
+    allowed_actions: string[];
+    can_decision: boolean;
+  }>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/agreement/review`, {
+      method: "GET",
+    });
+  },
+
+  verifySignedAgreement: async (
+    idOrCode: number | string,
+    payload: { action: "APPROVE" | "REJECT" | "approve" | "reject"; remarks?: string }
+  ): Promise<BackendResponse<{
+    success: boolean;
+    message: string;
+    dsa_id: number;
+    dsa_code: string;
+    agreement_status: string;
+    operational_status: string;
+    document: {
+      document_id: number;
+      status: string;
+      remarks?: string;
+      file_name?: string;
+      file_url?: string;
+    };
+    reupload_token?: {
+      token: string;
+      expires_at: string;
+      upload_url: string;
+    };
+  }>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/agreement/verify-signed`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
   // ── DSA Documents ───────────────────────────────────────────────────────────
   getDsaDocuments: async (idOrCode: number | string): Promise<BackendResponse<DsaDocument[]>> => {
     return request<BackendResponse<DsaDocument[]>>(`/v1/dsa/${idOrCode}/documents`, {
@@ -1359,4 +1515,86 @@ export const adminApi = {
       }),
     });
   },
+
+  /**
+   * GET /api/v1/loan/verify-email?token={token}
+   * Borrower email verification endpoint for external Loan Journey (Task 19 / Phase 4).
+   */
+  verifyLoanEmail: async (token: string): Promise<any> => {
+    return request<any>(`/v1/loan/verify-email?token=${encodeURIComponent(token)}`, {
+      method: "GET",
+      headers: {
+        "X-Tenant-ID": "cosmos-bank",
+        "X-API-Token": "ijkyWTMMuVWqDaGJFiEWQd2jogOuvO8QdkDBMWUG882HXQPvqg2StcydbAUiNH4J",
+      },
+    });
+  },
+
+  /**
+   * POST /api/v1/loan/resend-email-verification
+   * Resend borrower email verification link for external Loan Journey (Task 19 / Phase 4).
+   */
+  resendLoanEmailVerification: async (applicationId: string): Promise<any> => {
+    return request<any>("/v1/loan/resend-email-verification", {
+      method: "POST",
+      headers: {
+        "X-Tenant-ID": "cosmos-bank",
+        "X-API-Token": "ijkyWTMMuVWqDaGJFiEWQd2jogOuvO8QdkDBMWUG882HXQPvqg2StcydbAUiNH4J",
+      },
+      body: JSON.stringify({
+        application_id: applicationId,
+      }),
+    });
+  },
+
+  // ── DSA Portal Users ─────────────────────────────────────────────────────────
+
+  /**
+   * GET /api/v1/dsa/{id}/users
+   * Fetch all authorized user contacts mapped to this DSA.
+   */
+  getDsaUsers: async (idOrCode: number | string): Promise<BackendResponse<{
+    users: Array<{
+      mapping_id: number;
+      user_id: number;
+      name: string;
+      email: string;
+      mobile?: string;
+      phone?: string;
+      ticket_no?: string;
+      role_in_dsa: string;
+      is_primary_admin: boolean;
+      deactivated_at?: string | null;
+      created_at: string;
+    }>;
+    total: number;
+  }>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/users`, {
+      method: "GET",
+    });
+  },
+
+  /**
+   * POST /api/v1/dsa/{id}/users
+   * Create and map a new authorized portal user to the DSA.
+   * Payload: { name, email, mobile?, phone?, ticket_no?, password?, role_in_dsa? }
+   */
+  createDsaUser: async (
+    idOrCode: number | string,
+    payload: {
+      name: string;
+      email: string;
+      mobile?: string;
+      phone?: string;
+      ticket_no?: string;
+      password?: string;
+      role_in_dsa?: string;
+    }
+  ): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/users`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
 };
+

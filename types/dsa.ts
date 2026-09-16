@@ -118,6 +118,12 @@ export interface Dsa {
   branchId?: number | null;
   entity_type?: string | null;
   dsa_type?: string | null;
+  dsa_code?: string;
+  applicant_email?: string;
+  agreement_status?: string;
+  agreement_generated_at?: string | null;
+  digital_acceptance_status?: string;
+  digital_accepted_at?: string | null;
   latest_due_diligence_note?: DsaDueDiligenceNote | null;
   branch?: {
     id?: number;

@@ -1,4 +1,4 @@
-import type { DemoSessionUser } from "@/lib/demo-identities";
+import type { DemoSessionUser } from "@/types/auth";
 import type { BranchOption } from "@/types/dsa";
 import { authService } from "@/services/authService";
 import { adminApi } from "@/apis/admin";

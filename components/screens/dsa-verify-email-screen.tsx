@@ -21,6 +21,8 @@ import { Button, Card, CardContent } from "@/components/ui/primitives";
 
 interface DsaVerifyEmailScreenProps {
   token?: string;
+  type?: string;
+  applicationId?: string;
 }
 
 type VerificationState = "loading" | "success" | "error";
@@ -29,17 +31,69 @@ interface VerificationResult {
   message: string;
   dsaCode?: string;
   dsaId?: number | string;
+  applicationId?: string;
+  email?: string;
+  isLoan?: boolean;
 }
 
-export function DsaVerifyEmailScreen({ token }: DsaVerifyEmailScreenProps) {
+export function DsaVerifyEmailScreen({ token, type, applicationId }: DsaVerifyEmailScreenProps) {
   const router = useRouter();
   const [state, setState] = useState<VerificationState>("loading");
   const [result, setResult] = useState<VerificationResult>({
     message: "",
   });
+  const [resending, setResending] = useState(false);
+  const [resendStatus, setResendStatus] = useState<string | null>(null);
+
+  const handleResendLoanVerification = async () => {
+    const targetAppId = applicationId || result.applicationId;
+    if (!targetAppId) return;
+    setResending(true);
+    setResendStatus(null);
+    try {
+      const res = await adminApi.resendLoanEmailVerification(targetAppId);
+      setResendStatus(res?.message || res?.data?.message || "Verification email has been resent successfully.");
+    } catch (err: any) {
+      setResendStatus(err?.data?.message || err?.message || "Failed to resend verification email.");
+    } finally {
+      setResending(false);
+    }
+  };
 
   const performVerification = async (verifyToken: string) => {
     setState("loading");
+    const isLoanType = type === "loan" || type === "borrower";
+
+    if (isLoanType) {
+      try {
+        const res: any = await adminApi.verifyLoanEmail(verifyToken);
+        if (res?.status === "success" || res?.status_code === 200) {
+          setResult({
+            message: res?.message || res?.data?.message || "Borrower email address verified successfully.",
+            applicationId: res?.data?.application_id || res?.application_id || applicationId,
+            email: res?.data?.email || res?.email,
+            isLoan: true,
+          });
+          setState("success");
+          return;
+        } else {
+          setResult({
+            message: res?.message || res?.data?.message || "Invalid or expired loan verification link.",
+            isLoan: true,
+          });
+          setState("error");
+          return;
+        }
+      } catch (err: any) {
+        setResult({
+          message: err?.data?.message || err?.message || "Invalid or expired loan verification link.",
+          isLoan: true,
+        });
+        setState("error");
+        return;
+      }
+    }
+
     try {
       const res: any = await adminApi.verifyDsaEmail(verifyToken);
 
@@ -48,15 +102,50 @@ export function DsaVerifyEmailScreen({ token }: DsaVerifyEmailScreenProps) {
           message: res?.message || "Email address verified successfully.",
           dsaCode: res?.data?.dsa_code || res?.dsa_code,
           dsaId: res?.data?.dsa_id || res?.dsa_id,
+          isLoan: false,
         });
         setState("success");
       } else {
+        // Fallback: Check if this token corresponds to a borrower loan verification
+        try {
+          const loanRes: any = await adminApi.verifyLoanEmail(verifyToken);
+          if (loanRes?.status === "success" || loanRes?.status_code === 200) {
+            setResult({
+              message: loanRes?.message || loanRes?.data?.message || "Borrower email address verified successfully.",
+              applicationId: loanRes?.data?.application_id || loanRes?.application_id || applicationId,
+              email: loanRes?.data?.email,
+              isLoan: true,
+            });
+            setState("success");
+            return;
+          }
+        } catch {
+          // Retain primary DSA error
+        }
+
         setResult({
           message: res?.message || "Invalid or expired email verification link.",
         });
         setState("error");
       }
     } catch (err: any) {
+      // Fallback: Check if this token corresponds to a borrower loan verification
+      try {
+        const loanRes: any = await adminApi.verifyLoanEmail(verifyToken);
+        if (loanRes?.status === "success" || loanRes?.status_code === 200) {
+          setResult({
+            message: loanRes?.message || loanRes?.data?.message || "Borrower email address verified successfully.",
+            applicationId: loanRes?.data?.application_id || loanRes?.application_id || applicationId,
+            email: loanRes?.data?.email,
+            isLoan: true,
+          });
+          setState("success");
+          return;
+        }
+      } catch {
+        // Retain primary error
+      }
+
       const errMsg =
         err?.data?.message ||
         err?.message ||
@@ -151,7 +240,16 @@ export function DsaVerifyEmailScreen({ token }: DsaVerifyEmailScreenProps) {
 
               <CardContent className="p-6 sm:p-8 space-y-6">
                 <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-5 text-left space-y-3 shadow-sm">
-                  {result.dsaCode && (
+                  {result.isLoan && result.applicationId ? (
+                    <div className="flex items-center justify-between border-b border-emerald-200/60 pb-3">
+                      <span className="text-xs font-semibold uppercase text-emerald-900">
+                        Loan Application ID
+                      </span>
+                      <span className="font-mono text-base font-bold text-emerald-800 bg-white px-3 py-1 rounded-md border border-emerald-200">
+                        {result.applicationId}
+                      </span>
+                    </div>
+                  ) : result.dsaCode ? (
                     <div className="flex items-center justify-between border-b border-emerald-200/60 pb-3">
                       <span className="text-xs font-semibold uppercase text-emerald-900">
                         DSA Reference Code
@@ -160,7 +258,7 @@ export function DsaVerifyEmailScreen({ token }: DsaVerifyEmailScreenProps) {
                         {result.dsaCode}
                       </span>
                     </div>
-                  )}
+                  ) : null}
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-slate-600">Verification Status</span>
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-0.5 text-xs font-bold text-emerald-800">
@@ -171,7 +269,7 @@ export function DsaVerifyEmailScreen({ token }: DsaVerifyEmailScreenProps) {
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-slate-600">Application Pipeline</span>
                     <span className="inline-flex items-center rounded-full bg-blue-100 px-3 py-0.5 text-xs font-bold text-blue-800">
-                      Level 1 Review Queue
+                      {result.isLoan ? "Loan Application Journey" : "Level 1 Review Queue"}
                     </span>
                   </div>
                 </div>
@@ -181,18 +279,29 @@ export function DsaVerifyEmailScreen({ token }: DsaVerifyEmailScreenProps) {
                   <div>
                     <p className="font-semibold text-slate-800">Next Steps</p>
                     <p className="mt-0.5">
-                      Your application is currently under verification by bank officials. You will receive an SMS and email notification with your DSA partner credentials once approved.
+                      {result.isLoan
+                        ? "Your email verification for your loan application is complete. You can proceed with your loan journey to finalize documentation."
+                        : "Your application is currently under verification by bank officials. You will receive an SMS and email notification with your DSA partner credentials once approved."}
                     </p>
                   </div>
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-                  <Button
-                    onClick={() => router.push("/login")}
-                    className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 shadow-md"
-                  >
-                    Go to Partner Sign In <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
+                  {result.isLoan ? (
+                    <Button
+                      onClick={() => router.push(result.applicationId ? `/journey?application_id=${result.applicationId}` : "/journey")}
+                      className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 shadow-md"
+                    >
+                      Continue Loan Journey <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => router.push("/login")}
+                      className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 shadow-md"
+                    >
+                      Go to Partner Sign In <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     onClick={() => router.push("/")}
@@ -230,6 +339,12 @@ export function DsaVerifyEmailScreen({ token }: DsaVerifyEmailScreenProps) {
                   </p>
                 </div>
 
+                {resendStatus && (
+                  <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-xs font-semibold text-emerald-800 text-center">
+                    {resendStatus}
+                  </div>
+                )}
+
                 <div className="rounded-lg bg-slate-50 border border-slate-200 p-4 text-xs text-slate-600 leading-relaxed text-left space-y-2">
                   <p className="font-semibold text-slate-800 flex items-center gap-1.5">
                     <Lock className="h-3.5 w-3.5 text-slate-500" />
@@ -243,6 +358,17 @@ export function DsaVerifyEmailScreen({ token }: DsaVerifyEmailScreenProps) {
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                  {(applicationId || result.applicationId) && (
+                    <Button
+                      type="button"
+                      disabled={resending}
+                      onClick={handleResendLoanVerification}
+                      className="w-full sm:w-auto bg-emerald-700 hover:bg-emerald-800 text-white font-semibold px-6 shadow-md"
+                    >
+                      {resending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MailCheck className="mr-2 h-4 w-4" />}
+                      Resend Verification Link
+                    </Button>
+                  )}
                   <Button
                     onClick={() => router.push("/login")}
                     className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 shadow-md"
@@ -251,10 +377,10 @@ export function DsaVerifyEmailScreen({ token }: DsaVerifyEmailScreenProps) {
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => router.push("/dsa/self-onboarding")}
+                    onClick={() => router.push(result.isLoan ? "/journey" : "/dsa/self-onboarding")}
                     className="w-full sm:w-auto text-slate-700 border-slate-300 hover:bg-slate-50"
                   >
-                    DSA Self-Onboarding
+                    {result.isLoan ? "Loan Application" : "DSA Self-Onboarding"}
                   </Button>
                   {token && (
                     <Button

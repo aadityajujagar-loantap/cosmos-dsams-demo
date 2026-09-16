@@ -39,6 +39,7 @@ export default function LoginPage() {
   const [otpRefId, setOtpRefId] = useState("");
   const [mobileHint, setMobileHint] = useState("");
   const [otpDigits, setOtpDigits] = useState<string[]>(EMPTY_OTP);
+  const [loginPortal, setLoginPortal] = useState<"bank" | "dsa">("bank");
   const [error, setError] = useState("");
   const [verifying, setVerifying] = useState(false);
 
@@ -98,8 +99,68 @@ export default function LoginPage() {
     window.requestAnimationFrame(() => otpRefs.current[0]?.focus());
   };
 
+  const handleDsaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!identifier.trim() || !password) {
+      const msg = "Email and password are required for DSA Partner login.";
+      setError(msg);
+      toast({
+        title: "Validation Error",
+        description: msg,
+        variant: "warning",
+      });
+      return;
+    }
+
+    setVerifying(true);
+    try {
+      const response = await authApi.dsaLogin({
+        email: identifier.trim(),
+        password,
+      });
+
+      if (response && response.token) {
+        login({
+          token: response.token,
+          user: response.user as any,
+          roles: [{ id: 99, name: "DSA Partner", permissions: [] }],
+        });
+        toast({
+          title: "DSA Portal Login",
+          description: `Welcome, ${response.user.name || "Partner"}!`,
+          variant: "success",
+        });
+        router.push("/");
+      } else {
+        const msg = (response as any)?.message || "DSA login failed.";
+        setError(msg);
+        toast({
+          title: "Login Failed",
+          description: msg,
+          variant: "warning",
+        });
+      }
+    } catch (err: any) {
+      const errMsg =
+        err?.data?.message ||
+        err?.message ||
+        "DSA partner login failed. Ensure your account operational status is ACTIVE.";
+      setError(errMsg);
+      toast({
+        title: "Login Failed",
+        description: errMsg,
+        variant: "warning",
+      });
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   const handleCredentialSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loginPortal === "dsa") {
+      return handleDsaSubmit(e);
+    }
     if (!identifier.trim() || !password || !captcha.trim()) {
       const msg = "Username, password, and CAPTCHA are required.";
       setError(msg);
@@ -298,14 +359,54 @@ export default function LoginPage() {
 
       <div className="flex h-full w-full items-center justify-center overflow-hidden bg-white p-4 sm:p-6 lg:w-1/2 xl:p-8">
         <div className="w-full max-w-md space-y-4">
+          {/* Portal Switcher */}
+          <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 border border-slate-200 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => {
+                setLoginPortal("bank");
+                setError("");
+                setStep("credentials");
+              }}
+              className={`h-9 rounded-lg transition ${
+                loginPortal === "bank"
+                  ? "bg-white text-blue-900 shadow-sm font-extrabold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Bank Staff Login
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setLoginPortal("dsa");
+                setError("");
+                setStep("credentials");
+              }}
+              className={`h-9 rounded-lg transition ${
+                loginPortal === "dsa"
+                  ? "bg-white text-blue-900 shadow-sm font-extrabold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              DSA Partner Portal
+            </button>
+          </div>
+
           <div className="space-y-1.5 text-center lg:text-left">
             <h2 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
-              {step === "credentials" ? "Sign In" : "Verify OTP"}
+              {loginPortal === "dsa"
+                ? "DSA Partner Sign In"
+                : step === "credentials"
+                  ? "Sign In"
+                  : "Verify OTP"}
             </h2>
             <p className="text-sm text-slate-500">
-              {step === "credentials"
-                ? "Access the direct selling console using your registered username and password."
-                : `Enter the 6-digit OTP sent to your registered phone number ${mobileHint || ""}.`}
+              {loginPortal === "dsa"
+                ? "Access the DSA partner portal using your registered partner email and password."
+                : step === "credentials"
+                  ? "Access the direct selling console using your registered username and password."
+                  : `Enter the 6-digit OTP sent to your registered phone number ${mobileHint || ""}.`}
             </p>
           </div>
 
@@ -322,14 +423,14 @@ export default function LoginPage() {
             <form onSubmit={handleCredentialSubmit} className="space-y-3">
               <div className="space-y-1.5">
                 <label htmlFor="identifier" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Username
+                  {loginPortal === "dsa" ? "Partner Email Address" : "Username"}
                 </label>
                 <div className="relative">
                   <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                   <input
                     id="identifier"
-                    type="text"
-                    placeholder="Enter username"
+                    type={loginPortal === "dsa" ? "email" : "text"}
+                    placeholder={loginPortal === "dsa" ? "partner@example.com" : "Enter username"}
                     value={identifier}
                     onChange={(e) => {
                       setIdentifier(e.target.value);
@@ -362,50 +463,56 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label htmlFor="captcha" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Captcha
-                </label>
-                <div className="grid grid-cols-[1fr_1fr_44px] gap-3">
-                  <div className="relative">
-                    <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                    <input
-                      id="captcha"
-                      placeholder="Enter captcha"
-                      type="text"
-                      value={captcha}
-                      onChange={(e) => {
-                        setCaptcha(e.target.value);
-                        setError("");
-                      }}
-                      className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 tracking-[0.1em] focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none text-sm transition"
-                    />
-                  </div>
-                  <div
-                    aria-label="Captcha image"
-                    className="flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 overflow-hidden shadow-inner"
-                  >
-                    {captchaImg ? (
-                      <img
-                        src={captchaImg}
-                        alt="Captcha"
-                        className="h-full w-full object-fill"
+              {loginPortal === "bank" ? (
+                <div className="space-y-1.5">
+                  <label htmlFor="captcha" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Captcha
+                  </label>
+                  <div className="grid grid-cols-[1fr_1fr_44px] gap-3">
+                    <div className="relative">
+                      <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                      <input
+                        id="captcha"
+                        placeholder="Enter captcha"
+                        type="text"
+                        value={captcha}
+                        onChange={(e) => {
+                          setCaptcha(e.target.value);
+                          setError("");
+                        }}
+                        className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 tracking-[0.1em] focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none text-sm transition"
                       />
-                    ) : (
-                      <span className="text-slate-400 text-xs">Loading...</span>
-                    )}
+                    </div>
+                    <div
+                      aria-label="Captcha image"
+                      className="flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 overflow-hidden shadow-inner"
+                    >
+                      {captchaImg ? (
+                        <img
+                          src={captchaImg}
+                          alt="Captcha"
+                          className="h-full w-full object-fill"
+                        />
+                      ) : (
+                        <span className="text-slate-400 text-xs">Loading...</span>
+                      )}
+                    </div>
+                    <button
+                      aria-label="Refresh captcha"
+                      className="flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                      onClick={refreshCaptcha}
+                      type="button"
+                      disabled={verifying}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </button>
                   </div>
-                  <button
-                    aria-label="Refresh captcha"
-                    className="flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
-                    onClick={refreshCaptcha}
-                    type="button"
-                    disabled={verifying}
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                  </button>
                 </div>
-              </div>
+              ) : (
+                <p className="text-[11px] text-slate-500 pt-1 leading-relaxed">
+                  Partner login checks operational status <span className="font-semibold text-emerald-700">ACTIVE</span> (assigned upon agreement verification).
+                </p>
+              )}
 
               <div className="flex gap-3 pt-1">
                 <button
@@ -418,7 +525,7 @@ export default function LoginPage() {
                   ) : (
                     <ShieldCheck className="h-4 w-4" />
                   )}
-                  Next
+                  {loginPortal === "dsa" ? "Sign In as Partner" : "Next"}
                 </button>
               </div>
             </form>

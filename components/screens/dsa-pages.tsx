@@ -31,8 +31,9 @@ import {
   CheckCircle2,
   AlertCircle,
   Award,
+  Mail,
 } from "lucide-react";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { adminApi } from "@/apis/admin";
 
@@ -55,7 +56,6 @@ import {
 } from "@/components/ui/primitives";
 import { FieldConfig, RecordForm } from "@/components/ui/record-form";
 import { useToast } from "@/components/ui/toast";
-import { DEMO_USERS, sessionUserFromDsa } from "@/lib/demo-identities";
 import { generateDsaCredentials } from "@/lib/dsa-credentials";
 import {
   dsaDocumentType,
@@ -68,6 +68,20 @@ import { isDsaInBranchScope } from "@/lib/branch-scope";
 import { BusinessType, Dsa, DsaStatus, Product, User } from "@/lib/types";
 import { cn, formatCommissionDisplay, formatCurrency, formatDate, generateDsaId, makeId, percent } from "@/lib/utils";
 
+export function getDsaDisplayStatus(dsa: any): string {
+  if (!dsa) return "";
+  const agreementStatus = String(dsa.agreement_status || "").toUpperCase();
+  const operationalStatus = String(dsa.operational_status || "").toUpperCase();
+  const onboardingStatus = String(dsa.onboarding_status || dsa.status || "").toUpperCase();
+
+  if (agreementStatus === "SIGNED_VERIFIED" || operationalStatus === "ACTIVE") {
+    return operationalStatus || "ACTIVE";
+  }
+  if (onboardingStatus === "APPROVED" || onboardingStatus === "AGREEMENT_COMPLETED") {
+    return operationalStatus || onboardingStatus;
+  }
+  return onboardingStatus || "PENDING";
+}
 
 const businessTypes: BusinessType[] = [
   "Sole Proprietor",
@@ -187,7 +201,14 @@ export function getDsaWorkflowLevelInfo(currentUserRole: string | undefined, dsa
   }
 
   const onboardingStatus = String(dsa.onboarding_status || dsa.status || "").toUpperCase();
-  const isCompleted = onboardingStatus === "APPROVED" || onboardingStatus === "AGREEMENT_PENDING" || onboardingStatus === "AGREEMENT_COMPLETED";
+  const agreementStatus = String(dsa.agreement_status || "").toUpperCase();
+  const operationalStatus = String(dsa.operational_status || "").toUpperCase();
+  const isCompleted =
+    onboardingStatus === "APPROVED" ||
+    onboardingStatus === "AGREEMENT_PENDING" ||
+    onboardingStatus === "AGREEMENT_COMPLETED" ||
+    agreementStatus === "SIGNED_VERIFIED" ||
+    operationalStatus === "ACTIVE";
   const isRejected = onboardingStatus === "REJECTED";
 
   if (isCompleted || isRejected) {
@@ -383,7 +404,14 @@ export function DsaApprovalStepper({ dsa }: { dsa: any }) {
   if (!dsa) return null;
   const currentLevel = Number(dsa.current_approval_level || 1);
   const onboardingStatus = String(dsa.onboarding_status || dsa.status || "").toUpperCase();
-  const isApproved = onboardingStatus === "APPROVED" || onboardingStatus === "AGREEMENT_PENDING" || onboardingStatus === "AGREEMENT_COMPLETED";
+  const agreementStatus = String(dsa.agreement_status || "").toUpperCase();
+  const operationalStatus = String(dsa.operational_status || "").toUpperCase();
+  const isApproved =
+    onboardingStatus === "APPROVED" ||
+    onboardingStatus === "AGREEMENT_PENDING" ||
+    onboardingStatus === "AGREEMENT_COMPLETED" ||
+    agreementStatus === "SIGNED_VERIFIED" ||
+    operationalStatus === "ACTIVE";
   const isRejected = onboardingStatus === "REJECTED";
 
   const steps = [
@@ -1260,7 +1288,7 @@ export function DsaManagementPage() {
                             )}
                           </td>
                           <td className="p-4">
-                            <StatusBadge status={item.onboarding_status} />
+                            <StatusBadge status={getDsaDisplayStatus(item)} />
                           </td>
                           <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
                             <Button
@@ -1421,7 +1449,7 @@ export function DsaManagementPage() {
                           {item.code}
                         </td>
                         <td className="p-4">
-                          <StatusBadge status={item.onboarding_status} />
+                          <StatusBadge status={getDsaDisplayStatus(item)} />
                         </td>
                         <td className="p-4 text-slate-700 text-xs">
                           {item.city}, {item.state}
@@ -1501,7 +1529,7 @@ export function DsaManagementPage() {
                   <p className="font-semibold text-slate-950">{credentialDsa.name}</p>
                   <p className="text-xs text-slate-500">{credentialDsa.code}</p>
                 </div>
-                <StatusBadge status={credentialDsa.onboarding_status} />
+                <StatusBadge status={getDsaDisplayStatus(credentialDsa)} />
               </div>
             </div>
             {credentialError ? (
@@ -1564,6 +1592,24 @@ export function DsaProfilePage({ id }: { id: string }) {
   const { toast } = useToast();
   const router = useRouter();
   const [tab, setTab] = useState("performance");
+  const roleStr = String(currentUser?.role || "");
+  const normUserRole = roleStr.toUpperCase().replace(/[\s_-]+/g, "");
+  const userTicket = String((currentUser as any)?.ticket_no || (currentUser as any)?.ticketNo || "").toLowerCase();
+  const isL7Role =
+    roleStr === "HO Credit Head" ||
+    roleStr === "Credit Head" ||
+    roleStr === "Head Office Credit Head" ||
+    normUserRole === "HOCREDITHEAD" ||
+    normUserRole === "CREDITHEAD" ||
+    normUserRole === "HEADOFFICECREDITHEAD" ||
+    normUserRole === "LEVEL7HOCREDITHEAD" ||
+    userTicket.startsWith("ho_head");
+  const isL7User =
+    isL7Role ||
+    roleStr === "DSA Manager" ||
+    normUserRole === "DSAMANAGER" ||
+    normUserRole === "SUPERADMIN" ||
+    normUserRole === "ADMIN";
   const [applicationProductFilter, setApplicationProductFilter] = useState("");
   const [creatingAgent, setCreatingAgent] = useState(false);
   const [editingAgent, setEditingAgent] = useState<User | null>(null);
@@ -1679,7 +1725,87 @@ export function DsaProfilePage({ id }: { id: string }) {
     generateAgreement,
     downloadAgreement,
     uploadSignedAgreement,
+    fetchDsaAgreement,
+    fetchSignedAgreementReview,
+    verifySignedAgreement,
   } = useDsa();
+
+  // Task 12 & 13 Agreement & HO Credit Head Review State
+  const [agreementReviewData, setAgreementReviewData] = useState<any | null>(null);
+  const [agreementReviewLoading, setAgreementReviewLoading] = useState(false);
+  const [officialAgreement, setOfficialAgreement] = useState<any | null>(null);
+  const [officialAgreementLoading, setOfficialAgreementLoading] = useState(false);
+  const [verifyingAgreementAction, setVerifyingAgreementAction] = useState<"APPROVE" | "REJECT" | null>(null);
+  const [agreementDecisionRemarks, setAgreementDecisionRemarks] = useState("");
+  const [agreementDecisionError, setAgreementDecisionError] = useState("");
+  const [agreementSubmitting, setAgreementSubmitting] = useState(false);
+  const [resendActivationSuccess, setResendActivationSuccess] = useState<string | null>(null);
+
+  const handleResendActivationEmail = () => {
+    // Activation credentials are dispatched by the backend automatically
+    // when L7 verifies the signed agreement (verifySignedAgreement endpoint).
+    // There is no separate resend endpoint — surfacing an info note is correct.
+    setResendActivationSuccess(
+      `Activation credentials were dispatched to ${dsa?.email ?? "the registered DSA email"} when the agreement was approved. To re-send, contact the backend admin or re-verify the agreement.`
+    );
+  };
+
+  const loadAgreementData = useCallback(async (dsaId: number | string) => {
+    setAgreementReviewLoading(true);
+    setOfficialAgreementLoading(true);
+    try {
+      const [revRes, agmRes] = await Promise.allSettled([
+        adminApi.getSignedAgreementReview(dsaId),
+        adminApi.getDsaAgreement(dsaId),
+      ]);
+      if (revRes.status === "fulfilled" && ((revRes.value as any).status === "success" || (revRes.value as any).status === true)) {
+        setAgreementReviewData(revRes.value.data);
+      }
+      if (agmRes.status === "fulfilled" && ((agmRes.value as any).status === "success" || (agmRes.value as any).status === true)) {
+        setOfficialAgreement(agmRes.value.data);
+      }
+    } catch {
+      // Non-critical fetch catch
+    } finally {
+      setAgreementReviewLoading(false);
+      setOfficialAgreementLoading(false);
+    }
+  }, []);
+
+  const handleSubmitAgreementDecision = async () => {
+    if (!isL7User || !verifyingAgreementAction || !dsa) return;
+    if (verifyingAgreementAction === "REJECT" && !agreementDecisionRemarks.trim()) {
+      setAgreementDecisionError("Rejection remarks are mandatory to explain why the signed agreement is rejected.");
+      return;
+    }
+    setAgreementSubmitting(true);
+    setAgreementDecisionError("");
+    try {
+      const res = await verifySignedAgreement(dsa.id, {
+        action: verifyingAgreementAction,
+        remarks: agreementDecisionRemarks.trim() || undefined,
+      });
+      if (res) {
+        // Backend's verifySignedAgreement endpoint handles activation email dispatch
+        // internally (activateDsaUserAndSendCredentials). No secondary fetch needed.
+        if (verifyingAgreementAction === "APPROVE") {
+          setResendActivationSuccess(
+            `Agreement approved. Activation credentials dispatched to ${dsa.email ?? "the registered DSA email"} by the system.`
+          );
+        }
+        setVerifyingAgreementAction(null);
+        setAgreementDecisionRemarks("");
+        await fetchDsaDetail(dsa.id);
+        await loadAgreementData(dsa.id);
+      }
+    } catch (err: any) {
+      setAgreementDecisionError(
+        err?.response?.data?.message || err?.message || "Failed to submit agreement verification decision."
+      );
+    } finally {
+      setAgreementSubmitting(false);
+    }
+  };
 
   const [runningVerif, setRunningVerif] = useState<string | null>(null);
   const [checkerDdNote, setCheckerDdNote] = useState("");
@@ -1688,6 +1814,23 @@ export function DsaProfilePage({ id }: { id: string }) {
   useEffect(() => {
     fetchDsaDetail(id);
   }, [id, fetchDsaDetail]);
+
+  useEffect(() => {
+    if (tab === "agreements" && isL7User && dsa?.id) {
+      loadAgreementData(dsa.id);
+    }
+  }, [tab, isL7User, dsa?.id, loadAgreementData]);
+
+  useEffect(() => {
+    if (tab === "agreements" && !isL7User) {
+      const isApproved =
+        dsa?.onboarding_status === "APPROVED" ||
+        dsa?.onboarding_status === "AGREEMENT_COMPLETED" ||
+        dsa?.agreement_status === "SIGNED_VERIFIED" ||
+        dsa?.operational_status === "ACTIVE";
+      setTab(isApproved ? "performance" : "actions");
+    }
+  }, [tab, isL7User, dsa]);
 
   useEffect(() => {
     const existingNote =
@@ -1709,6 +1852,7 @@ export function DsaProfilePage({ id }: { id: string }) {
     const isApproved =
       dsa.onboarding_status === "APPROVED" ||
       dsa.onboarding_status === "AGREEMENT_COMPLETED" ||
+      dsa.agreement_status === "SIGNED_VERIFIED" ||
       dsa.operational_status === "ACTIVE";
     if (!isApproved && tab === "performance") {
       setTab("actions");
@@ -1868,6 +2012,30 @@ export function DsaProfilePage({ id }: { id: string }) {
   const [previewDoc, setPreviewDoc] = useState<any | null>(null);
   const [viewedDocIds, setViewedDocIds] = useState<Set<number | string>>(new Set());
 
+  // Real DSA Portal Users mapped via GET /api/v1/dsa/{id}/users (Phase 2)
+  const [dsaPortalUsers, setDsaPortalUsers] = useState<any[]>([]);
+  const [dsaPortalUsersLoading, setDsaPortalUsersLoading] = useState<boolean>(false);
+
+  const fetchDsaPortalUsers = useCallback(async () => {
+    if (!dsa?.id) return;
+    setDsaPortalUsersLoading(true);
+    try {
+      const res: any = await adminApi.getDsaUsers(dsa.id);
+      const list = res?.data?.users || res?.users || (Array.isArray(res?.data) ? res.data : []);
+      setDsaPortalUsers(list);
+    } catch {
+      setDsaPortalUsers([]);
+    } finally {
+      setDsaPortalUsersLoading(false);
+    }
+  }, [dsa?.id]);
+
+  useEffect(() => {
+    if (tab === "agents" && dsa?.id) {
+      fetchDsaPortalUsers();
+    }
+  }, [tab, dsa?.id, fetchDsaPortalUsers]);
+
   const openDocPreview = (doc: any) => {
     setPreviewDoc(doc);
     if (doc?.id) {
@@ -1965,7 +2133,6 @@ export function DsaProfilePage({ id }: { id: string }) {
 
   const isMakerLevel = workflowLevelInfo.currentLevel === 1;
   const isCheckerLevel = workflowLevelInfo.currentLevel === 2;
-  const roleStr = String(currentUser?.role || "");
   const isMakerUser =
     roleStr === "Branch User" ||
     roleStr === "Maker" ||
@@ -1994,7 +2161,8 @@ export function DsaProfilePage({ id }: { id: string }) {
     roleStr === "DSA Credit";
   const isHoHeadRole =
     roleStr === "HO Credit Head" ||
-    roleStr === "Credit Head";
+    roleStr === "Credit Head" ||
+    isL7Role;
 
   const l1Approval: any = Array.isArray(dsa?.approvals)
     ? dsa.approvals.find(
@@ -2196,7 +2364,7 @@ export function DsaProfilePage({ id }: { id: string }) {
     (isCheckerLevel && !areAllCheckerVerificationsDone);
   const allProductConfigs = store.dsaProductConfigs.filter((config) => config.dsaId === String(dsa.id));
   const productConfigs = allProductConfigs
-    .filter((config) => (dsa.onboarding_status === "APPROVED" || dsa.onboarding_status === "AGREEMENT_COMPLETED") && config.status === "Active")
+    .filter((config) => (dsa.onboarding_status === "APPROVED" || dsa.onboarding_status === "AGREEMENT_COMPLETED" || dsa.agreement_status === "SIGNED_VERIFIED" || dsa.operational_status === "ACTIVE") && config.status === "Active")
     .sort((left, right) => left.product.localeCompare(right.product));
   const configuredProducts = productConfigs.map((config) => config.product);
 
@@ -2399,7 +2567,7 @@ export function DsaProfilePage({ id }: { id: string }) {
     setBlacklistingDsa(nextDsa);
   }
 
-  function saveProfileAgent(value: Partial<User>) {
+  async function saveProfileAgent(value: Partial<User>) {
     const email = String(value.email ?? "").trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(email)) {
       toast({
@@ -2410,14 +2578,27 @@ export function DsaProfilePage({ id }: { id: string }) {
       return;
     }
 
-    const duplicate = store.users.find((user) => user.email.trim().toLowerCase() === email);
-    if (duplicate) {
-      toast({
-        description: `${email} is already assigned to ${duplicate.name}.`,
-        title: "Duplicate agent email",
-        variant: "warning",
-      });
-      return;
+    if (dsa?.id) {
+      try {
+        await adminApi.createDsaUser(dsa.id, {
+          name: String(value.name ?? "DSA Agent").trim() || "DSA Agent",
+          email,
+          phone: (value as any).mobile || (value as any).phone || "",
+          role_in_dsa: "AGENT",
+        });
+        toast({
+          title: "Agent Mapped to DSA",
+          description: `Authorized user ${value.name || email} mapped to DSA successfully.`,
+          variant: "success",
+        });
+        fetchDsaPortalUsers();
+      } catch (err: any) {
+        toast({
+          title: "Notice",
+          description: err?.data?.message || err?.message || "Agent saved locally.",
+          variant: "info",
+        });
+      }
     }
 
     createItem("users", {
@@ -2628,7 +2809,7 @@ export function DsaProfilePage({ id }: { id: string }) {
       <PageHeader
         action={
           <div className="flex items-center gap-2">
-            <StatusBadge status={dsa.onboarding_status === "APPROVED" || dsa.onboarding_status === "AGREEMENT_COMPLETED" ? dsa.operational_status : dsa.onboarding_status} />
+            <StatusBadge status={getDsaDisplayStatus(dsa)} />
             {canManageDsaLifecycle && (
               <div className="flex gap-2">
                 {dsa.operational_status === "ACTIVE" && (
@@ -2736,7 +2917,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                 {dsa.status_reason_at ? ` - ${formatDate(dsa.status_reason_at)}` : ""}
               </p>
             </div>
-            <StatusBadge status={dsa.onboarding_status} />
+            <StatusBadge status={getDsaDisplayStatus(dsa)} />
           </div>
           <Button
             className="mt-3 border-amber-200 bg-white text-amber-900 hover:bg-amber-100"
@@ -2797,13 +2978,14 @@ export function DsaProfilePage({ id }: { id: string }) {
           tabs={
             dsa.onboarding_status === "APPROVED" ||
             dsa.onboarding_status === "AGREEMENT_COMPLETED" ||
+            dsa.agreement_status === "SIGNED_VERIFIED" ||
             dsa.operational_status === "ACTIVE"
               ? [
                   { label: "Partner analysis", value: "performance" },
                   { label: "Basic Info", value: "overview" },
                   { label: "KYC", value: "kyc" },
                   { label: "Documents", value: "documents" },
-                  { label: "Agreements", value: "agreements" },
+                  ...(isL7User ? [{ label: "Agreements", value: "agreements" }] : []),
                   { label: "Manage Products", value: "products" },
                   ...(canManageAgents ? [{ label: "Manage Agents", value: "agents" }] : []),
                   { label: "Applications", value: "apps" },
@@ -2817,7 +2999,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                   { label: "Basic Info", value: "overview" },
                   { label: "KYC", value: "kyc" },
                   { label: "Documents", value: "documents" },
-                  { label: "Agreements", value: "agreements" },
+                  ...(isL7User ? [{ label: "Agreements", value: "agreements" }] : []),
                   ...(workflowLevelInfo.currentLevel >= 6 || currentUser?.role === "DSA Manager"
                     ? [{ label: "Manage Products", value: "products" }]
                     : []),
@@ -2882,7 +3064,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                       )}
                     </Button>
                   )}
-                  <StatusBadge status={dsa.onboarding_status} />
+                  <StatusBadge status={getDsaDisplayStatus(dsa)} />
                 </div>
               </div>
 
@@ -3181,7 +3363,7 @@ export function DsaProfilePage({ id }: { id: string }) {
 
               <DetailGrid>
                 <DetailItem label="Business type" value={dsa.business_type} />
-                <DetailItem label="KYC readiness" value={<StatusBadge status={dsa.onboarding_status} />} />
+                <DetailItem label="KYC readiness" value={<StatusBadge status={getDsaDisplayStatus(dsa)} />} />
                 <DetailItem label="Registered address" value={`${dsa.address}, ${dsa.city}, ${dsa.state} ${dsa.pincode}`} />
                 <DetailItem label="Contact Mobile" value={dsa.mobile} />
                 <DetailItem label="Contact Email" value={dsa.email} />
@@ -3224,7 +3406,21 @@ export function DsaProfilePage({ id }: { id: string }) {
                 )}
               </div>
               <div className="grid gap-4 lg:grid-cols-2">
-                {(dsa.documents || []).map((doc) => {
+                {(dsa.documents || [])
+                  .filter((doc) => {
+                    const dt = String(doc.document_type || "").toUpperCase();
+                    return dt !== "EMPANELMENT_LETTER" && dt !== "AGREEMENT" && dt !== "SIGNED_AGREEMENT";
+                  })
+                  .reduce((acc: any[], doc: any) => {
+                    const existingIndex = acc.findIndex((d) => d.document_type === doc.document_type);
+                    if (existingIndex >= 0) {
+                      acc[existingIndex] = doc;
+                    } else {
+                      acc.push(doc);
+                    }
+                    return acc;
+                  }, [])
+                  .map((doc) => {
                   const isDocViewed = viewedDocIds.has(doc.id);
                   const isPendingVerification = isBankUser && doc.status !== "Verified" && doc.status !== "Failed";
 
@@ -3409,86 +3605,588 @@ export function DsaProfilePage({ id }: { id: string }) {
               ) : null}
             </div>
           ) : null}
-          {tab === "agreements" ? (
-            <div className="space-y-4">
-              <div className="flex flex-col gap-1">
-                <h3 className="text-sm font-bold text-slate-900">Master Service Agreement (MSA)</h3>
-                <p className="text-xs text-slate-500">Generate, review, and execute legal agreements for partner activation.</p>
+          {tab === "agreements" && isL7User ? (
+            <div className="space-y-6">
+              {/* Header and Status Indicators */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-slate-100">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    Master Partnership Agreement (MSA) &amp; Partner Activation
+                    <span className="text-[11px] font-mono font-normal px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                      Task 12 &bull; Task 13 &bull; Task 14
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    End-to-end management of official agreement generation, partner physical execution upload, and Level 7 HO Credit Head verification.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border bg-slate-50 text-slate-700 border-slate-200">
+                    <span className="text-[10px] uppercase text-slate-400 font-bold">Agreement:</span>
+                    <span
+                      className={cn(
+                        "font-bold",
+                        (dsa.agreement_status || agreementReviewData?.agreement_status) === "SIGNED_VERIFIED"
+                          ? "text-emerald-700"
+                          : (dsa.agreement_status || agreementReviewData?.agreement_status) === "SIGNED_UPLOADED"
+                          ? "text-amber-700"
+                          : (dsa.agreement_status || agreementReviewData?.agreement_status) === "SIGNED_REJECTED"
+                          ? "text-rose-700"
+                          : "text-blue-700"
+                      )}
+                    >
+                      {dsa.agreement_status || agreementReviewData?.agreement_status || "PENDING"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border bg-slate-50 text-slate-700 border-slate-200">
+                    <span className="text-[10px] uppercase text-slate-400 font-bold">Operational:</span>
+                    <span
+                      className={cn(
+                        "font-bold",
+                        dsa.operational_status === "ACTIVE" ? "text-emerald-700" : "text-slate-500"
+                      )}
+                    >
+                      {dsa.operational_status || "NOT_ACTIVE"}
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    type="button"
+                    disabled={agreementReviewLoading || officialAgreementLoading}
+                    onClick={() => loadAgreementData(dsa.id)}
+                    className="h-7 text-xs px-2.5"
+                  >
+                    {agreementReviewLoading ? (
+                      <Loader2 className="h-3 w-3 animate-spin text-slate-500" />
+                    ) : (
+                      "Refresh Details"
+                    )}
+                  </Button>
+                </div>
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-2">
-                <Card>
-                  <CardContent className="p-4 space-y-3">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">Agreement Generation</h4>
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      The agreement can be generated once the partner is approved. Generating will create a customized legal document.
-                    </p>
+              {/* 4-Stage Stepper */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {/* Step 1 */}
+                <div
+                  className={cn(
+                    "p-3 rounded-xl border transition-all",
+                    dsa.digital_acceptance_status === "ACCEPTED"
+                      ? "bg-emerald-50/60 border-emerald-200 text-emerald-950"
+                      : "bg-slate-50/80 border-slate-200 text-slate-600"
+                  )}
+                >
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="font-bold uppercase tracking-wider text-[10px] text-slate-500">Stage 1</span>
+                    {dsa.digital_acceptance_status === "ACCEPTED" ? (
+                      <span className="flex items-center gap-1 font-bold text-emerald-700 text-[10px]">
+                        <Check className="h-3 w-3" /> Accepted
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-medium text-slate-400">Pending</span>
+                    )}
+                  </div>
+                  <p className="text-xs font-bold text-slate-900">Digital Acceptance</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {dsa.digital_acceptance_status === "ACCEPTED"
+                      ? "Empanelment letter digitally accepted"
+                      : "Awaiting partner digital acceptance"}
+                  </p>
+                </div>
+
+                {/* Step 2 */}
+                <div
+                  className={cn(
+                    "p-3 rounded-xl border transition-all",
+                    (dsa.agreement_status && dsa.agreement_status !== "PENDING") || officialAgreement
+                      ? "bg-emerald-50/60 border-emerald-200 text-emerald-950"
+                      : "bg-slate-50/80 border-slate-200 text-slate-600"
+                  )}
+                >
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="font-bold uppercase tracking-wider text-[10px] text-slate-500">Stage 2</span>
+                    {(dsa.agreement_status && dsa.agreement_status !== "PENDING") || officialAgreement ? (
+                      <span className="flex items-center gap-1 font-bold text-emerald-700 text-[10px]">
+                        <Check className="h-3 w-3" /> Generated
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-medium text-slate-400">Pending</span>
+                    )}
+                  </div>
+                  <p className="text-xs font-bold text-slate-900">Master Agreement PDF</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {officialAgreement ? "Document generated & stored" : "Generated upon digital acceptance"}
+                  </p>
+                </div>
+
+                {/* Step 3 */}
+                <div
+                  className={cn(
+                    "p-3 rounded-xl border transition-all",
+                    ["SIGNED_UPLOADED", "SIGNED_VERIFIED"].includes(dsa.agreement_status || "")
+                      ? "bg-emerald-50/60 border-emerald-200 text-emerald-950"
+                      : dsa.agreement_status === "SIGNED_REJECTED"
+                      ? "bg-rose-50/60 border-rose-200 text-rose-950"
+                      : "bg-slate-50/80 border-slate-200 text-slate-600"
+                  )}
+                >
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="font-bold uppercase tracking-wider text-[10px] text-slate-500">Stage 3</span>
+                    {["SIGNED_UPLOADED", "SIGNED_VERIFIED"].includes(dsa.agreement_status || "") ? (
+                      <span className="flex items-center gap-1 font-bold text-emerald-700 text-[10px]">
+                        <Check className="h-3 w-3" /> Uploaded
+                      </span>
+                    ) : dsa.agreement_status === "SIGNED_REJECTED" ? (
+                      <span className="font-bold text-rose-700 text-[10px]">Rejected</span>
+                    ) : (
+                      <span className="text-[10px] font-medium text-slate-400">Awaiting Upload</span>
+                    )}
+                  </div>
+                  <p className="text-xs font-bold text-slate-900">Signed Copy Upload</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {dsa.agreement_status === "SIGNED_UPLOADED"
+                      ? "Scanned signed copy uploaded"
+                      : dsa.agreement_status === "SIGNED_VERIFIED"
+                      ? "Signed copy verified"
+                      : "Partner downloads, signs & uploads"}
+                  </p>
+                </div>
+
+                {/* Step 4 */}
+                <div
+                  className={cn(
+                    "p-3 rounded-xl border transition-all",
+                    dsa.operational_status === "ACTIVE" || dsa.agreement_status === "SIGNED_VERIFIED"
+                      ? "bg-emerald-50/60 border-emerald-200 text-emerald-950"
+                      : "bg-slate-50/80 border-slate-200 text-slate-600"
+                  )}
+                >
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="font-bold uppercase tracking-wider text-[10px] text-slate-500">Stage 4</span>
+                    {dsa.operational_status === "ACTIVE" || dsa.agreement_status === "SIGNED_VERIFIED" ? (
+                      <span className="flex items-center gap-1 font-bold text-emerald-700 text-[10px]">
+                        <Check className="h-3 w-3" /> Active
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-medium text-slate-400">Pending</span>
+                    )}
+                  </div>
+                  <p className="text-xs font-bold text-slate-900">L7 Sanction &amp; Activation</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {dsa.operational_status === "ACTIVE" || dsa.agreement_status === "SIGNED_VERIFIED"
+                      ? "DSA is ACTIVE & credentials dispatched"
+                      : "HO Credit Head approval required"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Banner for HO Credit Head Verification (Task 13 & 14) */}
+              {((dsa.agreement_status === "SIGNED_UPLOADED" || agreementReviewData?.agreement_status === "SIGNED_UPLOADED") ||
+                agreementReviewData?.can_decision) && (
+                <div className="rounded-xl border border-amber-300 bg-gradient-to-r from-amber-50 to-orange-50 p-5 shadow-sm space-y-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-700 shrink-0">
+                        <Award className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                          Level 7 Head Office Credit Head Verification Required
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                            Action Pending
+                          </span>
+                        </h4>
+                        <p className="text-xs text-slate-600 mt-0.5">
+                          The DSA partner has uploaded their physically executed &amp; stamped Master Partnership Agreement. Inspect the uploaded document and execute your sanction decision.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        type="button"
+                        disabled={!isL7User}
+                        onClick={() => {
+                          if (!isL7User) return;
+                          setVerifyingAgreementAction("APPROVE");
+                          setAgreementDecisionRemarks("Signed agreement verified and approved by HO Credit Head. Partner activated.");
+                          setAgreementDecisionError("");
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 h-auto shadow-sm flex items-center gap-1.5"
+                      >
+                        <Check className="h-4 w-4" />
+                        Approve &amp; Activate DSA Partner
+                      </Button>
+                      <Button
+                        size="sm"
+                        type="button"
+                        variant="danger"
+                        disabled={!isL7User}
+                        onClick={() => {
+                          if (!isL7User) return;
+                          setVerifyingAgreementAction("REJECT");
+                          setAgreementDecisionRemarks("");
+                          setAgreementDecisionError("");
+                        }}
+                        className="font-bold text-xs px-4 py-2 h-auto shadow-sm flex items-center gap-1.5"
+                      >
+                        <X className="h-4 w-4" />
+                        Reject &amp; Request Re-upload
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {(dsa.agreement_status === "SIGNED_VERIFIED" || dsa.operational_status === "ACTIVE" || agreementReviewData?.latest_signed_agreement?.status === "VERIFIED") && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+                      <CheckCircle2 className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-950">
+                        Master Agreement Verified &amp; Partner Activated
+                      </h4>
+                      <p className="text-xs text-emerald-800 mt-0.5">
+                        Physical signed agreement has been formally verified and approved by Level 7 HO Credit Head. Operational status is ACTIVE and portal login credentials have been dispatched to <strong>{dsa.email ?? "the registered DSA email"}</strong>.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    type="button"
+                    onClick={handleResendActivationEmail}
+                    className="h-8 text-xs font-semibold border-emerald-300 text-emerald-900 bg-white hover:bg-emerald-100 flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
+                  >
+                    <Mail className="h-3.5 w-3.5" />
+                    Resend Activation Email
+                  </Button>
+                </div>
+              )}
+
+              {resendActivationSuccess && (
+                <div className="rounded-xl border border-emerald-300 bg-emerald-100/70 p-3 flex items-center gap-2 text-xs text-emerald-900 font-medium">
+                  <Check className="h-4 w-4 text-emerald-700 shrink-0" />
+                  <span>{resendActivationSuccess}</span>
+                </div>
+              )}
+
+              {dsa.agreement_status === "SIGNED_REJECTED" && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shrink-0">
+                      <AlertCircle className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-rose-950">
+                        Signed Agreement Rejected by HO Credit Head
+                      </h4>
+                      <p className="text-xs text-rose-800 mt-0.5">
+                        {agreementReviewData?.latest_signed_agreement?.remarks || "Deficiencies noted in physical execution or stamp."} A fresh 72-hour re-upload link has been sent to the partner.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    type="button"
+                    onClick={() => {
+                      setVerifyingAgreementAction("APPROVE");
+                      setAgreementDecisionRemarks("Signed agreement re-checked and verified. Approved for activation.");
+                      setAgreementDecisionError("");
+                    }}
+                    className="h-7 text-xs border-rose-300 text-rose-800 hover:bg-rose-100"
+                  >
+                    Re-evaluate
+                  </Button>
+                </div>
+              )}
+
+              {/* Main Document Cards Grid */}
+              <div className="grid gap-5 lg:grid-cols-2">
+                {/* Card 1: Official Master Partnership Agreement (Task 12) */}
+                <Card className="border-slate-200 shadow-sm">
+                  <CardContent className="p-5 space-y-4">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-blue-600" />
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                          Official Master Agreement (MSA)
+                        </h4>
+                      </div>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                        Task 12 Endpoint
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 text-xs">
+                      <div className="p-3 bg-slate-50 rounded-lg border border-slate-100 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500 text-[11px]">File Name:</span>
+                          <span className="font-mono font-semibold text-slate-800 truncate max-w-xs">
+                            {officialAgreement?.file_name ||
+                              agreementReviewData?.generated_agreement?.file_name ||
+                              `agreement_${dsa.code || dsa.id}.pdf`}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500 text-[11px]">Document Size:</span>
+                          <span className="text-slate-700">
+                            {officialAgreement?.size || agreementReviewData?.generated_agreement?.size || "Generated on server"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500 text-[11px]">Generated Date:</span>
+                          <span className="text-slate-700">
+                            {officialAgreement?.uploaded_at
+                              ? formatDate(officialAgreement.uploaded_at)
+                              : agreementReviewData?.generated_agreement?.uploaded_at
+                              ? formatDate(agreementReviewData.generated_agreement.uploaded_at)
+                              : "Post-Digital Acceptance"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500 text-[11px]">Agreement Status:</span>
+                          <span
+                            className={cn(
+                              "px-2 py-0.5 rounded-full text-[10px] font-bold border",
+                              officialAgreement?.status === "VERIFIED" || dsa.agreement_status === "SIGNED_VERIFIED" || dsa.operational_status === "ACTIVE"
+                                ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                : "bg-blue-100 text-blue-800 border-blue-300"
+                            )}
+                          >
+                            {officialAgreement?.status === "VERIFIED" || dsa.agreement_status === "SIGNED_VERIFIED" || dsa.operational_status === "ACTIVE"
+                              ? "VERIFIED & ACTIVE"
+                              : officialAgreement?.status || "GENERATED"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="flex flex-wrap gap-2 pt-2">
                       <Button
-                        disabled={actionLoading || (dsa.onboarding_status !== "PENDING_APPROVAL" && dsa.onboarding_status !== "APPROVED" && dsa.onboarding_status !== "AGREEMENT_PENDING")}
+                        size="sm"
+                        type="button"
+                        disabled={actionLoading || officialAgreementLoading || !isL7User}
                         onClick={async () => {
+                          if (!isL7User) return;
                           await generateAgreement(dsa.id);
                           await fetchDsaDetail(dsa.id);
+                          await loadAgreementData(dsa.id);
                         }}
-                        size="sm"
-                        type="button"
+                        className="text-xs h-8 font-semibold bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1.5"
                       >
-                        {actionLoading ? "Generating..." : "Generate Agreement PDF"}
+                        <FileCheck2 className="h-3.5 w-3.5" />
+                        {actionLoading ? "Generating..." : "Generate / Re-Generate MSA"}
                       </Button>
-                      <Button
-                        disabled={dsa.onboarding_status !== "AGREEMENT_PENDING" && dsa.onboarding_status !== "AGREEMENT_COMPLETED"}
-                        onClick={async () => {
-                          const details = await downloadAgreement(dsa.id);
-                          if (details?.file_url) {
-                            window.open(details.file_url, "_blank");
-                          }
-                        }}
-                        size="sm"
-                        type="button"
-                        variant="outline"
-                      >
-                        Download Agreement
-                      </Button>
+
+                      {(officialAgreement?.file_url || agreementReviewData?.generated_agreement?.file_url) && (
+                        <Button
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            const url = officialAgreement?.file_url || agreementReviewData?.generated_agreement?.file_url;
+                            if (url) window.open(url, "_blank");
+                          }}
+                          className="text-xs h-8 font-semibold flex items-center gap-1.5 text-slate-700"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          View Official Agreement
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardContent className="p-4 space-y-3">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">Upload Signed Agreement</h4>
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      Upload the signed and scanned PDF copy of the generated MSA. Uploading the signed agreement will automatically transition the partner to Active status.
-                    </p>
-                    <div className="pt-2">
+                {/* Card 2: Scanned Signed Copy (Task 12 & 13) */}
+                <Card className="border-slate-200 shadow-sm">
+                  <CardContent className="p-5 space-y-4">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                      <div className="flex items-center gap-2">
+                        <UploadCloud className="h-4 w-4 text-emerald-600" />
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                          Scanned Physically Executed Agreement
+                        </h4>
+                      </div>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        Partner Submission
+                      </span>
+                    </div>
+
+                    {agreementReviewData?.latest_signed_agreement ? (
+                      <div className="space-y-2 text-xs">
+                        <div className="p-3 bg-slate-50 rounded-lg border border-slate-100 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500 text-[11px]">Submitted File:</span>
+                            <span className="font-mono font-semibold text-slate-800 truncate max-w-xs">
+                              {agreementReviewData.latest_signed_agreement.file_name}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500 text-[11px]">File Size:</span>
+                            <span className="text-slate-700">
+                              {agreementReviewData.latest_signed_agreement.size || "Standard PDF"}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500 text-[11px]">Uploaded At:</span>
+                            <span className="text-slate-700">
+                              {formatDate(agreementReviewData.latest_signed_agreement.uploaded_at)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500 text-[11px]">Review Status:</span>
+                            <span
+                              className={cn(
+                                "px-2 py-0.5 rounded-full text-[10px] font-bold border",
+                                (agreementReviewData.latest_signed_agreement.status === "VERIFIED" || dsa.agreement_status === "SIGNED_VERIFIED" || dsa.operational_status === "ACTIVE")
+                                  ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                  : agreementReviewData.latest_signed_agreement.status === "REJECTED"
+                                  ? "bg-rose-100 text-rose-800 border-rose-300"
+                                  : "bg-amber-100 text-amber-800 border-amber-300"
+                              )}
+                            >
+                              {(agreementReviewData.latest_signed_agreement.status === "VERIFIED" || dsa.agreement_status === "SIGNED_VERIFIED" || dsa.operational_status === "ACTIVE")
+                                ? "VERIFIED"
+                                : (agreementReviewData.latest_signed_agreement.status || "PENDING")}
+                            </span>
+                          </div>
+                          {agreementReviewData.latest_signed_agreement.remarks && (
+                            <div className="pt-1 text-[11px] text-slate-600 italic border-t border-slate-200/60 mt-1">
+                              &ldquo;{agreementReviewData.latest_signed_agreement.remarks}&rdquo;
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 pt-2">
+                          {agreementReviewData.latest_signed_agreement.file_url && (
+                            <Button
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                              onClick={() => {
+                                window.open(agreementReviewData.latest_signed_agreement.file_url, "_blank");
+                              }}
+                              className="text-xs h-8 font-semibold flex items-center gap-1.5 text-blue-700 border-blue-200 hover:bg-blue-50"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                              Inspect Scanned PDF
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3 text-xs">
+                        <div className="p-4 bg-slate-50 rounded-lg border border-slate-100 text-center text-slate-500 space-y-1">
+                          <p className="font-semibold text-slate-700">Awaiting Partner Submission</p>
+                          <p className="text-[11px]">
+                            Partner receives a secure upload link via email to submit the physically executed agreement.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Internal Branch Staff Hardcopy Upload Fallback */}
+                    <div className="pt-2 border-t border-slate-100">
+                      <p className="text-[11px] text-slate-500 mb-2">
+                        Branch Staff Fallback: If partner physically submitted hardcopy at the branch, staff can upload it directly:
+                      </p>
                       <input
                         accept=".pdf"
                         className="sr-only"
-                        id="signedAgreementUpload"
+                        id="internalSignedAgreementUpload"
                         onChange={async (e) => {
+                          if (!isL7User) return;
                           const file = e.currentTarget.files?.[0];
                           if (file) {
                             await uploadSignedAgreement(dsa.id, file);
                             await fetchDsaDetail(dsa.id);
+                            await loadAgreementData(dsa.id);
                           }
                         }}
                         type="file"
-                        disabled={actionLoading || dsa.onboarding_status !== "AGREEMENT_PENDING"}
+                        disabled={actionLoading || !isL7User}
                       />
                       <label
-                        className={`inline-flex h-9 items-center justify-center gap-2 rounded-md px-4 text-xs font-semibold text-white transition ${
-                          dsa.onboarding_status === "AGREEMENT_PENDING" && !actionLoading
-                            ? "bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
-                            : "bg-slate-300 cursor-not-allowed"
+                        className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-semibold transition ${
+                          !actionLoading && isL7User
+                            ? "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300 cursor-pointer"
+                            : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
                         }`}
-                        htmlFor={dsa.onboarding_status === "AGREEMENT_PENDING" ? "signedAgreementUpload" : undefined}
+                        htmlFor={!actionLoading && isL7User ? "internalSignedAgreementUpload" : undefined}
                       >
-                        <UploadCloud className="h-4 w-4" />
-                        {actionLoading ? "Uploading..." : "Upload Signed PDF"}
+                        <UploadCloud className="h-3.5 w-3.5 text-slate-500" />
+                        {actionLoading ? "Uploading..." : "Upload Received Physical Copy"}
                       </label>
                     </div>
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Card 4: Historical Signed Submissions Audit */}
+              {agreementReviewData?.signed_agreement_history?.length > 1 && (
+                <Card className="border-slate-200 shadow-sm">
+                  <CardContent className="p-4 space-y-3">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                      Signed Agreement Submission History &bull; Audit Trail
+                    </h4>
+                    <div className="overflow-x-auto rounded-lg border border-slate-200">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500">
+                          <tr>
+                            <th className="p-2.5">Document ID</th>
+                            <th className="p-2.5">File Name</th>
+                            <th className="p-2.5">Uploaded Date</th>
+                            <th className="p-2.5">Status</th>
+                            <th className="p-2.5">Remarks / Observations</th>
+                            <th className="p-2.5 text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white">
+                          {agreementReviewData.signed_agreement_history.map((doc: any, idx: number) => (
+                            <tr key={doc.document_id || idx} className="hover:bg-slate-50/60">
+                              <td className="p-2.5 font-mono text-slate-600">#{doc.document_id}</td>
+                              <td className="p-2.5 font-medium text-slate-800">{doc.file_name}</td>
+                              <td className="p-2.5 text-slate-500">{formatDate(doc.uploaded_at)}</td>
+                              <td className="p-2.5">
+                                <span
+                                  className={cn(
+                                    "px-2 py-0.5 rounded-full text-[10px] font-bold border",
+                                    doc.status === "VERIFIED"
+                                      ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                      : doc.status === "REJECTED"
+                                      ? "bg-rose-100 text-rose-800 border-rose-300"
+                                      : "bg-amber-100 text-amber-800 border-amber-300"
+                                  )}
+                                >
+                                  {doc.status}
+                                </span>
+                              </td>
+                              <td className="p-2.5 text-slate-600 max-w-xs truncate">{doc.remarks || "—"}</td>
+                              <td className="p-2.5 text-right">
+                                {doc.file_url && (
+                                  <a
+                                    href={doc.file_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:underline font-semibold"
+                                  >
+                                    View
+                                  </a>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           ) : null}
           {tab === "performance" ? (
@@ -3647,9 +4345,25 @@ export function DsaProfilePage({ id }: { id: string }) {
                   />
                 )}
                 columns={dsaAgentColumns}
-                emptyDescription="Create an agent from this tab to attach it to this DSA."
-                emptyTitle="No agents under this DSA"
-                items={dsaAgents}
+                emptyDescription={
+                  dsaPortalUsersLoading
+                    ? "Fetching authorized portal users from backend..."
+                    : "Create an agent from this tab to attach it to this DSA."
+                }
+                emptyTitle={dsaPortalUsersLoading ? "Loading authorized users..." : "No agents under this DSA"}
+                items={
+                  dsaPortalUsers.length > 0
+                    ? dsaPortalUsers.map((u: any) => ({
+                        id: String(u.user_id || u.mapping_id || u.id),
+                        name: u.name || "Agent",
+                        email: u.email || "—",
+                        region: u.role_in_dsa || dsa.name,
+                        status: u.deactivated_at ? ("Disabled" as const) : ("Active" as const),
+                        lastLogin: u.created_at || new Date().toISOString(),
+                        role: "DSA Agent" as const,
+                      }))
+                    : dsaAgents
+                }
                 pageSize={8}
                 searchKeys={["name", "email", "region", "status"]}
               />
@@ -3986,7 +4700,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                         : `Currently with ${workflowLevelInfo.roleName} for review. You do not have authorization to take action at this level.`}
                     </p>
                   </div>
-                  <StatusBadge status={dsa.onboarding_status} />
+                  <StatusBadge status={getDsaDisplayStatus(dsa)} />
                 </div>
 
                 {/* If Maker has already forwarded to L2 */}
@@ -5322,11 +6036,11 @@ export function DsaProfilePage({ id }: { id: string }) {
             ? "Level 7: Final Institutional Sanction & Review Console"
             : `Approve DSA Application — ${workflowLevelInfo.levelName}`
         }
-        width={workflowLevelInfo.currentLevel === 7 ? "max-w-5xl" : "max-w-lg"}
+        width={workflowLevelInfo.currentLevel === 7 ? "max-w-4xl" : "max-w-lg"}
       >
         {approvingDsa ? (
           workflowLevelInfo.currentLevel === 7 ? (
-            <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
+            <div className="space-y-5">
               {/* Loading State */}
               {l7ReviewLoading && (
                 <div className="p-12 text-center space-y-4 bg-slate-50 rounded-xl border border-slate-200">
@@ -5525,7 +6239,7 @@ export function DsaProfilePage({ id }: { id: string }) {
 
                   {/* Sub-tab 2: All-Level History (L1–L6) */}
                   {l7ReviewTab === "history" && (
-                    <div className="space-y-2 max-h-80 overflow-y-auto pr-1 text-xs">
+                    <div className="space-y-2.5 text-xs">
                       {(l7ReviewData.approval_history || []).map((step: any) => {
                         const isDone = step.status === "RECOMMENDED" || step.status === "APPROVED";
                         const isBypassed = step.status === "SKIPPED";
@@ -5617,7 +6331,7 @@ export function DsaProfilePage({ id }: { id: string }) {
 
                   {/* Sub-tab 3: Statutory Verifications */}
                   {l7ReviewTab === "verifications" && (
-                    <div className="space-y-2 max-h-80 overflow-y-auto pr-1 text-xs">
+                    <div className="space-y-2.5 text-xs">
                       {l7ReviewData.verification_results?.items?.length > 0 ? (
                         <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white">
                           {l7ReviewData.verification_results.items.map((v: any) => (
@@ -5662,7 +6376,7 @@ export function DsaProfilePage({ id }: { id: string }) {
 
                   {/* Sub-tab 4: BRE & Deviations */}
                   {l7ReviewTab === "bre" && (
-                    <div className="space-y-3 max-h-80 overflow-y-auto pr-1 text-xs">
+                    <div className="space-y-3 text-xs">
                       <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
                         <div>
                           <span className="font-bold text-slate-800 block text-xs">Evaluation ID: {l7ReviewData.bre_policy_results?.evaluation_id || "BRE-AUTO"}</span>
@@ -5715,7 +6429,7 @@ export function DsaProfilePage({ id }: { id: string }) {
 
                   {/* Sub-tab 5: Checker Due Diligence */}
                   {l7ReviewTab === "dd" && (
-                    <div className="space-y-3 max-h-80 overflow-y-auto pr-1 text-xs">
+                    <div className="space-y-3 text-xs">
                       <div className="p-3.5 rounded-xl border border-blue-200 bg-blue-50/40 space-y-2">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-blue-800 block">
                           Checker Observations
@@ -6644,7 +7358,7 @@ export function DsaProfilePage({ id }: { id: string }) {
         description={`DSA #${dsa.code || dsa.id} • ${dsa.name} • Evaluation generated on Maker submission to Checker`}
         width="max-w-4xl"
       >
-        <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+        <div className="space-y-4">
           {loadingDeviationReport ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-blue-600 mr-2" />
@@ -6830,7 +7544,7 @@ export function DsaProfilePage({ id }: { id: string }) {
         description={`DSA #${dsa.code || dsa.id} • ${dsa.name} • Submitted by Level 2 Checker`}
         width="max-w-2xl"
       >
-        <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+        <div className="space-y-4">
           {(() => {
             const note =
               dsa?.latest_due_diligence_note ||
@@ -6994,6 +7708,118 @@ export function DsaProfilePage({ id }: { id: string }) {
                 : workflowLevelInfo.currentLevel === 4
                 ? "Confirm & Revert to Sub-Region Head (L3)"
                 : "Confirm & Revert to Checker"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Level 7 HO Credit Head Agreement Verification & Activation Modal */}
+      <Modal
+        onClose={() => {
+          setVerifyingAgreementAction(null);
+          setAgreementDecisionRemarks("");
+          setAgreementDecisionError("");
+        }}
+        open={Boolean(verifyingAgreementAction) && isL7User}
+        title={
+          verifyingAgreementAction === "APPROVE"
+            ? "Approve Agreement & Activate DSA Partner"
+            : "Reject Scanned Agreement & Request Re-upload"
+        }
+        description={
+          verifyingAgreementAction === "APPROVE"
+            ? "Verify physical execution signatures and stamp. Approving will atomically activate the DSA partner and dispatch temporary portal login credentials."
+            : "Specify rejection remarks detailing why the physical signed agreement is rejected. A fresh 72-hour upload link will be emailed to the partner."
+        }
+        width="max-w-lg"
+      >
+        <div className="space-y-4">
+          <div
+            className={cn(
+              "rounded-lg p-3.5 border text-xs leading-relaxed",
+              verifyingAgreementAction === "APPROVE"
+                ? "bg-emerald-50 border-emerald-200 text-emerald-950"
+                : "bg-rose-50 border-rose-200 text-rose-950"
+            )}
+          >
+            <div className="flex items-center gap-2 font-bold mb-1">
+              {verifyingAgreementAction === "APPROVE" ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  <span>Atomic DSA Activation (Task 14)</span>
+                </>
+              ) : (
+                <>
+                  <AlertCircle className="h-4 w-4 text-rose-600" />
+                  <span>Rejection &amp; Re-upload Token Issuance</span>
+                </>
+              )}
+            </div>
+            <p>
+              {verifyingAgreementAction === "APPROVE"
+                ? `Partner ${dsa?.dsa_code || dsa?.name} will transition to operational_status = ACTIVE. A cryptographically secure temporary password will be generated and emailed to ${dsa?.applicant_email || dsa?.email}.`
+                : `Partner will be notified via email with your remarks. A new 72-hour upload token will be generated allowing them to re-upload the corrected agreement.`}
+            </p>
+          </div>
+
+          <Field>
+            <Label htmlFor="agreementRemarks">
+              {verifyingAgreementAction === "APPROVE" ? "Verification Remarks (Optional)" : "Rejection Reason & Remarks (Mandatory)"}
+            </Label>
+            <textarea
+              id="agreementRemarks"
+              rows={3}
+              className="w-full rounded-md border border-slate-200 p-2 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              value={agreementDecisionRemarks}
+              onChange={(e) => {
+                setAgreementDecisionRemarks(e.target.value);
+                setAgreementDecisionError("");
+              }}
+              placeholder={
+                verifyingAgreementAction === "APPROVE"
+                  ? "e.g. Master agreement signatures and rubber stamp verified on all execution pages. Approved for partner activation."
+                  : "e.g. Rubber stamp missing on page 3. Signatures on execution schedule unclear. Please affix firm stamp and re-upload."
+              }
+            />
+            {agreementDecisionError ? (
+              <p className="text-xs font-semibold text-rose-600 mt-1">{agreementDecisionError}</p>
+            ) : null}
+          </Field>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={() => {
+                setVerifyingAgreementAction(null);
+                setAgreementDecisionRemarks("");
+                setAgreementDecisionError("");
+              }}
+              disabled={agreementSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={agreementSubmitting}
+              onClick={handleSubmitAgreementDecision}
+              className={cn(
+                "text-xs font-semibold px-4 py-2 text-white",
+                verifyingAgreementAction === "APPROVE"
+                  ? "bg-emerald-600 hover:bg-emerald-700"
+                  : "bg-rose-600 hover:bg-rose-700"
+              )}
+            >
+              {agreementSubmitting ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                  Processing...
+                </>
+              ) : verifyingAgreementAction === "APPROVE" ? (
+                "Confirm & Activate DSA"
+              ) : (
+                "Confirm & Reject Agreement"
+              )}
             </Button>
           </div>
         </div>

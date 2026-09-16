@@ -47,7 +47,6 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { FieldConfig, RecordForm } from "@/components/ui/record-form";
-import { DEMO_USERS } from "@/lib/demo-identities";
 import { buildApplicationJourney } from "@/lib/product-journeys";
 import { useMockStore } from "@/lib/store";
 import { useDsa } from "@/hooks/useDsa";
@@ -161,7 +160,7 @@ function newLead(value: Partial<Lead>, dsaId: string, dsaName: string): Lead {
     leadId: `LD-${Date.now().toString().slice(-5)}`,
     mobile: String(value.mobile ?? ""),
     nextAction: String(value.nextAction ?? "Call back"),
-    owner: String(value.owner ?? DEMO_USERS.admin.name),
+    owner: String(value.owner ?? "Admin"),
     product: (value.product as Product) || "Personal Loan",
     source: (value.source as Lead["source"]) || "DSA Campaign",
     status: (value.status as LeadStatus) || "New",
@@ -516,7 +515,7 @@ export function LeadsPage() {
         <RecordForm<Lead>
           fields={leadFormFields}
           initialValue={{
-            owner: currentUser?.name ?? DEMO_USERS.admin.name,
+            owner: currentUser?.name ?? "Admin",
             product: "Personal Loan",
             source: "DSA Campaign",
             status: "New",
@@ -963,7 +962,7 @@ export function ApplicationDetailPage({ id }: { id: string }) {
       notes: [note.trim(), ...application.notes],
       timeline: [
         {
-          actor: currentUser?.name ?? DEMO_USERS.admin.name,
+          actor: currentUser?.name ?? "System",
           at: new Date().toISOString(),
           id: makeId("tl"),
           note: note.trim(),
@@ -989,7 +988,7 @@ export function ApplicationDetailPage({ id }: { id: string }) {
     const inboxNote = getDeviationInboxNote();
     if (!inboxNote) return;
 
-    const actor = currentUser?.name ?? DEMO_USERS.admin.name;
+    const actor = currentUser?.name ?? "System";
     const now = new Date().toISOString();
     const noteText = `Deviation inbox update by ${actor}: ${inboxNote}`;
 
@@ -1019,7 +1018,7 @@ export function ApplicationDetailPage({ id }: { id: string }) {
     const inboxNote = getDeviationInboxNote();
     if (!inboxNote) return;
 
-    const actor = currentUser?.name ?? DEMO_USERS.admin.name;
+    const actor = currentUser?.name ?? "System";
     const now = new Date().toISOString();
     const approved = resolution === "Approved";
     const nextStatus: Application["status"] = approved ? "Approved" : "Rejected";

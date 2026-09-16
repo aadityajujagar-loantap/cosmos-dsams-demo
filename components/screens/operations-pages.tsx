@@ -8,7 +8,6 @@ import { Button, Modal, Select } from "@/components/ui/primitives";
 import { FieldConfig, RecordForm } from "@/components/ui/record-form";
 import { adminApi } from "@/apis/admin";
 import { useToast } from "@/components/ui/toast";
-import { DEMO_USERS } from "@/lib/demo-identities";
 import { useMockStore } from "@/lib/store";
 import { CibilScoreBand, GenderFilter, LoanSlab, Product } from "@/lib/types";
 import { makeId } from "@/lib/utils";

@@ -351,42 +351,47 @@ export function Modal({
 }) {
   useEffect(() => {
     if (!open) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     const listener = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
     window.addEventListener("keydown", listener);
-    return () => window.removeEventListener("keydown", listener);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", listener);
+    };
   }, [onClose, open]);
 
   if (!open) return null;
   return (
-    <div className="fixed -inset-1 z-40 flex items-center justify-center p-5" style={{ outline: 'none' }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6" style={{ outline: 'none' }}>
       <button
         aria-label="Close modal overlay"
-        className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm"
+        className="fixed inset-0 bg-slate-950/50 backdrop-blur-xs transition-opacity"
         onClick={onClose}
         style={{ outline: 'none', border: 'none', boxShadow: 'none' }}
         type="button"
       />
       <div
         className={cn(
-          "relative max-h-[92vh] w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl",
+          "relative flex max-h-[90vh] w-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl",
           width,
         )}
         role="dialog"
         aria-modal="true"
         style={{ outline: 'none' }}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100" style={{ padding: '20px 24px' }}>
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 px-6 py-4">
           <div>
-            <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
-            {description ? <p className="mt-1 text-sm text-slate-500">{description}</p> : null}
+            <h2 className="text-base sm:text-lg font-bold text-slate-950">{title}</h2>
+            {description ? <p className="mt-0.5 text-xs text-slate-500">{description}</p> : null}
           </div>
-          <Button aria-label="Close" onClick={onClose} size="icon" type="button" variant="ghost">
+          <Button aria-label="Close" onClick={onClose} size="icon" type="button" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-slate-700">
             <X className="h-4 w-4" />
           </Button>
         </div>
-        <div className="max-h-[calc(92vh-140px)] overflow-auto" style={{ padding: '24px' }}>{children}</div>
+        <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
       </div>
     </div>
   );

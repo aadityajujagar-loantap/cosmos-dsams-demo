@@ -61,6 +61,33 @@ export const authApi = {
   },
 
   /**
+   * DSA partner portal login (Task 14).
+   * POST /api/auth/dsa-login
+   * Checks operational_status === 'ACTIVE'; returns 403 if DSA is not yet activated.
+   */
+  dsaLogin: (payload: {
+    email: string;
+    password: string;
+  }): Promise<{
+    token: string;
+    user: {
+      id: number;
+      name: string;
+      email: string;
+      phone?: string;
+      ticket_no?: string;
+      is_active: boolean;
+      created_at: string;
+      updated_at: string;
+    };
+  }> => {
+    return request<any>("/auth/dsa-login", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
    * Fetch the authenticated backend user backing the current token
    */
   getCurrentUser: (): Promise<User> => {

@@ -1,4 +1,4 @@
-﻿export interface Permission {
+export interface Permission {
   id: number;
   name: string;
   description?: string | null;
@@ -42,6 +42,38 @@ export interface AuthSession {
     }[];
   }[];
 }
+
+export type SessionRole =
+  | "DSA Manager"
+  | "DSA Credit"
+  | "Branch Regional Head"
+  | "Region Head"
+  | "Sub-Region Head"
+  | "HO Credit Officer"
+  | "HO Credit Head"
+  | "Branch User"
+  | "Assistant Manager"
+  | "Manager"
+  | "AGM"
+  | "DGM"
+  | "DSA Partner"
+  | "DSA Agent"
+  | "Customer"
+  | "Checker"
+  | "Maker";
+
+export interface SessionUser {
+  name: string;
+  role: SessionRole;
+  id: string;
+  email: string;
+  mobile: string;
+  code?: string;
+  branchId?: number;
+  branchName?: string;
+}
+
+export type DemoSessionUser = SessionUser;
 
 export interface BranchRole {
   id: number;

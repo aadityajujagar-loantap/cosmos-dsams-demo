@@ -14,17 +14,29 @@ import { ToastProvider, useToast } from "@/components/ui/toast";
 import { authService } from "@/services/authService";
 import { authApi } from "@/apis/auth";
 import { adminApi } from "@/apis/admin";
-import type { AuthSession } from "@/types/auth";
-import {
-  DEFAULT_DSA_ID,
-  DEFAULT_DSA_LOGIN_PASSWORD,
-  DemoSessionUser,
-  DEMO_USERS,
-  sessionUserFromDsa,
-} from "@/lib/demo-identities";
+import type { AuthSession, DemoSessionUser } from "@/types/auth";
 import { generateDsaCredentials, makeDsaCredentials } from "@/lib/dsa-credentials";
-import { withBasePath } from "@/lib/base-path";
-import { createMockStore } from "@/lib/mock-data";
+export function createEmptyStore(): MockStore {
+  return {
+    applications: [],
+    approvals: [],
+    auditLogs: [],
+    breRules: [],
+    commissions: [],
+    documents: [],
+    dsaInvoices: [],
+    dsaProductConfigs: [],
+    dsaRecovery: [],
+    dsas: [],
+    leads: [],
+    loanSlabs: [],
+    notifications: [],
+    roles: [],
+    settings: [],
+    users: [],
+    verificationChecks: [],
+  };
+}
 import {
   Application,
   ApprovalItem,
@@ -69,7 +81,7 @@ interface StoreContextValue {
 const StoreContext = createContext<StoreContextValue | undefined>(undefined);
 const STORE_STORAGE_KEY = "cosmos_dsa_store";
 const STORE_SCHEMA_VERSION_KEY = `${STORE_STORAGE_KEY}_schema_version`;
-const STORE_SCHEMA_VERSION = "cosmos-dsa-live-v6";
+const STORE_SCHEMA_VERSION = "cosmos-dsa-dynamic-v1";
 const USER_STORAGE_KEY = "cosmos_dsa_user";
 const COLON_DSA_ID_PATTERN = /^COSDSA(\d{8})(\d{2}):(\d{2}):(\d{2}):(\d{3})$/;
 const LEGACY_DSA_ID_PATTERN = /^dsa-(\d+)$/;
@@ -270,11 +282,29 @@ function migrateOnHoldDsaStatuses(store: MockStore): MockStore {
   };
 }
 
+export function sessionUserFromDsa(dsa: {
+  id: string | number;
+  code?: string;
+  name: string;
+  mobile?: string;
+  email: string;
+  login_username?: string;
+  loginUsername?: string;
+}): DemoSessionUser {
+  return {
+    code: dsa.code,
+    email: dsa.login_username || dsa.loginUsername || dsa.email,
+    id: String(dsa.id),
+    mobile: dsa.mobile || "",
+    name: dsa.name,
+    role: "DSA Partner",
+  };
+}
+
 function ensureDsaCredentials(dsa: Dsa, fallbackBranchNumber = 1): Dsa {
   const fallbackCredentials = makeDsaCredentials(fallbackBranchNumber);
   const loginUsername = String(dsa.loginUsername || dsa.email || fallbackCredentials.loginUsername).trim().toLowerCase();
-  const fallbackPassword =
-    String(dsa.id) === String(DEFAULT_DSA_ID) ? DEFAULT_DSA_LOGIN_PASSWORD : fallbackCredentials.loginPassword;
+  const fallbackPassword = fallbackCredentials.loginPassword;
   const loginPassword = String(dsa.loginPassword || fallbackPassword).trim() || fallbackPassword;
 
   return {
@@ -416,7 +446,7 @@ function defaultDsaProductConfig(dsa: Dsa, product: Product, index: number): Dsa
     bannerName: `${dsa.city || dsa.name} ${product} Campaign`,
     commissionType: index % 3 === 0 ? "Percentage-based" : index % 3 === 1 ? "Tiered" : "Fixed-fee",
     configuredAt: dsa.onboardingDate,
-    configuredBy: DEMO_USERS.admin.name,
+    configuredBy: "System",
     dsaCode: String(dsa.code ?? ""),
     dsaId: dsaIdStr,
     dsaName: dsa.name,
@@ -450,60 +480,43 @@ function defaultDsaProductConfig(dsa: Dsa, product: Product, index: number): Dsa
   };
 }
 
-function hydratePersistedStore(persistedStore: Partial<MockStore>, seededStore = createMockStore()): MockStore {
-  const mergedStore = { ...seededStore, ...persistedStore } as MockStore;
+function hydratePersistedStore(persistedStore: Partial<MockStore>): MockStore {
+  const emptyStore = createEmptyStore();
+  const mergedStore = { ...emptyStore, ...persistedStore } as MockStore;
   mergedStore.applications = mergedStore.applications ?? [];
   mergedStore.roles = mergedStore.roles ?? [];
   mergedStore.users = mergedStore.users ?? [];
-
-  const existingApplicationIds = new Set(mergedStore.applications.map((item) => item.id));
-  const seededProductDemoApplications = seededStore.applications.filter((item) =>
-    item.id.startsWith("app-product-demo-"),
-  );
-  const existingUserIds = new Set(mergedStore.users.map((item) => item.id));
-  const existingRoleIds = new Set(mergedStore.roles.map((item) => item.id));
-
-  mergedStore.applications = [
-    ...mergedStore.applications,
-    ...seededProductDemoApplications.filter((item) => !existingApplicationIds.has(item.id)),
-  ];
-  mergedStore.users = [
-    ...mergedStore.users,
-    ...seededStore.users.filter((item) => !existingUserIds.has(item.id)),
-  ];
-  mergedStore.roles = [
-    ...mergedStore.roles,
-    ...seededStore.roles.filter((item) => !existingRoleIds.has(item.id)),
-  ];
+  mergedStore.dsas = mergedStore.dsas ?? [];
+  mergedStore.documents = mergedStore.documents ?? [];
 
   return ensureStoreRelationships(ensureApplicationJourneys(migrateOnHoldDsaStatuses(migrateLegacyDsaIds(mergedStore))));
 }
 
 function initialStore(): MockStore {
-  const seededStore = createMockStore();
-  if (typeof window === "undefined") return ensureStoreRelationships(ensureApplicationJourneys(seededStore));
+  const emptyStore = createEmptyStore();
+  if (typeof window === "undefined") return ensureStoreRelationships(ensureApplicationJourneys(emptyStore));
 
   const storedVersion = localStorage.getItem(STORE_SCHEMA_VERSION_KEY);
   if (storedVersion !== STORE_SCHEMA_VERSION) {
     localStorage.removeItem(STORE_STORAGE_KEY);
     localStorage.removeItem(USER_STORAGE_KEY);
     localStorage.setItem(STORE_SCHEMA_VERSION_KEY, STORE_SCHEMA_VERSION);
-    return ensureStoreRelationships(ensureApplicationJourneys(seededStore));
+    return ensureStoreRelationships(ensureApplicationJourneys(emptyStore));
   }
 
   const stored = localStorage.getItem(STORE_STORAGE_KEY);
-  if (!stored) return ensureStoreRelationships(ensureApplicationJourneys(seededStore));
+  if (!stored) return ensureStoreRelationships(ensureApplicationJourneys(emptyStore));
 
   try {
     const persistedStore = JSON.parse(stored) as Partial<MockStore>;
-    const hydratedStore = hydratePersistedStore(persistedStore, seededStore);
+    const hydratedStore = hydratePersistedStore(persistedStore);
 
-    console.log("Mock store: loaded from localStorage. Total DSAs in persisted store:", hydratedStore.dsas.length);
+    console.log("Store: loaded from localStorage. Total DSAs in persisted store:", hydratedStore.dsas.length);
     return hydratedStore;
   } catch (err) {
-    console.error("Mock store: failed to parse stored JSON. Resetting to seeded store.", err);
+    console.error("Store: failed to parse stored JSON. Resetting to clean store.", err);
     localStorage.removeItem(STORE_STORAGE_KEY);
-    return ensureStoreRelationships(ensureApplicationJourneys(seededStore));
+    return ensureStoreRelationships(ensureApplicationJourneys(emptyStore));
   }
 }
 
@@ -645,8 +658,8 @@ function audit(
   previous?: unknown,
   store?: MockStore,
 ): AuditLog {
-  const actor = actorUser?.name ?? DEMO_USERS.admin.name;
-  const actorRole = actorUser?.role ?? DEMO_USERS.admin.role;
+  const actor = actorUser?.name ?? "System";
+  const actorRole = actorUser?.role ?? "DSA Manager";
   const target = item ?? { id: actorUser?.id, name: actor, role: actorRole };
   const record = asRecord(target);
   const changedFields = action === "Updated" ? changedFieldNames(previous, target) : [];
@@ -1403,7 +1416,7 @@ function ensureStoreRelationships(store: MockStore): MockStore {
     const currentApplication = findApplicationByReference(next, application.id);
     if (!currentApplication) return;
     next = syncApplicationReferences(next, undefined, currentApplication);
-    next = ensureApplicationChildren(next, currentApplication, DEMO_USERS.admin.name);
+    next = ensureApplicationChildren(next, currentApplication, "System");
   });
 
   return next;
@@ -1478,45 +1491,15 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
 
     const serializedStore = JSON.stringify(store);
     if (localStorage.getItem(STORE_STORAGE_KEY) !== serializedStore) {
-      console.log("Mock store: saving to localStorage. Total DSAs:", store.dsas.length);
       localStorage.setItem(STORE_SCHEMA_VERSION_KEY, STORE_SCHEMA_VERSION);
       localStorage.setItem(STORE_STORAGE_KEY, serializedStore);
-
-      // Save to shared store API
-      fetch(withBasePath("/api/store"), {
-        cache: "no-store",
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: serializedStore,
-      }).catch((err) => console.warn("Mock store: failed to save to server API", err));
     }
   }, [store]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    async function syncStoreFromStorage() {
-      // 1. Sync from server
-      try {
-        const res = await fetch(withBasePath("/api/store"), { cache: "no-store" });
-        if (res.ok) {
-          const serverData = await res.json();
-          if (serverData) {
-            setStore((current) => {
-              const hydratedServerData = hydratePersistedStore(serverData);
-              const serializedServerData = JSON.stringify(hydratedServerData);
-              if (JSON.stringify(current) === serializedServerData) return current;
-              localStorage.setItem(STORE_STORAGE_KEY, serializedServerData);
-              return hydratedServerData;
-            });
-            return;
-          }
-        }
-      } catch (err) {
-        console.warn("Mock store: failed to sync from server API on focus/mount", err);
-      }
-
-      // 2. Fall back to localStorage
+    function syncStoreFromStorage() {
       const stored = localStorage.getItem(STORE_STORAGE_KEY);
       if (!stored) return;
 
@@ -1528,7 +1511,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
           const hydratedStore = hydratePersistedStore(parsed);
           return JSON.stringify(current) === JSON.stringify(hydratedStore) ? current : hydratedStore;
         } catch (err) {
-          console.warn("Mock store: failed to sync external store update.", err);
+          console.warn("Store: failed to sync external store update.", err);
           return current;
         }
       });
@@ -1711,7 +1694,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       let createdItem = item;
 
       setStore((current) => {
-        const actor = currentUser?.name ?? DEMO_USERS.admin.name;
+        const actor = currentUser?.name ?? "System";
         const normalized = normalizeLinkedEntity(current, collection, item);
         if (normalized.blockedReason) {
           blockedReason = normalized.blockedReason;
@@ -1763,7 +1746,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       let updatedName = "record";
 
       setStore((current) => {
-        const actor = currentUser?.name ?? DEMO_USERS.admin.name;
+        const actor = currentUser?.name ?? "System";
         const existing = current[collection].find((item) => item.id === id) as EntityMap[K] | undefined;
         if (!existing) {
           blockedReason = `Cannot update ${titleCase(collection)} because record ${id} was not found.`;
@@ -1820,7 +1803,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       let deletedName = "record";
 
       setStore((current) => {
-        const actor = currentUser?.name ?? DEMO_USERS.admin.name;
+        const actor = currentUser?.name ?? "System";
         const existing = current[collection].find((item) => item.id === id) as EntityMap[K] | undefined;
         if (!existing) {
           blockedReason = `Cannot delete ${titleCase(collection)} because record ${id} was not found.`;

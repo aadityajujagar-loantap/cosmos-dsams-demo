@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/primitives";
 import { Copy, Plus, Trash2, UploadCloud, Check, Landmark, Image as ImageIcon, FileCheck, AlertCircle } from "lucide-react";
 import { commissionDisplayLabel, formatCommissionDisplay, formatCurrency, makeId, usesCommissionAmount } from "@/lib/utils";
-import { DEMO_USERS } from "@/lib/demo-identities";
 import { journeyUrl } from "@/lib/journey-links";
 import { Product, ProductCommissionRange } from "@/lib/types";
 
@@ -282,7 +281,7 @@ export function ProductSettingPage() {
       bannerName: hasBanner ? bannerName : undefined,
       commissionType: "Percentage-based" as const,
       configuredAt: new Date().toISOString(),
-      configuredBy: currentUser?.name ?? DEMO_USERS.admin.name,
+      configuredBy: currentUser?.name ?? "System",
       dsaCode: selectedDsa.code,
       dsaId: String(selectedDsa.id),
       dsaName: selectedDsa.name,
@@ -305,7 +304,7 @@ export function ProductSettingPage() {
     createItem("auditLogs", {
       id: `audit-${Date.now()}`,
       at: new Date().toISOString(),
-      actor: currentUser?.name ?? DEMO_USERS.admin.name,
+      actor: currentUser?.name ?? "System",
       action: `Configured ${product} for ${selectedDsa.name}`,
       entity: "Settings",
       severity: "Info",

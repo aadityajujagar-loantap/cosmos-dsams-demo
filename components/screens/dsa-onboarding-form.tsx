@@ -18,6 +18,7 @@ import {
   Briefcase,
   Users,
   Info,
+  Loader2,
 } from "lucide-react";
 import { adminApi } from "@/apis/admin";
 import { useMockStore } from "@/lib/store";
@@ -159,7 +160,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   const [firstName, setFirstName] = useState<string>("");
   const [middleName, setMiddleName] = useState<string>("");
   const [lastName, setLastName] = useState<string>("");
-  const [dateOfBirth, setDateOfBirth] = useState<string>("");
+  const [dateOfBirth, setDateOfBirth] = useState<string>(""); // ISO YYYY-MM-DD for payload
+  const [displayDob, setDisplayDob] = useState<string>("");   // DD/MM/YYYY for display
   const [aadhaarNo, setAadhaarNo] = useState<string>("");
   const [educationQualification, setEducationQualification] = useState<string>("");
 
@@ -1464,13 +1466,29 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
-                      <Label htmlFor="date_of_birth" className="text-xs font-semibold">Date of Birth *</Label>
+                      <Label htmlFor="date_of_birth" className="text-xs font-semibold">Date of Birth * (DD/MM/YYYY)</Label>
                       <Input
                         id="date_of_birth"
-                        type="date"
-                        value={dateOfBirth}
-                        onChange={(e) => setDateOfBirth(e.target.value)}
-                        className="mt-1"
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="DD/MM/YYYY"
+                        maxLength={10}
+                        value={displayDob}
+                        onChange={(e) => {
+                          let v = e.target.value.replace(/[^\d/]/g, "");
+                          // Auto-insert slashes
+                          if (/^\d{2}$/.test(v)) v = v + "/";
+                          if (/^\d{2}\/\d{2}$/.test(v)) v = v + "/";
+                          setDisplayDob(v);
+                          // Convert complete DD/MM/YYYY → ISO YYYY-MM-DD
+                          const full = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v);
+                          if (full) {
+                            setDateOfBirth(`${full[3]}-${full[2]}-${full[1]}`);
+                          } else {
+                            setDateOfBirth("");
+                          }
+                        }}
+                        className="mt-1 font-mono"
                       />
                     </div>
                     <div>
@@ -2367,7 +2385,14 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                 disabled={isSubmitting || !declarationAgreed}
                 className="gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 shadow-md"
               >
-                {isSubmitting ? "Submitting Application..." : "Submit DSA Application"}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Submitting Application...
+                  </>
+                ) : (
+                  "Submit DSA Application"
+                )}
               </Button>
             )}
           </div>

@@ -513,6 +513,69 @@ export function useDsa() {
     [toast]
   );
 
+  const fetchDsaAgreement = useCallback(
+    async (idOrCode: number | string) => {
+      try {
+        const response = await adminApi.getDsaAgreement(idOrCode);
+        return response.data;
+      } catch (error: unknown) {
+        toast({
+          title: "Agreement fetch failed",
+          description: errorMessage(error, "Could not fetch Master Agreement details."),
+          variant: "warning",
+        });
+        return null;
+      }
+    },
+    [toast]
+  );
+
+  const fetchSignedAgreementReview = useCallback(
+    async (idOrCode: number | string) => {
+      try {
+        const response = await adminApi.getSignedAgreementReview(idOrCode);
+        return response.data;
+      } catch (error: unknown) {
+        toast({
+          title: "Review fetch failed",
+          description: errorMessage(error, "Could not fetch signed agreement review details."),
+          variant: "warning",
+        });
+        return null;
+      }
+    },
+    [toast]
+  );
+
+  const verifySignedAgreement = useCallback(
+    async (
+      idOrCode: number | string,
+      payload: { action: "APPROVE" | "REJECT" | "approve" | "reject"; remarks?: string }
+    ) => {
+      setActionLoading(true);
+      try {
+        const response = await adminApi.verifySignedAgreement(idOrCode, payload);
+        const isApprove = payload.action.toUpperCase() === "APPROVE";
+        toast({
+          title: isApprove ? "Agreement Verified & DSA Activated" : "Agreement Rejected",
+          description: response.message || (isApprove ? "DSA partner activated successfully." : "Re-upload link sent to partner."),
+          variant: isApprove ? "success" : "info",
+        });
+        return response.data;
+      } catch (error: unknown) {
+        toast({
+          title: "Verification failed",
+          description: errorMessage(error, "Failed to submit signed agreement decision."),
+          variant: "warning",
+        });
+        return null;
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [toast]
+  );
+
   const uploadDsaDocument = useCallback(
     async (idOrCode: number | string, payload: { file: File; document_type: string; owner_name?: string }) => {
       setActionLoading(true);
@@ -683,6 +746,9 @@ export function useDsa() {
     generateAgreement,
     downloadAgreement,
     uploadSignedAgreement,
+    fetchDsaAgreement,
+    fetchSignedAgreementReview,
+    verifySignedAgreement,
     uploadDsaDocument,
     updateDsaDocumentStatus,
     deleteDsaDocument,
