@@ -149,12 +149,14 @@ export type ApprovalStepLevelInfo = {
 function getDocumentUrl(doc: any): string {
   if (!doc) return "";
   const rawUrl = doc.file_url || doc.url;
+  const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").replace(/\/api\/?$/, "");
+  const apiOrigin = new URL(apiBase).origin;
   if (rawUrl) {
     try {
       const parsed = new URL(rawUrl);
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
-      const apiOrigin = new URL(apiBase).origin;
-      if (parsed.hostname === "localhost" && parsed.port !== "8000") {
+      // Always rewrite to the configured API origin so server-side localhost URLs
+      // (e.g. http://localhost:8000/storage/...) resolve correctly from the browser.
+      if (parsed.origin !== apiOrigin) {
         return `${apiOrigin}${parsed.pathname}${parsed.search}`;
       }
       return rawUrl;
@@ -163,7 +165,6 @@ function getDocumentUrl(doc: any): string {
     }
   }
   if (doc.file_path) {
-    const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").replace(/\/api\/?$/, "");
     return `${apiBase}/storage/${doc.file_path.replace(/^\/+/, "")}`;
   }
   return "";
@@ -2945,17 +2946,21 @@ export function DsaProfilePage({ id }: { id: string }) {
                       </div>
                     </div>
 
-                    {/* GSTIN Verification */}
+                    {/* GSTIN Verification — only shown when a GST number was actually provided */}
                     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold uppercase tracking-wider text-slate-500">GSTIN Verification</span>
                         <StatusBadge status={verifiedKyc.gst ? "Verified" : "Pending"} />
                       </div>
                       <div>
-                        <p className="text-lg font-mono font-bold text-slate-900">
-                          {dsa.gst || (dsa.pan ? `27${dsa.pan}1Z5` : "27AAAAC1234H1Z5")}
-                        </p>
-                        <p className="text-xs text-slate-500 mt-0.5">Taxpayer Status: Regular · Active</p>
+                        {dsa.gst ? (
+                          <>
+                            <p className="text-lg font-mono font-bold text-slate-900">{dsa.gst}</p>
+                            <p className="text-xs text-slate-500 mt-0.5">Taxpayer Status: Regular · Active</p>
+                          </>
+                        ) : (
+                          <p className="text-sm text-slate-400 italic">No GST number provided by the applicant.</p>
+                        )}
                       </div>
                       <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                         <span className="text-[11px] text-slate-500">
@@ -5556,7 +5561,15 @@ export function DsaProfilePage({ id }: { id: string }) {
                                   L{step.approval_level}
                                 </span>
                                 <span className="font-bold text-slate-800">{step.role_name || step.stage_code}</span>
-                                <span className="text-[11px] text-slate-500">({step.authority_title})</span>
+                                {(() => {
+                                  // Override stale/incorrect authority_title values from DB
+                                  const sc = step.stage_code || "";
+                                  const title =
+                                    sc === "LEVEL_6_HO_CREDIT_OFFICER" ? "Credit Appraisal Authority" :
+                                    sc === "LEVEL_7_HO_CREDIT_HEAD" ? "Final Approval Authority (HO Credit Head)" :
+                                    step.authority_title;
+                                  return title ? <span className="text-[11px] text-slate-500">({title})</span> : null;
+                                })()}
                               </div>
                               <div className="flex items-center gap-2">
                                 {step.actioned_at && (
