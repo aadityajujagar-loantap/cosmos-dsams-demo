@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -12,7 +12,6 @@ import {
   ArrowRight,
   RefreshCw,
   MailCheck,
-  Building2,
   Lock,
 } from "lucide-react";
 import { adminApi } from "@/apis/admin";
@@ -23,6 +22,33 @@ interface DsaVerifyEmailScreenProps {
   token?: string;
   type?: string;
   applicationId?: string;
+}
+
+interface VerificationApiResponse {
+  status?: boolean | string;
+  status_code?: number;
+  message?: string;
+  dsa_code?: string;
+  dsa_id?: number | string;
+  application_id?: string;
+  email?: string;
+  data?: {
+    status?: boolean | string;
+    status_code?: number;
+    message?: string;
+    dsa_code?: string;
+    dsa_id?: number | string;
+    application_id?: string;
+    email?: string;
+  };
+}
+
+interface VerificationError {
+  message?: string;
+  data?: {
+    message?: string;
+    application_id?: string;
+  };
 }
 
 type VerificationState = "loading" | "success" | "error";
@@ -38,55 +64,140 @@ interface VerificationResult {
 
 export function DsaVerifyEmailScreen({ token, type, applicationId }: DsaVerifyEmailScreenProps) {
   const router = useRouter();
-  const [state, setState] = useState<VerificationState>("loading");
-  const [result, setResult] = useState<VerificationResult>({
-    message: "",
-  });
+  const [state, setState] = useState<VerificationState>(() =>
+    !token || token.trim() === "" ? "error" : "loading"
+  );
+  const [result, setResult] = useState<VerificationResult>(() => ({
+    message:
+      !token || token.trim() === ""
+        ? "No verification token provided. Please check the link from your email or paste it below."
+        : "",
+  }));
   const [resending, setResending] = useState(false);
   const [resendStatus, setResendStatus] = useState<string | null>(null);
+  const [manualToken, setManualToken] = useState("");
+  const [manualAppId, setManualAppId] = useState("");
 
-  const handleResendLoanVerification = async () => {
-    const targetAppId = applicationId || result.applicationId;
+  const getEffectiveAppId = useCallback(() => {
+    if (applicationId) return applicationId;
+    if (result.applicationId) return result.applicationId;
+    if (manualAppId.trim()) return manualAppId.trim();
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("cosmos_assisted_application_id") || "";
+    }
+    return "";
+  }, [applicationId, result.applicationId, manualAppId]);
+
+  const handleResendLoanVerification = async (customId?: string) => {
+    const targetAppId = customId || getEffectiveAppId();
     if (!targetAppId) return;
     setResending(true);
     setResendStatus(null);
     try {
       const res = await adminApi.resendLoanEmailVerification(targetAppId);
-      setResendStatus(res?.message || res?.data?.message || "Verification email has been resent successfully.");
-    } catch (err: any) {
-      setResendStatus(err?.data?.message || err?.message || "Failed to resend verification email.");
+      setResendStatus(res?.message || res?.data?.message || "Verification email has been resent successfully. Please check your inbox.");
+    } catch (err: unknown) {
+      const vErr = err as VerificationError;
+      setResendStatus(vErr?.data?.message || vErr?.message || "Failed to resend verification email. Check Application ID.");
     } finally {
       setResending(false);
     }
   };
 
-  const performVerification = async (verifyToken: string) => {
+  const extractToken = (rawInput: string): string => {
+    const clean = rawInput.trim();
+    if (clean.includes("token=")) {
+      try {
+        const url = new URL(clean, "http://dummy");
+        const t = url.searchParams.get("token");
+        if (t) return t.trim();
+      } catch {
+        const match = clean.match(/token=([a-zA-Z0-9_-]+)/);
+        if (match) return match[1].trim();
+      }
+    }
+    // Also handle trailing paths like /dsa/verify-email/<token>
+    if (clean.includes("/verify-email/")) {
+      const parts = clean.split("/verify-email/");
+      const lastPart = parts[parts.length - 1]?.split("?")[0]?.split("#")[0];
+      if (lastPart) return lastPart.trim();
+    }
+    return clean;
+  };
+
+  const performVerification = useCallback(async (verifyToken: string) => {
+    const cleanToken = extractToken(verifyToken);
+    if (!cleanToken) {
+      setState("error");
+      setResult({
+        message: "No verification token provided. Please check the link from your email.",
+      });
+      return;
+    }
+
     setState("loading");
-    const isLoanType = type === "loan" || type === "borrower";
+    const isLoanType = type === "loan" || type === "borrower" || cleanToken.length === 64;
 
     if (isLoanType) {
       try {
-        const res: any = await adminApi.verifyLoanEmail(verifyToken);
+        const res = (await adminApi.verifyLoanEmail(cleanToken)) as VerificationApiResponse;
         if (res?.status === "success" || res?.status_code === 200) {
           setResult({
             message: res?.message || res?.data?.message || "Borrower email address verified successfully.",
-            applicationId: res?.data?.application_id || res?.application_id || applicationId,
+            applicationId: res?.data?.application_id || res?.application_id || getEffectiveAppId(),
             email: res?.data?.email || res?.email,
             isLoan: true,
           });
           setState("success");
           return;
         } else {
+          // Check DSA as fallback
+          try {
+            const dsaRes = (await adminApi.verifyDsaEmail(cleanToken)) as VerificationApiResponse;
+            if (dsaRes?.status === true || dsaRes?.status === "success" || dsaRes?.status_code === 200) {
+              setResult({
+                message: dsaRes?.message || "Email address verified successfully.",
+                dsaCode: dsaRes?.data?.dsa_code || dsaRes?.dsa_code,
+                dsaId: dsaRes?.data?.dsa_id || dsaRes?.dsa_id,
+                isLoan: false,
+              });
+              setState("success");
+              return;
+            }
+          } catch {
+            // retain primary loan error
+          }
+
           setResult({
             message: res?.message || res?.data?.message || "Invalid or expired loan verification link.",
+            applicationId: res?.data?.application_id || res?.application_id || getEffectiveAppId(),
             isLoan: true,
           });
           setState("error");
           return;
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
+        // Fallback: Check if DSA token
+        try {
+          const dsaRes = (await adminApi.verifyDsaEmail(cleanToken)) as VerificationApiResponse;
+          if (dsaRes?.status === true || dsaRes?.status === "success" || dsaRes?.status_code === 200) {
+            setResult({
+              message: dsaRes?.message || "Email address verified successfully.",
+              dsaCode: dsaRes?.data?.dsa_code || dsaRes?.dsa_code,
+              dsaId: dsaRes?.data?.dsa_id || dsaRes?.dsa_id,
+              isLoan: false,
+            });
+            setState("success");
+            return;
+          }
+        } catch {
+          // retain primary loan error
+        }
+
+        const vErr = err as VerificationError;
         setResult({
-          message: err?.data?.message || err?.message || "Invalid or expired loan verification link.",
+          message: vErr?.data?.message || vErr?.message || "Invalid or expired loan verification link.",
+          applicationId: vErr?.data?.application_id || getEffectiveAppId(),
           isLoan: true,
         });
         setState("error");
@@ -95,7 +206,7 @@ export function DsaVerifyEmailScreen({ token, type, applicationId }: DsaVerifyEm
     }
 
     try {
-      const res: any = await adminApi.verifyDsaEmail(verifyToken);
+      const res = (await adminApi.verifyDsaEmail(cleanToken)) as VerificationApiResponse;
 
       if (res?.status === true || res?.status === "success" || res?.status_code === 200) {
         setResult({
@@ -108,11 +219,11 @@ export function DsaVerifyEmailScreen({ token, type, applicationId }: DsaVerifyEm
       } else {
         // Fallback: Check if this token corresponds to a borrower loan verification
         try {
-          const loanRes: any = await adminApi.verifyLoanEmail(verifyToken);
+          const loanRes = (await adminApi.verifyLoanEmail(cleanToken)) as VerificationApiResponse;
           if (loanRes?.status === "success" || loanRes?.status_code === 200) {
             setResult({
               message: loanRes?.message || loanRes?.data?.message || "Borrower email address verified successfully.",
-              applicationId: loanRes?.data?.application_id || loanRes?.application_id || applicationId,
+              applicationId: loanRes?.data?.application_id || loanRes?.application_id || getEffectiveAppId(),
               email: loanRes?.data?.email,
               isLoan: true,
             });
@@ -128,14 +239,14 @@ export function DsaVerifyEmailScreen({ token, type, applicationId }: DsaVerifyEm
         });
         setState("error");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Fallback: Check if this token corresponds to a borrower loan verification
       try {
-        const loanRes: any = await adminApi.verifyLoanEmail(verifyToken);
+        const loanRes = (await adminApi.verifyLoanEmail(cleanToken)) as VerificationApiResponse;
         if (loanRes?.status === "success" || loanRes?.status_code === 200) {
           setResult({
             message: loanRes?.message || loanRes?.data?.message || "Borrower email address verified successfully.",
-            applicationId: loanRes?.data?.application_id || loanRes?.application_id || applicationId,
+            applicationId: loanRes?.data?.application_id || loanRes?.application_id || getEffectiveAppId(),
             email: loanRes?.data?.email,
             isLoan: true,
           });
@@ -146,28 +257,26 @@ export function DsaVerifyEmailScreen({ token, type, applicationId }: DsaVerifyEm
         // Retain primary error
       }
 
+      const vErr = err as VerificationError;
       const errMsg =
-        err?.data?.message ||
-        err?.message ||
+        vErr?.data?.message ||
+        vErr?.message ||
         "Invalid or expired email verification link.";
       setResult({
         message: errMsg,
       });
       setState("error");
     }
-  };
+  }, [type, getEffectiveAppId]);
 
   useEffect(() => {
-    if (!token || token.trim() === "") {
-      setState("error");
-      setResult({
-        message: "No verification token provided. Please check the link from your email.",
-      });
-      return;
+    if (token && token.trim() !== "") {
+      const timer = setTimeout(() => {
+        void performVerification(token.trim());
+      }, 0);
+      return () => clearTimeout(timer);
     }
-
-    performVerification(token.trim());
-  }, [token]);
+  }, [token, performVerification]);
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col justify-between">
@@ -356,13 +465,62 @@ export function DsaVerifyEmailScreen({ token, type, applicationId }: DsaVerifyEm
                     <li>The link address was incomplete or modified.</li>
                   </ul>
                 </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-left space-y-3">
+                  <label className="text-xs font-semibold text-slate-700 block">
+                    Have a verification link or token from email?
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Paste full link or token here..."
+                      value={manualToken}
+                      onChange={(e) => setManualToken(e.target.value)}
+                      className="flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => performVerification(manualToken)}
+                      disabled={!manualToken.trim()}
+                      className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-3"
+                    >
+                      Verify Now
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Resend verification box */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-left space-y-3">
+                  <label className="text-xs font-semibold text-slate-700 block">
+                    Need a new verification link?
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Enter Loan Application ID (e.g. COSMOS...)"
+                      value={manualAppId || getEffectiveAppId()}
+                      onChange={(e) => setManualAppId(e.target.value)}
+                      className="flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={resending || !getEffectiveAppId()}
+                      onClick={() => handleResendLoanVerification(manualAppId || getEffectiveAppId())}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-medium px-3"
+                    >
+                      {resending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <MailCheck className="mr-1 h-3.5 w-3.5" />}
+                      Resend Link
+                    </Button>
+                  </div>
+                </div>
 
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-                  {(applicationId || result.applicationId) && (
+                  {getEffectiveAppId() && (
                     <Button
                       type="button"
                       disabled={resending}
-                      onClick={handleResendLoanVerification}
+                      onClick={() => handleResendLoanVerification()}
                       className="w-full sm:w-auto bg-emerald-700 hover:bg-emerald-800 text-white font-semibold px-6 shadow-md"
                     >
                       {resending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MailCheck className="mr-2 h-4 w-4" />}
