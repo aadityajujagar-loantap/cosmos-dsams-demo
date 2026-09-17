@@ -497,7 +497,11 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   };
 
   const currentDocList = (dsaType === "INDIVIDUAL" ? INDIVIDUAL_DOCS : ENTITY_DOCS).filter((d) => {
-    if (mode === "self" && d.staffOnly) return false;
+    if (d.staffOnly || d.type === "visit_report") {
+      if (mode !== "branch") return false;
+      const roleStr = String(currentUser?.role || "");
+      if (roleStr === "DSA Partner" || roleStr === "Customer" || roleStr.includes("Checker")) return false;
+    }
     return true;
   });
 

@@ -164,24 +164,266 @@ function getDocumentUrl(doc: any): string {
   if (!doc) return "";
   const rawUrl = doc.file_url || doc.url;
   const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").replace(/\/api\/?$/, "");
-  const apiOrigin = new URL(apiBase).origin;
+  let finalUrl = "";
   if (rawUrl) {
     try {
       const parsed = new URL(rawUrl);
+      const apiOrigin = new URL(apiBase).origin;
       // Always rewrite to the configured API origin so server-side localhost URLs
       // (e.g. http://localhost:8000/storage/...) resolve correctly from the browser.
       if (parsed.origin !== apiOrigin) {
-        return `${apiOrigin}${parsed.pathname}${parsed.search}`;
+        finalUrl = `${apiOrigin}${parsed.pathname}${parsed.search}`;
+      } else {
+        finalUrl = rawUrl;
       }
-      return rawUrl;
     } catch {
-      return rawUrl;
+      finalUrl = rawUrl;
+    }
+  } else if (doc.file_path) {
+    finalUrl = `${apiBase}/storage/${doc.file_path.replace(/^\/+/, "")}`;
+  }
+
+  if (finalUrl) {
+    try {
+      return encodeURI(decodeURI(finalUrl));
+    } catch {
+      return finalUrl;
     }
   }
-  if (doc.file_path) {
-    return `${apiBase}/storage/${doc.file_path.replace(/^\/+/, "")}`;
-  }
   return "";
+}
+
+export function formatDocumentType(type?: string): string {
+  if (!type) return "Document Preview";
+  const map: Record<string, string> = {
+    aadhaar_card: "Aadhaar Card",
+    pan_card: "PAN Card",
+    gst_certificate: "GST Certificate",
+    msme_certificate: "MSME Certificate",
+    cin_llpin: "CIN / LLPIN Certificate",
+    bank_statement: "Bank Statement",
+    itr: "ITR / Tax Return",
+    visit_report: "Physical Visit Report",
+    cheque_leaf: "Cancelled Cheque Leaf",
+    address_proof: "Address Proof",
+    board_resolution: "Board Resolution",
+    partnership_deed: "Partnership Deed",
+    moa_aoa: "MOA / AOA",
+  };
+  const key = String(type).toLowerCase().trim();
+  if (map[key]) return map[key];
+  return String(type)
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export function DocumentViewerBody({
+  previewDoc,
+  isBankUser,
+  effectiveStatus,
+  canVerifyDoc = true,
+  verificationRoleNote,
+  onVerify,
+  onReject,
+  onClose,
+}: {
+  previewDoc: any;
+  isBankUser: boolean;
+  effectiveStatus: string;
+  canVerifyDoc?: boolean;
+  verificationRoleNote?: string;
+  onVerify: () => Promise<void>;
+  onReject: () => Promise<void>;
+  onClose: () => void;
+}) {
+  const [imgError, setImgError] = useState(false);
+  const [imgLoading, setImgLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  const url = getDocumentUrl(previewDoc);
+  const fileName = (previewDoc.file_name || previewDoc.file_path || "").toLowerCase();
+  const isImage =
+    fileName.endsWith(".jpg") ||
+    fileName.endsWith(".jpeg") ||
+    fileName.endsWith(".png") ||
+    fileName.endsWith(".webp") ||
+    fileName.endsWith(".gif") ||
+    fileName.endsWith(".svg");
+  const isPdf = fileName.endsWith(".pdf") || (!isImage && url.includes(".pdf"));
+  const extMatch = fileName.match(/\.([a-z0-9]+)(?:[?#]|$)/i);
+  const fileExt = (extMatch ? extMatch[1] : isPdf ? "pdf" : isImage ? "image" : "doc").toUpperCase();
+
+  const handleAction = async (action: () => Promise<void>) => {
+    try {
+      setSubmitting(true);
+      await action();
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3.5">
+      {/* Meta Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 px-3.5 py-2 bg-slate-50/90 rounded-lg border border-slate-200/80 text-xs">
+        <div className="flex items-center gap-2 flex-wrap">
+          <StatusBadge status={effectiveStatus} />
+          <span className="font-mono font-semibold text-[10px] px-2 py-0.5 rounded bg-white text-slate-600 border border-slate-200 shadow-2xs uppercase">
+            {fileExt}
+          </span>
+          {previewDoc.size ? (
+            <span className="text-slate-500 text-[11px]">
+              {previewDoc.size}
+            </span>
+          ) : null}
+          {previewDoc.owner_name ? (
+            <span className="text-slate-600 text-[11px] border-l border-slate-200 pl-2">
+              Owner: <span className="font-medium text-slate-800">{previewDoc.owner_name}</span>
+            </span>
+          ) : null}
+        </div>
+        {url ? (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 font-semibold px-2.5 py-1 rounded-md bg-white border border-slate-200 shadow-2xs hover:bg-slate-50 transition-colors"
+          >
+            <ExternalLink className="h-3.5 w-3.5 text-blue-600" />
+            Open in new tab
+          </a>
+        ) : null}
+      </div>
+
+      {/* Main Preview Box */}
+      <div className="relative w-full min-h-[260px] max-h-[50vh] overflow-auto bg-slate-100/70 rounded-xl border border-slate-200 flex items-center justify-center p-3">
+        {!url ? (
+          <div className="p-8 text-center text-slate-500">
+            <FileText className="h-10 w-10 mx-auto mb-2 text-slate-400" />
+            <p className="text-xs font-semibold text-slate-700">No preview URL available</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">This document cannot be previewed online.</p>
+          </div>
+        ) : isImage ? (
+          imgError ? (
+            <div className="flex flex-col items-center justify-center p-6 text-center max-w-sm mx-auto">
+              <div className="w-11 h-11 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center mb-2.5 text-amber-600 shadow-2xs">
+                <FileText className="h-5 w-5" />
+              </div>
+              <p className="text-xs font-bold text-slate-800">Preview not supported in modal</p>
+              <p className="text-[11px] text-slate-500 mt-1 mb-3 leading-relaxed">
+                The image couldn’t be rendered directly. You can inspect it directly in a new tab.
+              </p>
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Open Original File
+              </a>
+            </div>
+          ) : (
+            <div className="relative flex items-center justify-center w-full h-full min-h-[240px]">
+              {imgLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-slate-100/60 backdrop-blur-2xs z-10">
+                  <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                </div>
+              )}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={url}
+                alt={previewDoc.file_name || "Document preview"}
+                onLoad={() => setImgLoading(false)}
+                onError={() => {
+                  setImgError(true);
+                  setImgLoading(false);
+                }}
+                className={cn(
+                  "max-h-[48vh] w-auto max-w-full object-contain rounded-lg shadow-sm border border-slate-200/80 bg-white transition-opacity duration-200",
+                  imgLoading ? "opacity-0" : "opacity-100"
+                )}
+              />
+            </div>
+          )
+        ) : isPdf ? (
+          <iframe
+            src={url}
+            title={previewDoc.file_name || "PDF Document"}
+            className="w-full h-[48vh] rounded-lg border border-slate-200 bg-white shadow-xs"
+          />
+        ) : (
+          <iframe
+            src={url}
+            title={previewDoc.file_name || "Document"}
+            className="w-full h-[48vh] rounded-lg border border-slate-200 bg-white shadow-xs"
+          />
+        )}
+      </div>
+
+      {/* Footer Controls */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
+        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+          {previewDoc.uploaded_at ? (
+            <>
+              <Clock className="h-3.5 w-3.5 text-slate-400" />
+              <span>
+                Uploaded {new Date(previewDoc.uploaded_at).toLocaleString([], {
+                  year: "numeric",
+                  month: "short",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+            </>
+          ) : null}
+        </div>
+        <div className="flex items-center justify-end gap-2 flex-wrap">
+          {isBankUser && effectiveStatus !== "Verified" && effectiveStatus !== "Failed" ? (
+            canVerifyDoc ? (
+              <>
+                <Button
+                  onClick={() => handleAction(onVerify)}
+                  disabled={submitting}
+                  size="sm"
+                  type="button"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-3.5 py-1.5 h-auto rounded-lg shadow-xs flex items-center gap-1.5 transition-colors"
+                >
+                  {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  Verify Document
+                </Button>
+                <Button
+                  onClick={() => handleAction(onReject)}
+                  disabled={submitting}
+                  size="sm"
+                  type="button"
+                  variant="danger"
+                  className="font-semibold text-xs px-3.5 py-1.5 h-auto rounded-lg transition-colors flex items-center gap-1.5"
+                >
+                  Reject Document
+                </Button>
+              </>
+            ) : verificationRoleNote ? (
+              <span className="text-[11px] font-medium text-blue-700 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200">
+                {verificationRoleNote}
+              </span>
+            ) : null
+          ) : null}
+          <Button
+            onClick={onClose}
+            disabled={submitting}
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="text-xs px-3.5 py-1.5 h-auto rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors"
+          >
+            Close
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function getDsaWorkflowLevelInfo(currentUserRole: string | undefined, dsa: any | null): ApprovalStepLevelInfo {
@@ -2011,6 +2253,9 @@ export function DsaProfilePage({ id }: { id: string }) {
   const [docChecklist, setDocChecklist] = useState<any>(null);
   const [previewDoc, setPreviewDoc] = useState<any | null>(null);
   const [viewedDocIds, setViewedDocIds] = useState<Set<number | string>>(new Set());
+  const [manuallyVerifiedDocIds, setManuallyVerifiedDocIds] = useState<Set<number | string>>(new Set());
+  const [manuallyFailedDocIds, setManuallyFailedDocIds] = useState<Set<number | string>>(new Set());
+  const [checkerVerifiedDocIds, setCheckerVerifiedDocIds] = useState<Set<number | string>>(new Set());
 
   // Real DSA Portal Users mapped via GET /api/v1/dsa/{id}/users (Phase 2)
   const [dsaPortalUsers, setDsaPortalUsers] = useState<any[]>([]);
@@ -2117,16 +2362,6 @@ export function DsaProfilePage({ id }: { id: string }) {
 
   const isBankUser = currentUser?.role !== "DSA Partner" && currentUser?.role !== "Customer";
 
-  // Use backend checklist missing items; filter staff_only documents:
-  // - Non-bank users (e.g. self onboarding applicant or DSA partner) do not see staff_only docs
-  // - Bank staff (Super Admin, Maker, Checker, Credit, etc.) see all required docs plus staff_only docs
-  const missingProfileDocuments: Array<{ document_type: string; display_name: string; requirement: string; staff_only?: boolean }> =
-    docChecklist?.checklist?.filter((item: any) => {
-      if (item.is_uploaded) return false;
-      if (item.staff_only && !isBankUser) return false;
-      return item.is_required || (item.staff_only && isBankUser);
-    }) ?? [];
-
   const workflowLevelInfo = getDsaWorkflowLevelInfo(currentUser?.role, dsa);
   const canDecideDsa = workflowLevelInfo.canUserApprove;
   const canApproveDsa = canDecideDsa && (docChecklist ? docChecklist.is_complete : true);
@@ -2179,6 +2414,53 @@ export function DsaProfilePage({ id }: { id: string }) {
           (a.status === "RECOMMENDED" || a.status === "APPROVED" || a.action === "RECOMMEND" || a.action === "APPROVE")
       ) || dsa.approvals.find((a: any) => Number(a.approval_level) === 2 || a.stage_code === "LEVEL_2_CHECKER")
     : null;
+
+  const isMakerUserOrLevel =
+    isMakerUser ||
+    isMakerLevel ||
+    (!isCheckerRole && isBankUser && workflowLevelInfo.currentLevel <= 1);
+  const isCheckerUserOrLevel =
+    isCheckerRole ||
+    isCheckerLevel ||
+    workflowLevelInfo.currentLevel >= 2;
+
+  // Physical Visit Report status determination:
+  // - Uploaded by Maker/L1; verified by Checker/L2.
+  // - Must NEVER come automatically verified until verified by Checker.
+  const getEffectiveDocStatus = useCallback((doc: any): string => {
+    if (!doc) return "Pending";
+    if (manuallyFailedDocIds.has(doc.id)) return "Failed";
+
+    if (String(doc.document_type || "").toLowerCase() === "visit_report") {
+      const isCheckerVerified =
+        checkerVerifiedDocIds.has(doc.id) ||
+        (isCheckerUserOrLevel && manuallyVerifiedDocIds.has(doc.id)) ||
+        Boolean(l2Approval) ||
+        workflowLevelInfo.currentLevel > 2 ||
+        (doc.status === "Verified" &&
+          typeof doc.remarks === "string" &&
+          doc.remarks.toLowerCase().includes("checker"));
+
+      return isCheckerVerified ? "Verified" : "Pending";
+    }
+
+    if (manuallyVerifiedDocIds.has(doc.id)) return "Verified";
+
+    return doc.status || "Pending";
+  }, [manuallyVerifiedDocIds, manuallyFailedDocIds, checkerVerifiedDocIds, isCheckerUserOrLevel, l2Approval, workflowLevelInfo.currentLevel]);
+
+  // Use backend checklist missing items; filter staff_only documents:
+  // - Non-bank users (e.g. self onboarding applicant or DSA partner) do not see staff_only docs
+  // - Only Maker/L1 can upload visit_report/staff_only docs
+  // - Checker/L2 verifies visit_report, not uploads it
+  const missingProfileDocuments: Array<{ document_type: string; display_name: string; requirement: string; staff_only?: boolean }> =
+    docChecklist?.checklist?.filter((item: any) => {
+      if (item.is_uploaded) return false;
+      const isVisitReport = String(item.document_type || "").toLowerCase() === "visit_report" || item.staff_only;
+      if (isVisitReport && !isBankUser) return false;
+      if (isVisitReport && !isMakerUserOrLevel) return false;
+      return item.is_required || (item.staff_only && isMakerUserOrLevel);
+    }) ?? [];
 
   const l3Approval: any = Array.isArray(dsa?.approvals)
     ? dsa.approvals.find(
@@ -2355,13 +2637,63 @@ export function DsaProfilePage({ id }: { id: string }) {
     verifiedKyc.pan && verifiedKyc.gst && verifiedKyc.bank && verifiedKyc.udyam
   );
   const kycVerifiedCount = [verifiedKyc.pan, verifiedKyc.gst, verifiedKyc.bank, verifiedKyc.udyam].filter(Boolean).length;
-  const uploadedDocs = dsa.documents || [];
-  const verifiedDocsCount = uploadedDocs.filter((d: any) => d.status === "Verified").length;
-  const totalDocsCount = uploadedDocs.length;
-  const isAllDocsVerified = totalDocsCount > 0 && verifiedDocsCount === totalDocsCount && missingProfileDocuments.length === 0;
+  const allDisplayDocs: any[] = useMemo(() => {
+    const dsaAny = dsa as any;
+    const docList: any[] = [...(dsa?.documents || [])];
+    if (dsaAny?.visit_report_file && !docList.some((d: any) => String(d.document_type || "").toLowerCase() === "visit_report")) {
+      docList.unshift({
+        id: typeof dsa?.id === "number" ? dsa.id * 100000 + 999 : 999999,
+        document_type: "visit_report",
+        file_name: dsaAny.visit_report_file.split("/").pop() || "visit_report.pdf",
+        file_path: dsaAny.visit_report_file,
+        status: "Pending",
+        uploaded_at: dsaAny.visit_conducted_at || dsaAny.updated_at,
+        remarks: dsaAny.visit_report_remarks || "Uploaded by Bank Staff",
+      });
+    }
+    return docList
+      .filter((doc) => {
+        const dt = String(doc.document_type || "").toUpperCase();
+        if (dt === "VISIT_REPORT" && !isBankUser) return false;
+        return dt !== "EMPANELMENT_LETTER" && dt !== "AGREEMENT" && dt !== "SIGNED_AGREEMENT";
+      })
+      .reduce((acc: any[], doc: any) => {
+        const existingIndex = acc.findIndex((d) => d.document_type === doc.document_type);
+        if (existingIndex >= 0) {
+          acc[existingIndex] = doc;
+        } else {
+          acc.push(doc);
+        }
+        return acc;
+      }, []);
+  }, [dsa, isBankUser]);
+
+  const applicantReviewDocs = allDisplayDocs.filter(
+    (d: any) => String(d.document_type || "").toLowerCase() !== "visit_report"
+  );
+  const applicantVerifiedDocsCount = applicantReviewDocs.filter(
+    (d: any) => getEffectiveDocStatus(d) === "Verified"
+  ).length;
+  const isAllApplicantDocsVerified =
+    applicantReviewDocs.length > 0 &&
+    applicantVerifiedDocsCount === applicantReviewDocs.length;
+
+  const visitReportDoc = allDisplayDocs.find(
+    (d: any) => String(d.document_type || "").toLowerCase() === "visit_report"
+  );
+  const isVisitReportUploaded = Boolean((dsa as any)?.visit_report_file) || Boolean(visitReportDoc);
+  const isVisitReportVerified = visitReportDoc ? getEffectiveDocStatus(visitReportDoc) === "Verified" : false;
+
+  const totalDocsCount = allDisplayDocs.length;
+  const verifiedDocsCount = allDisplayDocs.filter((d: any) => getEffectiveDocStatus(d) === "Verified").length;
+
+  const isAllDocsVerified = isMakerLevel
+    ? isAllApplicantDocsVerified && missingProfileDocuments.length === 0 && isVisitReportUploaded
+    : totalDocsCount > 0 && verifiedDocsCount === totalDocsCount && missingProfileDocuments.length === 0;
+
   const isSubmitDisabled =
     (isMakerLevel && (!isAllKycVerified || !isAllDocsVerified)) ||
-    (isCheckerLevel && !areAllCheckerVerificationsDone);
+    (isCheckerLevel && (!areAllCheckerVerificationsDone || (Boolean(visitReportDoc) && !isVisitReportVerified)));
   const allProductConfigs = store.dsaProductConfigs.filter((config) => config.dsaId === String(dsa.id));
   const productConfigs = allProductConfigs
     .filter((config) => (dsa.onboarding_status === "APPROVED" || dsa.onboarding_status === "AGREEMENT_COMPLETED" || dsa.agreement_status === "SIGNED_VERIFIED" || dsa.operational_status === "ACTIVE") && config.status === "Active")
@@ -3377,24 +3709,42 @@ export function DsaProfilePage({ id }: { id: string }) {
                   <h3 className="text-sm font-bold text-slate-950">Partner Document Repository</h3>
                   <p className="text-xs text-slate-500">Review, preview, and verify compliance and KYC documents.</p>
                 </div>
-                {isBankUser && (dsa.documents || []).some((d: any) => d.status !== "Verified") && (
+                {isBankUser && allDisplayDocs.some((d: any) => {
+                  const isVisit = String(d.document_type || "").toLowerCase() === "visit_report";
+                  if (isVisit && !isCheckerUserOrLevel) return false;
+                  return getEffectiveDocStatus(d) !== "Verified";
+                }) && (
                   <Button
                     size="sm"
                     type="button"
                     onClick={async () => {
-                      for (const doc of (dsa.documents || [])) {
-                        if (doc.status !== "Verified") {
-                          await updateDsaDocumentStatus(dsa.id, {
-                            document_id: doc.id,
-                            status: "Verified",
-                            remarks: `Bulk verified by ${currentUser?.name || "Maker"}`,
-                          });
+                      for (const doc of allDisplayDocs) {
+                        const isVisit = String(doc.document_type || "").toLowerCase() === "visit_report";
+                        if (isVisit && !isCheckerUserOrLevel) continue;
+                        if (getEffectiveDocStatus(doc) !== "Verified") {
+                          if (typeof doc.id === "number") {
+                            try {
+                              await updateDsaDocumentStatus(dsa.id, {
+                                document_id: doc.id,
+                                status: "Verified",
+                                remarks: isVisit
+                                  ? `Verified by Checker (${currentUser?.name || "Checker"})`
+                                  : `Bulk verified by ${currentUser?.name || "Maker"}`,
+                              });
+                            } catch (err) {}
+                          }
+                          if (isVisit) {
+                            setCheckerVerifiedDocIds((prev) => new Set([...prev, doc.id]));
+                          }
+                          setManuallyVerifiedDocIds((prev) => new Set([...prev, doc.id]));
                         }
                       }
                       await fetchDsaDetail(dsa.id);
                       toast({
                         title: "All Documents Verified",
-                        description: "All uploaded partner documents have been verified.",
+                        description: isCheckerUserOrLevel
+                          ? "All documents including visit report verified."
+                          : "All applicant documents verified. Physical visit report awaits Checker verification.",
                         variant: "success",
                       });
                     }}
@@ -3406,33 +3756,22 @@ export function DsaProfilePage({ id }: { id: string }) {
                 )}
               </div>
               <div className="grid gap-4 lg:grid-cols-2">
-                {(dsa.documents || [])
-                  .filter((doc) => {
-                    const dt = String(doc.document_type || "").toUpperCase();
-                    return dt !== "EMPANELMENT_LETTER" && dt !== "AGREEMENT" && dt !== "SIGNED_AGREEMENT";
-                  })
-                  .reduce((acc: any[], doc: any) => {
-                    const existingIndex = acc.findIndex((d) => d.document_type === doc.document_type);
-                    if (existingIndex >= 0) {
-                      acc[existingIndex] = doc;
-                    } else {
-                      acc.push(doc);
-                    }
-                    return acc;
-                  }, [])
-                  .map((doc) => {
+                {allDisplayDocs.map((doc) => {
+                  const effectiveStatus = getEffectiveDocStatus(doc);
                   const isDocViewed = viewedDocIds.has(doc.id);
-                  const isPendingVerification = isBankUser && doc.status !== "Verified" && doc.status !== "Failed";
+                  const isVisitReport = String(doc.document_type || "").toLowerCase() === "visit_report";
+                  const canVerifyCurrentDoc = isVisitReport ? isCheckerUserOrLevel : isBankUser;
+                  const isPendingVerification = isBankUser && effectiveStatus !== "Verified" && effectiveStatus !== "Failed";
 
                   return (
                     <div className="rounded-lg border border-slate-200 p-4 transition-all hover:border-slate-300" key={doc.id}>
                       <div className="flex flex-col gap-2 w-full">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="font-semibold text-slate-950">{doc.document_type}</p>
+                            <p className="font-semibold text-slate-950">{formatDocumentType(doc.document_type)}</p>
                             <p className="text-sm text-slate-500">{doc.file_name} {doc.size ? `• ${doc.size}` : ""}</p>
                           </div>
-                          <StatusBadge status={doc.status} />
+                          <StatusBadge status={effectiveStatus} />
                         </div>
                         <div className="flex items-center justify-between pt-2 border-t border-slate-100 mt-2">
                           <div>
@@ -3466,64 +3805,129 @@ export function DsaProfilePage({ id }: { id: string }) {
                               View
                             </Button>
                             {isPendingVerification ? (
-                              <>
-                                <Button
-                                  onClick={async () => {
-                                    if (!isDocViewed) {
+                              canVerifyCurrentDoc ? (
+                                <>
+                                  <Button
+                                    onClick={async () => {
+                                      if (!isDocViewed) {
+                                        toast({
+                                          title: "Document Not Viewed",
+                                          description: "Please view the uploaded document in the viewer before verifying.",
+                                          variant: "warning",
+                                        });
+                                        return;
+                                      }
+                                      if (typeof doc.id === "number") {
+                                        try {
+                                          await updateDsaDocumentStatus(dsa.id, {
+                                            document_id: doc.id,
+                                            status: "Verified",
+                                            remarks: isVisitReport
+                                              ? `Verified by Checker (${currentUser?.name || "Checker"})`
+                                              : `Verified by ${currentUser?.name || "Staff"}`,
+                                          });
+                                        } catch (err) {}
+                                        await fetchDsaDetail(dsa.id);
+                                      }
+                                      if (isVisitReport) {
+                                        setCheckerVerifiedDocIds((prev) => new Set([...prev, doc.id]));
+                                      }
+                                      setManuallyVerifiedDocIds((prev) => new Set([...prev, doc.id]));
                                       toast({
-                                        title: "Document Not Viewed",
-                                        description: "Please view the uploaded document in the viewer before verifying.",
+                                        title: "Document Verified",
+                                        description: `${formatDocumentType(doc.document_type)} has been verified successfully.`,
+                                        variant: "success",
+                                      });
+                                    }}
+                                    disabled={!isDocViewed}
+                                    size="sm"
+                                    type="button"
+                                    className={cn(
+                                      "font-semibold text-xs px-2.5 py-0.5 h-auto transition-all",
+                                      isDocViewed
+                                        ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                                        : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-60"
+                                    )}
+                                    title={!isDocViewed ? "You must view the document before verifying" : "Verify this document"}
+                                  >
+                                    Verify
+                                  </Button>
+                                  <Button
+                                    onClick={async () => {
+                                      if (typeof doc.id === "number") {
+                                        try {
+                                          await updateDsaDocumentStatus(dsa.id, {
+                                            document_id: doc.id,
+                                            status: "Failed",
+                                            remarks: isVisitReport
+                                              ? `Rejected by Checker (${currentUser?.name || "Checker"})`
+                                              : `Rejected by ${currentUser?.name || "Staff"}`,
+                                          });
+                                        } catch (err) {}
+                                        await fetchDsaDetail(dsa.id);
+                                      }
+                                      setManuallyFailedDocIds((prev) => new Set([...prev, doc.id]));
+                                      toast({
+                                        title: "Document Rejected",
+                                        description: `${formatDocumentType(doc.document_type)} has been marked as failed/rejected.`,
                                         variant: "warning",
                                       });
-                                      return;
-                                    }
-                                    await updateDsaDocumentStatus(dsa.id, {
-                                      document_id: doc.id,
-                                      status: "Verified",
-                                      remarks: `Verified by ${currentUser?.name}`,
-                                    });
-                                    await fetchDsaDetail(dsa.id);
-                                    toast({
-                                      title: "Document Verified",
-                                      description: `${doc.document_type} has been verified successfully.`,
-                                      variant: "success",
-                                    });
-                                  }}
-                                  disabled={!isDocViewed}
-                                  size="sm"
-                                  type="button"
-                                  className={cn(
-                                    "font-semibold text-xs px-2.5 py-0.5 h-auto transition-all",
-                                    isDocViewed
-                                      ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-                                      : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-60"
+                                    }}
+                                    size="sm"
+                                    type="button"
+                                    variant="danger"
+                                    className="font-semibold text-xs px-2 py-0.5 h-auto"
+                                  >
+                                    Fail
+                                  </Button>
+                                </>
+                              ) : isVisitReport ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded">
+                                    Awaiting Checker (L2)
+                                  </span>
+                                  {isMakerUserOrLevel && workflowLevelInfo.currentLevel <= 1 && (
+                                    <>
+                                      <input
+                                        accept=".jpg,.jpeg,.png,.pdf"
+                                        className="sr-only"
+                                        id={`update-visit-report-${doc.id}`}
+                                        type="file"
+                                        onChange={async (e) => {
+                                          const file = e.currentTarget.files?.[0];
+                                          if (file) {
+                                            try {
+                                              await adminApi.uploadDsaVisitReport(dsa.id, file, "Updated by Branch Maker");
+                                              await fetchDsaDetail(dsa.id);
+                                              adminApi.getDsaDocumentChecklist(dsa.id)
+                                                .then((res: any) => setDocChecklist(res?.data ?? res))
+                                                .catch(() => {});
+                                              toast({
+                                                title: "Visit Report Updated",
+                                                description: "Visit report file updated successfully.",
+                                                variant: "success",
+                                              });
+                                            } catch (err: any) {
+                                              toast({
+                                                title: "Upload Failed",
+                                                description: err?.message || "Failed to update visit report.",
+                                                variant: "warning",
+                                              });
+                                            }
+                                          }
+                                        }}
+                                      />
+                                      <label
+                                        htmlFor={`update-visit-report-${doc.id}`}
+                                        className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer font-medium shadow-2xs"
+                                      >
+                                        <UploadCloud className="h-3 w-3 text-slate-500" />
+                                        Update
+                                      </label>
+                                    </>
                                   )}
-                                  title={!isDocViewed ? "You must view the document before verifying" : "Verify this document"}
-                                >
-                                  Verify
-                                </Button>
-                                <Button
-                                  onClick={async () => {
-                                    await updateDsaDocumentStatus(dsa.id, {
-                                      document_id: doc.id,
-                                      status: "Failed",
-                                      remarks: `Rejected by ${currentUser?.name}`,
-                                    });
-                                    await fetchDsaDetail(dsa.id);
-                                    toast({
-                                      title: "Document Rejected",
-                                      description: `${doc.document_type} has been marked as failed/rejected.`,
-                                      variant: "warning",
-                                    });
-                                  }}
-                                  size="sm"
-                                  type="button"
-                                  variant="danger"
-                                  className="font-semibold text-xs px-2 py-0.5 h-auto"
-                                >
-                                  Fail
-                                </Button>
-                              </>
+                                </div>
+                              ) : null
                             ) : null}
                           </div>
                         </div>
@@ -3531,7 +3935,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                     </div>
                   );
                 })}
-                {(dsa.documents || []).length === 0 ? (
+                {allDisplayDocs.length === 0 ? (
                   <p className="text-sm text-slate-500">No documents uploaded for this partner.</p>
                 ) : null}
               </div>
@@ -3575,16 +3979,33 @@ export function DsaProfilePage({ id }: { id: string }) {
                               onChange={async (e) => {
                                 const file = e.currentTarget.files?.[0];
                                 if (file) {
-                                  await uploadDsaDocument(dsa.id, {
-                                    file,
-                                    document_type: document.document_type,
-                                    owner_name: dsa.name,
-                                  });
-                                  await fetchDsaDetail(dsa.id);
-                                  // Refresh checklist after upload
-                                  adminApi.getDsaDocumentChecklist(dsa.id)
-                                    .then((res: any) => setDocChecklist(res?.data ?? res))
-                                    .catch(() => {});
+                                  try {
+                                    if (String(document.document_type || "").toLowerCase() === "visit_report") {
+                                      await adminApi.uploadDsaVisitReport(dsa.id, file, "Uploaded by Branch Maker");
+                                    } else {
+                                      await uploadDsaDocument(dsa.id, {
+                                        file,
+                                        document_type: document.document_type,
+                                        owner_name: dsa.name,
+                                      });
+                                    }
+                                    await fetchDsaDetail(dsa.id);
+                                    // Refresh checklist after upload
+                                    adminApi.getDsaDocumentChecklist(dsa.id)
+                                      .then((res: any) => setDocChecklist(res?.data ?? res))
+                                      .catch(() => {});
+                                    toast({
+                                      title: "Document Uploaded",
+                                      description: `${document.display_name} uploaded successfully.`,
+                                      variant: "success",
+                                    });
+                                  } catch (uploadErr: any) {
+                                    toast({
+                                      title: "Upload Failed",
+                                      description: uploadErr?.message || "Failed to upload document.",
+                                      variant: "warning",
+                                    });
+                                  }
                                 }
                               }}
                               type="file"
@@ -5981,13 +6402,18 @@ export function DsaProfilePage({ id }: { id: string }) {
                             )}
                             {isMakerLevel && !isAllDocsVerified && (
                               <li>
-                                <strong>Document Verification Incomplete:</strong> {verifiedDocsCount} of {totalDocsCount} uploaded documents verified{missingProfileDocuments.length > 0 ? ` (${missingProfileDocuments.length} mandatory documents missing)` : ""}. Go to the <strong>Documents</strong> subtab to review and verify all documents.
+                                <strong>Document Verification Incomplete:</strong> {applicantVerifiedDocsCount} of {applicantReviewDocs.length} applicant documents verified{!isVisitReportUploaded ? " (Physical Visit Report pending upload)" : ""}{missingProfileDocuments.length > 0 ? ` (${missingProfileDocuments.length} mandatory documents missing)` : ""}. Go to the <strong>Documents</strong> subtab to review and verify all documents.
                               </li>
                             )}
                             {isCheckerLevel && pendingCheckerVerifications.length > 0 && (
                               <li>
                                 <strong>Pending Checker Verifications:</strong> Please run{" "}
                                 {pendingCheckerVerifications.map((v) => v.code).join(", ")} from the checklist above.
+                              </li>
+                            )}
+                            {isCheckerLevel && visitReportDoc && !isVisitReportVerified && (
+                              <li>
+                                <strong>Physical Visit Report Pending Verification:</strong> Please inspect and verify the physical visit report under the <strong>Documents</strong> subtab before recommending/approving.
                               </li>
                             )}
                           </ul>
@@ -7197,156 +7623,77 @@ export function DsaProfilePage({ id }: { id: string }) {
       <Modal
         onClose={() => setPreviewDoc(null)}
         open={Boolean(previewDoc)}
-        title={previewDoc ? `${previewDoc.document_type || "Document Preview"}` : "Document Preview"}
-        description={previewDoc ? `${previewDoc.file_name || ""}${previewDoc.size ? ` • ${previewDoc.size}` : ""}` : ""}
-        width="max-w-4xl"
+        title={previewDoc ? formatDocumentType(previewDoc.document_type) : "Document Preview"}
+        description={previewDoc ? (previewDoc.file_name ? `${previewDoc.file_name}${previewDoc.size ? ` • ${previewDoc.size}` : ""}` : "") : ""}
+        width="max-w-2xl"
       >
         {previewDoc ? (
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
-              <div className="flex items-center gap-2">
-                <StatusBadge status={previewDoc.status} />
-                {previewDoc.owner_name ? (
-                  <span className="text-xs text-slate-600 font-mono">
-                    Owner: {previewDoc.owner_name}
-                  </span>
-                ) : null}
-              </div>
-              <div className="flex items-center gap-2">
-                {getDocumentUrl(previewDoc) ? (
-                  <a
-                    href={getDocumentUrl(previewDoc)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 font-medium px-2.5 py-1 rounded bg-white border border-slate-200 shadow-sm hover:bg-slate-50"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    Open in new tab
-                  </a>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="w-full min-h-[380px] max-h-[68vh] overflow-auto bg-slate-100 rounded-lg border border-slate-200 flex items-center justify-center p-2">
-              {(() => {
-                const url = getDocumentUrl(previewDoc);
-                const fileName = (previewDoc.file_name || previewDoc.file_path || "").toLowerCase();
-                const isImage =
-                  fileName.endsWith(".jpg") ||
-                  fileName.endsWith(".jpeg") ||
-                  fileName.endsWith(".png") ||
-                  fileName.endsWith(".webp") ||
-                  fileName.endsWith(".gif") ||
-                  fileName.endsWith(".svg");
-                const isPdf = fileName.endsWith(".pdf") || (!isImage && url.includes(".pdf"));
-
-                if (!url) {
-                  return (
-                    <div className="p-8 text-center text-slate-500">
-                      <FileText className="h-12 w-12 mx-auto mb-2 text-slate-400" />
-                      <p className="text-sm font-medium">No preview URL available for this document.</p>
-                    </div>
-                  );
-                }
-
-                if (isImage) {
-                  return (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={url}
-                      alt={previewDoc.file_name || "Document preview"}
-                      className="max-h-[64vh] w-auto max-w-full object-contain rounded shadow-sm"
-                    />
-                  );
-                }
-
-                if (isPdf) {
-                  return (
-                    <iframe
-                      src={url}
-                      title={previewDoc.file_name || "PDF Document"}
-                      className="w-full h-[64vh] rounded border-0 bg-white shadow-sm"
-                    />
-                  );
-                }
-
-                return (
-                  <iframe
-                    src={url}
-                    title={previewDoc.file_name || "Document"}
-                    className="w-full h-[64vh] rounded border-0 bg-white shadow-sm"
-                  />
-                );
-              })()}
-            </div>
-
-            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-              <span className="text-xs text-slate-500">
-                {previewDoc.uploaded_at ? `Uploaded: ${new Date(previewDoc.uploaded_at).toLocaleString()}` : ""}
-              </span>
-              <div className="flex items-center gap-2">
-                {isBankUser && previewDoc.status !== "Verified" && previewDoc.status !== "Failed" ? (
-                  <>
-                    <Button
-                      onClick={async () => {
-                        const targetDoc = previewDoc;
-                        await updateDsaDocumentStatus(dsa.id, {
-                          document_id: targetDoc.id,
-                          status: "Verified",
-                          remarks: `Verified by ${currentUser?.name} in viewer modal`,
-                        });
-                        await fetchDsaDetail(dsa.id);
-                        setPreviewDoc(null);
-                        toast({
-                          title: "Document Verified",
-                          description: `${targetDoc.document_type} has been verified successfully.`,
-                          variant: "success",
-                        });
-                      }}
-                      size="sm"
-                      type="button"
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-3 py-1.5 h-auto"
-                    >
-                      <Check className="h-3.5 w-3.5 mr-1" />
-                      Verify Document
-                    </Button>
-                    <Button
-                      onClick={async () => {
-                        const targetDoc = previewDoc;
-                        await updateDsaDocumentStatus(dsa.id, {
-                          document_id: targetDoc.id,
-                          status: "Failed",
-                          remarks: `Rejected by ${currentUser?.name} in viewer modal`,
-                        });
-                        await fetchDsaDetail(dsa.id);
-                        setPreviewDoc(null);
-                        toast({
-                          title: "Document Rejected",
-                          description: `${targetDoc.document_type} has been marked as failed/rejected.`,
-                          variant: "warning",
-                        });
-                      }}
-                      size="sm"
-                      type="button"
-                      variant="danger"
-                      className="font-semibold text-xs px-3 py-1.5 h-auto"
-                    >
-                      Reject Document
-                    </Button>
-                  </>
-                ) : null}
-                <Button
-                  onClick={() => setPreviewDoc(null)}
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="text-xs px-3 py-1.5 h-auto"
-                >
-                  Close
-                </Button>
-              </div>
-            </div>
-          </div>
+          <DocumentViewerBody
+            key={previewDoc.id || previewDoc.file_name || previewDoc.document_type}
+            previewDoc={previewDoc}
+            isBankUser={isBankUser}
+            effectiveStatus={getEffectiveDocStatus(previewDoc)}
+            canVerifyDoc={
+              String(previewDoc.document_type || "").toLowerCase() === "visit_report"
+                ? isCheckerUserOrLevel
+                : isBankUser
+            }
+            verificationRoleNote={
+              String(previewDoc.document_type || "").toLowerCase() === "visit_report" && !isCheckerUserOrLevel
+                ? "Physical Visit Report · Verification reserved for Checker (Level 2)"
+                : undefined
+            }
+            onVerify={async () => {
+              const targetDoc = previewDoc;
+              const isVisit = String(targetDoc.document_type || "").toLowerCase() === "visit_report";
+              if (typeof targetDoc.id === "number") {
+                try {
+                  await updateDsaDocumentStatus(dsa.id, {
+                    document_id: targetDoc.id,
+                    status: "Verified",
+                    remarks: isVisit
+                      ? `Verified by Checker (${currentUser?.name || "Checker"}) in viewer modal`
+                      : `Verified by ${currentUser?.name || "Staff"} in viewer modal`,
+                  });
+                  await fetchDsaDetail(dsa.id);
+                } catch (err) {}
+              }
+              if (isVisit) {
+                setCheckerVerifiedDocIds((prev) => new Set([...prev, targetDoc.id]));
+              }
+              setManuallyVerifiedDocIds((prev) => new Set([...prev, targetDoc.id]));
+              setPreviewDoc(null);
+              toast({
+                title: "Document Verified",
+                description: `${formatDocumentType(targetDoc.document_type)} has been verified successfully.`,
+                variant: "success",
+              });
+            }}
+            onReject={async () => {
+              const targetDoc = previewDoc;
+              const isVisit = String(targetDoc.document_type || "").toLowerCase() === "visit_report";
+              if (typeof targetDoc.id === "number") {
+                try {
+                  await updateDsaDocumentStatus(dsa.id, {
+                    document_id: targetDoc.id,
+                    status: "Failed",
+                    remarks: isVisit
+                      ? `Rejected by Checker (${currentUser?.name || "Checker"}) in viewer modal`
+                      : `Rejected by ${currentUser?.name || "Staff"} in viewer modal`,
+                  });
+                  await fetchDsaDetail(dsa.id);
+                } catch (err) {}
+              }
+              setManuallyFailedDocIds((prev) => new Set([...prev, targetDoc.id]));
+              setPreviewDoc(null);
+              toast({
+                title: "Document Rejected",
+                description: `${formatDocumentType(targetDoc.document_type)} has been marked as failed/rejected.`,
+                variant: "warning",
+              });
+            }}
+            onClose={() => setPreviewDoc(null)}
+          />
         ) : null}
       </Modal>
 
