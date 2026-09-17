@@ -32,6 +32,7 @@ import {
   AlertCircle,
   Award,
   Mail,
+  RotateCcw,
 } from "lucide-react";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -160,36 +161,36 @@ export type ApprovalStepLevelInfo = {
   isRejected: boolean;
 };
 
-function getDocumentUrl(doc: any): string {
+function getDocumentUrl(doc: any, dsaId?: number | string, useStorageFallback = false): string {
   if (!doc) return "";
-  const rawUrl = doc.file_url || doc.url;
   const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").replace(/\/api\/?$/, "");
-  let finalUrl = "";
+  const targetDsaId = dsaId || doc.dsa_id;
+
+  // 1. Primary path: Use dedicated API endpoint for authenticated / backend streaming if document ID is known
+  if (!useStorageFallback && targetDsaId && doc.id && typeof doc.id === "number") {
+    return `${apiBase}/api/v1/dsa/${targetDsaId}/documents/${doc.id}/file`;
+  }
+
+  // 2. Relative file_path via storage
+  if (doc.file_path) {
+    return `${apiBase}/storage/${doc.file_path.replace(/^\/+/, "")}`;
+  }
+
+  // 3. Absolute file_url or url
+  const rawUrl = doc.file_url || doc.url;
   if (rawUrl) {
     try {
       const parsed = new URL(rawUrl);
       const apiOrigin = new URL(apiBase).origin;
-      // Always rewrite to the configured API origin so server-side localhost URLs
-      // (e.g. http://localhost:8000/storage/...) resolve correctly from the browser.
       if (parsed.origin !== apiOrigin) {
-        finalUrl = `${apiOrigin}${parsed.pathname}${parsed.search}`;
-      } else {
-        finalUrl = rawUrl;
+        return `${apiOrigin}${parsed.pathname}${parsed.search}`;
       }
+      return rawUrl;
     } catch {
-      finalUrl = rawUrl;
+      return rawUrl;
     }
-  } else if (doc.file_path) {
-    finalUrl = `${apiBase}/storage/${doc.file_path.replace(/^\/+/, "")}`;
   }
 
-  if (finalUrl) {
-    try {
-      return encodeURI(decodeURI(finalUrl));
-    } catch {
-      return finalUrl;
-    }
-  }
   return "";
 }
 
@@ -227,6 +228,7 @@ export function getEffectiveDsaCode(dsa: any): string {
 
 export function DocumentViewerBody({
   previewDoc,
+  dsaId,
   isBankUser,
   effectiveStatus,
   canVerifyDoc = true,
@@ -236,6 +238,7 @@ export function DocumentViewerBody({
   onClose,
 }: {
   previewDoc: any;
+  dsaId?: number | string;
   isBankUser: boolean;
   effectiveStatus: string;
   canVerifyDoc?: boolean;
@@ -244,11 +247,12 @@ export function DocumentViewerBody({
   onReject: () => Promise<void>;
   onClose: () => void;
 }) {
+  const [useFallback, setUseFallback] = useState(false);
   const [imgError, setImgError] = useState(false);
   const [imgLoading, setImgLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  const url = getDocumentUrl(previewDoc);
+  const url = getDocumentUrl(previewDoc, dsaId, useFallback);
   const fileName = (previewDoc.file_name || previewDoc.file_path || "").toLowerCase();
   const isImage =
     fileName.endsWith(".jpg") ||
@@ -317,19 +321,37 @@ export function DocumentViewerBody({
               <div className="w-11 h-11 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center mb-2.5 text-amber-600 shadow-2xs">
                 <FileText className="h-5 w-5" />
               </div>
-              <p className="text-xs font-bold text-slate-800">Preview not supported in modal</p>
+              <p className="text-xs font-bold text-slate-800">Unable to preview document</p>
               <p className="text-[11px] text-slate-500 mt-1 mb-3 leading-relaxed">
-                The image couldn’t be rendered directly. You can inspect it directly in a new tab.
+                The document could not be rendered from the storage server ({previewDoc.file_name || previewDoc.file_path || "document"}).
               </p>
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-                Open Original File
-              </a>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={() => {
+                    setImgError(false);
+                    setUseFallback((prev) => !prev);
+                    setImgLoading(true);
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                  className="text-xs"
+                >
+                  <RotateCcw className="h-3 w-3 mr-1" />
+                  Retry
+                </Button>
+                {url ? (
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Open in new tab
+                  </a>
+                ) : null}
+              </div>
             </div>
           ) : (
             <div className="relative flex items-center justify-center w-full h-full min-h-[240px]">
@@ -344,8 +366,13 @@ export function DocumentViewerBody({
                 alt={previewDoc.file_name || "Document preview"}
                 onLoad={() => setImgLoading(false)}
                 onError={() => {
-                  setImgError(true);
-                  setImgLoading(false);
+                  if (!useFallback && (previewDoc.file_path || previewDoc.file_url)) {
+                    setUseFallback(true);
+                    setImgLoading(true);
+                  } else {
+                    setImgError(true);
+                    setImgLoading(false);
+                  }
                 }}
                 className={cn(
                   "max-h-[48vh] w-auto max-w-full object-contain rounded-lg shadow-sm border border-slate-200/80 bg-white transition-opacity duration-200",
@@ -2297,11 +2324,33 @@ export function DsaProfilePage({ id }: { id: string }) {
     }
   }, [dsa?.id]);
 
+  const [backendDocs, setBackendDocs] = useState<any[]>([]);
+  const [backendDocsLoading, setBackendDocsLoading] = useState<boolean>(false);
+
+  const fetchBackendDocuments = useCallback(async () => {
+    if (!dsa?.id) return;
+    setBackendDocsLoading(true);
+    try {
+      const res: any = await adminApi.getDsaDocuments(dsa.id);
+      const items = res?.data?.items || res?.data || (Array.isArray(res?.items) ? res.items : []);
+      if (Array.isArray(items) && items.length > 0) {
+        setBackendDocs(items);
+      }
+    } catch {
+      // fallback to dsa.documents
+    } finally {
+      setBackendDocsLoading(false);
+    }
+  }, [dsa?.id]);
+
   useEffect(() => {
     if (tab === "agents" && dsa?.id) {
       fetchDsaPortalUsers();
     }
-  }, [tab, dsa?.id, fetchDsaPortalUsers]);
+    if (tab === "documents" && dsa?.id) {
+      fetchBackendDocuments();
+    }
+  }, [tab, dsa?.id, fetchDsaPortalUsers, fetchBackendDocuments]);
 
   const openDocPreview = (doc: any) => {
     setPreviewDoc(doc);
@@ -2311,6 +2360,9 @@ export function DsaProfilePage({ id }: { id: string }) {
         next.add(doc.id);
         return next;
       });
+    }
+    if (dsa?.id) {
+      fetchBackendDocuments();
     }
   };
 
@@ -2660,7 +2712,7 @@ export function DsaProfilePage({ id }: { id: string }) {
   );
   const kycVerifiedCount = [verifiedKyc.pan, verifiedKyc.gst, verifiedKyc.bank, verifiedKyc.udyam].filter(Boolean).length;
   const dsaAny = dsa as any;
-  const rawDocList: any[] = [...(dsa?.documents || [])];
+  const rawDocList: any[] = backendDocs.length > 0 ? [...backendDocs] : [...(dsa?.documents || [])];
   if (dsaAny?.visit_report_file && !rawDocList.some((d: any) => String(d.document_type || "").toLowerCase() === "visit_report")) {
     rawDocList.unshift({
       id: typeof dsa?.id === "number" ? dsa.id * 100000 + 999 : 999999,
@@ -7663,6 +7715,7 @@ export function DsaProfilePage({ id }: { id: string }) {
           <DocumentViewerBody
             key={previewDoc.id || previewDoc.file_name || previewDoc.document_type}
             previewDoc={previewDoc}
+            dsaId={dsa?.id}
             isBankUser={isBankUser}
             effectiveStatus={getEffectiveDocStatus(previewDoc)}
             canVerifyDoc={

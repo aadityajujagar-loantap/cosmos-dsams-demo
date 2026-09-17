@@ -907,6 +907,11 @@ export const adminApi = {
     });
   },
 
+  getDsaDocumentFileUrl: (idOrCode: number | string, documentId: number | string): string => {
+    const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").replace(/\/api\/?$/, "");
+    return `${apiBase}/api/v1/dsa/${idOrCode}/documents/${documentId}/file`;
+  },
+
   uploadDsaDocument: async (
     idOrCode: number | string,
     payload: { file?: File; document_base64?: string; file_name?: string; document_type: string; owner_name?: string; remarks?: string }
