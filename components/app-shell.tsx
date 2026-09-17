@@ -110,7 +110,8 @@ function isPathAllowedForRole(role: string, pathname: string) {
       pathname.startsWith("/dsa/") ||
       pathname === "/applications" ||
       pathname.startsWith("/applications/") ||
-      pathname.startsWith("/administration/location-hierarchy")
+      pathname.startsWith("/administration/location-hierarchy") ||
+      pathname.startsWith("/administration/master-values")
     );
   }
 
@@ -124,7 +125,8 @@ function isPathAllowedForRole(role: string, pathname: string) {
       pathname.startsWith("/administration/maker-requests") ||
       pathname.startsWith("/administration/location-hierarchy") ||
       pathname.startsWith("/administration/audit-logs") ||
-      pathname.startsWith("/administration/users")
+      pathname.startsWith("/administration/users") ||
+      pathname.startsWith("/administration/master-values")
     );
   }
 
@@ -259,6 +261,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   { href: "/administration/roles", icon: ShieldCheck, label: "Roles & Permissions" },
                   { href: "/administration/branch-roles", icon: ShieldCheck, label: "Branch Roles" },
                   { href: "/administration/user-branch-mappings", icon: Users, label: "User Branch Mappings" },
+                  { href: "/administration/master-values", icon: Settings, label: "Master Values" },
                 ],
                 label: "Administration",
               },
@@ -274,6 +277,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               },
             ]
           : []),
+        {
+          items: [{ href: "/administration/master-values", icon: Settings, label: "Master Values" }],
+          label: "Master Values",
+        },
       ];
     } else if (currentUser.role === "Sub-Region Head") {
       return [
@@ -292,6 +299,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         {
           items: [{ href: "/analytics/reports", icon: LineChart, label: "Reports" }],
           label: "Analytics",
+        },
+        {
+          items: [{ href: "/administration/master-values", icon: Settings, label: "Master Values" }],
+          label: "Master Values",
         },
       ];
     } else if (currentUser.role === "DGM") {
@@ -312,6 +323,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           items: [{ href: "/analytics/reports", icon: LineChart, label: "Reports" }],
           label: "Analytics",
         },
+        {
+          items: [{ href: "/administration/master-values", icon: Settings, label: "Master Values" }],
+          label: "Master Values",
+        },
       ];
     } else if (currentUser.role === "Region Head" || currentUser.role === "Branch Regional Head") {
       return [
@@ -330,6 +345,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         {
           items: [{ href: "/analytics/reports", icon: LineChart, label: "Reports" }],
           label: "Analytics",
+        },
+        {
+          items: [{ href: "/administration/master-values", icon: Settings, label: "Master Values" }],
+          label: "Master Values",
         },
       ];
     } else if (currentUser.role === "HO Credit Officer") {
@@ -357,6 +376,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           items: [{ href: "/analytics/reports", icon: LineChart, label: "Reports" }],
           label: "Analytics",
         },
+        {
+          items: [{ href: "/administration/master-values", icon: Settings, label: "Master Values" }],
+          label: "Master Values",
+        },
       ];
     } else if (currentUser.role === "HO Credit Head") {
       return [
@@ -383,6 +406,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           items: [{ href: "/analytics/reports", icon: LineChart, label: "Reports" }],
           label: "Analytics",
         },
+        {
+          items: [{ href: "/administration/master-values", icon: Settings, label: "Master Values" }],
+          label: "Master Values",
+        },
       ];
     } else if (currentUser.role === "Branch User") {
       return [
@@ -405,6 +432,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         {
           items: [{ href: "/administration/location-hierarchy", icon: MapPin, label: "Location Hierarchy" }],
           label: "Master Data",
+        },
+        {
+          items: [{ href: "/administration/master-values", icon: Settings, label: "Master Values" }],
+          label: "Master Values",
         },
       ];
     } else if (currentUser.role === "Checker") {
@@ -432,6 +463,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             { href: "/administration/users", icon: Users, label: "User Directory" },
           ],
           label: "Operations & Verification",
+        },
+        {
+          items: [{ href: "/administration/master-values", icon: Settings, label: "Master Values" }],
+          label: "Master Values",
         },
       ];
     } else if (currentUser.role === "DSA Partner") {

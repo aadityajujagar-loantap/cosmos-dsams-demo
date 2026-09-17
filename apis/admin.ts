@@ -12,6 +12,12 @@ import type {
   RegionOption,
 } from "@/types/dsa";
 import type { LoanProduct, LoanScheme, SchemeParameter, SchemeSlab } from "@/types/product";
+import type {
+  MasterValue,
+  MasterValueDropdownItem,
+  MasterValueListParams,
+  MasterValuePayload,
+} from "@/types/masterValue";
 
 export interface BackendResponse<T> {
   status: string;
@@ -1600,6 +1606,94 @@ export const adminApi = {
       method: "POST",
       body: JSON.stringify(payload),
     });
+  },
+
+  // ── Master Values ──────────────────────────────────────────────────────────
+
+  /**
+   * GET /api/admin/master-values
+   * Paginated listing of master values with optional call_type and is_active filters
+   */
+  getMasterValuesPage: async (params?: MasterValueListParams): Promise<PaginatedResponse<MasterValue>> => {
+    const response = await request<ApiEnvelope<PaginatedResponse<MasterValue>>>(
+      `/admin/master-values${compactParams(params)}`,
+      { method: "GET" }
+    );
+    return response.data;
+  },
+
+  /**
+   * GET /api/admin/master-values/{id}
+   * Fetch single master value record
+   */
+  getMasterValue: async (id: number): Promise<MasterValue> => {
+    const response = await request<ApiEnvelope<MasterValue>>(`/admin/master-values/${id}`, {
+      method: "GET",
+    });
+    return response.data;
+  },
+
+  /**
+   * POST /api/admin/master-values
+   * Create new master value (Maker-Checker protected)
+   */
+  createMasterValue: async (
+    payload: MasterValuePayload
+  ): Promise<MasterValue | MakerCheckerActionResponse> => {
+    const response = await request<ApiEnvelope<MasterValue> | MakerCheckerActionResponse>(
+      "/admin/master-values",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+    return unwrapMutation<MasterValue>(response);
+  },
+
+  /**
+   * PUT /api/admin/master-values/{id}
+   * Update existing master value (Maker-Checker protected)
+   */
+  updateMasterValue: async (
+    id: number,
+    payload: Partial<MasterValuePayload>
+  ): Promise<MasterValue | MakerCheckerActionResponse> => {
+    const response = await request<ApiEnvelope<MasterValue> | MakerCheckerActionResponse>(
+      `/admin/master-values/${id}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      }
+    );
+    return unwrapMutation<MasterValue>(response);
+  },
+
+  /**
+   * DELETE /api/admin/master-values/{id}
+   * Soft-delete master value (Maker-Checker protected)
+   */
+  deleteMasterValue: async (
+    id: number
+  ): Promise<{ message?: string } | MakerCheckerActionResponse> => {
+    const response = await request<ApiEnvelope<{ message?: string }> | MakerCheckerActionResponse>(
+      `/admin/master-values/${id}`,
+      {
+        method: "DELETE",
+      }
+    );
+    return unwrapMutation<{ message?: string }>(response);
+  },
+
+  /**
+   * GET /api/master-values/dropdown?call_type={call_type}
+   * Get active master values for a specific call_type (UI select options)
+   */
+  getMasterValuesDropdown: async (callType: string): Promise<MasterValueDropdownItem[]> => {
+    const response = await request<ApiEnvelope<MasterValueDropdownItem[]>>(
+      `/master-values/dropdown?call_type=${encodeURIComponent(callType)}`,
+      { method: "GET" }
+    );
+    return response.data || [];
   },
 };
 
