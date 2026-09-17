@@ -138,6 +138,8 @@ export interface DsaApprovalRecord {
 
 export interface Dsa extends Entity {
   code: string;
+  dsa_code?: string | null;
+  dsa_code_generated_at?: string | null;
   name: string;
   businessType: BusinessType;
   pan: string;

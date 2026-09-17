@@ -282,7 +282,7 @@ export function ProductSettingPage() {
       commissionType: "Percentage-based" as const,
       configuredAt: new Date().toISOString(),
       configuredBy: currentUser?.name ?? "System",
-      dsaCode: selectedDsa.code,
+      dsaCode: selectedDsa.dsa_code || selectedDsa.code,
       dsaId: String(selectedDsa.id),
       dsaName: selectedDsa.name,
       loanUrl: landingEndpoint,
@@ -525,7 +525,7 @@ export function ProductSettingPage() {
                     <option value="">Select active DSA</option>
                     {activeDsas.map((dsa) => (
                       <option key={dsa.id} value={dsa.id}>
-                        {dsa.name} ({dsa.code})
+                        {dsa.name} ({dsa.dsa_code || dsa.code})
                       </option>
                     ))}
                   </Select>

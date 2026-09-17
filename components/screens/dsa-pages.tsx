@@ -217,6 +217,14 @@ export function formatDocumentType(type?: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+export function getEffectiveDsaCode(dsa: any): string {
+  if (!dsa) return "";
+  if (dsa.dsa_code && String(dsa.dsa_code).trim().length > 0) {
+    return String(dsa.dsa_code).trim();
+  }
+  return dsa.code || (dsa.id ? `DSA-${dsa.id}` : "");
+}
+
 export function DocumentViewerBody({
   previewDoc,
   isBankUser,
@@ -1496,8 +1504,14 @@ export function DsaManagementPage() {
                               </p>
                             </div>
                           </td>
-                          <td className="p-4 font-mono text-xs text-slate-600 font-bold">
-                            {item.code || `DSA-${item.id}`}
+                          <td className="p-4 font-mono text-xs font-bold">
+                            {item.dsa_code ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
+                                {item.dsa_code}
+                              </span>
+                            ) : (
+                              <span className="text-slate-600">{item.code || `DSA-${item.id}`}</span>
+                            )}
                           </td>
                           <td className="p-4">
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 mr-1.5">
@@ -1675,7 +1689,7 @@ export function DsaManagementPage() {
                       <tr className="hover:bg-slate-50/50 transition cursor-pointer" key={item.id} onClick={() => router.push(`/dsa/${item.id}`)}>
                         <td className="p-4">
                           <div>
-                            <p className="font-semibold text-blue-700 hover:underline">{item.name || item.contact_person || item.code}</p>
+                            <p className="font-semibold text-blue-700 hover:underline">{item.name || item.contact_person || item.dsa_code || item.code}</p>
                             <p className="text-[10px] text-slate-500">
                               {item.contact_person} · {item.email}
                               {(item.branch_name || item.branch?.branch_name) && (
@@ -1687,8 +1701,14 @@ export function DsaManagementPage() {
                             </p>
                           </div>
                         </td>
-                        <td className="p-4 font-mono text-xs text-slate-600">
-                          {item.code}
+                        <td className="p-4 font-mono text-xs font-bold">
+                          {item.dsa_code ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
+                              {item.dsa_code}
+                            </span>
+                          ) : (
+                            <span className="text-slate-600">{item.code}</span>
+                          )}
                         </td>
                         <td className="p-4">
                           <StatusBadge status={getDsaDisplayStatus(item)} />
@@ -1769,7 +1789,9 @@ export function DsaManagementPage() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-semibold text-slate-950">{credentialDsa.name}</p>
-                  <p className="text-xs text-slate-500">{credentialDsa.code}</p>
+                  <p className="text-xs text-slate-500 font-mono">
+                    {credentialDsa.dsa_code ? `Partner Code: ${credentialDsa.dsa_code}` : (credentialDsa.code || `DSA-${credentialDsa.id}`)}
+                  </p>
                 </div>
                 <StatusBadge status={getDsaDisplayStatus(credentialDsa)} />
               </div>
@@ -2159,7 +2181,7 @@ export function DsaProfilePage({ id }: { id: string }) {
       "COSMOS CO-OPERATIVE BANK LIMITED - DSA MAKER DEVIATION REPORT (BRE EVALUATION)",
       "================================================================================",
       `Generated At:        ${new Date().toLocaleString()}`,
-      `DSA Code:            ${dsa.code || "DSA-" + dsa.id}`,
+      `DSA Code:            ${getEffectiveDsaCode(dsa)}`,
       `Partner Name:        ${dsa.name}`,
       `DSA Type:            ${dsa.dsa_type || "INDIVIDUAL"}`,
       `Branch:              ${dsa.branch?.branch_name || dsa.branch_name || "Main Branch"}`,
@@ -2197,7 +2219,7 @@ export function DsaProfilePage({ id }: { id: string }) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `DSA-${dsa.code || dsa.id}-deviation-report.txt`;
+    link.download = `DSA-${getEffectiveDsaCode(dsa)}-deviation-report.txt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -2217,7 +2239,7 @@ export function DsaProfilePage({ id }: { id: string }) {
       "COSMOS CO-OPERATIVE BANK LIMITED - CHECKER DUE DILIGENCE (DD) REVIEW NOTE",
       "================================================================================",
       `Generated At:            ${new Date().toLocaleString()}`,
-      `DSA Code:                ${dsa.code || "DSA-" + dsa.id}`,
+      `DSA Code:                ${getEffectiveDsaCode(dsa)}`,
       `Partner Name:            ${dsa.name}`,
       `Branch:                  ${dsa.branch?.branch_name || dsa.branch_name || "Main Branch"}`,
       `Submitted By:            Checker (User ID: ${note?.checker_user_id || "Checker Authority"})`,
@@ -2242,7 +2264,7 @@ export function DsaProfilePage({ id }: { id: string }) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `DSA-${dsa.code || dsa.id}-due-diligence-note.txt`;
+    link.download = `DSA-${getEffectiveDsaCode(dsa)}-due-diligence-note.txt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -2332,7 +2354,7 @@ export function DsaProfilePage({ id }: { id: string }) {
             <div className="space-y-2">
               <h2 className="text-xl font-bold text-slate-900">Branch Access Restricted</h2>
               <p className="text-sm text-slate-600 max-w-md mx-auto">
-                DSA <strong>#{dsa.code || dsa.id} ({dsa.name})</strong> is assigned to{" "}
+                DSA <strong>#{getEffectiveDsaCode(dsa)} ({dsa.name})</strong> is assigned to{" "}
                 <span className="font-semibold text-slate-800">
                   {dsa.branch?.branch_name || dsa.branch_name || (dsa.branch_id ? `Branch #${dsa.branch_id}` : "another branch")}
                 </span>.
@@ -2427,7 +2449,7 @@ export function DsaProfilePage({ id }: { id: string }) {
   // Physical Visit Report status determination:
   // - Uploaded by Maker/L1; verified by Checker/L2.
   // - Must NEVER come automatically verified until verified by Checker.
-  const getEffectiveDocStatus = useCallback((doc: any): string => {
+  const getEffectiveDocStatus = (doc: any): string => {
     if (!doc) return "Pending";
     if (manuallyFailedDocIds.has(doc.id)) return "Failed";
 
@@ -2447,7 +2469,7 @@ export function DsaProfilePage({ id }: { id: string }) {
     if (manuallyVerifiedDocIds.has(doc.id)) return "Verified";
 
     return doc.status || "Pending";
-  }, [manuallyVerifiedDocIds, manuallyFailedDocIds, checkerVerifiedDocIds, isCheckerUserOrLevel, l2Approval, workflowLevelInfo.currentLevel]);
+  };
 
   // Use backend checklist missing items; filter staff_only documents:
   // - Non-bank users (e.g. self onboarding applicant or DSA partner) do not see staff_only docs
@@ -2637,36 +2659,34 @@ export function DsaProfilePage({ id }: { id: string }) {
     verifiedKyc.pan && verifiedKyc.gst && verifiedKyc.bank && verifiedKyc.udyam
   );
   const kycVerifiedCount = [verifiedKyc.pan, verifiedKyc.gst, verifiedKyc.bank, verifiedKyc.udyam].filter(Boolean).length;
-  const allDisplayDocs: any[] = useMemo(() => {
-    const dsaAny = dsa as any;
-    const docList: any[] = [...(dsa?.documents || [])];
-    if (dsaAny?.visit_report_file && !docList.some((d: any) => String(d.document_type || "").toLowerCase() === "visit_report")) {
-      docList.unshift({
-        id: typeof dsa?.id === "number" ? dsa.id * 100000 + 999 : 999999,
-        document_type: "visit_report",
-        file_name: dsaAny.visit_report_file.split("/").pop() || "visit_report.pdf",
-        file_path: dsaAny.visit_report_file,
-        status: "Pending",
-        uploaded_at: dsaAny.visit_conducted_at || dsaAny.updated_at,
-        remarks: dsaAny.visit_report_remarks || "Uploaded by Bank Staff",
-      });
-    }
-    return docList
-      .filter((doc) => {
-        const dt = String(doc.document_type || "").toUpperCase();
-        if (dt === "VISIT_REPORT" && !isBankUser) return false;
-        return dt !== "EMPANELMENT_LETTER" && dt !== "AGREEMENT" && dt !== "SIGNED_AGREEMENT";
-      })
-      .reduce((acc: any[], doc: any) => {
-        const existingIndex = acc.findIndex((d) => d.document_type === doc.document_type);
-        if (existingIndex >= 0) {
-          acc[existingIndex] = doc;
-        } else {
-          acc.push(doc);
-        }
-        return acc;
-      }, []);
-  }, [dsa, isBankUser]);
+  const dsaAny = dsa as any;
+  const rawDocList: any[] = [...(dsa?.documents || [])];
+  if (dsaAny?.visit_report_file && !rawDocList.some((d: any) => String(d.document_type || "").toLowerCase() === "visit_report")) {
+    rawDocList.unshift({
+      id: typeof dsa?.id === "number" ? dsa.id * 100000 + 999 : 999999,
+      document_type: "visit_report",
+      file_name: dsaAny.visit_report_file.split("/").pop() || "visit_report.pdf",
+      file_path: dsaAny.visit_report_file,
+      status: "Pending",
+      uploaded_at: dsaAny.visit_conducted_at || dsaAny.updated_at,
+      remarks: dsaAny.visit_report_remarks || "Uploaded by Bank Staff",
+    });
+  }
+  const allDisplayDocs: any[] = rawDocList
+    .filter((doc) => {
+      const dt = String(doc.document_type || "").toUpperCase();
+      if (dt === "VISIT_REPORT" && !isBankUser) return false;
+      return dt !== "EMPANELMENT_LETTER" && dt !== "AGREEMENT" && dt !== "SIGNED_AGREEMENT";
+    })
+    .reduce((acc: any[], doc: any) => {
+      const existingIndex = acc.findIndex((d) => d.document_type === doc.document_type);
+      if (existingIndex >= 0) {
+        acc[existingIndex] = doc;
+      } else {
+        acc.push(doc);
+      }
+      return acc;
+    }, []);
 
   const applicantReviewDocs = allDisplayDocs.filter(
     (d: any) => String(d.document_type || "").toLowerCase() !== "visit_report"
@@ -3141,6 +3161,15 @@ export function DsaProfilePage({ id }: { id: string }) {
       <PageHeader
         action={
           <div className="flex items-center gap-2">
+            {dsa.dsa_code ? (
+              <span className="font-mono text-xs font-bold px-2.5 py-1 rounded-md bg-blue-50 text-blue-800 border border-blue-200 shadow-2xs">
+                Partner Code: {dsa.dsa_code}
+              </span>
+            ) : (
+              <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                App ID: {dsa.code || `DSA-${dsa.id}`}
+              </span>
+            )}
             <StatusBadge status={getDsaDisplayStatus(dsa)} />
             {canManageDsaLifecycle && (
               <div className="flex gap-2">
@@ -3218,7 +3247,7 @@ export function DsaProfilePage({ id }: { id: string }) {
           </div>
         }
         description="Partner performance, sourcing activity, and configured loan products."
-        eyebrow="Partner analysis"
+        eyebrow={dsa.dsa_code ? `Official Partner Code: ${dsa.dsa_code}` : `Application ID: ${dsa.code || `DSA-${dsa.id}`}`}
         title={dsa.name}
       />
 
@@ -3346,7 +3375,10 @@ export function DsaProfilePage({ id }: { id: string }) {
         <CardContent>
           {tab === "overview" ? (
             <DetailGrid>
-              <DetailItem label="DSA ID" value={dsa.code} />
+              <DetailItem label="Official Partner Code" value={dsa.dsa_code || "Generated upon final activation"} />
+              {dsa.code && dsa.code !== dsa.dsa_code ? (
+                <DetailItem label="Application Ref" value={dsa.code} />
+              ) : null}
               <DetailItem label="Contact person" value={dsa.contact_person} />
               <DetailItem label="Mobile" value={dsa.mobile} />
               <DetailItem label="Email" value={dsa.email} />
@@ -4350,7 +4382,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                           <span className="font-mono font-semibold text-slate-800 truncate max-w-xs">
                             {officialAgreement?.file_name ||
                               agreementReviewData?.generated_agreement?.file_name ||
-                              `agreement_${dsa.code || dsa.id}.pdf`}
+                              `agreement_${getEffectiveDsaCode(dsa)}.pdf`}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
@@ -4849,7 +4881,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                       invoiceNumber: invoiceNum,
                       dsaId: String(dsa.id),
                       dsaName: dsa.name,
-                      dsaCode: dsa.code,
+                      dsaCode: getEffectiveDsaCode(dsa),
                       month,
                       grossAmount: total,
                       adjustmentAmount: 0,
@@ -6519,7 +6551,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                             {l7ReviewData.application_information?.applicant_name || approvingDsa.name}
                           </span>
                           <span className="font-mono text-xs text-slate-500 font-semibold">
-                            ({l7ReviewData.application_information?.code || approvingDsa.code})
+                            ({approvingDsa.dsa_code || l7ReviewData.application_information?.code || approvingDsa.code})
                           </span>
                         </div>
                         <p className="text-xs text-slate-600 mt-1">
@@ -6978,7 +7010,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                                   await fetchDsaDetail(id);
                                   toast({
                                     title: "Institutional Sanction Granted (Approved)",
-                                    description: `Application #${approvingDsa.code || approvingDsa.id} sanctioned. DSA Code allotted and Empanelment Letter generated.`,
+                                    description: `Application #${approvingDsa.dsa_code || approvingDsa.code || approvingDsa.id} sanctioned. DSA Code allotted and Empanelment Letter generated.`,
                                     variant: "success",
                                   });
                                   closeDecisionModals();
@@ -7702,7 +7734,7 @@ export function DsaProfilePage({ id }: { id: string }) {
         onClose={() => setViewingDeviationReport(false)}
         open={viewingDeviationReport}
         title="Maker BRE Deviation Assessment Report"
-        description={`DSA #${dsa.code || dsa.id} • ${dsa.name} • Evaluation generated on Maker submission to Checker`}
+        description={`DSA #${getEffectiveDsaCode(dsa)} • ${dsa.name} • Evaluation generated on Maker submission to Checker`}
         width="max-w-4xl"
       >
         <div className="space-y-4">
@@ -7888,7 +7920,7 @@ export function DsaProfilePage({ id }: { id: string }) {
         onClose={() => setViewingDdNoteModal(false)}
         open={viewingDdNoteModal}
         title="Checker Due Diligence (DD) Review Note"
-        description={`DSA #${dsa.code || dsa.id} • ${dsa.name} • Submitted by Level 2 Checker`}
+        description={`DSA #${getEffectiveDsaCode(dsa)} • ${dsa.name} • Submitted by Level 2 Checker`}
         width="max-w-2xl"
       >
         <div className="space-y-4">
@@ -7990,7 +8022,7 @@ export function DsaProfilePage({ id }: { id: string }) {
         onClose={closeDecisionModals}
         open={Boolean(revertingDsa)}
         title={`Revert Application to ${workflowLevelInfo.currentLevel === 7 ? "HO Credit Officer (L6)" : workflowLevelInfo.currentLevel === 6 ? "Region Head (L5)" : workflowLevelInfo.currentLevel === 5 ? (l4Approval?.status === "SKIPPED" ? "Sub-Region Head (L3)" : "DGM (L4)") : workflowLevelInfo.currentLevel === 4 ? "Sub-Region Head (L3)" : workflowLevelInfo.currentLevel === 3 ? "Checker (L2)" : `Level ${workflowLevelInfo.currentLevel - 1}`}`}
-        description={`Send application #${revertingDsa?.code || revertingDsa?.id} back to ${workflowLevelInfo.currentLevel === 7 ? "Level 6 (HO Credit Officer)" : workflowLevelInfo.currentLevel === 6 ? "Level 5 (Region Head)" : workflowLevelInfo.currentLevel === 5 ? (l4Approval?.status === "SKIPPED" ? "Level 3 (Sub-Region Head)" : "Level 4 (DGM)") : workflowLevelInfo.currentLevel === 4 ? "Level 3 (Sub-Region Head)" : workflowLevelInfo.currentLevel === 3 ? "Level 2 (Checker)" : `Level ${workflowLevelInfo.currentLevel - 1}`} for re-evaluation.`}
+        description={`Send application #${getEffectiveDsaCode(revertingDsa)} back to ${workflowLevelInfo.currentLevel === 7 ? "Level 6 (HO Credit Officer)" : workflowLevelInfo.currentLevel === 6 ? "Level 5 (Region Head)" : workflowLevelInfo.currentLevel === 5 ? (l4Approval?.status === "SKIPPED" ? "Level 3 (Sub-Region Head)" : "Level 4 (DGM)") : workflowLevelInfo.currentLevel === 4 ? "Level 3 (Sub-Region Head)" : workflowLevelInfo.currentLevel === 3 ? "Level 2 (Checker)" : `Level ${workflowLevelInfo.currentLevel - 1}`} for re-evaluation.`}
         width="max-w-lg"
       >
         <div className="space-y-4">

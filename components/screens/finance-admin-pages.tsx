@@ -244,7 +244,7 @@ function newDsaInvoice({
     adjustmentAmount,
     createdAt: now,
     csvBatchId,
-    dsaCode: dsa.code,
+    dsaCode: dsa.dsa_code || dsa.code,
     dsaId: dsa.id,
     dsaName: dsa.name,
     grossAmount,
@@ -304,6 +304,7 @@ function isDsaForSession(
   return (
     dsa.id === user?.id ||
     dsa.code === user?.code ||
+    (dsa.dsa_code && dsa.dsa_code === user?.code) ||
     dsa.loginUsername.trim().toLowerCase() === userEmail ||
     dsa.email.trim().toLowerCase() === userEmail
   );
@@ -312,7 +313,7 @@ function isDsaForSession(
 function isInvoiceForDsa(invoice: DsaInvoice, dsa: Dsa | undefined) {
   if (!dsa) return false;
 
-  return invoice.dsaId === dsa.id || invoice.dsaCode === dsa.code || invoice.dsaName === dsa.name;
+  return invoice.dsaId === dsa.id || invoice.dsaCode === dsa.code || (Boolean(dsa.dsa_code) && invoice.dsaCode === dsa.dsa_code) || invoice.dsaName === dsa.name;
 }
 
 export function CommissionsPage({
@@ -493,7 +494,7 @@ export function CommissionsPage({
       const headers = headerLine.split(",").map((item) => item.trim());
       lines.forEach((line) => {
         const row = Object.fromEntries(line.split(",").map((value, index) => [headers[index], value.trim()]));
-        const dsa = store.dsas.find((item) => item.id === row.dsaId || item.code === row.dsaCode) ?? defaultDsa;
+        const dsa = store.dsas.find((item) => item.id === row.dsaId || item.code === row.dsaCode || (item.dsa_code && item.dsa_code === row.dsaCode)) ?? defaultDsa;
         if (!dsa) return;
         const grossAmount = moneyFromInput(row.grossAmount || row.gross || row.amount);
         const adjustmentAmount = moneyFromInput(row.adjustmentAmount || row.adjustment || "0");
@@ -557,7 +558,7 @@ export function CommissionsPage({
                 <Select onChange={(event) => setSelectedDsaId(event.target.value)} value={selectedDsaId}>
                   <option value="">All DSAs</option>
                   {store.dsas.map((dsa) => (
-                    <option key={dsa.id} value={dsa.id}>{dsa.name} ({dsa.code})</option>
+                    <option key={dsa.id} value={dsa.id}>{dsa.name} ({dsa.dsa_code || dsa.code})</option>
                   ))}
                 </Select>
               </Field>
@@ -877,7 +878,7 @@ export function ReportsPage() {
   const [iracStatusFilter, setIracStatusFilter] = useState("");
   const isSuperAdmin = currentUser?.role === "DSA Manager";
   const performance = store.dsas.slice(0, 8).map((dsa) => ({
-    name: dsa.code,
+    name: dsa.dsa_code || dsa.code,
     value: dsa.approvalRate,
   }));
   const volume = ["Personal Loan", "Home Loan", "Loan Against Property", "Business Loan", "Auto Loan"].map((product) => ({
@@ -1403,7 +1404,7 @@ export function ReportsPage() {
                 value={selectedDsaId}
               >
                 {dsasWithRecovery.map((dsa) => (
-                  <option key={dsa.id} value={dsa.id}>{dsa.name} ({dsa.code})</option>
+                  <option key={dsa.id} value={dsa.id}>{dsa.name} ({dsa.dsa_code || dsa.code})</option>
                 ))}
               </Select>
             </div>

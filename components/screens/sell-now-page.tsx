@@ -502,7 +502,7 @@ function JourneySelection({
           <option value="">Select DSA</option>
           {dsas.map((dsa) => (
             <option key={dsa.id} value={String(dsa.id)}>
-              {dsa.name} ({dsa.code})
+              {dsa.name} ({dsa.dsa_code || dsa.code})
             </option>
           ))}
         </Select>
@@ -745,7 +745,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
           const dsaN = urlParams.get("DSA") || "";
           const matched = dsas.find(
             (d: any) => 
-              (dsaC && d.code?.toLowerCase() === dsaC.toLowerCase()) ||
+              (dsaC && (d.dsa_code?.toLowerCase() === dsaC.toLowerCase() || d.code?.toLowerCase() === dsaC.toLowerCase())) ||
               (dsaN && d.name?.toLowerCase() === dsaN.toLowerCase())
           ) ?? dsas[0];
 
@@ -2400,7 +2400,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
       const matchedDsa = backendDsas.find(
         (d) => d.name?.toLowerCase() === effectiveConfig.dsaName?.toLowerCase()
       ) ?? backendDsas[0];
-      const dsaCodeToUse = matchedDsa.code;
+      const dsaCodeToUse = matchedDsa.dsa_code || matchedDsa.code;
       const dsaCity = matchedDsa.city ?? "";
       const dsaState = matchedDsa.state ?? "";
 
@@ -3969,7 +3969,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
           configs.push({
             ...c,
             dsaId: dsaIdStr,
-            dsaCode: dsa.code,
+            dsaCode: dsa.dsa_code || dsa.code,
             dsaName: dsa.name,
           });
         });
@@ -4236,7 +4236,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
             (d) => d.name?.toLowerCase() === effectiveConfig?.dsaName?.toLowerCase()
           ) ?? backendDsas[0];
           if (matchedDsa) {
-            dsaCodeToUse = dsaCodeToUse || matchedDsa.code;
+            dsaCodeToUse = dsaCodeToUse || matchedDsa.dsa_code || matchedDsa.code;
             if (matchedDsa.state) dsaState = matchedDsa.state;
           }
         }
@@ -4336,7 +4336,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
       const matchedDsa = backendDsas.find(
         (d) => d.name?.toLowerCase() === effectiveConfig.dsaName?.toLowerCase()
       ) ?? backendDsas[0];
-      const dsaCodeToUse = matchedDsa.code;
+      const dsaCodeToUse = matchedDsa.dsa_code || matchedDsa.code;
       const dsaCity = matchedDsa.city ?? "";
       const dsaState = matchedDsa.state ?? "";
 
