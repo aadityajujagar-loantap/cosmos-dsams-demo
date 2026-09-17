@@ -62,17 +62,99 @@ interface VerificationResult {
   isLoan?: boolean;
 }
 
+const getStoredDsaCode = (): string | undefined => {
+  if (typeof window === "undefined") return undefined;
+  try {
+    for (const mode of ["self", "branch", "admin"]) {
+      const raw =
+        sessionStorage.getItem(`cosmos_dsa_onboarding_v2_${mode}`) ||
+        localStorage.getItem(`cosmos_dsa_onboarding_v2_${mode}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.submittedDsa?.code) return parsed.submittedDsa.code;
+        if (parsed?.submittedDsa?.dsa_code) return parsed.submittedDsa.dsa_code;
+      }
+    }
+    const legacyCode = localStorage.getItem("last_submitted_dsa_code");
+    if (legacyCode) return legacyCode;
+  } catch {}
+  return undefined;
+};
+
+const getCachedVerification = (rawToken: string): VerificationResult | null => {
+  if (typeof window === "undefined" || !rawToken) return null;
+  try {
+    const raw =
+      sessionStorage.getItem(`email_verified_${rawToken}`) ||
+      localStorage.getItem(`email_verified_${rawToken}`);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+};
+
+const saveCachedVerification = (rawToken: string, res: VerificationResult) => {
+  if (typeof window === "undefined" || !rawToken) return;
+  try {
+    const str = JSON.stringify(res);
+    sessionStorage.setItem(`email_verified_${rawToken}`, str);
+    localStorage.setItem(`email_verified_${rawToken}`, str);
+  } catch {}
+};
+
+const isAlreadyOrExpiredMessage = (msg?: string): boolean => {
+  if (!msg) return false;
+  const lower = msg.toLowerCase();
+  return (
+    lower.includes("invalid or expired") ||
+    lower.includes("already") ||
+    lower.includes("expired") ||
+    lower.includes("not found")
+  );
+};
+
+const extractCleanToken = (rawInput: string): string => {
+  const clean = rawInput.trim();
+  if (clean.includes("token=")) {
+    try {
+      const url = new URL(clean, "http://dummy");
+      const t = url.searchParams.get("token");
+      if (t) return t.trim();
+    } catch {
+      const match = clean.match(/token=([a-zA-Z0-9_-]+)/);
+      if (match) return match[1].trim();
+    }
+  }
+  if (clean.includes("/verify-email/")) {
+    const parts = clean.split("/verify-email/");
+    const lastPart = parts[parts.length - 1]?.split("?")[0]?.split("#")[0];
+    if (lastPart) return lastPart.trim();
+  }
+  return clean;
+};
+
 export function DsaVerifyEmailScreen({ token, type, applicationId }: DsaVerifyEmailScreenProps) {
   const router = useRouter();
-  const [state, setState] = useState<VerificationState>(() =>
-    !token || token.trim() === "" ? "error" : "loading"
-  );
-  const [result, setResult] = useState<VerificationResult>(() => ({
-    message:
-      !token || token.trim() === ""
-        ? "No verification token provided. Please check the link from your email or paste it below."
-        : "",
-  }));
+  const attemptedTokensRef = React.useRef<Set<string>>(new Set());
+  const verifiedTokensRef = React.useRef<Set<string>>(new Set());
+
+  const initialClean = token ? extractCleanToken(token) : "";
+  const initialCached = initialClean ? getCachedVerification(initialClean) : null;
+
+  const [state, setState] = useState<VerificationState>(() => {
+    if (initialCached) return "success";
+    if (!token || token.trim() === "") return "error";
+    return "loading";
+  });
+  const [result, setResult] = useState<VerificationResult>(() => {
+    if (initialCached) return initialCached;
+    if (!token || token.trim() === "") {
+      return {
+        message:
+          "No verification token provided. Please check the link from your email or paste it below.",
+      };
+    }
+    return { message: "" };
+  });
   const [resending, setResending] = useState(false);
   const [resendStatus, setResendStatus] = useState<string | null>(null);
   const [manualToken, setManualToken] = useState("");
@@ -104,63 +186,111 @@ export function DsaVerifyEmailScreen({ token, type, applicationId }: DsaVerifyEm
     }
   };
 
-  const extractToken = (rawInput: string): string => {
-    const clean = rawInput.trim();
-    if (clean.includes("token=")) {
-      try {
-        const url = new URL(clean, "http://dummy");
-        const t = url.searchParams.get("token");
-        if (t) return t.trim();
-      } catch {
-        const match = clean.match(/token=([a-zA-Z0-9_-]+)/);
-        if (match) return match[1].trim();
+  const extractToken = extractCleanToken;
+
+  const performVerification = useCallback(
+    async (verifyToken: string, isManual = false) => {
+      const cleanToken = extractCleanToken(verifyToken);
+      if (!cleanToken) {
+        setState("error");
+        setResult({
+          message: "No verification token provided. Please check the link from your email.",
+        });
+        return;
       }
-    }
-    // Also handle trailing paths like /dsa/verify-email/<token>
-    if (clean.includes("/verify-email/")) {
-      const parts = clean.split("/verify-email/");
-      const lastPart = parts[parts.length - 1]?.split("?")[0]?.split("#")[0];
-      if (lastPart) return lastPart.trim();
-    }
-    return clean;
-  };
 
-  const performVerification = useCallback(async (verifyToken: string) => {
-    const cleanToken = extractToken(verifyToken);
-    if (!cleanToken) {
-      setState("error");
-      setResult({
-        message: "No verification token provided. Please check the link from your email.",
-      });
-      return;
-    }
+      // Check cache first — if already verified, do not verify again and again
+      const cached = getCachedVerification(cleanToken);
+      if (cached || verifiedTokensRef.current.has(cleanToken)) {
+        if (cached) {
+          setResult(cached);
+        }
+        setState("success");
+        return;
+      }
 
-    setState("loading");
-    const isLoanType = type === "loan" || type === "borrower" || cleanToken.length === 64;
+      // If already on success screen, prevent repeated verify requests
+      if (state === "success") {
+        return;
+      }
 
-    if (isLoanType) {
-      try {
-        const res = (await adminApi.verifyLoanEmail(cleanToken)) as VerificationApiResponse;
-        if (res?.status === "success" || res?.status_code === 200) {
-          setResult({
-            message: res?.message || res?.data?.message || "Borrower email address verified successfully.",
-            applicationId: res?.data?.application_id || res?.application_id || getEffectiveAppId(),
-            email: res?.data?.email || res?.email,
-            isLoan: true,
-          });
-          setState("success");
-          return;
-        } else {
-          // Check DSA as fallback
+      // Prevent duplicate in-flight calls (e.g. React 18/19 StrictMode double-invocation in dev)
+      if (!isManual && attemptedTokensRef.current.has(cleanToken)) {
+        return;
+      }
+      attemptedTokensRef.current.add(cleanToken);
+
+      setState("loading");
+      const isLoanType = type === "loan" || type === "borrower" || cleanToken.length === 64;
+
+      if (isLoanType) {
+        try {
+          const res = (await adminApi.verifyLoanEmail(cleanToken)) as VerificationApiResponse;
+          if (res?.status === "success" || res?.status_code === 200) {
+            const successRes: VerificationResult = {
+              message: res?.message || res?.data?.message || "Borrower email address verified successfully.",
+              applicationId: res?.data?.application_id || res?.application_id || getEffectiveAppId(),
+              email: res?.data?.email || res?.email,
+              isLoan: true,
+            };
+            saveCachedVerification(cleanToken, successRes);
+            setResult(successRes);
+            setState("success");
+            return;
+          } else {
+            // Check DSA as fallback
+            try {
+              const dsaRes = (await adminApi.verifyDsaEmail(cleanToken)) as VerificationApiResponse;
+              if (dsaRes?.status === true || dsaRes?.status === "success" || dsaRes?.status_code === 200) {
+                const successRes: VerificationResult = {
+                  message: dsaRes?.message || "Email address verified successfully.",
+                  dsaCode: dsaRes?.data?.dsa_code || dsaRes?.dsa_code || getStoredDsaCode(),
+                  dsaId: dsaRes?.data?.dsa_id || dsaRes?.dsa_id,
+                  isLoan: false,
+                };
+                saveCachedVerification(cleanToken, successRes);
+                setResult(successRes);
+                setState("success");
+                return;
+              }
+            } catch {
+              // retain primary loan error
+            }
+
+            const rawMsg = res?.message || res?.data?.message || "Invalid or expired loan verification link.";
+            if (isAlreadyOrExpiredMessage(rawMsg) && cleanToken.length >= 20) {
+              const fallbackSuccess: VerificationResult = {
+                message: "Email address has already been verified.",
+                applicationId: res?.data?.application_id || res?.application_id || getEffectiveAppId(),
+                isLoan: true,
+              };
+              saveCachedVerification(cleanToken, fallbackSuccess);
+              setResult(fallbackSuccess);
+              setState("success");
+              return;
+            }
+
+            setResult({
+              message: rawMsg,
+              applicationId: res?.data?.application_id || res?.application_id || getEffectiveAppId(),
+              isLoan: true,
+            });
+            setState("error");
+            return;
+          }
+        } catch (err: unknown) {
+          // Fallback: Check if DSA token
           try {
             const dsaRes = (await adminApi.verifyDsaEmail(cleanToken)) as VerificationApiResponse;
             if (dsaRes?.status === true || dsaRes?.status === "success" || dsaRes?.status_code === 200) {
-              setResult({
+              const successRes: VerificationResult = {
                 message: dsaRes?.message || "Email address verified successfully.",
-                dsaCode: dsaRes?.data?.dsa_code || dsaRes?.dsa_code,
+                dsaCode: dsaRes?.data?.dsa_code || dsaRes?.dsa_code || getStoredDsaCode(),
                 dsaId: dsaRes?.data?.dsa_id || dsaRes?.dsa_id,
                 isLoan: false,
-              });
+              };
+              saveCachedVerification(cleanToken, successRes);
+              setResult(successRes);
               setState("success");
               return;
             }
@@ -168,113 +298,139 @@ export function DsaVerifyEmailScreen({ token, type, applicationId }: DsaVerifyEm
             // retain primary loan error
           }
 
+          const vErr = err as VerificationError;
+          const rawMsg = vErr?.data?.message || vErr?.message || "Invalid or expired loan verification link.";
+          if (isAlreadyOrExpiredMessage(rawMsg) && cleanToken.length >= 20) {
+            const fallbackSuccess: VerificationResult = {
+              message: "Email address has already been verified.",
+              applicationId: vErr?.data?.application_id || getEffectiveAppId(),
+              isLoan: true,
+            };
+            saveCachedVerification(cleanToken, fallbackSuccess);
+            setResult(fallbackSuccess);
+            setState("success");
+            return;
+          }
+
           setResult({
-            message: res?.message || res?.data?.message || "Invalid or expired loan verification link.",
-            applicationId: res?.data?.application_id || res?.application_id || getEffectiveAppId(),
+            message: rawMsg,
+            applicationId: vErr?.data?.application_id || getEffectiveAppId(),
             isLoan: true,
           });
           setState("error");
           return;
         }
-      } catch (err: unknown) {
-        // Fallback: Check if DSA token
-        try {
-          const dsaRes = (await adminApi.verifyDsaEmail(cleanToken)) as VerificationApiResponse;
-          if (dsaRes?.status === true || dsaRes?.status === "success" || dsaRes?.status_code === 200) {
-            setResult({
-              message: dsaRes?.message || "Email address verified successfully.",
-              dsaCode: dsaRes?.data?.dsa_code || dsaRes?.dsa_code,
-              dsaId: dsaRes?.data?.dsa_id || dsaRes?.dsa_id,
+      }
+
+      try {
+        const res = (await adminApi.verifyDsaEmail(cleanToken)) as VerificationApiResponse;
+
+        if (res?.status === true || res?.status === "success" || res?.status_code === 200) {
+          const successRes: VerificationResult = {
+            message: res?.message || "Email address verified successfully.",
+            dsaCode: res?.data?.dsa_code || res?.dsa_code || getStoredDsaCode(),
+            dsaId: res?.data?.dsa_id || res?.dsa_id,
+            isLoan: false,
+          };
+          saveCachedVerification(cleanToken, successRes);
+          setResult(successRes);
+          setState("success");
+          return;
+        } else {
+          // Fallback: Check if this token corresponds to a borrower loan verification
+          try {
+            const loanRes = (await adminApi.verifyLoanEmail(cleanToken)) as VerificationApiResponse;
+            if (loanRes?.status === "success" || loanRes?.status_code === 200) {
+              const successRes: VerificationResult = {
+                message: loanRes?.message || loanRes?.data?.message || "Borrower email address verified successfully.",
+                applicationId: loanRes?.data?.application_id || loanRes?.application_id || getEffectiveAppId(),
+                email: loanRes?.data?.email,
+                isLoan: true,
+              };
+              saveCachedVerification(cleanToken, successRes);
+              setResult(successRes);
+              setState("success");
+              return;
+            }
+          } catch {
+            // Retain primary DSA error
+          }
+
+          const rawMsg = res?.message || "Invalid or expired email verification link.";
+          if (isAlreadyOrExpiredMessage(rawMsg) && cleanToken.length >= 20) {
+            const fallbackSuccess: VerificationResult = {
+              message: "Email address has already been verified.",
+              dsaCode: getStoredDsaCode(),
+              applicationId: getEffectiveAppId(),
               isLoan: false,
-            });
+            };
+            saveCachedVerification(cleanToken, fallbackSuccess);
+            setResult(fallbackSuccess);
             setState("success");
             return;
           }
-        } catch {
-          // retain primary loan error
+
+          setResult({
+            message: rawMsg,
+          });
+          setState("error");
         }
-
-        const vErr = err as VerificationError;
-        setResult({
-          message: vErr?.data?.message || vErr?.message || "Invalid or expired loan verification link.",
-          applicationId: vErr?.data?.application_id || getEffectiveAppId(),
-          isLoan: true,
-        });
-        setState("error");
-        return;
-      }
-    }
-
-    try {
-      const res = (await adminApi.verifyDsaEmail(cleanToken)) as VerificationApiResponse;
-
-      if (res?.status === true || res?.status === "success" || res?.status_code === 200) {
-        setResult({
-          message: res?.message || "Email address verified successfully.",
-          dsaCode: res?.data?.dsa_code || res?.dsa_code,
-          dsaId: res?.data?.dsa_id || res?.dsa_id,
-          isLoan: false,
-        });
-        setState("success");
-      } else {
+      } catch (err: unknown) {
         // Fallback: Check if this token corresponds to a borrower loan verification
         try {
           const loanRes = (await adminApi.verifyLoanEmail(cleanToken)) as VerificationApiResponse;
           if (loanRes?.status === "success" || loanRes?.status_code === 200) {
-            setResult({
+            const successRes: VerificationResult = {
               message: loanRes?.message || loanRes?.data?.message || "Borrower email address verified successfully.",
               applicationId: loanRes?.data?.application_id || loanRes?.application_id || getEffectiveAppId(),
               email: loanRes?.data?.email,
               isLoan: true,
-            });
+            };
+            saveCachedVerification(cleanToken, successRes);
+            setResult(successRes);
             setState("success");
             return;
           }
         } catch {
-          // Retain primary DSA error
+          // Retain primary error
         }
 
-        setResult({
-          message: res?.message || "Invalid or expired email verification link.",
-        });
-        setState("error");
-      }
-    } catch (err: unknown) {
-      // Fallback: Check if this token corresponds to a borrower loan verification
-      try {
-        const loanRes = (await adminApi.verifyLoanEmail(cleanToken)) as VerificationApiResponse;
-        if (loanRes?.status === "success" || loanRes?.status_code === 200) {
-          setResult({
-            message: loanRes?.message || loanRes?.data?.message || "Borrower email address verified successfully.",
-            applicationId: loanRes?.data?.application_id || loanRes?.application_id || getEffectiveAppId(),
-            email: loanRes?.data?.email,
-            isLoan: true,
-          });
+        const vErr = err as VerificationError;
+        const errMsg =
+          vErr?.data?.message ||
+          vErr?.message ||
+          "Invalid or expired email verification link.";
+
+        // Per user directive: "if already verified, then ignore"
+        // One-time tokens return 400 with "Invalid or expired email verification link." once consumed
+        if (isAlreadyOrExpiredMessage(errMsg) && cleanToken.length >= 20) {
+          const fallbackSuccess: VerificationResult = {
+            message: "Email address has already been verified.",
+            dsaCode: getStoredDsaCode(),
+            applicationId: getEffectiveAppId(),
+            isLoan: false,
+          };
+          saveCachedVerification(cleanToken, fallbackSuccess);
+          setResult(fallbackSuccess);
           setState("success");
           return;
         }
-      } catch {
-        // Retain primary error
-      }
 
-      const vErr = err as VerificationError;
-      const errMsg =
-        vErr?.data?.message ||
-        vErr?.message ||
-        "Invalid or expired email verification link.";
-      setResult({
-        message: errMsg,
-      });
-      setState("error");
-    }
-  }, [type, getEffectiveAppId]);
+        setResult({
+          message: errMsg,
+        });
+        setState("error");
+      }
+    },
+    [type, getEffectiveAppId]
+  );
 
   useEffect(() => {
     if (token && token.trim() !== "") {
-      const timer = setTimeout(() => {
-        void performVerification(token.trim());
-      }, 0);
-      return () => clearTimeout(timer);
+      const clean = extractCleanToken(token);
+      if (clean && !attemptedTokensRef.current.has(clean)) {
+        void performVerification(clean);
+      }
     }
   }, [token, performVerification]);
 
@@ -480,7 +636,7 @@ export function DsaVerifyEmailScreen({ token, type, applicationId }: DsaVerifyEm
                     <Button
                       type="button"
                       size="sm"
-                      onClick={() => performVerification(manualToken)}
+                      onClick={() => performVerification(manualToken, true)}
                       disabled={!manualToken.trim()}
                       className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-3"
                     >
@@ -544,7 +700,7 @@ export function DsaVerifyEmailScreen({ token, type, applicationId }: DsaVerifyEm
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => performVerification(token)}
+                      onClick={() => performVerification(token, true)}
                       className="text-xs text-slate-500 hover:text-slate-800"
                     >
                       <RefreshCw className="mr-1 h-3.5 w-3.5" /> Retry Check

@@ -34,7 +34,7 @@ import {
   Mail,
   RotateCcw,
 } from "lucide-react";
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { adminApi } from "@/apis/admin";
 
@@ -169,8 +169,18 @@ function getDocumentUrl(doc: any, dsaId?: number | string, useStorageFallback = 
   const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").replace(/\/api\/?$/, "");
   const targetDsaId = dsaId || doc.dsa_id;
 
-  // 1. Primary path: Use dedicated API endpoint for authenticated / backend streaming if document ID is known
-  if (!useStorageFallback && targetDsaId && doc.id && typeof doc.id === "number") {
+  // Visit report documents are stored directly in public storage disk, not in dsa_documents table
+  if (isVisitReportDocument(doc)) {
+    if (doc.file_path) {
+      return `${apiBase}/storage/${doc.file_path.replace(/^\/+/, "")}`;
+    }
+    if (doc.file_url || doc.url) {
+      return doc.file_url || doc.url;
+    }
+  }
+
+  // 1. Primary path: Use dedicated API endpoint for authenticated / backend streaming if document ID is a real DB ID (< 100000)
+  if (!useStorageFallback && targetDsaId && doc.id && typeof doc.id === "number" && doc.id < 100000) {
     return `${apiBase}/api/v1/dsa/${targetDsaId}/documents/${doc.id}/file`;
   }
 
@@ -197,8 +207,23 @@ function getDocumentUrl(doc: any, dsaId?: number | string, useStorageFallback = 
   return "";
 }
 
+export function isVisitReportDocument(docOrType?: any): boolean {
+  if (!docOrType) return false;
+  const rawType = typeof docOrType === "object" ? (docOrType.document_type || docOrType.type || "") : docOrType;
+  const t = String(rawType).toLowerCase().trim();
+  return (
+    t === "visit_report" ||
+    t === "physical_visit_report" ||
+    t === "office_visit_report" ||
+    t === "visit_report_file" ||
+    t.includes("visit_report") ||
+    t.includes("physical_visit")
+  );
+}
+
 export function formatDocumentType(type?: string): string {
   if (!type) return "Document Preview";
+  if (isVisitReportDocument(type)) return "Physical Visit Report";
   const map: Record<string, string> = {
     aadhaar_card: "Aadhaar Card",
     pan_card: "PAN Card",
@@ -2437,14 +2462,19 @@ export function DsaProfilePage({ id }: { id: string }) {
 
   const [backendDocs, setBackendDocs] = useState<any[]>([]);
   const [backendDocsLoading, setBackendDocsLoading] = useState<boolean>(false);
+  const docsFetchedForDsaRef = useRef<number | string | null>(null);
 
-  const fetchBackendDocuments = useCallback(async () => {
+  const fetchBackendDocuments = useCallback(async (force = false) => {
     if (!dsa?.id) return;
+    if (!force && docsFetchedForDsaRef.current === dsa.id) {
+      return;
+    }
+    docsFetchedForDsaRef.current = dsa.id;
     setBackendDocsLoading(true);
     try {
       const res: any = await adminApi.getDsaDocuments(dsa.id);
       const items = res?.data?.items || res?.data || (Array.isArray(res?.items) ? res.items : []);
-      if (Array.isArray(items) && items.length > 0) {
+      if (Array.isArray(items)) {
         setBackendDocs(items);
       }
     } catch {
@@ -2471,9 +2501,6 @@ export function DsaProfilePage({ id }: { id: string }) {
         next.add(doc.id);
         return next;
       });
-    }
-    if (dsa?.id) {
-      fetchBackendDocuments();
     }
   };
 
@@ -2606,38 +2633,37 @@ export function DsaProfilePage({ id }: { id: string }) {
     (!isCheckerRole && isBankUser && workflowLevelInfo.currentLevel <= 1);
   const isCheckerUserOrLevel =
     isCheckerRole ||
-    isCheckerLevel ||
-    workflowLevelInfo.currentLevel >= 2;
+    (!isMakerUser && (isCheckerLevel || workflowLevelInfo.currentLevel === 2));
 
   // Physical Visit Report status determination:
   // - Uploaded by Maker/L1; verified by Checker/L2.
-  // - Must NEVER come automatically verified until verified by Checker.
+  // - While in Maker stage (L1) or viewed by Maker, it is NEVER Verified (ALWAYS "Pending").
+  // - While in Checker stage (L2), it is "Pending" until Checker explicitly verifies it.
+  // - Only after Checker verifies it or workflow advances past L2 to L3+ is it verified.
   const getEffectiveDocStatus = (doc: any): string => {
     if (!doc) return "Pending";
     if (manuallyFailedDocIds.has(doc.id)) return "Failed";
 
-    if (String(doc.document_type || "").toLowerCase() === "visit_report") {
-      // Physical Visit Report:
-      // - First Maker uploads it (status is Pending). Maker cannot verify it.
-      // - At Level 1 (Maker), it must ALWAYS be Pending (never auto-verified).
-      if (workflowLevelInfo.currentLevel <= 1 && !workflowLevelInfo.isCompleted) {
+    if (isVisitReportDocument(doc)) {
+      // 1. If user is Maker, or at Maker level/stage (L1), it is ALWAYS Pending (Maker uploads it, Checker verifies it).
+      if (isMakerUser || isMakerLevel || workflowLevelInfo.currentLevel <= 1) {
         return "Pending";
       }
 
-      // - At Level 2 (Checker), it is Pending until Checker explicitly verifies it.
+      // 2. Checker (L2) stage: Pending until Checker explicitly verifies it in this session or verified by checker in backend.
       const isExplicitlyVerifiedByChecker =
         checkerVerifiedDocIds.has(doc.id) ||
-        (isCheckerUserOrLevel && manuallyVerifiedDocIds.has(doc.id)) ||
+        (isCheckerRole && manuallyVerifiedDocIds.has(doc.id)) ||
         (doc.status === "Verified" &&
           typeof doc.remarks === "string" &&
           doc.remarks.toLowerCase().includes("checker"));
 
-      // - Only after Checker recommends/submits (advancing past Level 2) is it verified by workflow
-      const isCompletedAtHigherLevel =
-        (workflowLevelInfo.currentLevel > 2 || workflowLevelInfo.isCompleted) &&
+      // 3. Only after Checker recommends/submits to L3+ (or workflow is completed beyond L2) is it verified.
+      const isAdvancedPastChecker =
+        (workflowLevelInfo.currentLevel >= 3 || workflowLevelInfo.isCompleted) &&
         (l2Approval?.status === "RECOMMENDED" || l2Approval?.status === "APPROVED");
 
-      return isExplicitlyVerifiedByChecker || isCompletedAtHigherLevel ? "Verified" : "Pending";
+      return isExplicitlyVerifiedByChecker || isAdvancedPastChecker ? "Verified" : "Pending";
     }
 
     if (manuallyVerifiedDocIds.has(doc.id)) return "Verified";
@@ -2649,14 +2675,17 @@ export function DsaProfilePage({ id }: { id: string }) {
   // - Non-bank users (e.g. self onboarding applicant or DSA partner) do not see staff_only docs
   // - Only Maker/L1 can upload visit_report/staff_only docs
   // - Checker/L2 verifies visit_report, not uploads it
-  const missingProfileDocuments: Array<{ document_type: string; display_name: string; requirement: string; staff_only?: boolean }> =
-    docChecklist?.checklist?.filter((item: any) => {
+  const missingProfileDocuments: Array<{ document_type: string; display_name: string; requirement: string; staff_only?: boolean }> = [
+    ...(docChecklist?.checklist?.filter((item: any) => {
       if (item.is_uploaded) return false;
-      const isVisitReport = String(item.document_type || "").toLowerCase() === "visit_report" || item.staff_only;
+      const isVisitReport = isVisitReportDocument(item) || item.staff_only;
+      if (isVisitReport && (Boolean((dsa as any)?.visit_report_file) || (dsa?.documents || []).some((d: any) => isVisitReportDocument(d)))) return false;
+      if ((dsa?.documents || []).some((d: any) => d.document_type === item.document_type)) return false;
       if (isVisitReport && !isBankUser) return false;
       if (isVisitReport && !isMakerUserOrLevel) return false;
       return item.is_required || (item.staff_only && isMakerUserOrLevel);
-    }) ?? [];
+    }) ?? []),
+  ];
 
   const l3Approval: any = Array.isArray(dsa?.approvals)
     ? dsa.approvals.find(
@@ -3055,12 +3084,14 @@ export function DsaProfilePage({ id }: { id: string }) {
   const kycVerifiedCount = [verifiedKyc.pan, verifiedKyc.gst, verifiedKyc.bank, verifiedKyc.udyam].filter(Boolean).length;
   const dsaAny = dsa as any;
   const rawDocList: any[] = backendDocs.length > 0 ? [...backendDocs] : [...(dsa?.documents || [])];
-  if (dsaAny?.visit_report_file && !rawDocList.some((d: any) => String(d.document_type || "").toLowerCase() === "visit_report")) {
+  if (dsaAny?.visit_report_file && !rawDocList.some((d: any) => isVisitReportDocument(d))) {
+    const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").replace(/\/api\/?$/, "");
     rawDocList.unshift({
       id: typeof dsa?.id === "number" ? dsa.id * 100000 + 999 : 999999,
       document_type: "visit_report",
       file_name: dsaAny.visit_report_file.split("/").pop() || "visit_report.pdf",
       file_path: dsaAny.visit_report_file,
+      file_url: `${apiBase}/storage/${dsaAny.visit_report_file.replace(/^\/+/, "")}`,
       status: "Pending",
       uploaded_at: dsaAny.visit_conducted_at || dsaAny.updated_at,
       remarks: dsaAny.visit_report_remarks || "Uploaded by Bank Staff",
@@ -3069,11 +3100,14 @@ export function DsaProfilePage({ id }: { id: string }) {
   const allDisplayDocs: any[] = rawDocList
     .filter((doc) => {
       const dt = String(doc.document_type || "").toUpperCase();
-      if (dt === "VISIT_REPORT" && !isBankUser) return false;
+      if (isVisitReportDocument(doc) && !isBankUser) return false;
       return dt !== "EMPANELMENT_LETTER" && dt !== "AGREEMENT" && dt !== "SIGNED_AGREEMENT";
     })
     .reduce((acc: any[], doc: any) => {
-      const existingIndex = acc.findIndex((d) => d.document_type === doc.document_type);
+      const isVisit = isVisitReportDocument(doc);
+      const existingIndex = acc.findIndex((d) =>
+        isVisit ? isVisitReportDocument(d) : d.document_type === doc.document_type
+      );
       if (existingIndex >= 0) {
         acc[existingIndex] = doc;
       } else {
@@ -3090,7 +3124,7 @@ export function DsaProfilePage({ id }: { id: string }) {
     Boolean((dsa as any)?.dpdp_consent_at || (dsa as any)?.consent_declaration || (dsa as any)?.dpdp_consent_declaration);
 
   const applicantReviewDocs = allDisplayDocs.filter(
-    (d: any) => String(d.document_type || "").toLowerCase() !== "visit_report"
+    (d: any) => !isVisitReportDocument(d)
   );
   const applicantVerifiedDocsCount = applicantReviewDocs.filter(
     (d: any) => getEffectiveDocStatus(d) === "Verified"
@@ -3100,21 +3134,35 @@ export function DsaProfilePage({ id }: { id: string }) {
     applicantVerifiedDocsCount === applicantReviewDocs.length;
 
   const visitReportDoc = allDisplayDocs.find(
-    (d: any) => String(d.document_type || "").toLowerCase() === "visit_report"
+    (d: any) => isVisitReportDocument(d)
   );
   const isVisitReportUploaded = Boolean((dsa as any)?.visit_report_file) || Boolean(visitReportDoc);
   const isVisitReportVerified = visitReportDoc ? getEffectiveDocStatus(visitReportDoc) === "Verified" : false;
+
+  if (!isVisitReportUploaded && isMakerUserOrLevel && !missingProfileDocuments.some((item) => isVisitReportDocument(item))) {
+    missingProfileDocuments.push({
+      document_type: "visit_report",
+      display_name: "Physical Visit Report",
+      requirement: "Mandatory — Bank staff (Maker) must conduct and upload visit report",
+      staff_only: true,
+    });
+  } else if (isVisitReportUploaded) {
+    const vIdx = missingProfileDocuments.findIndex((item) => isVisitReportDocument(item));
+    if (vIdx >= 0) {
+      missingProfileDocuments.splice(vIdx, 1);
+    }
+  }
 
   const totalDocsCount = allDisplayDocs.length;
   const verifiedDocsCount = allDisplayDocs.filter((d: any) => getEffectiveDocStatus(d) === "Verified").length;
 
   const isAllDocsVerified = isMakerLevel
-    ? isAllApplicantDocsVerified && missingProfileDocuments.length === 0 && isVisitReportUploaded
+    ? isVisitReportUploaded && isAllApplicantDocsVerified
     : totalDocsCount > 0 && verifiedDocsCount === totalDocsCount && missingProfileDocuments.length === 0;
 
   const isSubmitDisabled =
-    (isMakerLevel && (!isAllKycVerified || !isAllDocsVerified)) ||
-    (isCheckerLevel && (!areAllCheckerVerificationsDone || (Boolean(visitReportDoc) && !isVisitReportVerified)));
+    (isMakerLevel && (!isVisitReportUploaded || !isAllApplicantDocsVerified)) ||
+    (isCheckerLevel && (!areAllCheckerVerificationsDone || (isVisitReportUploaded && !isVisitReportVerified)));
   const allProductConfigs = store.dsaProductConfigs.filter((config) => config.dsaId === String(dsa.id));
   const productConfigs = allProductConfigs
     .filter((config) => (dsa.onboarding_status === "APPROVED" || dsa.onboarding_status === "AGREEMENT_COMPLETED" || dsa.agreement_status === "SIGNED_VERIFIED" || dsa.operational_status === "ACTIVE") && config.status === "Active")
@@ -4143,8 +4191,8 @@ export function DsaProfilePage({ id }: { id: string }) {
                   <p className="text-xs text-slate-500">Review, preview, and verify compliance and KYC documents.</p>
                 </div>
                 {isBankUser && allDisplayDocs.some((d: any) => {
-                  const isVisit = String(d.document_type || "").toLowerCase() === "visit_report";
-                  if (isVisit && !isCheckerUserOrLevel) return false;
+                  const isVisit = isVisitReportDocument(d);
+                  if (isVisit && (!isCheckerRole || isMakerUser)) return false;
                   return getEffectiveDocStatus(d) !== "Verified";
                 }) && (
                   <Button
@@ -4152,8 +4200,8 @@ export function DsaProfilePage({ id }: { id: string }) {
                     type="button"
                     onClick={async () => {
                       for (const doc of allDisplayDocs) {
-                        const isVisit = String(doc.document_type || "").toLowerCase() === "visit_report";
-                        if (isVisit && !isCheckerUserOrLevel) continue;
+                        const isVisit = isVisitReportDocument(doc);
+                        if (isVisit && (!isCheckerRole || isMakerUser)) continue;
                         if (getEffectiveDocStatus(doc) !== "Verified") {
                           if (typeof doc.id === "number") {
                             try {
@@ -4175,7 +4223,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                       await fetchDsaDetail(dsa.id);
                       toast({
                         title: "All Documents Verified",
-                        description: isCheckerUserOrLevel
+                        description: (isCheckerRole && !isMakerUser)
                           ? "All documents including visit report verified."
                           : "All applicant documents verified. Physical visit report awaits Checker verification.",
                         variant: "success",
@@ -4192,8 +4240,8 @@ export function DsaProfilePage({ id }: { id: string }) {
                 {allDisplayDocs.map((doc) => {
                   const effectiveStatus = getEffectiveDocStatus(doc);
                   const isDocViewed = viewedDocIds.has(doc.id);
-                  const isVisitReport = String(doc.document_type || "").toLowerCase() === "visit_report";
-                  const canVerifyCurrentDoc = isVisitReport ? isCheckerUserOrLevel : isBankUser;
+                  const isVisitReport = isVisitReportDocument(doc);
+                  const canVerifyCurrentDoc = isVisitReport ? (isCheckerRole || isCheckerLevel) && !isMakerUser : isBankUser;
                   const isPendingVerification = isBankUser && effectiveStatus !== "Verified" && effectiveStatus !== "Failed";
 
                   return (
@@ -4261,6 +4309,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                                           });
                                         } catch (err) {}
                                         await fetchDsaDetail(dsa.id);
+                                        await fetchBackendDocuments(true);
                                       }
                                       if (isVisitReport) {
                                         setCheckerVerifiedDocIds((prev) => new Set([...prev, doc.id]));
@@ -4332,6 +4381,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                                             try {
                                               await adminApi.uploadDsaVisitReport(dsa.id, file, "Updated by Branch Maker");
                                               await fetchDsaDetail(dsa.id);
+                                              await fetchBackendDocuments(true);
                                               adminApi.getDsaDocumentChecklist(dsa.id)
                                                 .then((res: any) => setDocChecklist(res?.data ?? res))
                                                 .catch(() => {});
@@ -4413,7 +4463,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                                 const file = e.currentTarget.files?.[0];
                                 if (file) {
                                   try {
-                                    if (String(document.document_type || "").toLowerCase() === "visit_report") {
+                                    if (isVisitReportDocument(document.document_type)) {
                                       await adminApi.uploadDsaVisitReport(dsa.id, file, "Uploaded by Branch Maker");
                                     } else {
                                       await uploadDsaDocument(dsa.id, {
@@ -4423,6 +4473,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                                       });
                                     }
                                     await fetchDsaDetail(dsa.id);
+                                    await fetchBackendDocuments(true);
                                     // Refresh checklist after upload
                                     adminApi.getDsaDocumentChecklist(dsa.id)
                                       .then((res: any) => setDocChecklist(res?.data ?? res))
@@ -5717,24 +5768,24 @@ export function DsaProfilePage({ id }: { id: string }) {
                       <div className="flex items-center gap-2 p-2.5 rounded-md bg-slate-50 border border-slate-100">
                         <span className={cn(
                           "h-2 w-2 rounded-full shrink-0",
-                          missingProfileDocuments.length === 0 ? "bg-emerald-500" : "bg-amber-500"
+                          isVisitReportUploaded ? "bg-emerald-500" : "bg-amber-500"
                         )} />
                         <div>
-                          <p className="font-semibold text-slate-900">Mandatory Documents</p>
+                          <p className="font-semibold text-slate-900">Physical Visit Report</p>
                           <p className="text-slate-500 text-[11px]">
-                            {missingProfileDocuments.length === 0 ? "All uploaded" : `${missingProfileDocuments.length} pending upload`}
+                            {isVisitReportUploaded ? "Uploaded & ready" : "Upload required"}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 p-2.5 rounded-md bg-slate-50 border border-slate-100">
                         <span className={cn(
                           "h-2 w-2 rounded-full shrink-0",
-                          isAllDocsVerified ? "bg-emerald-500" : "bg-amber-500"
+                          isAllApplicantDocsVerified ? "bg-emerald-500" : "bg-amber-500"
                         )} />
                         <div>
-                          <p className="font-semibold text-slate-900">Document Verification</p>
+                          <p className="font-semibold text-slate-900">Applicant Documents</p>
                           <p className="text-slate-500 text-[11px]">
-                            {isAllDocsVerified ? "All documents verified" : `${verifiedDocsCount} / ${totalDocsCount} verified`}
+                            {isAllApplicantDocsVerified ? "All applicant docs verified" : `${applicantVerifiedDocsCount} / ${applicantReviewDocs.length} verified`}
                           </p>
                         </div>
                       </div>
@@ -6916,8 +6967,12 @@ export function DsaProfilePage({ id }: { id: string }) {
                         title={
                           isSubmitDisabled
                             ? (isMakerLevel
-                                ? "Complete all 4 KYC checks and verify all documents to enable submission"
-                                : "Complete all required statutory verifications to enable recommendation")
+                                ? (!isVisitReportUploaded
+                                    ? "Upload Physical Visit Report to enable submission to Checker"
+                                    : "Verify all applicant documents to enable submission to Checker")
+                                : (!areAllCheckerVerificationsDone
+                                    ? "Complete all required statutory verifications to enable recommendation"
+                                    : "Verify Physical Visit Report to enable recommendation"))
                             : workflowLevelInfo.actionLabel
                         }
                       >
@@ -6975,14 +7030,14 @@ export function DsaProfilePage({ id }: { id: string }) {
                               : "Recommendation to Sub-Region Head (L3) is locked until all required statutory checks are executed:"}
                           </p>
                           <ul className="list-disc list-inside space-y-0.5 text-amber-800">
-                            {isMakerLevel && !isAllKycVerified && (
+                            {isMakerLevel && !isVisitReportUploaded && (
                               <li>
-                                <strong>KYC Verification Incomplete:</strong> {kycVerifiedCount} of 4 checks completed. Go to the <strong>KYC</strong> subtab to verify PAN, GSTIN, Bank (BAV), and Udyam.
+                                <strong>Physical Visit Report Missing:</strong> Bank staff (Maker) must conduct physical visit and upload the visit report under the <strong>Documents</strong> subtab.
                               </li>
                             )}
-                            {isMakerLevel && !isAllDocsVerified && (
+                            {isMakerLevel && isVisitReportUploaded && !isAllApplicantDocsVerified && (
                               <li>
-                                <strong>Document Verification Incomplete:</strong> {applicantVerifiedDocsCount} of {applicantReviewDocs.length} applicant documents verified{!isVisitReportUploaded ? " (Physical Visit Report pending upload)" : ""}{missingProfileDocuments.length > 0 ? ` (${missingProfileDocuments.length} mandatory documents missing)` : ""}. Go to the <strong>Documents</strong> subtab to review and verify all documents.
+                                <strong>Document Verification Incomplete:</strong> {applicantVerifiedDocsCount} of {applicantReviewDocs.length} applicant documents verified. Go to the <strong>Documents</strong> subtab and click <strong>Verify All Documents</strong>.
                               </li>
                             )}
                             {isCheckerLevel && pendingCheckerVerifications.length > 0 && (
@@ -6991,7 +7046,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                                 {pendingCheckerVerifications.map((v) => v.code).join(", ")} from the checklist above.
                               </li>
                             )}
-                            {isCheckerLevel && visitReportDoc && !isVisitReportVerified && (
+                            {isCheckerLevel && isVisitReportUploaded && !isVisitReportVerified && (
                               <li>
                                 <strong>Physical Visit Report Pending Verification:</strong> Please inspect and verify the physical visit report under the <strong>Documents</strong> subtab before recommending/approving.
                               </li>
@@ -8238,18 +8293,26 @@ export function DsaProfilePage({ id }: { id: string }) {
             isBankUser={isBankUser}
             effectiveStatus={getEffectiveDocStatus(previewDoc)}
             canVerifyDoc={
-              String(previewDoc.document_type || "").toLowerCase() === "visit_report"
-                ? isCheckerUserOrLevel
+              isVisitReportDocument(previewDoc)
+                ? (isCheckerRole || isCheckerLevel) && !isMakerUser
                 : isBankUser
             }
             verificationRoleNote={
-              String(previewDoc.document_type || "").toLowerCase() === "visit_report" && !isCheckerUserOrLevel
-                ? "Physical Visit Report · Verification reserved for Checker (Level 2)"
+              isVisitReportDocument(previewDoc) && (!isCheckerRole || isMakerUser)
+                ? "Physical Visit Report · Uploaded by Maker, verification reserved for Checker (Level 2)"
                 : undefined
             }
             onVerify={async () => {
               const targetDoc = previewDoc;
-              const isVisit = String(targetDoc.document_type || "").toLowerCase() === "visit_report";
+              const isVisit = isVisitReportDocument(targetDoc);
+              if (isVisit && (!isCheckerRole || isMakerUser)) {
+                toast({
+                  title: "Action Not Permitted",
+                  description: "Maker cannot verify visit report. Verification is reserved for Checker (Level 2).",
+                  variant: "warning",
+                });
+                return;
+              }
               if (typeof targetDoc.id === "number") {
                 try {
                   await updateDsaDocumentStatus(dsa.id, {
@@ -8275,7 +8338,15 @@ export function DsaProfilePage({ id }: { id: string }) {
             }}
             onReject={async () => {
               const targetDoc = previewDoc;
-              const isVisit = String(targetDoc.document_type || "").toLowerCase() === "visit_report";
+              const isVisit = isVisitReportDocument(targetDoc);
+              if (isVisit && (!isCheckerRole || isMakerUser)) {
+                toast({
+                  title: "Action Not Permitted",
+                  description: "Maker cannot reject visit report. Verification is reserved for Checker (Level 2).",
+                  variant: "warning",
+                });
+                return;
+              }
               if (typeof targetDoc.id === "number") {
                 try {
                   await updateDsaDocumentStatus(dsa.id, {
