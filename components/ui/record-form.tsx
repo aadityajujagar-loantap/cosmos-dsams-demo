@@ -2,7 +2,7 @@
 
 import { FormEvent, ReactNode, useId, useState } from "react";
 
-import { Button, Field, Input, Label, Select, Textarea } from "@/components/ui/primitives";
+import { Button, DatePicker, Field, Input, Label, Select, Textarea } from "@/components/ui/primitives";
 
 export interface FieldConfig<T> {
   name: keyof T;
@@ -67,6 +67,14 @@ export function RecordForm<T extends object>({
                   id={`${formId}-${String(field.name)}`}
                   onChange={(event) => update(field.name, event.target.value)}
                   placeholder={field.placeholder}
+                  required={field.required}
+                  value={fieldValue}
+                />
+              ) : field.type === "date" ? (
+                <DatePicker
+                  id={`${formId}-${String(field.name)}`}
+                  onChange={(event) => update(field.name, event.target.value)}
+                  placeholder={field.placeholder || "DD/MM/YYYY"}
                   required={field.required}
                   value={fieldValue}
                 />

@@ -4270,7 +4270,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                               )
                             ) : (
                               <span className="text-xs text-slate-400">
-                                {doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString() : ""}
+                                {doc.uploaded_at ? formatDate(doc.uploaded_at) : ""}
                               </span>
                             )}
                           </div>
@@ -8427,7 +8427,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                           <span className="text-xs text-slate-500 font-mono">Ref: {evalId}</span>
                         </div>
                         <p className="text-xs text-slate-600">
-                          Evaluated: {bre?.evaluated_at ? formatDate(bre.evaluated_at) : new Date().toLocaleDateString()} • Branch: {dsa.branch?.branch_name || dsa.branch_name || "Main Branch"}
+                          Evaluated: {bre?.evaluated_at ? formatDate(bre.evaluated_at) : formatDate(new Date().toISOString())} • Branch: {dsa.branch?.branch_name || dsa.branch_name || "Main Branch"}
                         </p>
                       </div>
 

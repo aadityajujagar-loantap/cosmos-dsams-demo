@@ -125,8 +125,17 @@ export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElem
     <input
       className={cn(
         "h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100",
+        props.type === "date" && "cursor-pointer",
         className,
       )}
+      onClick={(e) => {
+        if (props.type === "date" && "showPicker" in e.currentTarget) {
+          try {
+            (e.currentTarget as HTMLInputElement).showPicker();
+          } catch {}
+        }
+        props.onClick?.(e);
+      }}
       {...props}
     />
   );
@@ -494,3 +503,5 @@ export function EmptyState({
     </div>
   );
 }
+
+export { DatePicker, type DatePickerProps } from "./date-picker";

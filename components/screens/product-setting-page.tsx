@@ -10,6 +10,7 @@ import {
   Button,
   Card,
   CardContent,
+  DatePicker,
   EmptyState,
   Field,
   Label,
@@ -578,9 +579,8 @@ export function ProductSettingPage() {
                 <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
                   <Field>
                     <Label htmlFor="effectiveDateInput">Effective Date</Label>
-                    <Input
+                    <DatePicker
                       id="effectiveDateInput"
-                      type="date"
                       value={effectiveDate}
                       onChange={(e) => setEffectiveDate(e.target.value)}
                     />
@@ -588,9 +588,8 @@ export function ProductSettingPage() {
 
                   <Field>
                     <Label htmlFor="endDateInput">End Date</Label>
-                    <Input
+                    <DatePicker
                       id="endDateInput"
-                      type="date"
                       value={endDate}
                       onChange={(e) => setEndDate(e.target.value)}
                     />

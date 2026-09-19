@@ -30,6 +30,7 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
+import { formatDate } from "@/lib/utils";
 import type { Permission, Role, User, BranchRole } from "@/types/auth";
 import type { BranchOption } from "@/types/dsa";
 
@@ -1414,7 +1415,7 @@ export function UserBranchMappingsPage() {
       cell: (r) =>
         r.created_at ? (
           <span className="text-slate-500 text-xs">
-            {new Date(r.created_at).toLocaleDateString()}
+            {formatDate(r.created_at)}
           </span>
         ) : (
           <span className="text-slate-400 text-xs">—</span>

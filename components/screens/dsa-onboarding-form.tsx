@@ -23,8 +23,8 @@ import {
 import { adminApi } from "@/apis/admin";
 import { useMockStore } from "@/lib/store";
 import { useToast } from "@/components/ui/toast";
-import { Button, Card, CardContent, Input, Label, Select } from "@/components/ui/primitives";
-import { generateDsaId } from "@/lib/utils";
+import { Button, Card, CardContent, DatePicker, Input, Label, Select } from "@/components/ui/primitives";
+import { formatDate, generateDsaId } from "@/lib/utils";
 
 export type OnboardingMode = "branch" | "self";
 export type DsaType = "INDIVIDUAL" | "ENTITY";
@@ -292,7 +292,13 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         if (data.firstName !== undefined) setFirstName(data.firstName);
         if (data.middleName !== undefined) setMiddleName(data.middleName);
         if (data.lastName !== undefined) setLastName(data.lastName);
-        if (data.dateOfBirth !== undefined) setDateOfBirth(data.dateOfBirth);
+        if (data.dateOfBirth !== undefined) {
+          setDateOfBirth(data.dateOfBirth);
+          if (data.dateOfBirth) {
+            const parts = data.dateOfBirth.split("-");
+            if (parts.length === 3) setDisplayDob(`${parts[2]}/${parts[1]}/${parts[0]}`);
+          }
+        }
         if (data.aadhaarNo !== undefined) setAadhaarNo(data.aadhaarNo);
         if (data.educationQualification !== undefined) setEducationQualification(data.educationQualification);
         if (data.entityName !== undefined) setEntityName(data.entityName);
@@ -1179,24 +1185,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     <div className="mx-auto max-w-5xl py-6 px-4 sm:px-6">
       {/* Header Banner */}
       <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-200 pb-5">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-700/10">
-              {mode === "branch" ? "Bank Staff / Maker Channel" : "Direct Self-Onboarding"}
-            </span>
-            <span className="text-xs text-slate-400">•</span>
-            <span className="text-xs text-slate-500 font-medium">Cosmos Co-operative Bank Ltd.</span>
-          </div>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            Direct Selling Agent (DSA) Onboarding
-          </h1>
-          <p className="mt-1 text-sm text-slate-600">
-            {mode === "branch"
-              ? "Complete DSA empanelment profile and attach required verification documents."
-              : "Register as a recognized DSA partner with Cosmos Bank. All details and docs are mandatory."}
-          </p>
-        </div>
-
+        <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+          Direct Selling Agent (DSA) Onboarding
+        </h1>
         {mode === "branch" && (
           <Link
             href="/dsa/management"
@@ -1244,7 +1235,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   </span>
                   <span className="text-xs font-semibold">{s.name}</span>
                 </div>
-                <span className="text-[11px] text-slate-500 mt-0.5 truncate">{s.desc}</span>
+                {/* <span className="text-[11px] text-slate-500 mt-0.5 truncate">{s.desc}</span> */}
               </button>
             );
           })}
@@ -1274,9 +1265,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
             <div className="space-y-6">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Step 1: Select DSA Type & Basic Information</h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Choose whether the applicant is an Individual DSA or an Entity / Corporate DSA.
-                </p>
               </div>
 
               {/* DSA Type Radio Cards */}
@@ -1298,7 +1286,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       {dsaType === "INDIVIDUAL" && <Check className="h-4 w-4 text-blue-600" />}
                     </div>
                     <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                      Single professional applicant / Sole proprietor operating under personal PAN and credentials.
+                      Single professional applicant operating under personal PAN and credentials.
                     </p>
                   </div>
                 </div>
@@ -1320,7 +1308,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       {dsaType === "ENTITY" && <Check className="h-4 w-4 text-blue-600" />}
                     </div>
                     <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                      Proprietorship, Partnership, LLP, Pvt Ltd, Public Ltd, Trust, or Co-operative Society.
+                      Proprietorship, Sole Proprietorship, Partnership, LLP, Pvt Ltd, Public Ltd, Trust, or Co-operative Society.
                     </p>
                   </div>
                 </div>
@@ -1352,7 +1340,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           );
                         })}
                       </Select>
-                      <p className="text-[11px] text-slate-500 mt-1">Application will be processed by this branch maker.</p>
                     </div>
 
                     <div>
@@ -1471,28 +1458,23 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <Label htmlFor="date_of_birth" className="text-xs font-semibold">Date of Birth * (DD/MM/YYYY)</Label>
-                      <Input
+                      <DatePicker
                         id="date_of_birth"
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="DD/MM/YYYY"
-                        maxLength={10}
-                        value={displayDob}
+                        value={dateOfBirth}
                         onChange={(e) => {
-                          let v = e.target.value.replace(/[^\d/]/g, "");
-                          // Auto-insert slashes
-                          if (/^\d{2}$/.test(v)) v = v + "/";
-                          if (/^\d{2}\/\d{2}$/.test(v)) v = v + "/";
-                          setDisplayDob(v);
-                          // Convert complete DD/MM/YYYY → ISO YYYY-MM-DD
-                          const full = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v);
-                          if (full) {
-                            setDateOfBirth(`${full[3]}-${full[2]}-${full[1]}`);
+                          const v = e.target.value;
+                          setDateOfBirth(v);
+                          if (v) {
+                            const parts = v.split("-");
+                            if (parts.length === 3) setDisplayDob(`${parts[2]}/${parts[1]}/${parts[0]}`);
                           } else {
-                            setDateOfBirth("");
+                            setDisplayDob("");
                           }
                         }}
-                        className="mt-1 font-mono"
+                        max={new Date().toISOString().slice(0, 10)}
+                        placeholder="DD/MM/YYYY"
+                        className="mt-1"
+                        required
                       />
                     </div>
                     <div>
@@ -2270,7 +2252,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     {dsaType === "INDIVIDUAL" ? (
                       <>
                         <p><span className="text-slate-500">Applicant:</span> <span className="font-semibold">{firstName} {middleName} {lastName}</span></p>
-                        <p><span className="text-slate-500">DOB:</span> {dateOfBirth || "N/A"}</p>
+                        <p><span className="text-slate-500">DOB:</span> {formatDate(dateOfBirth)}</p>
                         <p><span className="text-slate-500">Highest Qualification:</span> {educationQualification}</p>
                         <p><span className="text-slate-500">Aadhaar:</span> {aadhaarNo ? `XXXX-XXXX-${aadhaarNo.slice(-4)}` : "N/A"}</p>
                       </>

@@ -21,6 +21,7 @@ import {
 import { adminApi } from "@/apis/admin";
 import { withBasePath } from "@/lib/base-path";
 import { Button, Card, CardContent } from "@/components/ui/primitives";
+import { formatDate } from "@/lib/utils";
 
 interface DsaDigitalAcceptanceScreenProps {
   token: string;
@@ -281,7 +282,7 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
                     {preview.expires_at && (
                       <span className="text-[11px] text-slate-400 flex items-center gap-1">
                         <Clock className="w-3 h-3 text-amber-400" />
-                        Expires: {new Date(preview.expires_at).toLocaleDateString()}
+                        Expires: {formatDate(preview.expires_at)}
                       </span>
                     )}
                   </div>

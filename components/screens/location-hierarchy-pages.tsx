@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/module";
 import { Column, DataTable } from "@/components/ui/data-table";
 import { Badge, Button, Card, CardContent, Field, Input, Label, Modal, Select } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
+import { formatDate } from "@/lib/utils";
 import type { BranchItem, BranchSyncResult, DistrictItem, RegionItem, StateItem, SubRegionItem } from "@/types/auth";
 import type { DistrictOption, RegionOption, StateOption } from "@/types/dsa";
 
@@ -120,7 +121,7 @@ function RegionsTab({ toast }: { toast: any }) {
   const columns: Column<Omit<RegionItem, "id"> & { id: string }>[] = [
     { key: "region_code", header: "Region Code", sortable: true, cell: (r) => <span className="font-mono font-semibold text-slate-900">{r.region_code}</span> },
     { key: "region_name", header: "Region Name", sortable: true, cell: (r) => <span className="font-medium text-slate-800">{r.region_name}</span> },
-    { key: "created_at", header: "Created At", cell: (r) => <span className="text-xs text-slate-500">{r.created_at ? new Date(r.created_at).toLocaleDateString() : "—"}</span> },
+    { key: "created_at", header: "Created At", cell: (r) => <span className="text-xs text-slate-500">{r.created_at ? formatDate(r.created_at) : "—"}</span> },
   ];
 
   return (
@@ -207,7 +208,7 @@ function SubRegionsTab({ toast, regionOptions }: { toast: any; regionOptions: Re
     { key: "sub_region_code", header: "Sub-Region Code", sortable: true, cell: (sr) => <span className="font-mono font-semibold text-slate-900">{sr.sub_region_code}</span> },
     { key: "sub_region_name", header: "Sub-Region Name", sortable: true, cell: (sr) => <span className="font-medium text-slate-800">{sr.sub_region_name}</span> },
     { key: "region_code", header: "Parent Region", sortable: true, cell: (sr) => <Badge>{sr.region_code}</Badge> },
-    { key: "created_at", header: "Created At", cell: (sr) => <span className="text-xs text-slate-500">{sr.created_at ? new Date(sr.created_at).toLocaleDateString() : "—"}</span> },
+    { key: "created_at", header: "Created At", cell: (sr) => <span className="text-xs text-slate-500">{sr.created_at ? formatDate(sr.created_at) : "—"}</span> },
   ];
 
   return (
@@ -302,7 +303,7 @@ function StatesTab({ toast }: { toast: any }) {
   const columns: Column<Omit<StateItem, "id"> & { id: string }>[] = [
     { key: "state_code", header: "State Code", sortable: true, cell: (st) => <span className="font-mono font-semibold text-slate-900">{st.state_code}</span> },
     { key: "state_name", header: "State Name", sortable: true, cell: (st) => <span className="font-medium text-slate-800">{st.state_name}</span> },
-    { key: "created_at", header: "Created At", cell: (st) => <span className="text-xs text-slate-500">{st.created_at ? new Date(st.created_at).toLocaleDateString() : "—"}</span> },
+    { key: "created_at", header: "Created At", cell: (st) => <span className="text-xs text-slate-500">{st.created_at ? formatDate(st.created_at) : "—"}</span> },
   ];
 
   return (
@@ -389,7 +390,7 @@ function DistrictsTab({ toast, stateOptions }: { toast: any; stateOptions: State
     { key: "district_code", header: "District Code", sortable: true, cell: (d) => <span className="font-mono font-semibold text-slate-900">{d.district_code}</span> },
     { key: "district_name", header: "District Name", sortable: true, cell: (d) => <span className="font-medium text-slate-800">{d.district_name}</span> },
     { key: "state_code", header: "Parent State", sortable: true, cell: (d) => <Badge>{d.state_code}</Badge> },
-    { key: "created_at", header: "Created At", cell: (d) => <span className="text-xs text-slate-500">{d.created_at ? new Date(d.created_at).toLocaleDateString() : "—"}</span> },
+    { key: "created_at", header: "Created At", cell: (d) => <span className="text-xs text-slate-500">{d.created_at ? formatDate(d.created_at) : "—"}</span> },
   ];
 
   return (

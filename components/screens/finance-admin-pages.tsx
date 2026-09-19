@@ -28,6 +28,7 @@ import {
   Card,
   CardContent,
   CardHeader,
+  DatePicker,
   EmptyState,
   Field,
   Input,
@@ -1249,11 +1250,11 @@ export function ReportsPage() {
                 </Field>
                 <Field>
                   <Label>From</Label>
-                  <Input onChange={(event) => setAuditFromDate(event.target.value)} type="date" value={auditFromDate} />
+                  <DatePicker onChange={(event) => setAuditFromDate(event.target.value)} value={auditFromDate} />
                 </Field>
                 <Field>
                   <Label>To</Label>
-                  <Input onChange={(event) => setAuditToDate(event.target.value)} type="date" value={auditToDate} />
+                  <DatePicker onChange={(event) => setAuditToDate(event.target.value)} value={auditToDate} />
                 </Field>
               </div>
               <div className="flex justify-end">

@@ -40,13 +40,23 @@ export function formatCommissionDisplay(range: CommissionRangeDisplay) {
 
 export function formatDate(value?: string | number | null) {
   if (!value) return "N/A";
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(trimmed);
+    if (isoMatch) {
+      return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+    }
+    const ddmmyyyyMatch = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(trimmed);
+    if (ddmmyyyyMatch) {
+      return `${ddmmyyyyMatch[1].padStart(2, "0")}/${ddmmyyyyMatch[2].padStart(2, "0")}/${ddmmyyyyMatch[3]}`;
+    }
+  }
   const date = new Date(value);
   if (isNaN(date.getTime())) return "N/A";
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(date);
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
 }
 
 export function compactNumber(value: number) {

@@ -68,6 +68,7 @@ import {
   Card,
   CardContent,
   CardHeader,
+  DatePicker,
   EmptyState,
   Field,
   Input,
@@ -2919,7 +2920,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
                           </Field>
                           <Field>
                             <Label htmlFor="panIssuedDate">DATE OF PAN ISSUED</Label>
-                            <Input id="panIssuedDate" type="date" value={panIssuedDate} onChange={(e) => setPanIssuedDate(e.target.value)} />
+                            <DatePicker id="panIssuedDate" value={panIssuedDate} onChange={(e) => setPanIssuedDate(e.target.value)} max={new Date().toISOString().slice(0, 10)} />
                           </Field>
                         </div>
                       </div>
@@ -3051,7 +3052,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
                           <Field>
                             <Label htmlFor="personalDobField">DATE OF BIRTH <span className="text-red-500">*</span></Label>
                             <div className="flex items-center gap-3">
-                              <Input id="personalDobField" type="date" value={personalDob} onChange={(e) => setPersonalDob(e.target.value)} className="flex-1" />
+                              <DatePicker id="personalDobField" value={personalDob} onChange={(e) => setPersonalDob(e.target.value)} max={new Date().toISOString().slice(0, 10)} className="flex-1" />
                               {ageInfo && (
                                 <span className="bg-emerald-50 text-emerald-700 px-3 py-2 rounded-lg border border-emerald-200 text-xs font-bold flex-shrink-0">
                                   {ageInfo.years} years old ({ageInfo.totalMonths} months old)
@@ -3211,7 +3212,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
                         </Field>
                         <Field>
                           <Label htmlFor="businessSinceDateField">BUSINESS SINCE <span className="text-red-500">*</span></Label>
-                          <Input id="businessSinceDateField" type="date" value={businessSinceDate} onChange={(e) => setBusinessSinceDate(e.target.value)} />
+                          <DatePicker id="businessSinceDateField" value={businessSinceDate} onChange={(e) => setBusinessSinceDate(e.target.value)} max={new Date().toISOString().slice(0, 10)} />
                         </Field>
                         <Field>
                           <Label htmlFor="professionField">PROFESSION</Label>
@@ -3392,7 +3393,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
                             </Field>
                             <Field>
                               <Label>DATE OF BIRTH <span className="text-red-500">*</span></Label>
-                              <Input type="date" value={co.dob} onChange={(e) => { const updated = [...coApplicantsList]; updated[idx].dob = e.target.value; setCoApplicantsList(updated); }} />
+                              <DatePicker value={co.dob} onChange={(e) => { const updated = [...coApplicantsList]; updated[idx].dob = e.target.value; setCoApplicantsList(updated); }} max={new Date().toISOString().slice(0, 10)} />
                             </Field>
                           </div>
                         </div>

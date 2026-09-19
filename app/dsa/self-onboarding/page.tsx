@@ -13,15 +13,15 @@ export default function DsaSelfOnboardingPage() {
       <header className="border-b border-slate-200 bg-white shadow-sm">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
           <div className="relative z-10 flex items-center gap-3">
-                      <Image
-                        src={withBasePath("/logo-dsasm-cosmos.png")}
-                        alt="Cosmos Logo"
-                        width={708}
-                        height={118}
-                        className="h-8 w-auto"
-                        priority
-                        unoptimized
-                      />
+            <Image
+              src={withBasePath("/logo-dsasm-cosmos.png")}
+              alt="Cosmos Logo"
+              width={708}
+              height={118}
+              className="h-8 w-auto"
+              priority
+              unoptimized
+            />
           </div>
           <Link
             href="/login"
@@ -33,13 +33,16 @@ export default function DsaSelfOnboardingPage() {
       </header>
 
       {/* Main Form Container */}
-      <main className="flex-1 py-8">
+      <main className="flex-1">
         <DsaOnboardingForm mode="self" />
       </main>
 
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500">
-        <p>© 2026 The Cosmos Co-operative Bank Ltd. All rights reserved. Regulated by RBI.</p>
+        <p>
+          © 2026 The Cosmos Co-operative Bank Ltd. All rights reserved.
+          Regulated by RBI.
+        </p>
       </footer>
     </div>
   );

@@ -839,7 +839,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="flex h-16 items-center border-b border-slate-100 px-4">
           <Image
             alt="Cosmos Bank"
-            className="h-10 w-auto max-w-[220px]"
+            className="h-9 w-auto max-w-[230px]"
             height={40}
             priority
             src={withBasePath("/logo-dsasm-cosmos.png")}

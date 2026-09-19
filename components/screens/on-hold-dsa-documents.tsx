@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/toast";
 import { isMissingDsaDocumentRecord } from "@/lib/dsa-documents";
 import { useMockStore } from "@/lib/store";
 import type { Dsa } from "@/lib/types";
+import { formatDate } from "@/lib/utils";
 
 function formatFileSize(size: number) {
   if (size < 1024) return `${size} B`;
@@ -104,7 +105,7 @@ export function OnHoldDsaDocuments({
 
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
                   <DetailItem label="Manager" value={dsa.manager} />
-                  <DetailItem label="Submitted" value={new Date(dsa.onboardingDate).toLocaleDateString("en-IN")} />
+                  <DetailItem label="Submitted" value={formatDate(dsa.onboardingDate)} />
                 </div>
 
                 <div className="mt-4 space-y-2">
