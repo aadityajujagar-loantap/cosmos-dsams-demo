@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -19,6 +19,7 @@ import {
   Users,
   Info,
   Loader2,
+  ChevronDown,
 } from "lucide-react";
 import { adminApi } from "@/apis/admin";
 import { useMockStore } from "@/lib/store";
@@ -59,9 +60,7 @@ const INDIVIDUAL_DOCS: DocDef[] = [
   { type: "dsa_consent_dpdp", label: "DSA Consent Format (as per DPDP Act)", required: true, requirementLabel: "Mandatory" },
   { type: "visit_report", label: "Office Visit Report", required: (s) => s.mode === "branch", requirementLabel: "Mandatory — Bank staff only", staffOnly: true },
   { type: "brief_profile", label: "Brief profile of DSA", required: false, requirementLabel: "Optional" },
-  { type: "experience_certificate", label: "Experience certificates / empanelment letters from Banks / FIs", required: (s) => Boolean(s.has_experience), requirementLabel: "Conditional mandatory" },
   { type: "gst_certificate", label: "GST Certificate", required: (s) => s.gst_applicable === true, requirementLabel: "Conditional mandatory — if GST Applicable = Yes" },
-  { type: "business_license", label: "Business License (Udyam / Shop Act)", required: (s) => Boolean(s.has_license), requirementLabel: "Conditional mandatory" },
   { type: "itr_returns", label: "IT Returns with computation (last 2 F.Y.)", required: false, requirementLabel: "Optional" },
   { type: "rent_agreement", label: "Rent Agreement", required: (s) => s.business_premises_ownership === "Rented", requirementLabel: "Conditional mandatory — if premises rented" },
   { type: "other_document", label: "Any other document", required: false, requirementLabel: "Optional" },
@@ -75,9 +74,7 @@ const ENTITY_DOCS: DocDef[] = [
   { type: "dsa_consent_dpdp", label: "DSA Consent Format (as per DPDP Act)", required: true, requirementLabel: "Mandatory" },
   { type: "visit_report", label: "Office Visit Report", required: (s) => s.mode === "branch", requirementLabel: "Mandatory — Bank staff only", staffOnly: true },
   { type: "brief_profile", label: "Brief profile of DSA entity", required: false, requirementLabel: "Optional" },
-  { type: "experience_certificate", label: "Experience certificates / empanelment letters from Banks / FIs", required: (s) => Boolean(s.has_experience), requirementLabel: "Conditional mandatory" },
   { type: "gst_certificate", label: "GST Certificate", required: (s) => s.gst_applicable === true, requirementLabel: "Conditional mandatory — if GST Applicable = Yes" },
-  { type: "business_license", label: "Business Licenses (Udyam / Shop Act / Reg. Cert. / COI)", required: (s) => Boolean(s.has_license), requirementLabel: "Conditional mandatory" },
   { type: "itr_returns", label: "IT Returns with computation (last 2 F.Y.)", required: false, requirementLabel: "Optional" },
   {
     type: "board_resolution",
@@ -88,6 +85,161 @@ const ENTITY_DOCS: DocDef[] = [
   { type: "rent_agreement", label: "Rent Agreement", required: (s) => s.business_premises_ownership === "Rented", requirementLabel: "Conditional mandatory — if premises rented" },
   { type: "other_document", label: "Any other document", required: false, requirementLabel: "Optional" },
 ];
+
+const FALLBACK_EDUCATION_OPTIONS = [
+  { key: "Professional Degree", label: "Professional Degree" },
+  { key: "Post Graduate", label: "Post Graduate" },
+  { key: "Graduate", label: "Graduate" },
+  { key: "Undergraduate", label: "Undergraduate" },
+  { key: "Diploma, ITI", label: "Diploma, ITI" },
+  { key: "HSC & below", label: "HSC & below" },
+];
+
+const DEFAULT_BUSINESS_LICENSE_OPTIONS = [
+  { key: "SHOP_ACT", label: "Shop Act" },
+  { key: "GST", label: "GST" },
+  { key: "UDYAM", label: "Udyam" },
+];
+
+function CheckboxDropdown({
+  id,
+  options,
+  selectedKeys,
+  onChange,
+  placeholder = "Select Business License(s)",
+  className,
+}: {
+  id?: string;
+  options: { key: string; label: string }[];
+  selectedKeys: string[];
+  onChange: (keys: string[]) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
+
+  const handleToggle = (key: string) => {
+    if (selectedKeys.includes(key)) {
+      onChange(selectedKeys.filter((k) => k !== key));
+    } else {
+      onChange([...selectedKeys, key]);
+    }
+  };
+
+  const handleSelectAll = () => {
+    onChange(options.map((o) => o.key));
+  };
+
+  const handleClearAll = () => {
+    onChange([]);
+  };
+
+  const selectedLabels = useMemo(() => {
+    return selectedKeys
+      .map((k) => options.find((o) => o.key === k)?.label || k)
+      .filter(Boolean);
+  }, [selectedKeys, options]);
+
+  return (
+    <div className={`relative w-full ${className || ""}`} ref={containerRef}>
+      <button
+        id={id}
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex w-full items-center justify-between rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm transition hover:border-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 min-h-[38px]"
+      >
+        <div className="flex flex-wrap items-center gap-1.5 overflow-hidden text-left">
+          {selectedKeys.length === 0 ? (
+            <span className="text-slate-400 font-normal">{placeholder}</span>
+          ) : (
+            <div className="flex items-center gap-1.5 truncate">
+              <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800">
+                {selectedKeys.length} selected
+              </span>
+              <span className="truncate text-slate-700 font-medium max-w-[180px] sm:max-w-[260px]">
+                {selectedLabels.join(", ")}
+              </span>
+            </div>
+          )}
+        </div>
+        <ChevronDown
+          className={`h-4 w-4 flex-shrink-0 text-slate-400 transition-transform duration-200 ${
+            isOpen ? "rotate-180 text-blue-600" : ""
+          }`}
+        />
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 right-0 z-50 mt-1 rounded-lg border border-slate-200 bg-white p-2 shadow-xl ring-1 ring-black/5">
+          <div className="flex items-center justify-between pb-2 px-1 border-b border-slate-100 text-[11px]">
+            <span className="font-semibold text-slate-600">
+              {selectedKeys.length} of {options.length} selected
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                className="text-blue-600 hover:text-blue-800 font-medium transition-colors"
+              >
+                Select All
+              </button>
+              <span className="text-slate-300">|</span>
+              <button
+                type="button"
+                onClick={handleClearAll}
+                className="text-slate-500 hover:text-rose-600 font-medium transition-colors"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-1.5 max-h-56 overflow-y-auto space-y-0.5 pr-0.5">
+            {options.map((opt) => {
+              const isChecked = selectedKeys.includes(opt.key);
+              return (
+                <label
+                  key={opt.key}
+                  className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs cursor-pointer transition-colors ${
+                    isChecked
+                      ? "bg-blue-50 text-blue-900 font-medium"
+                      : "text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => handleToggle(opt.key)}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <span className="flex-1 select-none leading-tight">{opt.label}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const getDraftKey = (mode: string) => `cosmos_dsa_onboarding_v2_${mode}`;
 
@@ -163,7 +315,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   const [dateOfBirth, setDateOfBirth] = useState<string>(""); // ISO YYYY-MM-DD for payload
   const [displayDob, setDisplayDob] = useState<string>("");   // DD/MM/YYYY for display
   const [aadhaarNo, setAadhaarNo] = useState<string>("");
+  const [isAadhaarFocused, setIsAadhaarFocused] = useState<boolean>(false);
   const [educationQualification, setEducationQualification] = useState<string>("");
+  const [educationOptions, setEducationOptions] = useState<{ key: string; label: string }[]>(FALLBACK_EDUCATION_OPTIONS);
+  const [loadingEducation, setLoadingEducation] = useState<boolean>(false);
 
   // Form Fields - Entity
   const [entityName, setEntityName] = useState<string>("");
@@ -187,8 +342,11 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   const [contactPerson, setContactPerson] = useState<string>("");
   const [gstApplicable, setGstApplicable] = useState<boolean>(false);
   const [gstNumber, setGstNumber] = useState<string>("");
-  const [hasExperience, setHasExperience] = useState<boolean>(false);
-  const [hasLicense, setHasLicense] = useState<boolean>(false);
+  const [experienceYears, setExperienceYears] = useState<string>("0");
+  const [selectedLicenses, setSelectedLicenses] = useState<string[]>([]);
+  const [businessLicenseOptions, setBusinessLicenseOptions] = useState<Array<{ key: string; label: string }>>(DEFAULT_BUSINESS_LICENSE_OPTIONS);
+  const hasExperience = experienceYears !== "0" && experienceYears !== "";
+  const hasLicense = selectedLicenses.length > 0;
 
   // Address Details
   const [address, setAddress] = useState<string>("");
@@ -253,6 +411,52 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     };
   }, []);
 
+  // Fetch education qualifications from master values API
+  useEffect(() => {
+    let mounted = true;
+    setLoadingEducation(true);
+    adminApi
+      .getMasterValuesDropdown("education")
+      .then((res: any) => {
+        if (!mounted) return;
+        const items = Array.isArray(res) ? res : res?.data || [];
+        if (items.length > 0) {
+          setEducationOptions(
+            items.map((item: any) => ({
+              key: item.meta_value || item.meta_key,
+              label: item.meta_value || item.meta_key,
+            }))
+          );
+        }
+      })
+      .catch(() => {
+        // Retain fallback options
+      })
+      .finally(() => {
+        if (mounted) setLoadingEducation(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const getAadhaarDisplayValue = () => {
+    if (isAadhaarFocused) return aadhaarNo;
+    const clean = aadhaarNo.replace(/\D/g, "");
+    if (!clean) return "";
+    if (clean.length === 12) {
+      return `XXXX-XXXX-${clean.slice(8)}`;
+    }
+    if (clean.length > 8) {
+      return `XXXX-XXXX-${clean.slice(8)}`;
+    }
+    if (clean.length > 4) {
+      return `XXXX-${clean.slice(4)}`;
+    }
+    return "XXXX-XXXX-XXXX";
+  };
+
   // Ensure branchId always resolves to a valid existing branch
   useEffect(() => {
     if (branches.length > 0) {
@@ -311,8 +515,24 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         if (data.contactPerson !== undefined) setContactPerson(data.contactPerson);
         if (data.gstApplicable !== undefined) setGstApplicable(data.gstApplicable);
         if (data.gstNumber !== undefined) setGstNumber(data.gstNumber);
-        if (data.hasExperience !== undefined) setHasExperience(data.hasExperience);
-        if (data.hasLicense !== undefined) setHasLicense(data.hasLicense);
+        if (data.experienceYears !== undefined) {
+          setExperienceYears(String(data.experienceYears));
+        } else if (data.hasExperience !== undefined) {
+          setExperienceYears(data.hasExperience ? "1" : "0");
+        }
+        if (Array.isArray(data.selectedLicenses)) {
+          setSelectedLicenses(
+            data.selectedLicenses
+              .map((k: string) => {
+                if (k === "SHOP_ACT_LICENSE") return "SHOP_ACT";
+                if (k === "UDYAM_REGISTRATION") return "UDYAM";
+                return k;
+              })
+              .filter((k: string) => ["SHOP_ACT", "GST", "UDYAM"].includes(k))
+          );
+        } else if (data.hasLicense !== undefined) {
+          setSelectedLicenses(data.hasLicense ? ["SHOP_ACT"] : []);
+        }
         if (data.address !== undefined) setAddress(data.address);
         if (data.city !== undefined) setCity(data.city);
         if (data.stateName !== undefined) setStateName(data.stateName);
@@ -396,6 +616,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           gstNumber,
           hasExperience,
           hasLicense,
+          experienceYears,
+          selectedLicenses,
           address,
           city,
           stateName,
@@ -502,14 +724,53 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     has_license: hasLicense,
   };
 
-  const currentDocList = (dsaType === "INDIVIDUAL" ? INDIVIDUAL_DOCS : ENTITY_DOCS).filter((d) => {
-    if (d.staffOnly || d.type === "visit_report") {
-      if (mode !== "branch") return false;
-      const roleStr = String(currentUser?.role || "");
-      if (roleStr === "DSA Partner" || roleStr === "Customer" || roleStr.includes("Checker")) return false;
+  const currentDocList = useMemo(() => {
+    const baseList = (dsaType === "INDIVIDUAL" ? INDIVIDUAL_DOCS : ENTITY_DOCS).filter((d) => {
+      if (d.type === "experience_certificate" || d.type === "business_license") return false;
+      if (d.staffOnly || d.type === "visit_report") {
+        if (mode !== "branch") return false;
+        const roleStr = String(currentUser?.role || "");
+        if (roleStr === "DSA Partner" || roleStr === "Customer" || roleStr.includes("Checker")) return false;
+      }
+      return true;
+    });
+
+    const dynamicDocs: DocDef[] = [];
+
+    // Prior experience / empanelment certificate (dynamically appears when experience > 0, mandatory)
+    if (experienceYears !== "0" && experienceYears !== "") {
+      dynamicDocs.push({
+        type: "experience_certificate",
+        label: `Experience certificates / empanelment letters from Banks / FIs (${experienceYears} yrs)`,
+        required: true,
+        requirementLabel: "Mandatory",
+      });
     }
-    return true;
-  });
+
+    // Dynamic business licenses selected from dropdown with checkboxes (all mandatory)
+    selectedLicenses.forEach((licKey) => {
+      const opt = businessLicenseOptions.find((o) => o.key === licKey);
+      const licLabel = opt?.label || licKey;
+      dynamicDocs.push({
+        type: `business_license_${licKey.toLowerCase()}`,
+        label: `Registered Business Proof — ${licLabel}`,
+        required: true,
+        requirementLabel: "Mandatory",
+      });
+    });
+
+    // Insert dynamic documents right after GST Certificate
+    const gstIdx = baseList.findIndex((d) => d.type === "gst_certificate");
+    if (gstIdx !== -1) {
+      return [
+        ...baseList.slice(0, gstIdx + 1),
+        ...dynamicDocs,
+        ...baseList.slice(gstIdx + 1),
+      ];
+    }
+
+    return [...baseList, ...dynamicDocs];
+  }, [dsaType, mode, currentUser?.role, experienceYears, selectedLicenses, businessLicenseOptions]);
 
   const isDocRequired = (doc: DocDef) => {
     if (typeof doc.required === "function") {
@@ -688,8 +949,13 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           toast({ title: "Qualification Required", description: "Please select highest educational qualification.", variant: "warning" });
           return false;
         }
-        if (aadhaarNo && aadhaarNo.replace(/\D/g, "").length !== 12) {
-          toast({ title: "Invalid Aadhaar", description: "Aadhaar number must be 12 digits.", variant: "warning" });
+        const cleanAadhaar = aadhaarNo.replace(/\D/g, "");
+        if (!cleanAadhaar) {
+          toast({ title: "Aadhaar Required", description: "Aadhaar number is mandatory.", variant: "warning" });
+          return false;
+        }
+        if (cleanAadhaar.length !== 12) {
+          toast({ title: "Invalid Aadhaar", description: "Aadhaar number must be exactly 12 digits.", variant: "warning" });
           return false;
         }
       } else {
@@ -884,7 +1150,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       if (middleName) payload.middle_name = middleName;
       payload.last_name = lastName;
       payload.date_of_birth = dateOfBirth;
-      if (aadhaarNo) payload.aadhaar_no = aadhaarNo;
+      payload.education_qualification = educationQualification;
+      payload.aadhaar_no = aadhaarNo.replace(/\D/g, "");
     } else {
       payload.entity_name = entityName;
       payload.constitution = constitution;
@@ -1489,14 +1756,25 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="aadhaar_no" className="text-xs font-semibold">Aadhaar Number (Optional — 12 digits)</Label>
+                      <Label htmlFor="aadhaar_no" className="text-xs font-semibold">Aadhaar Number * (12 digits)</Label>
                       <Input
                         id="aadhaar_no"
-                        value={aadhaarNo}
-                        onChange={(e) => setAadhaarNo(e.target.value.replace(/\D/g, "").slice(0, 12))}
-                        placeholder="123456789012"
-                        className="mt-1 font-mono"
-                        maxLength={12}
+                        value={getAadhaarDisplayValue()}
+                        onFocus={() => setIsAadhaarFocused(true)}
+                        onBlur={() => setIsAadhaarFocused(false)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (isAadhaarFocused) {
+                            setAadhaarNo(val.replace(/\D/g, "").slice(0, 12));
+                          } else {
+                            const digits = val.replace(/\D/g, "");
+                            if (digits.length === 12) setAadhaarNo(digits);
+                          }
+                        }}
+                        placeholder={isAadhaarFocused ? "Enter 12-digit Aadhaar" : "XXXX-XXXX-XXXX"}
+                        className="mt-1 font-mono tracking-wider"
+                        maxLength={isAadhaarFocused ? 12 : 14}
+                        required
                       />
                     </div>
                   </div>
@@ -1534,34 +1812,52 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         onChange={(e) => setEducationQualification(e.target.value)}
                         className="mt-1"
                       >
-                        <option value="">Select Qualification</option>
-                        <option value="Graduate">Graduate (B.Com / B.A. / B.Sc / B.E.)</option>
-                        <option value="Post Graduate">Post Graduate (M.Com / MBA / M.Sc)</option>
-                        <option value="Professional">Professional (CA / CS / CMA / CFA)</option>
-                        <option value="Diploma">Diploma / HSC / 10th</option>
+                        <option value="">{loadingEducation ? "Loading qualifications..." : "Select Qualification"}</option>
+                        {educationOptions.map((opt) => (
+                          <option key={opt.key} value={opt.key}>
+                            {opt.label}
+                          </option>
+                        ))}
+                        {educationQualification && !educationOptions.some((o) => o.key === educationQualification) && (
+                          <option value={educationQualification}>{educationQualification}</option>
+                        )}
                       </Select>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                    <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={hasExperience}
-                        onChange={(e) => setHasExperience(e.target.checked)}
-                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span>Applicant has prior experience / empanelment with other Banks/FIs</span>
-                    </label>
-                    <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={hasLicense}
-                        onChange={(e) => setHasLicense(e.target.checked)}
-                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span>Applicant holds registered Business License (Udyam / Shop Act)</span>
-                    </label>
+                    <div>
+                      <Label htmlFor="experience_years" className="text-xs font-semibold text-slate-700">
+                        Applicant Prior Experience / Empanelment with other Banks/FIs
+                      </Label>
+                      <Select
+                        id="experience_years"
+                        value={experienceYears}
+                        onChange={(e) => setExperienceYears(e.target.value)}
+                        className="mt-1"
+                      >
+                        <option value="0">0</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="3+">3+</option>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label className="text-xs font-semibold text-slate-700">
+                        Registered Business Proof
+                      </Label>
+                      <div className="mt-1">
+                        <CheckboxDropdown
+                          id="individual_business_licenses"
+                          placeholder="Select Registered Business Proof (Shop Act / GST / Udyam)"
+                          options={businessLicenseOptions}
+                          selectedKeys={selectedLicenses}
+                          onChange={setSelectedLicenses}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1709,25 +2005,39 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       </div>
                     )}
 
-                    <div className="flex flex-col sm:flex-row gap-4 pt-1">
-                      <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={hasExperience}
-                          onChange={(e) => setHasExperience(e.target.checked)}
-                          className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span>Entity has prior empanelment letters / experience</span>
-                      </label>
-                      <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={hasLicense}
-                          onChange={(e) => setHasLicense(e.target.checked)}
-                          className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span>Entity has valid Business Licenses (Udyam / Shop Act / COI)</span>
-                      </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                      <div>
+                        <Label htmlFor="entity_experience_years" className="text-xs font-semibold text-slate-700">
+                          Entity Prior Experience / Empanelment Letters
+                        </Label>
+                        <Select
+                          id="entity_experience_years"
+                          value={experienceYears}
+                          onChange={(e) => setExperienceYears(e.target.value)}
+                          className="mt-1"
+                        >
+                          <option value="0">0</option>
+                          <option value="1">1</option>
+                          <option value="2">2</option>
+                          <option value="3">3</option>
+                          <option value="3+">3+</option>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label className="text-xs font-semibold text-slate-700">
+                          Entity Registered Business Proof
+                        </Label>
+                        <div className="mt-1">
+                          <CheckboxDropdown
+                            id="entity_business_licenses"
+                            placeholder="Select Registered Business Proof (Shop Act / GST / Udyam)"
+                            options={businessLicenseOptions}
+                            selectedKeys={selectedLicenses}
+                            onChange={setSelectedLicenses}
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1737,14 +2047,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
           {/* STEP 2: ADDRESS & PREMISES */}
           {step === 2 && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">Step 2: Business & Registered Address Details</h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Enter physical address and select premises ownership status.
-                </p>
-              </div>
-
+            <div className="space-y-3">
+              <h3 className="text-lg font-bold text-slate-900">Step 2: Business & Registered Address Details</h3>
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="address" className="text-xs font-semibold">Office / Residential Address *</Label>
@@ -2268,6 +2572,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     <p><span className="text-slate-500">PAN:</span> <span className="font-mono font-semibold">{pan}</span></p>
                     <p><span className="text-slate-500">Mobile:</span> {mobile}</p>
                     <p><span className="text-slate-500">Email:</span> {email}</p>
+                    <p><span className="text-slate-500">Prior Experience:</span> <span className="font-semibold">{experienceYears === "0" ? "0 (No prior experience)" : `${experienceYears} yrs`}</span></p>
+                    <p><span className="text-slate-500">Business Licenses:</span> <span className="font-semibold">{selectedLicenses.length > 0 ? selectedLicenses.map((k) => businessLicenseOptions.find((o) => o.key === k)?.label || k).join(", ") : "None"}</span></p>
                   </div>
                 </div>
 
