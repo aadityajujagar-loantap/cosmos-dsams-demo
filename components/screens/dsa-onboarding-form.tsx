@@ -112,38 +112,51 @@ const FALLBACK_STATE_OPTIONS = [
   { key: "Goa", label: "Goa" },
 ];
 
-const FALLBACK_CITY_OPTIONS = [
-  { key: "Mumbai", label: "Mumbai" },
-  { key: "Pune", label: "Pune" },
-  { key: "Nagpur", label: "Nagpur" },
-  { key: "Nashik", label: "Nashik" },
-  { key: "Aurangabad (Chhatrapati Sambhajinagar)", label: "Aurangabad (Chhatrapati Sambhajinagar)" },
-  { key: "Thane", label: "Thane" },
-  { key: "Navi Mumbai", label: "Navi Mumbai" },
-  { key: "Kolhapur", label: "Kolhapur" },
-  { key: "Solapur", label: "Solapur" },
-  { key: "Ahmedabad", label: "Ahmedabad" },
-  { key: "Surat", label: "Surat" },
-  { key: "Vadodara", label: "Vadodara" },
-  { key: "Rajkot", label: "Rajkot" },
-  { key: "Gandhinagar", label: "Gandhinagar" },
-  { key: "Bengaluru", label: "Bengaluru" },
-  { key: "Mysuru", label: "Mysuru" },
-  { key: "Hubballi", label: "Hubballi" },
-  { key: "Hyderabad", label: "Hyderabad" },
-  { key: "Secunderabad", label: "Secunderabad" },
-  { key: "New Delhi", label: "New Delhi" },
-  { key: "Delhi", label: "Delhi" },
-  { key: "Chennai", label: "Chennai" },
-  { key: "Coimbatore", label: "Coimbatore" },
-  { key: "Indore", label: "Indore" },
-  { key: "Bhopal", label: "Bhopal" },
-  { key: "Jaipur", label: "Jaipur" },
-  { key: "Lucknow", label: "Lucknow" },
-  { key: "Kanpur", label: "Kanpur" },
-  { key: "Noida", label: "Noida" },
-  { key: "Kolkata", label: "Kolkata" },
-  { key: "Panaji", label: "Panaji" },
+const FALLBACK_CITY_OPTIONS: Array<{ key: string; label: string; stateKey?: string }> = [
+  // Maharashtra
+  { key: "Mumbai", label: "Mumbai", stateKey: "MAHARASHTRA" },
+  { key: "Pune", label: "Pune", stateKey: "MAHARASHTRA" },
+  { key: "Nagpur", label: "Nagpur", stateKey: "MAHARASHTRA" },
+  { key: "Nashik", label: "Nashik", stateKey: "MAHARASHTRA" },
+  { key: "Aurangabad (Chhatrapati Sambhajinagar)", label: "Aurangabad (Chhatrapati Sambhajinagar)", stateKey: "MAHARASHTRA" },
+  { key: "Thane", label: "Thane", stateKey: "MAHARASHTRA" },
+  { key: "Navi Mumbai", label: "Navi Mumbai", stateKey: "MAHARASHTRA" },
+  { key: "Kolhapur", label: "Kolhapur", stateKey: "MAHARASHTRA" },
+  { key: "Solapur", label: "Solapur", stateKey: "MAHARASHTRA" },
+  // Gujarat
+  { key: "Ahmedabad", label: "Ahmedabad", stateKey: "GUJARAT" },
+  { key: "Surat", label: "Surat", stateKey: "GUJARAT" },
+  { key: "Vadodara", label: "Vadodara", stateKey: "GUJARAT" },
+  { key: "Rajkot", label: "Rajkot", stateKey: "GUJARAT" },
+  { key: "Gandhinagar", label: "Gandhinagar", stateKey: "GUJARAT" },
+  // Karnataka
+  { key: "Bengaluru", label: "Bengaluru", stateKey: "KARNATAKA" },
+  { key: "Mysuru", label: "Mysuru", stateKey: "KARNATAKA" },
+  { key: "Hubballi", label: "Hubballi", stateKey: "KARNATAKA" },
+  // Telangana
+  { key: "Hyderabad", label: "Hyderabad", stateKey: "TELANGANA" },
+  { key: "Secunderabad", label: "Secunderabad", stateKey: "TELANGANA" },
+  // Delhi
+  { key: "New Delhi", label: "New Delhi", stateKey: "DELHI" },
+  { key: "Delhi", label: "Delhi", stateKey: "DELHI" },
+  // Tamil Nadu
+  { key: "Chennai", label: "Chennai", stateKey: "TAMIL_NADU" },
+  { key: "Coimbatore", label: "Coimbatore", stateKey: "TAMIL_NADU" },
+  // Madhya Pradesh
+  { key: "Indore", label: "Indore", stateKey: "MADHYA_PRADESH" },
+  { key: "Bhopal", label: "Bhopal", stateKey: "MADHYA_PRADESH" },
+  // Rajasthan
+  { key: "Jaipur", label: "Jaipur", stateKey: "RAJASTHAN" },
+  // Uttar Pradesh
+  { key: "Lucknow", label: "Lucknow", stateKey: "UTTAR_PRADESH" },
+  { key: "Kanpur", label: "Kanpur", stateKey: "UTTAR_PRADESH" },
+  { key: "Noida", label: "Noida", stateKey: "UTTAR_PRADESH" },
+  // West Bengal
+  { key: "Kolkata", label: "Kolkata", stateKey: "WEST_BENGAL" },
+  // Kerala
+  { key: "Kochi", label: "Kochi", stateKey: "KERALA" },
+  // Goa
+  { key: "Panaji", label: "Panaji", stateKey: "GOA" },
 ];
 
 const DEFAULT_BUSINESS_LICENSE_OPTIONS = [
@@ -411,7 +424,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   const [officePincode, setOfficePincode] = useState<string>("");
   const [businessPremisesOwnership, setBusinessPremisesOwnership] = useState<"" | "Owned" | "Rented">("");
   const [stateOptions, setStateOptions] = useState<Array<{ key: string; label: string }>>(FALLBACK_STATE_OPTIONS);
-  const [cityOptions, setCityOptions] = useState<Array<{ key: string; label: string }>>(FALLBACK_CITY_OPTIONS);
+  const [cityOptions, setCityOptions] = useState<Array<{ key: string; label: string; stateKey?: string }>>(FALLBACK_CITY_OPTIONS);
   const [loadingStates, setLoadingStates] = useState(false);
   const [loadingCities, setLoadingCities] = useState(false);
 
@@ -534,10 +547,15 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         const items = Array.isArray(res) ? res : res?.data || [];
         if (items.length > 0) {
           setCityOptions(
-            items.map((item: any) => ({
-              key: item.meta_value || item.meta_key,
-              label: item.meta_value || item.meta_key,
-            }))
+            items.map((item: any) => {
+              const metaKey = String(item.meta_key || "");
+              const statePrefix = metaKey.includes(":") ? metaKey.split(":")[0] : "";
+              return {
+                key: item.meta_value || item.meta_key,
+                label: item.meta_value || item.meta_key,
+                stateKey: statePrefix,
+              };
+            })
           );
         }
       })
@@ -553,13 +571,67 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     };
   }, []);
 
-  // Ensure current selections are always present in options (e.g. from draft)
-  const resolvedCityOptions = useMemo(() => {
-    if (city && !cityOptions.some((o) => o.key === city)) {
-      return [{ key: city, label: city }, ...cityOptions];
+  // State-wise filtered city options for Residence Address
+  const stateCodeForResidence = useMemo(() => {
+    if (!stateName) return "";
+    return stateName.toUpperCase().replace(/[\s-]+/g, "_");
+  }, [stateName]);
+
+  const availableResidenceCities = useMemo(() => {
+    if (!stateCodeForResidence) return [];
+    return cityOptions.filter((c) => c.stateKey === stateCodeForResidence);
+  }, [stateCodeForResidence, cityOptions]);
+
+  const resolvedResidenceCityOptions = useMemo(() => {
+    if (city && !availableResidenceCities.some((o) => o.key === city)) {
+      return [{ key: city, label: city, stateKey: stateCodeForResidence }, ...availableResidenceCities];
     }
-    return cityOptions;
-  }, [city, cityOptions]);
+    return availableResidenceCities;
+  }, [city, availableResidenceCities, stateCodeForResidence]);
+
+  const handleStateChange = (newState: string) => {
+    setStateName(newState);
+    if (!newState) {
+      setCity("");
+      return;
+    }
+    const newCode = newState.toUpperCase().replace(/[\s-]+/g, "_");
+    const matchingCities = cityOptions.filter((c) => c.stateKey === newCode);
+    if (city && matchingCities.length > 0 && !matchingCities.some((c) => c.key === city)) {
+      setCity("");
+    }
+  };
+
+  // State-wise filtered city options for Office Address
+  const stateCodeForOffice = useMemo(() => {
+    if (!officeStateName) return "";
+    return officeStateName.toUpperCase().replace(/[\s-]+/g, "_");
+  }, [officeStateName]);
+
+  const availableOfficeCities = useMemo(() => {
+    if (!stateCodeForOffice) return [];
+    return cityOptions.filter((c) => c.stateKey === stateCodeForOffice);
+  }, [stateCodeForOffice, cityOptions]);
+
+  const resolvedOfficeCityOptions = useMemo(() => {
+    if (officeCity && !availableOfficeCities.some((o) => o.key === officeCity)) {
+      return [{ key: officeCity, label: officeCity, stateKey: stateCodeForOffice }, ...availableOfficeCities];
+    }
+    return availableOfficeCities;
+  }, [officeCity, availableOfficeCities, stateCodeForOffice]);
+
+  const handleOfficeStateChange = (newState: string) => {
+    setOfficeStateName(newState);
+    if (!newState) {
+      setOfficeCity("");
+      return;
+    }
+    const newCode = newState.toUpperCase().replace(/[\s-]+/g, "_");
+    const matchingCities = cityOptions.filter((c) => c.stateKey === newCode);
+    if (officeCity && matchingCities.length > 0 && !matchingCities.some((c) => c.key === officeCity)) {
+      setOfficeCity("");
+    }
+  };
 
   const resolvedStateOptions = useMemo(() => {
     if (stateName && !stateOptions.some((o) => o.key === stateName)) {
@@ -567,13 +639,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     }
     return stateOptions;
   }, [stateName, stateOptions]);
-
-  const resolvedOfficeCityOptions = useMemo(() => {
-    if (officeCity && !cityOptions.some((o) => o.key === officeCity)) {
-      return [{ key: officeCity, label: officeCity }, ...cityOptions];
-    }
-    return cityOptions;
-  }, [officeCity, cityOptions]);
 
   const resolvedOfficeStateOptions = useMemo(() => {
     if (officeStateName && !stateOptions.some((o) => o.key === officeStateName)) {
@@ -965,10 +1030,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   };
 
   const handleFileUpload = (docType: string, file: File) => {
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > 2 * 1024 * 1024) {
       toast({
         title: "File too large",
-        description: "Maximum allowed file size is 5MB.",
+        description: "Maximum allowed file size is 2MB.",
         variant: "warning",
       });
       return;
@@ -2271,28 +2336,11 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
-                      <Label htmlFor="city" className="text-xs font-semibold text-slate-700">City *</Label>
-                      <Select
-                        id="city"
-                        value={city}
-                        onChange={(e) => setCity(e.target.value)}
-                        className="mt-1"
-                        disabled={loadingCities}
-                      >
-                        <option value="">{loadingCities ? "Loading cities..." : "Select City"}</option>
-                        {resolvedCityOptions.map((c) => (
-                          <option key={c.key} value={c.key}>
-                            {c.label}
-                          </option>
-                        ))}
-                      </Select>
-                    </div>
-                    <div>
                       <Label htmlFor="state" className="text-xs font-semibold text-slate-700">State *</Label>
                       <Select
                         id="state"
                         value={stateName}
-                        onChange={(e) => setStateName(e.target.value)}
+                        onChange={(e) => handleStateChange(e.target.value)}
                         className="mt-1"
                         disabled={loadingStates}
                       >
@@ -2300,6 +2348,29 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         {resolvedStateOptions.map((s) => (
                           <option key={s.key} value={s.key}>
                             {s.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="city" className="text-xs font-semibold text-slate-700">City *</Label>
+                      <Select
+                        id="city"
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                        className="mt-1"
+                        disabled={!stateName || loadingCities}
+                      >
+                        <option value="">
+                          {!stateName
+                            ? "Select State first"
+                            : loadingCities
+                            ? "Loading cities..."
+                            : "Select City"}
+                        </option>
+                        {resolvedResidenceCityOptions.map((c) => (
+                          <option key={c.key} value={c.key}>
+                            {c.label}
                           </option>
                         ))}
                       </Select>
@@ -2404,28 +2475,11 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
-                          <Label htmlFor="office_city" className="text-xs font-semibold text-slate-700">City *</Label>
-                          <Select
-                            id="office_city"
-                            value={officeCity}
-                            onChange={(e) => setOfficeCity(e.target.value)}
-                            className="mt-1"
-                            disabled={loadingCities}
-                          >
-                            <option value="">{loadingCities ? "Loading cities..." : "Select City"}</option>
-                            {resolvedOfficeCityOptions.map((c) => (
-                              <option key={c.key} value={c.key}>
-                                {c.label}
-                              </option>
-                            ))}
-                          </Select>
-                        </div>
-                        <div>
                           <Label htmlFor="office_state" className="text-xs font-semibold text-slate-700">State *</Label>
                           <Select
                             id="office_state"
                             value={officeStateName}
-                            onChange={(e) => setOfficeStateName(e.target.value)}
+                            onChange={(e) => handleOfficeStateChange(e.target.value)}
                             className="mt-1"
                             disabled={loadingStates}
                           >
@@ -2433,6 +2487,29 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                             {resolvedOfficeStateOptions.map((s) => (
                               <option key={s.key} value={s.key}>
                                 {s.label}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                        <div>
+                          <Label htmlFor="office_city" className="text-xs font-semibold text-slate-700">City *</Label>
+                          <Select
+                            id="office_city"
+                            value={officeCity}
+                            onChange={(e) => setOfficeCity(e.target.value)}
+                            className="mt-1"
+                            disabled={!officeStateName || loadingCities}
+                          >
+                            <option value="">
+                              {!officeStateName
+                                ? "Select State first"
+                                : loadingCities
+                                ? "Loading cities..."
+                                : "Select City"}
+                            </option>
+                            {resolvedOfficeCityOptions.map((c) => (
+                              <option key={c.key} value={c.key}>
+                                {c.label}
                               </option>
                             ))}
                           </Select>
@@ -2767,7 +2844,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       Step 5: {dsaType === "INDIVIDUAL" ? "Individual DSA" : "Entity DSA"} — Document Checklist
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Attach verified documents. All mandatory documents marked below are required to submit.
+                      Attach verified documents (Max 2MB per file, PDF/JPG/PNG). All mandatory documents marked below are required to submit.
                     </p>
                   </div>
                   <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-blue-50 text-blue-800 border border-blue-200">
@@ -2950,7 +3027,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           />
                         </label>
                         <p className="text-[10px] text-slate-500 mt-1">
-                          Supported formats: PDF, JPG, JPEG, PNG (Max 5MB)
+                          Supported formats: PDF, JPG, JPEG, PNG (Max 2MB)
                         </p>
                       </div>
                     )}

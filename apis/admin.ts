@@ -1688,9 +1688,12 @@ export const adminApi = {
    * GET /api/master-values/dropdown?call_type={call_type}
    * Get active master values for a specific call_type (UI select options)
    */
-  getMasterValuesDropdown: async (callType: string): Promise<MasterValueDropdownItem[]> => {
+  getMasterValuesDropdown: async (callType: string, state?: string): Promise<MasterValueDropdownItem[]> => {
+    const url = state
+      ? `/master-values/dropdown?call_type=${encodeURIComponent(callType)}&state=${encodeURIComponent(state)}`
+      : `/master-values/dropdown?call_type=${encodeURIComponent(callType)}`;
     const response = await request<ApiEnvelope<MasterValueDropdownItem[]>>(
-      `/master-values/dropdown?call_type=${encodeURIComponent(callType)}`,
+      url,
       { method: "GET" }
     );
     return response.data || [];
