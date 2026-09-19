@@ -295,6 +295,19 @@ export function DocumentViewerBody({
   const extMatch = fileName.match(/\.([a-z0-9]+)(?:[?#]|$)/i);
   const fileExt = (extMatch ? extMatch[1] : isPdf ? "pdf" : isImage ? "image" : "doc").toUpperCase();
 
+  const embedUrl = useMemo(() => {
+    if (!url) return "";
+    if (isPdf) {
+      // #navpanes=0 suppresses the left sidebar thumbnail pages view
+      // #pagemode=none prevents opening document pages outline or thumbnail panel
+      // #view=FitH fits page horizontally for required standard viewing size
+      const [base, hash] = url.split("#");
+      const pdfParams = "navpanes=0&pagemode=none&view=FitH";
+      return hash ? `${base}#${pdfParams}&${hash}` : `${base}#${pdfParams}`;
+    }
+    return url;
+  }, [url, isPdf]);
+
   const handleAction = async (action: () => Promise<void>) => {
     try {
       setSubmitting(true);
@@ -338,7 +351,7 @@ export function DocumentViewerBody({
       </div>
 
       {/* Main Preview Box */}
-      <div className="relative w-full min-h-[260px] max-h-[50vh] overflow-auto bg-slate-100/70 rounded-xl border border-slate-200 flex items-center justify-center p-3">
+      <div className="relative w-full min-h-[360px] max-h-[72vh] overflow-auto bg-slate-100/70 rounded-xl border border-slate-200 flex items-center justify-center p-2">
         {!url ? (
           <div className="p-8 text-center text-slate-500">
             <FileText className="h-10 w-10 mx-auto mb-2 text-slate-400" />
@@ -405,7 +418,7 @@ export function DocumentViewerBody({
                   }
                 }}
                 className={cn(
-                  "max-h-[48vh] w-auto max-w-full object-contain rounded-lg shadow-sm border border-slate-200/80 bg-white transition-opacity duration-200",
+                  "max-h-[68vh] w-auto max-w-full object-contain rounded-lg shadow-sm border border-slate-200/80 bg-white transition-opacity duration-200",
                   imgLoading ? "opacity-0" : "opacity-100"
                 )}
               />
@@ -413,15 +426,15 @@ export function DocumentViewerBody({
           )
         ) : isPdf ? (
           <iframe
-            src={url}
+            src={embedUrl}
             title={previewDoc.file_name || "PDF Document"}
-            className="w-full h-[48vh] rounded-lg border border-slate-200 bg-white shadow-xs"
+            className="w-full h-[68vh] min-h-[480px] rounded-lg border border-slate-200 bg-white shadow-xs"
           />
         ) : (
           <iframe
-            src={url}
+            src={embedUrl}
             title={previewDoc.file_name || "Document"}
-            className="w-full h-[48vh] rounded-lg border border-slate-200 bg-white shadow-xs"
+            className="w-full h-[68vh] min-h-[480px] rounded-lg border border-slate-200 bg-white shadow-xs"
           />
         )}
       </div>
@@ -8283,7 +8296,7 @@ export function DsaProfilePage({ id }: { id: string }) {
         open={Boolean(previewDoc)}
         title={previewDoc ? formatDocumentType(previewDoc.document_type) : "Document Preview"}
         description={previewDoc ? (previewDoc.file_name ? `${previewDoc.file_name}${previewDoc.size ? ` • ${previewDoc.size}` : ""}` : "") : ""}
-        width="max-w-2xl"
+        width="max-w-4xl"
       >
         {previewDoc ? (
           <DocumentViewerBody

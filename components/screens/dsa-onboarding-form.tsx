@@ -20,6 +20,7 @@ import {
   Info,
   Loader2,
   ChevronDown,
+  Download,
 } from "lucide-react";
 import { adminApi } from "@/apis/admin";
 import { useMockStore } from "@/lib/store";
@@ -62,7 +63,6 @@ const INDIVIDUAL_DOCS: DocDef[] = [
   { type: "brief_profile", label: "Brief profile of DSA", required: false, requirementLabel: "Optional" },
   { type: "gst_certificate", label: "GST Certificate", required: (s) => s.gst_applicable === true, requirementLabel: "Conditional mandatory — if GST Applicable = Yes" },
   { type: "itr_returns", label: "IT Returns with computation (last 2 F.Y.)", required: false, requirementLabel: "Optional" },
-  { type: "rent_agreement", label: "Rent Agreement", required: (s) => s.business_premises_ownership === "Rented", requirementLabel: "Conditional mandatory — if premises rented" },
   { type: "other_document", label: "Any other document", required: false, requirementLabel: "Optional" },
 ];
 
@@ -82,7 +82,6 @@ const ENTITY_DOCS: DocDef[] = [
     required: (s) => ["LLP", "Pvt Ltd", "Public Ltd", "Trust", "Co-op Society"].includes(s.constitution),
     requirementLabel: "Conditional mandatory",
   },
-  { type: "rent_agreement", label: "Rent Agreement", required: (s) => s.business_premises_ownership === "Rented", requirementLabel: "Conditional mandatory — if premises rented" },
   { type: "other_document", label: "Any other document", required: false, requirementLabel: "Optional" },
 ];
 
@@ -93,6 +92,58 @@ const FALLBACK_EDUCATION_OPTIONS = [
   { key: "Undergraduate", label: "Undergraduate" },
   { key: "Diploma, ITI", label: "Diploma, ITI" },
   { key: "HSC & below", label: "HSC & below" },
+];
+
+const FALLBACK_STATE_OPTIONS = [
+  { key: "Maharashtra", label: "Maharashtra" },
+  { key: "Gujarat", label: "Gujarat" },
+  { key: "Karnataka", label: "Karnataka" },
+  { key: "Telangana", label: "Telangana" },
+  { key: "Delhi", label: "Delhi" },
+  { key: "Tamil Nadu", label: "Tamil Nadu" },
+  { key: "Madhya Pradesh", label: "Madhya Pradesh" },
+  { key: "Rajasthan", label: "Rajasthan" },
+  { key: "Andhra Pradesh", label: "Andhra Pradesh" },
+  { key: "Uttar Pradesh", label: "Uttar Pradesh" },
+  { key: "West Bengal", label: "West Bengal" },
+  { key: "Kerala", label: "Kerala" },
+  { key: "Punjab", label: "Punjab" },
+  { key: "Haryana", label: "Haryana" },
+  { key: "Goa", label: "Goa" },
+];
+
+const FALLBACK_CITY_OPTIONS = [
+  { key: "Mumbai", label: "Mumbai" },
+  { key: "Pune", label: "Pune" },
+  { key: "Nagpur", label: "Nagpur" },
+  { key: "Nashik", label: "Nashik" },
+  { key: "Aurangabad (Chhatrapati Sambhajinagar)", label: "Aurangabad (Chhatrapati Sambhajinagar)" },
+  { key: "Thane", label: "Thane" },
+  { key: "Navi Mumbai", label: "Navi Mumbai" },
+  { key: "Kolhapur", label: "Kolhapur" },
+  { key: "Solapur", label: "Solapur" },
+  { key: "Ahmedabad", label: "Ahmedabad" },
+  { key: "Surat", label: "Surat" },
+  { key: "Vadodara", label: "Vadodara" },
+  { key: "Rajkot", label: "Rajkot" },
+  { key: "Gandhinagar", label: "Gandhinagar" },
+  { key: "Bengaluru", label: "Bengaluru" },
+  { key: "Mysuru", label: "Mysuru" },
+  { key: "Hubballi", label: "Hubballi" },
+  { key: "Hyderabad", label: "Hyderabad" },
+  { key: "Secunderabad", label: "Secunderabad" },
+  { key: "New Delhi", label: "New Delhi" },
+  { key: "Delhi", label: "Delhi" },
+  { key: "Chennai", label: "Chennai" },
+  { key: "Coimbatore", label: "Coimbatore" },
+  { key: "Indore", label: "Indore" },
+  { key: "Bhopal", label: "Bhopal" },
+  { key: "Jaipur", label: "Jaipur" },
+  { key: "Lucknow", label: "Lucknow" },
+  { key: "Kanpur", label: "Kanpur" },
+  { key: "Noida", label: "Noida" },
+  { key: "Kolkata", label: "Kolkata" },
+  { key: "Panaji", label: "Panaji" },
 ];
 
 const DEFAULT_BUSINESS_LICENSE_OPTIONS = [
@@ -353,7 +404,16 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   const [city, setCity] = useState<string>("");
   const [stateName, setStateName] = useState<string>("");
   const [pincode, setPincode] = useState<string>("");
+  const [isOfficeSameAsResidence, setIsOfficeSameAsResidence] = useState<boolean>(true);
+  const [officeAddress, setOfficeAddress] = useState<string>("");
+  const [officeCity, setOfficeCity] = useState<string>("");
+  const [officeStateName, setOfficeStateName] = useState<string>("");
+  const [officePincode, setOfficePincode] = useState<string>("");
   const [businessPremisesOwnership, setBusinessPremisesOwnership] = useState<"" | "Owned" | "Rented">("");
+  const [stateOptions, setStateOptions] = useState<Array<{ key: string; label: string }>>(FALLBACK_STATE_OPTIONS);
+  const [cityOptions, setCityOptions] = useState<Array<{ key: string; label: string }>>(FALLBACK_CITY_OPTIONS);
+  const [loadingStates, setLoadingStates] = useState(false);
+  const [loadingCities, setLoadingCities] = useState(false);
 
   // Banking Details
   const [bankName, setBankName] = useState<string>("");
@@ -440,6 +500,87 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       mounted = false;
     };
   }, []);
+
+  // Fetch states and cities from master values API
+  useEffect(() => {
+    let mounted = true;
+    setLoadingStates(true);
+    adminApi
+      .getMasterValuesDropdown("state")
+      .then((res: any) => {
+        if (!mounted) return;
+        const items = Array.isArray(res) ? res : res?.data || [];
+        if (items.length > 0) {
+          setStateOptions(
+            items.map((item: any) => ({
+              key: item.meta_value || item.meta_key,
+              label: item.meta_value || item.meta_key,
+            }))
+          );
+        }
+      })
+      .catch(() => {
+        // Retain fallback state options
+      })
+      .finally(() => {
+        if (mounted) setLoadingStates(false);
+      });
+
+    setLoadingCities(true);
+    adminApi
+      .getMasterValuesDropdown("city")
+      .then((res: any) => {
+        if (!mounted) return;
+        const items = Array.isArray(res) ? res : res?.data || [];
+        if (items.length > 0) {
+          setCityOptions(
+            items.map((item: any) => ({
+              key: item.meta_value || item.meta_key,
+              label: item.meta_value || item.meta_key,
+            }))
+          );
+        }
+      })
+      .catch(() => {
+        // Retain fallback city options
+      })
+      .finally(() => {
+        if (mounted) setLoadingCities(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Ensure current selections are always present in options (e.g. from draft)
+  const resolvedCityOptions = useMemo(() => {
+    if (city && !cityOptions.some((o) => o.key === city)) {
+      return [{ key: city, label: city }, ...cityOptions];
+    }
+    return cityOptions;
+  }, [city, cityOptions]);
+
+  const resolvedStateOptions = useMemo(() => {
+    if (stateName && !stateOptions.some((o) => o.key === stateName)) {
+      return [{ key: stateName, label: stateName }, ...stateOptions];
+    }
+    return stateOptions;
+  }, [stateName, stateOptions]);
+
+  const resolvedOfficeCityOptions = useMemo(() => {
+    if (officeCity && !cityOptions.some((o) => o.key === officeCity)) {
+      return [{ key: officeCity, label: officeCity }, ...cityOptions];
+    }
+    return cityOptions;
+  }, [officeCity, cityOptions]);
+
+  const resolvedOfficeStateOptions = useMemo(() => {
+    if (officeStateName && !stateOptions.some((o) => o.key === officeStateName)) {
+      return [{ key: officeStateName, label: officeStateName }, ...stateOptions];
+    }
+    return stateOptions;
+  }, [officeStateName, stateOptions]);
 
   const getAadhaarDisplayValue = () => {
     if (isAadhaarFocused) return aadhaarNo;
@@ -537,6 +678,19 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         if (data.city !== undefined) setCity(data.city);
         if (data.stateName !== undefined) setStateName(data.stateName);
         if (data.pincode !== undefined) setPincode(data.pincode);
+        if (data.isOfficeSameAsResidence !== undefined) {
+          setIsOfficeSameAsResidence(data.isOfficeSameAsResidence);
+        } else if (data.hasCurrentAddress !== undefined) {
+          setIsOfficeSameAsResidence(!data.hasCurrentAddress);
+        }
+        if (data.officeAddress !== undefined) setOfficeAddress(data.officeAddress);
+        else if (data.currentAddress !== undefined) setOfficeAddress(data.currentAddress);
+        if (data.officeCity !== undefined) setOfficeCity(data.officeCity);
+        else if (data.currentCity !== undefined) setOfficeCity(data.currentCity);
+        if (data.officeStateName !== undefined) setOfficeStateName(data.officeStateName);
+        else if (data.currentStateName !== undefined) setOfficeStateName(data.currentStateName);
+        if (data.officePincode !== undefined) setOfficePincode(data.officePincode);
+        else if (data.currentPincode !== undefined) setOfficePincode(data.currentPincode);
         if (data.businessPremisesOwnership !== undefined) setBusinessPremisesOwnership(data.businessPremisesOwnership);
         if (data.bankName !== undefined) setBankName(data.bankName);
         if (data.accountName !== undefined) setAccountName(data.accountName);
@@ -622,6 +776,11 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           city,
           stateName,
           pincode,
+          isOfficeSameAsResidence,
+          officeAddress,
+          officeCity,
+          officeStateName,
+          officePincode,
           businessPremisesOwnership,
           bankName,
           accountName,
@@ -686,6 +845,11 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     city,
     stateName,
     pincode,
+    isOfficeSameAsResidence,
+    officeAddress,
+    officeCity,
+    officeStateName,
+    officePincode,
     businessPremisesOwnership,
     bankName,
     accountName,
@@ -726,7 +890,13 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
   const currentDocList = useMemo(() => {
     const baseList = (dsaType === "INDIVIDUAL" ? INDIVIDUAL_DOCS : ENTITY_DOCS).filter((d) => {
-      if (d.type === "experience_certificate" || d.type === "business_license") return false;
+      if (
+        d.type === "experience_certificate" ||
+        d.type === "business_license" ||
+        d.type === "rent_agreement" ||
+        d.type === "dsa_consent_dpdp"
+      )
+        return false;
       if (d.staffOnly || d.type === "visit_report") {
         if (mode !== "branch") return false;
         const roleStr = String(currentUser?.role || "");
@@ -759,18 +929,33 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       });
     });
 
-    // Insert dynamic documents right after GST Certificate
-    const gstIdx = baseList.findIndex((d) => d.type === "gst_certificate");
+    // Insert dynamic business & experience documents right after GST Certificate
+    let list = [...baseList];
+    const gstIdx = list.findIndex((d) => d.type === "gst_certificate");
     if (gstIdx !== -1) {
-      return [
-        ...baseList.slice(0, gstIdx + 1),
-        ...dynamicDocs,
-        ...baseList.slice(gstIdx + 1),
-      ];
+      list.splice(gstIdx + 1, 0, ...dynamicDocs);
+    } else {
+      list.push(...dynamicDocs);
     }
 
-    return [...baseList, ...dynamicDocs];
-  }, [dsaType, mode, currentUser?.role, experienceYears, selectedLicenses, businessLicenseOptions]);
+    // Dynamic Rental Proof / Rent Agreement (dynamically appears when premises are rented, mandatory)
+    if (businessPremisesOwnership === "Rented") {
+      const otherDocIdx = list.findIndex((d) => d.type === "other_document");
+      const rentalDoc: DocDef = {
+        type: "rent_agreement",
+        label: "Rental Proof / Rent Agreement",
+        required: true,
+        requirementLabel: "Mandatory",
+      };
+      if (otherDocIdx !== -1) {
+        list.splice(otherDocIdx, 0, rentalDoc);
+      } else {
+        list.push(rentalDoc);
+      }
+    }
+
+    return list;
+  }, [dsaType, mode, currentUser?.role, experienceYears, selectedLicenses, businessLicenseOptions, businessPremisesOwnership]);
 
   const isDocRequired = (doc: DocDef) => {
     if (typeof doc.required === "function") {
@@ -985,12 +1170,22 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
     if (currentStep === 2) {
       if (!address.trim() || !city.trim() || !stateName.trim() || !pincode.trim()) {
-        toast({ title: "Address Required", description: "Complete address, city, state, and pincode are mandatory.", variant: "warning" });
+        toast({ title: "Residence Address Required", description: "Complete residence address, city, state, and pincode are mandatory.", variant: "warning" });
         return false;
       }
       if (pincode.trim().length !== 6 || !/^\d{6}$/.test(pincode.trim())) {
-        toast({ title: "Pincode Invalid", description: "Pincode must be exactly 6 digits.", variant: "warning" });
+        toast({ title: "Residence Pincode Invalid", description: "Residence pincode must be exactly 6 digits.", variant: "warning" });
         return false;
+      }
+      if (!isOfficeSameAsResidence) {
+        if (!officeAddress.trim() || !officeCity.trim() || !officeStateName.trim() || !officePincode.trim()) {
+          toast({ title: "Office Address Required", description: "Complete office address, city, state, and pincode are mandatory when distinct.", variant: "warning" });
+          return false;
+        }
+        if (officePincode.trim().length !== 6 || !/^\d{6}$/.test(officePincode.trim())) {
+          toast({ title: "Office Pincode Invalid", description: "Office address pincode must be exactly 6 digits.", variant: "warning" });
+          return false;
+        }
       }
       if (!businessPremisesOwnership) {
         toast({ title: "Premises Ownership Required", description: "Please select business premises ownership.", variant: "warning" });
@@ -1079,6 +1274,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         .filter((d) => isDocRequired(d) && !uploadedDocs[d.type])
         .map((d) => d.label);
 
+      if (!uploadedDocs["dsa_consent_dpdp"]) {
+        missing.push("DSA Consent Form (signed)");
+      }
+
       if (missing.length > 0) {
         toast({
           title: "Mandatory Documents Missing",
@@ -1106,12 +1305,13 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   };
 
   const handleSubmit = async () => {
-    if (!declarationAgreed) {
+    if (!uploadedDocs["dsa_consent_dpdp"]) {
       toast({
-        title: "Consent Required",
-        description: "Please check the DPDP Act declaration before submitting.",
+        title: "DSA Consent Form Required",
+        description: "Please download, sign, and upload the DSA Consent Form before submitting.",
         variant: "warning",
       });
+      setStep(5);
       return;
     }
 
@@ -1133,6 +1333,11 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       city,
       state: stateName,
       pincode,
+      office_address_different: !isOfficeSameAsResidence,
+      office_address_line_1: isOfficeSameAsResidence ? address : officeAddress,
+      office_city: isOfficeSameAsResidence ? city : officeCity,
+      office_state: isOfficeSameAsResidence ? stateName : officeStateName,
+      office_pincode: isOfficeSameAsResidence ? pincode : officePincode,
       bank_name: bankName,
       account_name: accountName,
       account_number: accountNumber,
@@ -2050,59 +2255,202 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
             <div className="space-y-3">
               <h3 className="text-lg font-bold text-slate-900">Step 2: Business & Registered Address Details</h3>
               <div className="space-y-4">
-                <div>
-                  <Label htmlFor="address" className="text-xs font-semibold">Office / Residential Address *</Label>
-                  <textarea
-                    id="address"
-                    rows={3}
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    placeholder="Floor, Building, Street, Landmark"
-                    className="mt-1 w-full rounded-md border border-slate-300 p-2.5 text-xs shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
+                {/* Residence Address Section */}
+                <div className="space-y-3">
+                  <div>
+                    <Label htmlFor="address" className="text-xs font-semibold text-slate-700">Residence Address *</Label>
+                    <textarea
+                      id="address"
+                      rows={3}
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                      placeholder="House/Flat No., Building, Street, Landmark"
+                      className="mt-1 w-full rounded-md border border-slate-300 p-2.5 text-xs shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <Label htmlFor="city" className="text-xs font-semibold text-slate-700">City *</Label>
+                      <Select
+                        id="city"
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                        className="mt-1"
+                        disabled={loadingCities}
+                      >
+                        <option value="">{loadingCities ? "Loading cities..." : "Select City"}</option>
+                        {resolvedCityOptions.map((c) => (
+                          <option key={c.key} value={c.key}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="state" className="text-xs font-semibold text-slate-700">State *</Label>
+                      <Select
+                        id="state"
+                        value={stateName}
+                        onChange={(e) => setStateName(e.target.value)}
+                        className="mt-1"
+                        disabled={loadingStates}
+                      >
+                        <option value="">{loadingStates ? "Loading states..." : "Select State"}</option>
+                        {resolvedStateOptions.map((s) => (
+                          <option key={s.key} value={s.key}>
+                            {s.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="pincode" className="text-xs font-semibold text-slate-700">Pincode (6 digits) *</Label>
+                      <Input
+                        id="pincode"
+                        value={pincode}
+                        onChange={(e) => setPincode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                        placeholder="400001"
+                        className="mt-1 font-mono"
+                        maxLength={6}
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <Label htmlFor="city" className="text-xs font-semibold">City *</Label>
-                    <Input
-                      id="city"
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      placeholder="e.g. Mumbai"
-                      className="mt-1"
-                    />
+                {/* Office Address Section */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+                    <div>
+                      <span className="text-xs font-bold text-slate-800">Office Address</span>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        {isOfficeSameAsResidence
+                          ? "Office address is set to same as residence address."
+                          : "Office address is distinct from residence address."}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsOfficeSameAsResidence(true)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                          isOfficeSameAsResidence
+                            ? "bg-blue-600 border-blue-600 text-white shadow-sm"
+                            : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                        <span>Same as Residence Address</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsOfficeSameAsResidence(false)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                          !isOfficeSameAsResidence
+                            ? "bg-blue-600 border-blue-600 text-white shadow-sm"
+                            : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <Building className="h-3.5 w-3.5" />
+                        <span>Distinct Office Address</span>
+                      </button>
+                    </div>
                   </div>
-                  <div>
-                    <Label htmlFor="state" className="text-xs font-semibold">State *</Label>
-                    <Select
-                      id="state"
-                      value={stateName}
-                      onChange={(e) => setStateName(e.target.value)}
-                      className="mt-1"
-                    >
-                      <option value="">Select State</option>
-                      <option value="Maharashtra">Maharashtra</option>
-                      <option value="Gujarat">Gujarat</option>
-                      <option value="Karnataka">Karnataka</option>
-                      <option value="Telangana">Telangana</option>
-                      <option value="Delhi">Delhi</option>
-                      <option value="Tamil Nadu">Tamil Nadu</option>
-                      <option value="Madhya Pradesh">Madhya Pradesh</option>
-                      <option value="Rajasthan">Rajasthan</option>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="pincode" className="text-xs font-semibold">Pincode (6 digits) *</Label>
-                    <Input
-                      id="pincode"
-                      value={pincode}
-                      onChange={(e) => setPincode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                      placeholder="400001"
-                      className="mt-1 font-mono"
-                      maxLength={6}
-                    />
-                  </div>
+
+                  {isOfficeSameAsResidence ? (
+                    <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3 text-xs text-blue-900 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Check className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                        <span>Residence address is used as office address.</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsOfficeSameAsResidence(false)}
+                        className="text-xs font-semibold text-blue-700 hover:underline"
+                      >
+                        Click to keep distinct
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-slate-700">Enter Distinct Office Address</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOfficeAddress(address);
+                            setOfficeCity(city);
+                            setOfficeStateName(stateName);
+                            setOfficePincode(pincode);
+                          }}
+                          className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 underline"
+                        >
+                          Copy from Residence Address
+                        </button>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="office_address" className="text-xs font-semibold text-slate-700">Office Address *</Label>
+                        <textarea
+                          id="office_address"
+                          rows={3}
+                          value={officeAddress}
+                          onChange={(e) => setOfficeAddress(e.target.value)}
+                          placeholder="Floor, Building, Street, Landmark"
+                          className="mt-1 w-full rounded-md border border-slate-300 p-2.5 text-xs shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <Label htmlFor="office_city" className="text-xs font-semibold text-slate-700">City *</Label>
+                          <Select
+                            id="office_city"
+                            value={officeCity}
+                            onChange={(e) => setOfficeCity(e.target.value)}
+                            className="mt-1"
+                            disabled={loadingCities}
+                          >
+                            <option value="">{loadingCities ? "Loading cities..." : "Select City"}</option>
+                            {resolvedOfficeCityOptions.map((c) => (
+                              <option key={c.key} value={c.key}>
+                                {c.label}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                        <div>
+                          <Label htmlFor="office_state" className="text-xs font-semibold text-slate-700">State *</Label>
+                          <Select
+                            id="office_state"
+                            value={officeStateName}
+                            onChange={(e) => setOfficeStateName(e.target.value)}
+                            className="mt-1"
+                            disabled={loadingStates}
+                          >
+                            <option value="">{loadingStates ? "Loading states..." : "Select State"}</option>
+                            {resolvedOfficeStateOptions.map((s) => (
+                              <option key={s.key} value={s.key}>
+                                {s.label}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                        <div>
+                          <Label htmlFor="office_pincode" className="text-xs font-semibold text-slate-700">Pincode (6 digits) *</Label>
+                          <Input
+                            id="office_pincode"
+                            value={officePincode}
+                            onChange={(e) => setOfficePincode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                            placeholder="411001"
+                            className="mt-1 font-mono"
+                            maxLength={6}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Premises Ownership */}
@@ -2118,7 +2466,12 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         type="radio"
                         name="ownership"
                         checked={businessPremisesOwnership === "Owned"}
-                        onChange={() => setBusinessPremisesOwnership("Owned")}
+                        onChange={() => {
+                          setBusinessPremisesOwnership("Owned");
+                          if (uploadedDocs["rent_agreement"]) {
+                            removeDoc("rent_agreement");
+                          }
+                        }}
                       />
                       <span>Self Owned Premises</span>
                     </label>
@@ -2518,6 +2871,93 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                 })}
               </div>
 
+              {/* 16. DSA Consent Form Download & Signed Upload */}
+              <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50/70 to-indigo-50/40 p-4 sm:p-5 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-blue-200/70 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-blue-600 text-white shadow-sm flex-shrink-0">
+                      <FileText className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-bold text-slate-900">16. DSA Consent Form</h4>
+                        <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-800">
+                          Mandatory
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600">
+                        Consent format as per Digital Personal Data Protection (DPDP) Act
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Download option */}
+                  <a
+                    href="/documents/pdf-sample.pdf"
+                    download="DSA_Consent_Form.pdf"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 shadow-sm hover:bg-blue-50 hover:border-blue-400 transition-colors w-fit"
+                  >
+                    <Download className="h-3.5 w-3.5 text-blue-600" />
+                    <span>Download Consent Form</span>
+                  </a>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                  <div className="text-xs text-slate-600 space-y-1">
+                    <p className="font-semibold text-slate-700">Instructions:</p>
+                    <ol className="list-decimal list-inside space-y-0.5 text-[11px]">
+                      <li>Download the official DSA Consent Form template.</li>
+                      <li>Review, sign, and date the form.</li>
+                      <li>Upload the signed copy here (Supports Image & PDF).</li>
+                    </ol>
+                  </div>
+
+                  {/* Upload area */}
+                  <div className="flex flex-col sm:items-end justify-center">
+                    {uploadedDocs["dsa_consent_dpdp"] ? (
+                      <div className="flex items-center gap-2 p-2.5 rounded-lg border border-emerald-200 bg-emerald-50/80 w-full sm:w-auto">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                        <div className="text-left">
+                          <p className="text-xs font-semibold text-emerald-900 truncate max-w-[200px]">
+                            {uploadedDocs["dsa_consent_dpdp"].name}
+                          </p>
+                          <p className="text-[10px] text-emerald-700">
+                            Signed document attached ({uploadedDocs["dsa_consent_dpdp"].size})
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeDoc("dsa_consent_dpdp")}
+                          className="text-rose-600 hover:text-rose-800 p-1 rounded hover:bg-rose-100 transition-colors ml-2"
+                          title="Remove signed consent form"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="w-full sm:w-auto text-left sm:text-right">
+                        <label className="cursor-pointer inline-flex items-center gap-2 rounded-lg border border-blue-600 bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors">
+                          <UploadCloud className="h-4 w-4" />
+                          <span>Upload Signed Form</span>
+                          <input
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) handleFileUpload("dsa_consent_dpdp", f);
+                            }}
+                          />
+                        </label>
+                        <p className="text-[10px] text-slate-500 mt-1">
+                          Supported formats: PDF, JPG, JPEG, PNG (Max 5MB)
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {/* Remarks for Bank Staff Visit Report */}
               {mode === "branch" && uploadedDocs["visit_report"] && (
                 <div className="pt-2">
@@ -2589,7 +3029,13 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     <p><span className="text-slate-500">Account No:</span> <span className="font-mono font-semibold">{accountNumber}</span></p>
                     <p><span className="text-slate-500">IFSC Code:</span> <span className="font-mono font-semibold">{ifsc}</span></p>
                     <p><span className="text-slate-500">Premises:</span> {businessPremisesOwnership}</p>
-                    <p><span className="text-slate-500">Location:</span> {city}, {stateName} - {pincode}</p>
+                    <p><span className="text-slate-500">Residence Address:</span> {address ? `${address}, ${city}, ${stateName} - ${pincode}` : `${city}, ${stateName} - ${pincode}`}</p>
+                    <p>
+                      <span className="text-slate-500">Office Address:</span>{" "}
+                      {isOfficeSameAsResidence
+                        ? "Same as Residence Address"
+                        : `${officeAddress}, ${officeCity}, ${officeStateName} - ${officePincode}`}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -2628,22 +3074,36 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
               {/* DPDP Act Declaration Box */}
               <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4">
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={declarationAgreed}
-                    onChange={(e) => setDeclarationAgreed(e.target.checked)}
-                    className="mt-0.5 rounded border-blue-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
-                  />
-                  <div className="text-xs text-slate-800 leading-relaxed">
-                    <span className="font-bold text-blue-900 block mb-1">
-                      DSA Consent & Declaration Format (Under Digital Personal Data Protection Act)
-                    </span>
-                    I/We hereby declare that all information and documents furnished above are true, complete, and authentic.
-                    I/We grant express consent to The Cosmos Co-operative Bank Ltd. to verify details, conduct due diligence,
-                    and process my personal and business data strictly for empanelment, origination, and regulatory compliance.
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex-shrink-0">
+                    {uploadedDocs["dsa_consent_dpdp"] ? (
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                    ) : (
+                      <Info className="h-5 w-5 text-amber-600" />
+                    )}
                   </div>
-                </label>
+                  <div className="text-xs text-slate-800 leading-relaxed space-y-1">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="font-bold text-blue-900">
+                        DSA Consent & Declaration (Under Digital Personal Data Protection Act)
+                      </span>
+                      {uploadedDocs["dsa_consent_dpdp"] ? (
+                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                          ✓ Signed Consent Form Uploaded ({uploadedDocs["dsa_consent_dpdp"].name})
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-rose-100 px-2.5 py-0.5 text-[10px] font-bold text-rose-800">
+                          Signed Form Pending Upload in Step 5
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-slate-600">
+                      I/We hereby declare that all information and documents furnished above are true, complete, and authentic.
+                      I/We grant express consent to The Cosmos Co-operative Bank Ltd. to verify details, conduct due diligence,
+                      and process my personal and business data strictly for empanelment, origination, and regulatory compliance as formalized in the attached signed DSA consent document.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -2674,7 +3134,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
               <Button
                 type="button"
                 onClick={handleSubmit}
-                disabled={isSubmitting || !declarationAgreed}
+                disabled={isSubmitting || !uploadedDocs["dsa_consent_dpdp"]}
                 className="gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 shadow-md"
               >
                 {isSubmitting ? (
