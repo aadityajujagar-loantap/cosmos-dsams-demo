@@ -4391,6 +4391,14 @@ export function DsaProfilePage({ id }: { id: string }) {
                                         onChange={async (e) => {
                                           const file = e.currentTarget.files?.[0];
                                           if (file) {
+                                            if (file.size > 2 * 1024 * 1024) {
+                                              toast({
+                                                title: "File too large",
+                                                description: "Maximum allowed file size is 2MB.",
+                                                variant: "warning",
+                                              });
+                                              return;
+                                            }
                                             try {
                                               await adminApi.uploadDsaVisitReport(dsa.id, file, "Updated by Branch Maker");
                                               await fetchDsaDetail(dsa.id);
@@ -4475,6 +4483,14 @@ export function DsaProfilePage({ id }: { id: string }) {
                               onChange={async (e) => {
                                 const file = e.currentTarget.files?.[0];
                                 if (file) {
+                                  if (file.size > 2 * 1024 * 1024) {
+                                    toast({
+                                      title: "File too large",
+                                      description: "Maximum allowed file size is 2MB.",
+                                      variant: "warning",
+                                    });
+                                    return;
+                                  }
                                   try {
                                     if (isVisitReportDocument(document.document_type)) {
                                       await adminApi.uploadDsaVisitReport(dsa.id, file, "Uploaded by Branch Maker");
@@ -5021,6 +5037,14 @@ export function DsaProfilePage({ id }: { id: string }) {
                           if (!isL7User) return;
                           const file = e.currentTarget.files?.[0];
                           if (file) {
+                            if (file.size > 2 * 1024 * 1024) {
+                              toast({
+                                title: "File too large",
+                                description: "Maximum allowed file size is 2MB.",
+                                variant: "warning",
+                              });
+                              return;
+                            }
                             await uploadSignedAgreement(dsa.id, file);
                             await fetchDsaDetail(dsa.id);
                             await loadAgreementData(dsa.id);

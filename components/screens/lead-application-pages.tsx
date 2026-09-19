@@ -761,6 +761,7 @@ export function ApplicationsPage() {
 }
 
 export function ApplicationDetailPage({ id }: { id: string }) {
+  const { toast } = useToast();
   const { createItem, store, updateItem, currentUser } = useMockStore();
   const [note, setNote] = useState("");
   const [isDeviationModalOpen, setIsDeviationModalOpen] = useState(false);
@@ -924,6 +925,15 @@ export function ApplicationDetailPage({ id }: { id: string }) {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = "";
     if (!file || !isCustomerApplication) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Maximum allowed file size is 2MB.",
+        variant: "warning",
+      });
+      return;
+    }
 
     const now = new Date().toISOString();
     const documentId = makeId("doc");

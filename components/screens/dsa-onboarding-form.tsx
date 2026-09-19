@@ -647,6 +647,16 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     return stateOptions;
   }, [officeStateName, stateOptions]);
 
+  // Keep office address in sync when "Keep same as residential" toggle is active
+  useEffect(() => {
+    if (isOfficeSameAsResidence) {
+      setOfficeAddress(address);
+      setOfficeStateName(stateName);
+      setOfficeCity(city);
+      setOfficePincode(pincode);
+    }
+  }, [isOfficeSameAsResidence, address, stateName, city, pincode]);
+
   const getAadhaarDisplayValue = () => {
     if (isAadhaarFocused) return aadhaarNo;
     const clean = aadhaarNo.replace(/\D/g, "");
@@ -2391,76 +2401,16 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
                 {/* Office Address Section */}
                 <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
-                    <div>
-                      <span className="text-xs font-bold text-slate-800">Office Address</span>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        {isOfficeSameAsResidence
-                          ? "Office address is set to same as residence address."
-                          : "Office address is distinct from residence address."}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setIsOfficeSameAsResidence(true)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                          isOfficeSameAsResidence
-                            ? "bg-blue-600 border-blue-600 text-white shadow-sm"
-                            : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
-                        }`}
-                      >
-                        <Check className="h-3.5 w-3.5" />
-                        <span>Same as Residence Address</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsOfficeSameAsResidence(false)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                          !isOfficeSameAsResidence
-                            ? "bg-blue-600 border-blue-600 text-white shadow-sm"
-                            : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
-                        }`}
-                      >
-                        <Building className="h-3.5 w-3.5" />
-                        <span>Distinct Office Address</span>
-                      </button>
-                    </div>
+                  <div>
+                    <span className="text-xs font-bold text-slate-800">Office Address</span>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Business premises and registered office location details
+                    </p>
                   </div>
 
-                  {isOfficeSameAsResidence ? (
-                    <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3 text-xs text-blue-900 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Check className="h-4 w-4 text-blue-600 flex-shrink-0" />
-                        <span>Residence address is used as office address.</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setIsOfficeSameAsResidence(false)}
-                        className="text-xs font-semibold text-blue-700 hover:underline"
-                      >
-                        Click to keep distinct
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-slate-700">Enter Distinct Office Address</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setOfficeAddress(address);
-                            setOfficeCity(city);
-                            setOfficeStateName(stateName);
-                            setOfficePincode(pincode);
-                          }}
-                          className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 underline"
-                        >
-                          Copy from Residence Address
-                        </button>
-                      </div>
-
+                  {/* Office Address Fields (Collapsed when toggled same as residential) */}
+                  {!isOfficeSameAsResidence ? (
+                    <div className="space-y-3">
                       <div>
                         <Label htmlFor="office_address" className="text-xs font-semibold text-slate-700">Office Address *</Label>
                         <textarea
@@ -2468,7 +2418,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           rows={3}
                           value={officeAddress}
                           onChange={(e) => setOfficeAddress(e.target.value)}
-                          placeholder="Floor, Building, Street, Landmark"
+                          placeholder="House/Flat No., Building, Street, Landmark"
                           className="mt-1 w-full rounded-md border border-slate-300 p-2.5 text-xs shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                         />
                       </div>
@@ -2527,7 +2477,49 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         </div>
                       </div>
                     </div>
+                  ) : (
+                    <div className="flex items-center gap-2 rounded-lg bg-blue-50/90 border border-blue-200 px-3 py-2 text-xs text-blue-800">
+                      <Check className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                      <span>Residential address is used as office address.</span>
+                    </div>
                   )}
+
+                  {/* Toggle Button: Keep same as residential */}
+                  <div className={`flex items-center justify-between ${!isOfficeSameAsResidence ? "pt-3 border-t border-slate-200" : ""}`}>
+                    <div>
+                      <span className="text-xs font-bold text-slate-800">Keep same as residential</span>
+                      <p className="text-[11px] text-slate-500">
+                        {isOfficeSameAsResidence
+                          ? "Office address is synced with residential address"
+                          : "Toggle to automatically use residential address for office"}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={isOfficeSameAsResidence}
+                      onClick={() => {
+                        const next = !isOfficeSameAsResidence;
+                        setIsOfficeSameAsResidence(next);
+                        if (next) {
+                          setOfficeAddress(address);
+                          setOfficeStateName(stateName);
+                          setOfficeCity(city);
+                          setOfficePincode(pincode);
+                        }
+                      }}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${
+                        isOfficeSameAsResidence ? "bg-blue-600" : "bg-slate-300"
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          isOfficeSameAsResidence ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Premises Ownership */}
@@ -2571,13 +2563,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           {/* STEP 3: BANK SETTLEMENT DETAILS */}
           {step === 3 && (
             <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">Step 3: Bank Settlement Details</h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Provide verified bank account details for DSA commission and payout settlements.
-                </p>
-              </div>
-
+              <h3 className="text-lg font-bold text-slate-900">Step 3: Bank Settlement Details</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="bank_name" className="text-xs font-semibold">Bank Name *</Label>

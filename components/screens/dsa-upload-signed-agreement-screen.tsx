@@ -115,8 +115,8 @@ export function DsaUploadSignedAgreementScreen({ token }: DsaUploadSignedAgreeme
       alert("Please select a valid PDF document.");
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      alert("File size exceeds maximum limit of 10MB.");
+    if (file.size > 2 * 1024 * 1024) {
+      alert("File size exceeds maximum limit of 2MB.");
       return;
     }
     setSelectedFile(file);
@@ -456,7 +456,7 @@ export function DsaUploadSignedAgreementScreen({ token }: DsaUploadSignedAgreeme
                         <div className="text-xs">
                           <span className="text-indigo-400 font-semibold hover:underline">Click to browse</span> or drag and drop your scanned PDF here
                         </div>
-                        <p className="text-[10px] text-slate-500">PDF documents only &bull; Up to 10 MB</p>
+                        <p className="text-[10px] text-slate-500">PDF documents only &bull; Up to 2 MB</p>
                       </div>
                     )}
                   </div>

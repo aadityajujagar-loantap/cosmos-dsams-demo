@@ -1747,7 +1747,17 @@ export function UserBranchMappingsPage() {
                     type="file"
                     accept=".csv,.txt"
                     className="hidden"
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) setCsvFile(f); }}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        if (f.size > 2 * 1024 * 1024) {
+                          toast({ title: "File too large", description: "Maximum allowed file size is 2MB.", variant: "warning" });
+                          e.target.value = "";
+                          return;
+                        }
+                        setCsvFile(f);
+                      }
+                    }}
                   />
                 </label>
                 <p className="text-xs text-slate-400 mt-2">CSV or TXT • max 2 MB</p>

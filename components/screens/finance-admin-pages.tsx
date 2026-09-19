@@ -489,6 +489,10 @@ export function CommissionsPage({
 
   function handleInvoiceCsv(file?: File) {
     if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      notifyInvoice("File too large", "Maximum allowed CSV file size is 2MB.");
+      return;
+    }
     const batchId = makeId("csv-invoice");
     file.text().then((text) => {
       const [headerLine, ...lines] = text.split(/\r?\n/).filter((line) => line.trim());

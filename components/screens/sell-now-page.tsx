@@ -3648,8 +3648,8 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            if (file.size > 10 * 1024 * 1024) {
-                              toast({ title: "File too large", description: "Maximum allowed file size is 10MB.", variant: "warning" });
+                            if (file.size > 2 * 1024 * 1024) {
+                              toast({ title: "File too large", description: "Maximum allowed file size is 2MB.", variant: "warning" });
                               return;
                             }
                             setIdentityProofFile(file);
@@ -3677,7 +3677,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
                             <UploadCloud className="h-5 w-5" />
                           </div>
                           <p className="text-xs font-bold text-slate-700">Click to upload file</p>
-                          <p className="text-[11px] text-slate-400 mt-0.5">PDF, JPG, PNG up to 10MB</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">PDF, JPG, PNG up to 2MB</p>
                         </div>
                       )}
                     </div>
@@ -3702,8 +3702,8 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            if (file.size > 10 * 1024 * 1024) {
-                              toast({ title: "File too large", description: "Maximum allowed file size is 10MB.", variant: "warning" });
+                            if (file.size > 2 * 1024 * 1024) {
+                              toast({ title: "File too large", description: "Maximum allowed file size is 2MB.", variant: "warning" });
                               return;
                             }
                             setAddressProofFile(file);
@@ -3731,7 +3731,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
                             <UploadCloud className="h-5 w-5" />
                           </div>
                           <p className="text-xs font-bold text-slate-700">Click to upload file</p>
-                          <p className="text-[11px] text-slate-400 mt-0.5">PDF, JPG, PNG up to 10MB</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">PDF, JPG, PNG up to 2MB</p>
                         </div>
                       )}
                     </div>
@@ -3756,8 +3756,8 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            if (file.size > 10 * 1024 * 1024) {
-                              toast({ title: "File too large", description: "Maximum allowed file size is 10MB.", variant: "warning" });
+                            if (file.size > 2 * 1024 * 1024) {
+                              toast({ title: "File too large", description: "Maximum allowed file size is 2MB.", variant: "warning" });
                               return;
                             }
                             setIncomeProofFile(file);
@@ -3785,7 +3785,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
                             <UploadCloud className="h-5 w-5" />
                           </div>
                           <p className="text-xs font-bold text-slate-700">Click to upload file</p>
-                          <p className="text-[11px] text-slate-400 mt-0.5">PDF, JPG, PNG up to 10MB</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">PDF, JPG, PNG up to 2MB</p>
                         </div>
                       )}
                     </div>
@@ -3805,8 +3805,8 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            if (file.size > 10 * 1024 * 1024) {
-                              toast({ title: "File too large", description: "Maximum allowed file size is 10MB.", variant: "warning" });
+                            if (file.size > 2 * 1024 * 1024) {
+                              toast({ title: "File too large", description: "Maximum allowed file size is 2MB.", variant: "warning" });
                               return;
                             }
                             setBankStatementFile(file);
@@ -3834,7 +3834,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
                             <UploadCloud className="h-5 w-5" />
                           </div>
                           <p className="text-xs font-bold text-slate-700">Click to upload file</p>
-                          <p className="text-[11px] text-slate-400 mt-0.5">PDF, JPG, PNG up to 10MB</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">PDF, JPG, PNG up to 2MB</p>
                         </div>
                       )}
                     </div>
@@ -3854,8 +3854,8 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            if (file.size > 10 * 1024 * 1024) {
-                              toast({ title: "File too large", description: "Maximum allowed file size is 10MB.", variant: "warning" });
+                            if (file.size > 2 * 1024 * 1024) {
+                              toast({ title: "File too large", description: "Maximum allowed file size is 2MB.", variant: "warning" });
                               return;
                             }
                             setSalarySlipsFile(file);
@@ -3883,7 +3883,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
                             <UploadCloud className="h-5 w-5" />
                           </div>
                           <p className="text-xs font-bold text-slate-700">Click to upload file</p>
-                          <p className="text-[11px] text-slate-400 mt-0.5">PDF, JPG, PNG up to 10MB</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">PDF, JPG, PNG up to 2MB</p>
                         </div>
                       )}
                     </div>

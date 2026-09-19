@@ -359,6 +359,15 @@ export function ProductSettingPage() {
   const handleBannerFile = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Maximum allowed file size is 2MB.",
+        variant: "warning",
+      });
+      event.target.value = "";
+      return;
+    }
     if (bannerPreviewUrl) URL.revokeObjectURL(bannerPreviewUrl);
     setBannerName(file.name);
     setBannerPreviewUrl(URL.createObjectURL(file));
