@@ -2664,7 +2664,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
                             onChange={(e) => setNotNpaDefaulterFlag(e.target.checked)}
                             className="mt-0.5 rounded border-slate-300 text-blue-600"
                           />
-                          <span>I hereby confirm that I am not a defaulter for any bank&apos;s loan and no insolvency proceedings are initiated against me. <span className="text-red-500">*</span></span>
+                          <span>I hereby confirm that I am not a defaulter for any bank&apos;s loan and no insolvency proceedings are initiated against me.</span>
                         </label>
 
                         <label className="flex items-start gap-2 text-xs text-slate-700 cursor-pointer">
@@ -2674,7 +2674,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
                             onChange={(e) => setCommunicationConsent(e.target.checked)}
                             className="mt-0.5 rounded border-slate-300 text-blue-600"
                           />
-                          <span>I hereby confirm that Cosmos Bank / bank agent can call me / send SMS / send Email to me regarding my loan application. <span className="text-red-500">*</span></span>
+                          <span>I hereby confirm that Cosmos Bank / bank agent can call me / send SMS / send Email to me regarding my loan application.</span>
                         </label>
                       </div>
 

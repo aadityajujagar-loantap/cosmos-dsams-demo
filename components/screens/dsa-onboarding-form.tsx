@@ -59,9 +59,8 @@ const INDIVIDUAL_DOCS: DocDef[] = [
   { type: "aadhaar_card", label: "Aadhaar Card", required: true, requirementLabel: "Mandatory" },
   { type: "education_certificate", label: "Educational qualification certificate (highest)", required: true, requirementLabel: "Mandatory" },
   { type: "dsa_consent_dpdp", label: "DSA Consent Format (as per DPDP Act)", required: true, requirementLabel: "Mandatory" },
-  { type: "visit_report", label: "Office Visit Report", required: (s) => s.mode === "branch", requirementLabel: "Mandatory — Bank staff only", staffOnly: true },
+  { type: "visit_report", label: "Office Visit Report", required: (s) => s.mode === "branch", requirementLabel: "Mandatory", staffOnly: true },
   { type: "brief_profile", label: "Brief profile of DSA", required: false, requirementLabel: "Optional" },
-  { type: "gst_certificate", label: "GST Certificate", required: (s) => s.gst_applicable === true, requirementLabel: "Conditional mandatory — if GST Applicable = Yes" },
   { type: "itr_returns", label: "IT Returns with computation (last 2 F.Y.)", required: false, requirementLabel: "Optional" },
   { type: "other_document", label: "Any other document", required: false, requirementLabel: "Optional" },
 ];
@@ -72,16 +71,9 @@ const ENTITY_DOCS: DocDef[] = [
   { type: "stakeholder_pan_card", label: "At least one Key Person / Partner / Director — PAN Card", required: true, requirementLabel: "Mandatory" },
   { type: "stakeholder_aadhaar_card", label: "At least one Key Person / Partner / Director — Aadhaar Card", required: true, requirementLabel: "Mandatory" },
   { type: "dsa_consent_dpdp", label: "DSA Consent Format (as per DPDP Act)", required: true, requirementLabel: "Mandatory" },
-  { type: "visit_report", label: "Office Visit Report", required: (s) => s.mode === "branch", requirementLabel: "Mandatory — Bank staff only", staffOnly: true },
+  { type: "visit_report", label: "Office Visit Report", required: (s) => s.mode === "branch", requirementLabel: "Mandatory", staffOnly: true },
   { type: "brief_profile", label: "Brief profile of DSA entity", required: false, requirementLabel: "Optional" },
-  { type: "gst_certificate", label: "GST Certificate", required: (s) => s.gst_applicable === true, requirementLabel: "Conditional mandatory — if GST Applicable = Yes" },
   { type: "itr_returns", label: "IT Returns with computation (last 2 F.Y.)", required: false, requirementLabel: "Optional" },
-  {
-    type: "board_resolution",
-    label: "Board Resolution — LLP / Pvt. Ltd. / Public Ltd. / Trust / Society",
-    required: (s) => ["LLP", "Pvt Ltd", "Public Ltd", "Trust", "Co-op Society"].includes(s.constitution),
-    requirementLabel: "Conditional mandatory",
-  },
   { type: "other_document", label: "Any other document", required: false, requirementLabel: "Optional" },
 ];
 
@@ -969,7 +961,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         d.type === "experience_certificate" ||
         d.type === "business_license" ||
         d.type === "rent_agreement" ||
-        d.type === "dsa_consent_dpdp"
+        d.type === "dsa_consent_dpdp" ||
+        d.type === "gst_certificate" ||
+        d.type === "board_resolution"
       )
         return false;
       if (d.staffOnly || d.type === "visit_report") {
@@ -982,7 +976,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
     const dynamicDocs: DocDef[] = [];
 
-    // Prior experience / empanelment certificate (dynamically appears when experience > 0, mandatory)
+    // Prior experience / empanelment certificate: populates only when experience is selected > 0
     if (experienceYears !== "0" && experienceYears !== "") {
       dynamicDocs.push({
         type: "experience_certificate",
@@ -992,8 +986,22 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       });
     }
 
-    // Dynamic business licenses selected from dropdown with checkboxes (all mandatory)
+    // GST Certificate: populates only when user selected GST details (GST Applicable Yes, or GST Number, or GST checked in business licenses)
+    const hasGst = Boolean(gstApplicable) || Boolean(gstNumber) || selectedLicenses.some((k) => k.toUpperCase() === "GST");
+    if (hasGst) {
+      dynamicDocs.push({
+        type: "gst_certificate",
+        label: "GST Certificate",
+        required: true,
+        requirementLabel: "Mandatory",
+      });
+    }
+
+    // Dynamic business licenses selected from dropdown with checkboxes (excluding duplicate GST)
     selectedLicenses.forEach((licKey) => {
+      if (licKey.toUpperCase() === "GST") {
+        return;
+      }
       const opt = businessLicenseOptions.find((o) => o.key === licKey);
       const licLabel = opt?.label || licKey;
       dynamicDocs.push({
@@ -1004,16 +1012,26 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       });
     });
 
-    // Insert dynamic business & experience documents right after GST Certificate
+    // Board Resolution for Entity: populates only when constitution requires it
+    if (dsaType === "ENTITY" && ["LLP", "Pvt Ltd", "Public Ltd", "Trust", "Co-op Society"].includes(constitution)) {
+      dynamicDocs.push({
+        type: "board_resolution",
+        label: "Board Resolution — LLP / Pvt. Ltd. / Public Ltd. / Trust / Society",
+        required: true,
+        requirementLabel: "Mandatory",
+      });
+    }
+
+    // Insert dynamic business & experience documents before optional documents (IT returns, Other docs)
     let list = [...baseList];
-    const gstIdx = list.findIndex((d) => d.type === "gst_certificate");
-    if (gstIdx !== -1) {
-      list.splice(gstIdx + 1, 0, ...dynamicDocs);
+    const insertIdx = list.findIndex((d) => d.type === "itr_returns" || d.type === "other_document");
+    if (insertIdx !== -1) {
+      list.splice(insertIdx, 0, ...dynamicDocs);
     } else {
       list.push(...dynamicDocs);
     }
 
-    // Dynamic Rental Proof / Rent Agreement (dynamically appears when premises are rented, mandatory)
+    // Dynamic Rental Proof / Rent Agreement: populates only when premises are rented
     if (businessPremisesOwnership === "Rented") {
       const otherDocIdx = list.findIndex((d) => d.type === "other_document");
       const rentalDoc: DocDef = {
@@ -1030,7 +1048,18 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     }
 
     return list;
-  }, [dsaType, mode, currentUser?.role, experienceYears, selectedLicenses, businessLicenseOptions, businessPremisesOwnership]);
+  }, [
+    dsaType,
+    mode,
+    currentUser?.role,
+    experienceYears,
+    selectedLicenses,
+    businessLicenseOptions,
+    businessPremisesOwnership,
+    gstApplicable,
+    gstNumber,
+    constitution,
+  ]);
 
   const isDocRequired = (doc: DocDef) => {
     if (typeof doc.required === "function") {
@@ -1751,7 +1780,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           {[
             { id: 1, name: "DSA Type & Identity", desc: "Type & Contact" },
             { id: 2, name: "Address & Premises", desc: "Location Details" },
-            { id: 3, name: "Bank Settlement", desc: "Payout Account" },
+            { id: 3, name: "Bank Details", desc: "Payout Account" },
             { id: 4, name: "References", desc: dsaType === "ENTITY" ? "Refs & Key Persons" : "Two References" },
             { id: 5, name: "Document Uploads", desc: "Checklist Matrix" },
             { id: 6, name: "Review & Submit", desc: "DPDP Declaration" },
@@ -1794,7 +1823,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
             Step {step} of 6: {[
               "DSA Type & Identity",
               "Address & Premises",
-              "Bank Settlement",
+              "Bank Details",
               "References",
               "Document Uploads",
               "Review & Submit",
@@ -2560,10 +2589,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
             </div>
           )}
 
-          {/* STEP 3: BANK SETTLEMENT DETAILS */}
+          {/* STEP 3: BANK DETAILS */}
           {step === 3 && (
             <div className="space-y-6">
-              <h3 className="text-lg font-bold text-slate-900">Step 3: Bank Settlement Details</h3>
+              <h3 className="text-lg font-bold text-slate-900">Step 3: Bank Details</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="bank_name" className="text-xs font-semibold">Bank Name *</Label>
@@ -2834,7 +2863,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     </p>
                   </div>
                   <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-blue-50 text-blue-800 border border-blue-200">
-                    Attached: {Object.keys(uploadedDocs).length} / {currentDocList.length}
+                    Attached: {currentDocList.filter((d) => Boolean(uploadedDocs[d.type])).length} / {currentDocList.length}
                   </span>
                 </div>
               </div>
@@ -2888,12 +2917,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
                             required
                               ? "bg-rose-100 text-rose-800"
-                              : doc.requirementLabel.toLowerCase().includes("conditional")
-                              ? "bg-amber-100 text-amber-800"
                               : "bg-slate-100 text-slate-600"
                           }`}
                         >
-                          {doc.requirementLabel}
+                          {required ? "Mandatory" : "Optional"}
                         </span>
                       </div>
 
@@ -2956,8 +2983,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
                   {/* Download option */}
                   <a
-                    href="/documents/pdf-sample.pdf"
-                    download="DSA_Consent_Form.pdf"
+                    href="/documents/Cosmos_Bank_DSA_Consent_Form.pdf"
+                    download="Cosmos_Bank_DSA_Consent_Form.pdf"
                     className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 shadow-sm hover:bg-blue-50 hover:border-blue-400 transition-colors w-fit"
                   >
                     <Download className="h-3.5 w-3.5 text-blue-600" />
@@ -3043,7 +3070,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Step 6: Review Application & Declaration</h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Verify all submitted information before dispatching into the verification queue.
+                  Review and verify all application details and uploaded documents before submission.
                 </p>
               </div>
 
@@ -3080,10 +3107,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   </div>
                 </div>
 
-                {/* Bank Settlement Summary */}
+                {/* Bank Details Summary */}
                 <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
                   <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                    <span className="font-bold text-slate-800 uppercase tracking-wide">Bank Settlement</span>
+                    <span className="font-bold text-slate-800 uppercase tracking-wide">Bank Details</span>
                     <span className="font-bold text-emerald-600">{accountType}</span>
                   </div>
                   <div className="space-y-1 pt-1 text-slate-700">
@@ -3128,7 +3155,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     {Object.entries(uploadedDocs).map(([key, item]) => (
                       <li key={key} className="flex items-center justify-between text-[11px]">
                         <span className="text-slate-600 truncate max-w-[180px]">{item.name}</span>
-                        <span className="text-emerald-700 font-semibold">Ready</span>
+                        <span className="text-emerald-700 font-semibold">Uploaded</span>
                       </li>
                     ))}
                   </ul>
