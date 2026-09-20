@@ -148,7 +148,7 @@ export function DsaUploadSignedAgreementScreen({ token }: DsaUploadSignedAgreeme
       return;
     }
     if (!acknowledged) {
-      alert("Please confirm the document verification declaration before submitting.");
+      alert("Please confirm the document checking declaration before submitting.");
       return;
     }
 
@@ -306,7 +306,7 @@ export function DsaUploadSignedAgreementScreen({ token }: DsaUploadSignedAgreeme
                     <span>What happens next?</span>
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Our Level 7 HO Credit Head will review the stamp and execution signatures on your uploaded agreement. Once approved, your DSA account will be automatically activated and temporary login credentials will be dispatched to your registered email address.
+                    Our Head Office Credit Head will review the stamp and execution signatures on your uploaded agreement. Once approved, your DSA account will be automatically activated and temporary login credentials will be dispatched to your registered email address.
                   </p>
                 </div>
 
@@ -486,7 +486,7 @@ export function DsaUploadSignedAgreementScreen({ token }: DsaUploadSignedAgreeme
                     className="mt-0.5 rounded border-slate-700 text-emerald-600 focus:ring-emerald-500/20 bg-slate-900 w-4 h-4"
                   />
                   <div className="text-xs text-slate-300 leading-relaxed">
-                    <span className="font-semibold text-white">Declaration of Physical Execution:</span> I hereby verify that this document represents the genuine, complete, and physically signed and stamped Master Partnership Agreement executed with The Cosmos Co-Operative Bank Ltd.
+                    <span className="font-semibold text-white">Declaration of Physical Execution:</span> I hereby confirm that this document represents the genuine, complete, and physically signed and stamped Master Partnership Agreement executed with The Cosmos Co-Operative Bank Ltd.
                   </div>
                 </label>
 

@@ -3593,7 +3593,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
 
                   {/* Yellow Disclaimer Banner */}
                   <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3.5 text-xs">
-                    This is a pre-approved tentative offer. Final approval is subject to document verification and credit assessment by Cosmos Bank.
+                    This is a pre-approved tentative offer. Final approval is subject to document checking and credit assessment by Cosmos Bank.
                   </div>
 
                   <Button onClick={handleAcceptOffer} className="w-full bg-blue-900 hover:bg-blue-800 text-white py-3 font-semibold text-base">

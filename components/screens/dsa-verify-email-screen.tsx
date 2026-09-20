@@ -534,7 +534,7 @@ export function DsaVerifyEmailScreen({ token, type, applicationId }: DsaVerifyEm
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-slate-600">Application Pipeline</span>
                     <span className="inline-flex items-center rounded-full bg-blue-100 px-3 py-0.5 text-xs font-bold text-blue-800">
-                      {result.isLoan ? "Loan Application Journey" : "Level 1 Review Queue"}
+                      {result.isLoan ? "Loan Application Journey" : "Maker Review Queue"}
                     </span>
                   </div>
                 </div>

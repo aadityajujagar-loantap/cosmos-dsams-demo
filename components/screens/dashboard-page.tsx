@@ -592,7 +592,7 @@ export function DashboardPage() {
         {
           id: makeId("tl"),
           title: "Verification Pending",
-          note: "Customer documents are pending upload and verification.",
+          note: "Customer documents are pending upload and checking.",
           actor: "Cosmos Auto Desk",
           at: createdAt,
         },
@@ -1274,8 +1274,8 @@ export function DashboardPage() {
         <PageHeader
           description={
             isChecker
-              ? "Review and recommend branch DSA applications at Level 2 (Checker Due Diligence)."
-              : "Onboard DSAs from the branch and track the internal approval handoff to Level 2 (Checker)."
+              ? "Review and recommend branch DSA applications for Checker Due Diligence."
+              : "Onboard DSAs from the branch and track the internal approval handoff to Checker."
           }
           eyebrow={isChecker ? "Branch Checker desk" : "Branch DSA desk"}
           title={`${isChecker ? "Checker" : "Branch"} Dashboard: ${currentUser.name}`}
@@ -1284,9 +1284,9 @@ export function DashboardPage() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <KpiCard change="Branch scope" icon={Building2} label="Branch DSAs" tone="blue" value={String(branchStats.total)} />
           <KpiCard
-            change={isChecker ? "L2 Review" : "Checker queue"}
+            change={isChecker ? "Checker Review" : "Checker queue"}
             icon={Clock}
-            label={isChecker ? "Pending Checker" : "Pending L2"}
+            label="Pending Checker"
             tone="amber"
             value={String(isChecker ? branchStats.pendingChecker : branchStats.pendingCredit)}
           />
@@ -1304,7 +1304,7 @@ export function DashboardPage() {
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
                   {isChecker
-                    ? "Applications submitted by branch Makers pending Level 2 Checker Due Diligence."
+                    ? "Applications submitted by branch Makers pending Checker Due Diligence."
                     : "Track DSA applications submitted from your branch through Maker & Checker stages."}
                 </p>
               </div>
@@ -1337,7 +1337,7 @@ export function DashboardPage() {
                           <td className="p-4 text-right pr-6">
                             <Link href={`/dsa/${dsa.id}`}>
                               <Button size="sm" type="button" variant={isChecker && Number(dsa.current_approval_level) === 2 ? "primary" : "outline"}>
-                                {isChecker && Number(dsa.current_approval_level) === 2 ? "Review L2" : "Open"}
+                                {isChecker && Number(dsa.current_approval_level) === 2 ? "Review" : "Open"}
                               </Button>
                             </Link>
                           </td>
@@ -1363,23 +1363,23 @@ export function DashboardPage() {
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
                 {isChecker
-                  ? "Level 2 verification & recommendation workflow."
+                  ? "Checker verification & recommendation workflow."
                   : "Branch submissions remain inactive until DSA Credit approves them."}
               </p>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="rounded-md bg-sky-50 p-4">
                 <p className="text-sm font-semibold text-blue-950">
-                  {isChecker ? "Pending Checker Queue (L2)" : "Current L2 queue"}
+                  Pending Checker Queue
                 </p>
                 <p className="mt-1 text-2xl font-semibold text-blue-700">
                   {isChecker ? branchStats.pendingChecker : branchStats.pendingCredit}
                 </p>
               </div>
               <div className="space-y-2 text-xs text-slate-600">
-                <p className="rounded-md border border-slate-100 p-3">1. Maker (L1) verifies documents and KYC, then submits to Checker.</p>
-                <p className="rounded-md border border-slate-100 p-3">2. Checker (L2) runs due diligence checks and recommends to Sub-Region Head.</p>
-                <p className="rounded-md border border-slate-100 p-3">3. Sub-Region Head (L3) through Credit Head (L7) finalize approval.</p>
+                <p className="rounded-md border border-slate-100 p-3">1. Branch Maker verifies documents and KYC, then submits to Checker.</p>
+                <p className="rounded-md border border-slate-100 p-3">2. Checker runs due diligence checks and recommends to Sub-Region Head.</p>
+                <p className="rounded-md border border-slate-100 p-3">3. Sub-Region Head through HO Credit Head finalize approval.</p>
               </div>
             </CardContent>
           </Card>

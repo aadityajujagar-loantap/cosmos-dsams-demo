@@ -290,7 +290,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         },
         {
           items: [{ href: "/dsa/management", icon: Users, label: "DSA Approval Queue" }],
-          label: "Sub-Region Queue (L3)",
+          label: "Sub-Region Queue",
         },
         {
           items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications" }],
@@ -313,7 +313,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         },
         {
           items: [{ href: "/dsa/management", icon: Users, label: "DSA Approval Queue" }],
-          label: "DGM Queue (L4)",
+          label: "DGM Queue",
         },
         {
           items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications" }],
@@ -336,7 +336,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         },
         {
           items: [{ href: "/dsa/management", icon: Users, label: "DSA Approval Queue" }],
-          label: "Regional Queue (L5)",
+          label: "Regional Queue",
         },
         {
           items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications" }],
@@ -362,7 +362,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             { href: "/dsa/management", icon: Users, label: "DSA Approval Queue" },
             { href: "/dsa/product-setting", icon: Settings, label: "Product Setting" },
           ],
-          label: "Credit Appraisal (L6)",
+          label: "Credit Appraisal",
         },
         {
           items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications" }],
@@ -392,7 +392,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             { href: "/dsa/management", icon: Users, label: "Final Approval Queue" },
             { href: "/dsa/product-setting", icon: Settings, label: "Product Setting" },
           ],
-          label: "Final Sanction (L7)",
+          label: "Final Sanction",
         },
         {
           items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications" }],
@@ -423,7 +423,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             { href: "/dsa/onboarding", icon: UserPlus, label: "Onboard DSA" },
             { href: "/dsa/product-setting", icon: Settings, label: "Product Setting" },
           ],
-          label: "Branch Initiator (L1)",
+          label: "Branch Initiator",
         },
         {
           items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications & Leads" }],
@@ -449,7 +449,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             { href: "/dsa/management", icon: Users, label: "DSA Approval Queue" },
             { href: "/dsa/product-setting", icon: Settings, label: "Product Setting" },
           ],
-          label: "Checker Review (L2)",
+          label: "Checker Review",
         },
         {
           items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications & Leads" }],
@@ -658,7 +658,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           createdAt: document.uploadedAt,
           href: application ? `/applications/${application.id}` : dsa ? `/dsa/${dsa.id}` : "/applications",
           id: `stale-doc-${document.id}`,
-          title: "Document verification overdue",
+          title: "Document checking overdue",
         });
       }
     });

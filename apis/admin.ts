@@ -26,6 +26,14 @@ export interface BackendResponse<T> {
   data: T;
 }
 
+export interface KycApiResponse<T = any> {
+  success: boolean;
+  message?: string;
+  data: T;
+  dsa_temp_id?: string;
+  count?: number;
+}
+
 export interface DsaListResponse {
   items: Dsa[];
   pagination: {
@@ -1706,6 +1714,110 @@ export const adminApi = {
       { method: "GET" }
     );
     return response.data || [];
+  },
+
+  // ── 11. KYC & Verification Gateways (ScoreMe / BAV) ─────────────────────────
+  /**
+   * POST /api/v1/kyc/scoreme/gst-info
+   * GSTIN filing and registration lookup (ScoreMe API Gateway - Flags 1 to 7)
+   */
+  verifyGstInfo: async (payload: {
+    gstin: string;
+    flag?: number;
+    dsa_temp_id?: string;
+    dsa_id?: number;
+  }): Promise<KycApiResponse<any>> => {
+    return request<KycApiResponse<any>>("/v1/kyc/scoreme/gst-info", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * POST /api/v1/kyc/scoreme/pan-to-gstin
+   * Resolve all GSTIN numbers linked to a PAN
+   */
+  resolvePanToGstin: async (payload: {
+    pan: string;
+    dsa_temp_id?: string;
+    dsa_id?: number;
+  }): Promise<KycApiResponse<any>> => {
+    return request<KycApiResponse<any>>("/v1/kyc/scoreme/pan-to-gstin", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * POST /api/v1/kyc/scoreme/udyam-verification
+   * Verify MSME Udyam Certificate registration details
+   */
+  verifyUdyam: async (payload: {
+    registration_number: string;
+    dsa_temp_id?: string;
+    dsa_id?: number;
+  }): Promise<KycApiResponse<any>> => {
+    return request<KycApiResponse<any>>("/v1/kyc/scoreme/udyam-verification", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * POST /api/v1/kyc/scoreme/pan-advance
+   * Advanced PAN verification with name match and status
+   */
+  verifyPanAdvance: async (payload: {
+    pan: string;
+    dsa_temp_id?: string;
+    dsa_id?: number;
+  }): Promise<KycApiResponse<any>> => {
+    return request<KycApiResponse<any>>("/v1/kyc/scoreme/pan-advance", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * POST /api/v1/kyc/bank-verification
+   * Penny-drop Bank Account Verification (₹1.00 Verification)
+   */
+  verifyBankAccount: async (payload: {
+    account_number: string;
+    ifsc: string;
+    dsa_temp_id?: string;
+    dsa_id?: number;
+  }): Promise<KycApiResponse<any>> => {
+    return request<KycApiResponse<any>>("/v1/kyc/bank-verification", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * POST /api/v1/kyc/bank-verification-pennyless
+   * Pennyless Bank Account Verification
+   */
+  verifyBankAccountPennyless: async (payload: {
+    account_number: string;
+    ifsc: string;
+    dsa_temp_id?: string;
+    dsa_id?: number;
+  }): Promise<KycApiResponse<any>> => {
+    return request<KycApiResponse<any>>("/v1/kyc/bank-verification-pennyless", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * GET /api/v1/kyc/verifications/{tempId}
+   * Query verification records and historical logs by temp ID or DSA ID
+   */
+  getKycVerifications: async (tempIdOrDsaId: string | number): Promise<KycApiResponse<any[]>> => {
+    return request<KycApiResponse<any[]>>(`/v1/kyc/verifications/${tempIdOrDsaId}`, {
+      method: "GET",
+    });
   },
 };
 

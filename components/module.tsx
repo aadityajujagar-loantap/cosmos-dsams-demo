@@ -11,7 +11,7 @@ export function PageHeader({
   description,
 }: {
   action?: ReactNode;
-  description: string;
+  description?: string;
   eyebrow?: string;
   title: string;
 }) {
@@ -22,7 +22,9 @@ export function PageHeader({
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-blue-700">{eyebrow}</p>
         ) : null}
         <h1 className="text-lg font-semibold tracking-tight text-slate-950 md:text-xl">{title}</h1>
-        <p className="mt-1 max-w-3xl text-sm leading-5 text-slate-600">{description}</p>
+        {description ? (
+          <p className="mt-1 max-w-3xl text-sm leading-5 text-slate-600">{description}</p>
+        ) : null}
       </div>
       {action}
     </div>

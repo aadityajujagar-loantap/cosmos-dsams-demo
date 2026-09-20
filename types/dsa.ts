@@ -130,7 +130,57 @@ export interface Dsa {
     id?: number;
     branch_code?: string;
     branch_name?: string;
+    sub_region_code?: string;
   } | null;
+  submission_mode?: string | null;
+  first_name?: string | null;
+  middle_name?: string | null;
+  last_name?: string | null;
+  applicant_title?: string | null;
+  date_of_birth?: string | null;
+  age?: number | string | null;
+  education_qualification?: string | null;
+  aadhaar_no?: string | null;
+  entity_name?: string | null;
+  constitution?: string | null;
+  nature_of_business?: string | null;
+  registration_no_llpin_cin?: string | null;
+  gst_applicable?: boolean | null;
+  business_license_type?: string | null;
+  business_license_no?: string | null;
+  experience_years?: string | number | null;
+  empanelment_since_year?: string | number | null;
+  selected_licenses?: string[] | string | null;
+  key_person_contact_no?: string | null;
+  landline_no?: string | null;
+  website?: string | null;
+  office_address_different?: boolean | null;
+  office_address_line_1?: string | null;
+  office_city?: string | null;
+  office_state?: string | null;
+  office_pincode?: string | null;
+  office_landline_no?: string | null;
+  office_mobile_no?: string | null;
+  business_premises_ownership?: string | null;
+  account_type?: string | null;
+  reference_1_name?: string | null;
+  reference_1_contact_no?: string | null;
+  reference_2_name?: string | null;
+  reference_2_contact_no?: string | null;
+  visit_report_remarks?: string | null;
+  visit_conducted_by?: string | null;
+  visit_conducted_at?: string | null;
+  mobile_verified_at?: string | null;
+  email_verified_at?: string | null;
+  stakeholders?: Array<{
+    id?: number;
+    stakeholder_type?: string;
+    name: string;
+    mobile_no?: string;
+    pan?: string;
+    aadhaar?: string;
+    din_dpin_no?: string;
+  }>;
 }
 
 export interface StateOption {

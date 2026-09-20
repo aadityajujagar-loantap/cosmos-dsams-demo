@@ -14,18 +14,25 @@ import type {
 import { useToast } from "@/components/ui/toast";
 
 function errorMessage(error: unknown, fallback: string) {
-  if (error && typeof error === "object" && "data" in error) {
-    const data = (error as { data?: { error?: unknown; message?: unknown } }).data;
-    const details = Array.isArray(data?.error) ? data.error.map(String).join(" ") : String(data?.error ?? "");
-    if (details.includes("Table 'cosmos_dsa.dsas' doesn't exist") || details.includes("Base table or view not found")) {
-      return "DSA list API is unavailable because the backend database table `dsas` is missing. Run the backend migrations and seed data before retrying.";
+  if (error && typeof error === "object") {
+    const errObj = error as any;
+    const data = errObj.response?.data || errObj.data;
+    if (data) {
+      const details = Array.isArray(data?.error)
+        ? data.error.map(String).join(" ")
+        : String(data?.error ?? "");
+      if (
+        details.includes("Table 'cosmos_dsa.dsas' doesn't exist") ||
+        details.includes("Base table or view not found")
+      ) {
+        return "DSA list API is unavailable because the backend database table `dsas` is missing. Run the backend migrations and seed data before retrying.";
+      }
+      if (typeof data.message === "string" && data.message.trim()) return data.message;
+      if (details.trim()) return details;
     }
-    if (typeof data?.message === "string") return data.message;
+    if (typeof errObj.message === "string" && errObj.message.trim()) return errObj.message;
   }
   if (error instanceof Error) return error.message;
-  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
-    return error.message;
-  }
   return fallback;
 }
 
@@ -218,7 +225,7 @@ export function useDsa() {
         const response = await adminApi.submitMakerApplication(idOrCode, { remarks });
         toast({
           title: "Submitted to Checker",
-          description: "Application successfully submitted to Level 2 (Checker).",
+          description: "Application successfully submitted to Checker.",
           variant: "success",
         });
         if (response.data?.dsa) {
@@ -246,7 +253,7 @@ export function useDsa() {
         const response = await adminApi.submitCheckerApplication(idOrCode, payload);
         toast({
           title: "Application Recommended",
-          description: "Application successfully submitted to Level 3 (Sub-Region Head).",
+          description: "Application successfully submitted to Sub-Region Head.",
           variant: "success",
         });
         if (response.data?.dsa) {
@@ -256,7 +263,7 @@ export function useDsa() {
       } catch (error: unknown) {
         toast({
           title: "Submission failed",
-          description: errorMessage(error, "Failed to submit application to Level 3."),
+          description: errorMessage(error, "Failed to submit application to Sub-Region Head."),
           variant: "warning",
         });
         return null;
@@ -334,7 +341,7 @@ export function useDsa() {
         toast({
           title: `Verification [${code}] failed`,
           description: errorMessage(error, `Failed to execute verification [${code}].`),
-          variant: "warning",
+          variant: "destructive",
         });
         return null;
       } finally {

@@ -958,7 +958,7 @@ export function ApplicationDetailPage({ id }: { id: string }) {
           actor: currentUser?.name ?? application.customer,
           at: now,
           id: makeId("tl"),
-          note: `${file.name} uploaded and queued for document verification.`,
+          note: `${file.name} uploaded and queued for document checking.`,
           title: "Document uploaded",
         },
         ...application.timeline,
@@ -1189,7 +1189,7 @@ export function ApplicationDetailPage({ id }: { id: string }) {
                         <p className="font-medium text-slate-950">{doc.type}</p>
                         <p className="text-xs text-slate-500">{doc.fileName}</p>
                       </div>
-                      <StatusBadge status={doc.status} />
+                      <StatusBadge status={doc.status === "Verified" ? "Checked" : doc.status} />
                     </div>
                     {canVerifyDocuments && doc.status !== "Verified" && doc.status !== "Failed" ? (
                       <div className="flex justify-end gap-2 pt-1">
@@ -1201,7 +1201,7 @@ export function ApplicationDetailPage({ id }: { id: string }) {
                           type="button"
                           className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-2 py-0.5 h-auto"
                         >
-                          Verify
+                          Check
                         </Button>
                         <Button
                           onClick={() => {
@@ -1221,7 +1221,7 @@ export function ApplicationDetailPage({ id }: { id: string }) {
               ))}
               {documents.length === 0 ? (
                 <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500 md:col-span-2">
-                  No documents uploaded yet. Upload PAN, income, or bank documents to start verification.
+                  No documents uploaded yet. Upload PAN, income, or bank documents to start checking.
                 </div>
               ) : null}
             </CardContent>

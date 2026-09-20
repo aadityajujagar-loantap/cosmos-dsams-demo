@@ -1655,7 +1655,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
             <h2 className="text-2xl font-bold tracking-tight">Application Submitted Successfully!</h2>
             <p className="mt-2 text-emerald-100 text-sm">
               {mode === "branch"
-                ? "The DSA registration has been routed directly to the Level 1 Assistant Manager verification queue."
+                ? "The DSA registration has been routed directly to the Branch Maker verification queue."
                 : "Thank you for registering. A verification link has been sent to your email."}
             </p>
           </div>
@@ -1681,7 +1681,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-600">Queue Status</span>
                 <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-800">
-                  Pending Level 1 Review
+                  Pending Maker Review
                 </span>
               </div>
               <div className="flex items-center justify-between text-sm">
