@@ -370,9 +370,9 @@ export function DocumentViewerBody({
   };
 
   return (
-    <div className="space-y-3.5">
+    <div className="flex flex-col h-full min-h-0 space-y-3">
       {/* Meta Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 px-3.5 py-2 bg-slate-50/90 rounded-lg border border-slate-200/80 text-xs">
+      <div className="shrink-0 flex flex-wrap items-center justify-between gap-2.5 px-3.5 py-2 bg-slate-50/90 rounded-lg border border-slate-200/80 text-xs">
         <div className="flex items-center gap-2 flex-wrap">
           <StatusBadge status={getDocDisplayStatus(effectiveStatus)} />
           <span className="font-mono font-semibold text-[10px] px-2 py-0.5 rounded bg-white text-slate-600 border border-slate-200 shadow-2xs uppercase">
@@ -406,7 +406,7 @@ export function DocumentViewerBody({
       </div>
 
       {/* Main Preview Box */}
-      <div className="relative w-full min-h-[360px] max-h-[72vh] overflow-auto bg-slate-100/70 rounded-xl border border-slate-200 flex items-center justify-center p-2">
+      <div className="flex-1 min-h-0 relative w-full overflow-hidden bg-slate-100/70 rounded-xl border border-slate-200 flex items-center justify-center p-1.5">
         {!url ? (
           <div className="p-8 text-center text-slate-500">
             <FileText className="h-10 w-10 mx-auto mb-2 text-slate-400" />
@@ -459,7 +459,7 @@ export function DocumentViewerBody({
               </div>
             </div>
           ) : (
-            <div className="relative flex items-center justify-center w-full h-full min-h-[240px]">
+            <div className="relative flex items-center justify-center w-full h-full min-h-[200px]">
               {imgLoading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-slate-100/60 backdrop-blur-2xs z-10">
                   <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
@@ -483,7 +483,7 @@ export function DocumentViewerBody({
                   }
                 }}
                 className={cn(
-                  "max-h-[68vh] w-auto max-w-full object-contain rounded-lg shadow-sm border border-slate-200/80 bg-white transition-opacity duration-200",
+                  "max-h-full w-auto max-w-full object-contain rounded-lg shadow-sm border border-slate-200/80 bg-white transition-opacity duration-200",
                   imgLoading ? "opacity-0" : "opacity-100",
                 )}
               />
@@ -493,19 +493,19 @@ export function DocumentViewerBody({
           <iframe
             src={embedUrl}
             title={previewDoc.file_name || "PDF Document"}
-            className="w-full h-[68vh] min-h-[480px] rounded-lg border border-slate-200 bg-white shadow-xs"
+            className="w-full h-full rounded-lg border border-slate-200 bg-white shadow-xs"
           />
         ) : (
           <iframe
             src={embedUrl}
             title={previewDoc.file_name || "Document"}
-            className="w-full h-[68vh] min-h-[480px] rounded-lg border border-slate-200 bg-white shadow-xs"
+            className="w-full h-full rounded-lg border border-slate-200 bg-white shadow-xs"
           />
         )}
       </div>
 
       {/* Footer Controls */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
+      <div className="shrink-0 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
         <div className="flex items-center gap-1.5 text-xs text-slate-500">
           {previewDoc.uploaded_at ? (
             <>
@@ -2926,7 +2926,10 @@ export function DsaProfilePage({ id }: { id: string }) {
           });
         }
       } else if (type === "cibil") {
-        const res = await triggerCheckerVerification(dsa.id, "CIBIL", {
+        const isInd =
+          dsa.dsa_type === "INDIVIDUAL" || dsa.dsa_type === "Individual";
+        const cibilCode = isInd ? "CIBIL_CONSUMER" : "CIBIL_COMMERCIAL";
+        const res = await triggerCheckerVerification(dsa.id, cibilCode, {
           pan: dsa.pan,
         });
         // Mark attempted regardless of success/failure (only throws are excluded)
@@ -2948,7 +2951,7 @@ export function DsaProfilePage({ id }: { id: string }) {
           setFailedKyc((prev) => ({ ...prev, cibil: false }));
         }
       } else if (type === "aml") {
-        const res = await triggerCheckerVerification(dsa.id, "AML", {
+        const res = await triggerCheckerVerification(dsa.id, "AML_COMPASS", {
           name: dsa.name,
           pan: dsa.pan,
         });
@@ -3091,7 +3094,6 @@ export function DsaProfilePage({ id }: { id: string }) {
     }
   };
 
-  const [runningVerif, setRunningVerif] = useState<string | null>(null);
   const [checkerDdNote, setCheckerDdNote] = useState("");
   const [checkerSavingNote, setCheckerSavingNote] = useState(false);
 
@@ -3911,11 +3913,6 @@ export function DsaProfilePage({ id }: { id: string }) {
 
   const existingVerifications = (dsa.verifications || []) as any[];
 
-  const getVerificationRecord = (code: string) =>
-    existingVerifications.find(
-      (v) => (v.verification_code || "").toUpperCase() === code.toUpperCase(),
-    );
-
   const isVerificationAttempted = (code: string) =>
     existingVerifications.some(
       (v) =>
@@ -3933,150 +3930,6 @@ export function DsaProfilePage({ id }: { id: string }) {
   );
   const areAllCheckerVerificationsDone =
     pendingCheckerVerifications.length === 0;
-
-  const getVerificationFinding = (code: string) => {
-    const record = getVerificationRecord(code);
-    if (!record) return null;
-    const norm = record.normalized_data || {};
-    const isFailed =
-      record.execution_status === "FAILED" ||
-      record.execution_status === "TIMEOUT" ||
-      (!record.is_success && (!norm || Object.keys(norm).length === 0));
-
-    let isAdverse = false;
-    let summaryText = "";
-
-    switch (code) {
-      case "CIBIL_CONSUMER": {
-        const score = Number(norm.cibil_score || norm.score || 0);
-        if (score > 0) {
-          if (score < 550) {
-            isAdverse = true;
-            summaryText = `CIBIL Score: ${score} (< 550: Reject criteria)`;
-          } else if (score < 700) {
-            isAdverse = true;
-            summaryText = `CIBIL Score: ${score} (< 700: Deviation required)`;
-          } else {
-            summaryText = `CIBIL Score: ${score} (Meets >= 700 benchmark)`;
-          }
-        }
-        break;
-      }
-      case "CIBIL_COMMERCIAL": {
-        const cmr = Number(norm.cmr_rank || norm.cmr || norm.score || 0);
-        if (cmr > 0) {
-          if (cmr > 5) {
-            isAdverse = true;
-            summaryText = `CMR Rank: ${cmr} (> 5: Deviation required)`;
-          } else {
-            summaryText = `CMR Rank: ${cmr} (Acceptable CMR 1–5)`;
-          }
-        }
-        break;
-      }
-      case "AML_COMPASS": {
-        const matchScore = Number(norm.aml_score || norm.match_score || 0);
-        const pep = Boolean(norm.pep_match);
-        const sanction = Boolean(norm.sanction_match);
-        if (matchScore >= 95 || pep || sanction) {
-          isAdverse = true;
-          summaryText = `AML Match: ${matchScore}%${pep ? ", PEP Match" : ""}${sanction ? ", Sanction Match" : ""} (>= 95%: Deviation required)`;
-        } else if (matchScore > 0 || record.is_success) {
-          summaryText = `AML Match: ${matchScore}% (Clear)`;
-        }
-        break;
-      }
-      case "GST": {
-        if (norm.gstin_status || norm.status) {
-          const st = String(norm.gstin_status || norm.status).toUpperCase();
-          if (st.includes("ACTIVE")) {
-            summaryText = `GSTIN: Active | Filings regular`;
-          } else {
-            isAdverse = true;
-            summaryText = `GSTIN: ${st} (Deviation generated)`;
-          }
-        }
-        break;
-      }
-      case "UDYAM": {
-        if (norm.udyam_status || norm.registration_status || norm.status) {
-          const st = String(
-            norm.udyam_status || norm.registration_status || norm.status,
-          ).toUpperCase();
-          if (
-            st.includes("ACTIVE") ||
-            st.includes("VERIFIED") ||
-            record.is_success
-          ) {
-            summaryText = `MSME Status: Verified active`;
-          } else {
-            isAdverse = true;
-            summaryText = `MSME Status: ${st} (Deviation generated)`;
-          }
-        }
-        break;
-      }
-      default:
-        break;
-    }
-
-    return {
-      record,
-      isFailed,
-      isAdverse,
-      summaryText:
-        summaryText ||
-        (record.is_success
-          ? "Verified successfully"
-          : record.error_message || "Gateway response received"),
-    };
-  };
-
-  const handleAddRemarkFromVerif = (item: {
-    label: string;
-    ifFail: string;
-    ifAdverse: string;
-    code: string;
-  }) => {
-    const finding = getVerificationFinding(item.code);
-    const statusNote = finding?.isFailed
-      ? `Failed with gateway error (${finding.record?.error_message || "External gateway unreachable"}). Policy: ${item.ifFail}.`
-      : finding?.isAdverse
-        ? `Adverse outcome flagged (${finding.summaryText}). Policy: ${item.ifAdverse}.`
-        : `Verified successfully (${finding?.summaryText || "Completed"}).`;
-
-    const noteLine = `• [${item.label}] (Triggered by Checker): ${statusNote}`;
-    setCheckerDdNote((prev) =>
-      prev.trim() ? `${prev.trim()}\n${noteLine}` : noteLine,
-    );
-    toast({
-      title: "Remark Added to DD Note",
-      description: `Observation for ${item.label} inserted into Due Diligence Note.`,
-      variant: "success",
-    });
-  };
-
-  const handleRunCheckerVerif = async (code: string, label: string) => {
-    setRunningVerif(code);
-    try {
-      await triggerCheckerVerification(dsa.id, code);
-      toast({
-        title: `${code} Verification Completed`,
-        description: `${label} verification completed successfully.`,
-        variant: "success",
-      });
-      await fetchDsaDetail(id);
-    } catch (err: any) {
-      toast({
-        title: "Verification Trigger Failed",
-        description:
-          err?.message || "Verification gateway failed. Please retry.",
-        variant: "warning",
-      });
-    } finally {
-      setRunningVerif(null);
-    }
-  };
 
   const handleSaveCheckerDdNote = async () => {
     if (!checkerDdNote.trim()) {
@@ -4997,15 +4850,9 @@ export function DsaProfilePage({ id }: { id: string }) {
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
               <FileCheck2 className="h-5 w-5" />
             </div>
-            <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                Level Review Documentation &bull; {workflowLevelInfo.levelName}
-              </h4>
-              <p className="text-xs text-slate-500">
-                Access automated Maker BRE deviation assessment and Checker
-                field Due Diligence note.
-              </p>
-            </div>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+              Level Review Documentation &bull; {workflowLevelInfo.levelName}
+            </h4>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -5697,11 +5544,17 @@ export function DsaProfilePage({ id }: { id: string }) {
                             }),
                           });
                           if (!isCibilChecked && !isMakerUser) {
+                            const isInd =
+                              dsa.dsa_type === "INDIVIDUAL" ||
+                              dsa.dsa_type === "Individual";
+                            const cibilCode = isInd
+                              ? "CIBIL_CONSUMER"
+                              : "CIBIL_COMMERCIAL";
                             tasks.push({
                               key: "cibil",
                               promise: triggerCheckerVerification(
                                 dsa.id,
-                                "CIBIL",
+                                cibilCode,
                                 { pan: dsa.pan },
                               ),
                             });
@@ -5711,7 +5564,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                               key: "aml",
                               promise: triggerCheckerVerification(
                                 dsa.id,
-                                "AML",
+                                "AML_COMPASS",
                                 { name: dsa.name, pan: dsa.pan },
                               ),
                             });
@@ -8404,277 +8257,9 @@ export function DsaProfilePage({ id }: { id: string }) {
                   </div>
                 )}
 
-                {/* Level 2 Checker Due Diligence & Verifications */}
+                {/* Level 2 Checker Due Diligence Note */}
                 {isCheckerLevel && workflowLevelInfo.canUserApprove && (
                   <div className="mt-4 space-y-4">
-                    {/* Verifications Card */}
-                    <div className="rounded-lg border border-slate-200 bg-white p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <FileCheck2 className="h-4 w-4 text-blue-600" />
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                            2.6 API Checks — Due Diligence Stage
-                          </h4>
-                        </div>
-                        <span
-                          className={cn(
-                            "text-[11px] font-bold px-2 py-0.5 rounded-full border",
-                            areAllCheckerVerificationsDone
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : "bg-amber-50 text-amber-700 border-amber-200",
-                          )}
-                        >
-                          {areAllCheckerVerificationsDone
-                            ? "All Required Verifications Executed"
-                            : `${requiredCheckerVerifications.length - pendingCheckerVerifications.length} of ${requiredCheckerVerifications.length} Executed`}
-                        </span>
-                      </div>
-
-                      {/* Statutory DPDP Act Compliance Banner */}
-                      <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-3 mb-4 text-xs text-amber-950">
-                        <div className="flex items-start gap-2.5">
-                          <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                          <div className="space-y-1">
-                            <p className="font-semibold leading-relaxed">
-                              Note: DSA Consent must be captured before
-                              triggering any API — as per DPDP Act. API charges
-                              borne by Cosmos Bank.
-                            </p>
-                            <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                              <span
-                                className={cn(
-                                  "font-semibold px-2 py-0.5 rounded-full text-[10px] border",
-                                  hasDpdpConsent
-                                    ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                                    : "bg-amber-100 text-amber-800 border-amber-300",
-                                )}
-                              >
-                                {hasDpdpConsent
-                                  ? "✓ DPDP Consent on File"
-                                  : "⚠ Awaiting DPDP Consent Document"}
-                              </span>
-                              <span className="text-amber-800 font-medium">
-                                All API charges borne by Cosmos Bank.
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Maker Check Status (Section 2.6) */}
-                      <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 mb-3 text-xs">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="space-y-0.5">
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={cn(
-                                  "h-2 w-2 rounded-full shrink-0",
-                                  isVerificationAttempted(makerPanCheck.code)
-                                    ? "bg-emerald-500"
-                                    : "bg-slate-400",
-                                )}
-                              />
-                              <span className="font-bold text-slate-800">
-                                Maker Check: {makerPanCheck.label} (
-                                {makerPanCheck.dsaType})
-                              </span>
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-semibold">
-                                Triggered By: Maker
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-slate-500 pl-4">
-                              {makerPanCheck.desc}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-slate-500">
-                              Fail:{" "}
-                              <span className="text-slate-700 font-medium">
-                                {makerPanCheck.ifFail}
-                              </span>{" "}
-                              | Adverse:{" "}
-                              <span className="text-slate-700 font-medium">
-                                {makerPanCheck.ifAdverse}
-                              </span>
-                            </span>
-                            <span
-                              className={cn(
-                                "inline-flex shrink-0 items-center text-[10px] font-bold px-2 py-0.5 rounded border",
-                                isVerificationAttempted(makerPanCheck.code)
-                                  ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                                  : "bg-slate-100 text-slate-600 border-slate-200",
-                              )}
-                            >
-                              {isVerificationAttempted(makerPanCheck.code)
-                                ? "EXECUTED BY MAKER"
-                                : "PENDING MAKER"}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Checker Statutory & Risk Verifications Grid */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {requiredCheckerVerifications.map((item) => {
-                          const done = isVerificationDone(item.code);
-                          const isRunning = runningVerif === item.code;
-                          const finding = getVerificationFinding(item.code);
-                          const verifRecord = finding?.record;
-
-                          return (
-                            <div
-                              key={item.code}
-                              className={cn(
-                                "flex flex-col justify-between rounded-lg border p-3 transition space-y-2.5",
-                                finding?.isFailed
-                                  ? "border-rose-200 bg-rose-50/40"
-                                  : finding?.isAdverse
-                                    ? "border-amber-200 bg-amber-50/40"
-                                    : done
-                                      ? "border-emerald-200 bg-emerald-50/40"
-                                      : "border-slate-200 bg-slate-50/50",
-                              )}
-                            >
-                              <div className="space-y-1.5">
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="space-y-0.5">
-                                    <div className="flex items-center gap-2">
-                                      <span
-                                        className={cn(
-                                          "h-2 w-2 rounded-full shrink-0",
-                                          finding?.isFailed
-                                            ? "bg-rose-500"
-                                            : finding?.isAdverse
-                                              ? "bg-amber-500"
-                                              : done
-                                                ? "bg-emerald-500"
-                                                : "bg-slate-400",
-                                        )}
-                                      />
-                                      <span className="font-bold text-xs text-slate-900">
-                                        {item.label}
-                                      </span>
-                                    </div>
-                                    <p className="text-[11px] text-slate-500 pl-4">
-                                      {item.desc}
-                                    </p>
-                                  </div>
-                                  <span
-                                    className={cn(
-                                      "inline-flex shrink-0 items-center text-[10px] font-bold px-2 py-0.5 rounded border",
-                                      finding?.isFailed
-                                        ? "bg-rose-100 text-rose-800 border-rose-300"
-                                        : finding?.isAdverse
-                                          ? "bg-amber-100 text-amber-800 border-amber-300"
-                                          : done
-                                            ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                                            : "bg-slate-100 text-slate-600 border-slate-200",
-                                    )}
-                                  >
-                                    {finding?.isFailed
-                                      ? "GATEWAY FAIL"
-                                      : finding?.isAdverse
-                                        ? "ADVERSE / DEVIATION"
-                                        : done
-                                          ? "VERIFIED"
-                                          : "PENDING"}
-                                  </span>
-                                </div>
-
-                                {/* Statutory Policy Chips from Section 2.6 */}
-                                <div className="pl-4 flex flex-wrap items-center gap-1.5 text-[10px]">
-                                  <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 font-medium">
-                                    DSA Type: {item.dsaType}
-                                  </span>
-                                  <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-medium">
-                                    Triggered By: {item.triggeredBy}
-                                  </span>
-                                  <span
-                                    className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-medium"
-                                    title="Client policy on failure"
-                                  >
-                                    If Fail: {item.ifFail}
-                                  </span>
-                                  <span
-                                    className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-800 border border-purple-200 font-medium"
-                                    title="Client policy on adverse outcome"
-                                  >
-                                    If Adverse: {item.ifAdverse}
-                                  </span>
-                                </div>
-
-                                {/* Findings / Observation Output */}
-                                {done && finding && (
-                                  <div className="pl-4 pt-1">
-                                    <div className="rounded bg-white/80 border border-slate-200 p-1.5 text-[11px] text-slate-700 flex items-center justify-between gap-2">
-                                      <span className="font-medium truncate">
-                                        {finding.summaryText}
-                                      </span>
-                                      {verifRecord?.executed_at && (
-                                        <span className="text-[10px] text-slate-400 shrink-0 font-mono">
-                                          {formatDate(verifRecord.executed_at)}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2 text-[11px]">
-                                <div className="flex items-center gap-1.5">
-                                  {done && (
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={() =>
-                                        handleAddRemarkFromVerif(item)
-                                      }
-                                      className="h-6 text-[11px] px-2 text-blue-700 hover:text-blue-900 hover:bg-blue-50 font-medium flex items-center gap-1"
-                                      title="Append finding to Checker Due Diligence Note"
-                                    >
-                                      <Plus className="h-3 w-3" />
-                                      Remark in DD note
-                                    </Button>
-                                  )}
-                                </div>
-
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={actionLoading || isRunning}
-                                  onClick={() =>
-                                    handleRunCheckerVerif(item.code, item.label)
-                                  }
-                                  className={cn(
-                                    "h-7 text-xs px-2.5 font-medium flex items-center gap-1",
-                                    done
-                                      ? "text-slate-600 hover:bg-slate-100"
-                                      : "bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200 font-semibold",
-                                  )}
-                                >
-                                  {isRunning ? (
-                                    <>
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                      Running...
-                                    </>
-                                  ) : done ? (
-                                    <>
-                                      <Check className="h-3 w-3 text-emerald-600" />
-                                      Re-verify
-                                    </>
-                                  ) : (
-                                    <>Run Verification</>
-                                  )}
-                                </Button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
                     {/* Checker Due Diligence Note Card */}
                     <div className="rounded-lg border border-slate-200 bg-white p-4">
                       <div className="flex items-center justify-between mb-2">
@@ -8684,31 +8269,15 @@ export function DsaProfilePage({ id }: { id: string }) {
                             Checker Due Diligence Note &amp; Observations
                           </h4>
                         </div>
-                        <span className="text-[11px] text-slate-500">
-                          {checkerSavingNote
-                            ? "Saving..."
-                            : "Auto-attached on recommendation"}
-                        </span>
                       </div>
-                      <p className="text-xs text-slate-500 mb-2">
-                        Record field investigation findings, business premise
-                        verification, and statutory check observations (per
-                        Section 2.6: record remarks for any failed or adverse
-                        checks).
-                      </p>
                       <textarea
                         rows={3}
                         className="w-full rounded-md border border-slate-200 p-2 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 font-sans leading-relaxed"
                         value={checkerDdNote}
                         onChange={(e) => setCheckerDdNote(e.target.value)}
-                        placeholder="e.g., Office premises visited and verified. Telephonic verification with applicant satisfactory. Statutory verifications executed per Sec 2.6. Remarks recorded for deviations if applicable. Recommended for sanction."
+                        placeholder="Type your due diligence notes here..."
                       />
                       <div className="mt-2 flex justify-between items-center text-[11px] text-slate-400">
-                        <span>
-                          Tip: Click &lsquo;Remark in DD note&rsquo; on any
-                          verification card above to quickly insert findings
-                          here.
-                        </span>
                         <Button
                           type="button"
                           size="sm"
@@ -11535,7 +11104,9 @@ export function DsaProfilePage({ id }: { id: string }) {
               : ""
             : ""
         }
-        width="max-w-4xl"
+        width="max-w-2xl"
+        className="h-[88vh] max-h-[88vh]"
+        bodyClassName="overflow-hidden flex flex-col p-4 sm:p-5"
       >
         {previewDoc ? (
           <DocumentViewerBody
@@ -11641,7 +11212,7 @@ export function DsaProfilePage({ id }: { id: string }) {
         open={viewingDeviationReport}
         title="Maker BRE Deviation Assessment Report"
         description={`DSA #${getEffectiveDsaCode(dsa)} • ${dsa.name} • Evaluation generated on Maker submission to Checker`}
-        width="max-w-4xl"
+        width="max-w-2xl"
       >
         <div className="space-y-4">
           {loadingDeviationReport ? (

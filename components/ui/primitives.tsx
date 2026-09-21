@@ -351,6 +351,8 @@ export function Modal({
   description,
   onClose,
   width = "max-w-2xl",
+  className,
+  bodyClassName,
 }: {
   children: ReactNode;
   open: boolean;
@@ -358,6 +360,8 @@ export function Modal({
   description?: string;
   onClose: () => void;
   width?: string;
+  className?: string;
+  bodyClassName?: string;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -387,6 +391,7 @@ export function Modal({
         className={cn(
           "relative flex max-h-[90vh] w-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl",
           width,
+          className,
         )}
         role="dialog"
         aria-modal="true"
@@ -401,7 +406,7 @@ export function Modal({
             <X className="h-4 w-4" />
           </Button>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
+        <div className={cn("flex-1 overflow-y-auto px-6 py-5", bodyClassName)}>{children}</div>
       </div>
     </div>
   );
