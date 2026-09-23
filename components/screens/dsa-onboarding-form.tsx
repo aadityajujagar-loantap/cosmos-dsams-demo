@@ -341,6 +341,47 @@ function readDraft(mode: string): any {
   }
 }
 
+function getDocDisplayLabel(key: string, docList?: DocDef[]): string {
+  const found = docList?.find((d) => d.type === key);
+  if (found) return found.label;
+
+  const map: Record<string, string> = {
+    pan_card: "PAN Card",
+    aadhaar_card: "Aadhaar Card",
+    recent_photograph: "Recent Photograph",
+    education_certificate: "Educational Qualification Certificate",
+    dsa_consent_dpdp: "DSA Consent & Declaration (DPDP Act)",
+    visit_report: "Office Visit Report",
+    brief_profile: "Brief Profile of DSA",
+    itr_returns: "IT Returns (Last 2 F.Y.)",
+    other_document: "Other Supporting Document",
+    gst_certificate: "GST Certificate",
+    rent_agreement: "Rental Proof / Rent Agreement",
+    experience_certificate: "Experience / Empanelment Certificate",
+    board_resolution: "Board Resolution",
+    business_license_shop_act: "Shop Act License",
+    business_license_udyam: "Udyam Registration Certificate",
+    business_license: "Registered Business License",
+    entity_pan_card: "Entity PAN Card",
+    stakeholder_photograph: "Key Person / Director Photograph",
+    stakeholder_pan_card: "Key Person / Director PAN Card",
+    stakeholder_aadhaar_card: "Key Person / Director Aadhaar Card",
+    bank_proof: "Bank Account Proof / Cancelled Cheque",
+  };
+
+  if (map[key]) return map[key];
+
+  if (key.startsWith("business_license_")) {
+    const sub = key.replace("business_license_", "").replace(/_/g, " ").toUpperCase();
+    return `Registered Business Proof (${sub})`;
+  }
+
+  return key
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
 export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -3483,11 +3524,16 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         Documents Prepared ({Object.keys(uploadedDocs).length} files)
                       </span>
                     </div>
-                    <ul className="space-y-1 pt-1 text-slate-700">
+                    <ul className="space-y-1.5 pt-1 text-slate-700 divide-y divide-slate-100">
                       {Object.entries(uploadedDocs).map(([key, item]) => (
-                        <li key={key} className="flex items-center justify-between text-[11px]">
-                          <span className="text-slate-600 truncate max-w-[200px]">{item.name}</span>
-                          <span className="text-emerald-700 font-semibold">Uploaded</span>
+                        <li key={key} className="flex items-center justify-between gap-3 text-[11px] pt-1.5 first:pt-0">
+                          <span className="font-medium text-slate-800 flex items-center gap-1.5 truncate">
+                            <FileText className="h-3 w-3 text-blue-600 shrink-0" />
+                            {getDocDisplayLabel(key, currentDocList)}
+                          </span>
+                          <span className="text-slate-600 font-mono text-[10px] bg-white px-2 py-0.5 rounded border border-slate-200 truncate max-w-[200px] shrink-0 text-right font-medium shadow-2xs">
+                            {item.name}
+                          </span>
                         </li>
                       ))}
                     </ul>
