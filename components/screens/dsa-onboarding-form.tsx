@@ -17,6 +17,7 @@ import {
   Building,
   Briefcase,
   Users,
+  MapPin,
   Info,
   Loader2,
   ChevronDown,
@@ -153,7 +154,6 @@ const FALLBACK_CITY_OPTIONS: Array<{ key: string; label: string; stateKey?: stri
 
 const DEFAULT_BUSINESS_LICENSE_OPTIONS = [
   { key: "SHOP_ACT", label: "Shop Act" },
-  { key: "GST", label: "GST" },
   { key: "UDYAM", label: "Udyam" },
 ];
 
@@ -398,7 +398,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   const [contactPerson, setContactPerson] = useState<string>("");
   const [gstApplicable, setGstApplicable] = useState<boolean>(false);
   const [gstNumber, setGstNumber] = useState<string>("");
+  const [shopActNumber, setShopActNumber] = useState<string>("");
+  const [udyamNumber, setUdyamNumber] = useState<string>("");
   const [experienceYears, setExperienceYears] = useState<string>("0");
+  const [priorExperienceDetails, setPriorExperienceDetails] = useState<string>("");
   const [selectedLicenses, setSelectedLicenses] = useState<string[]>([]);
   const [businessLicenseOptions, setBusinessLicenseOptions] = useState<Array<{ key: string; label: string }>>(DEFAULT_BUSINESS_LICENSE_OPTIONS);
   const hasExperience = experienceYears !== "0" && experienceYears !== "";
@@ -440,6 +443,29 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
   // Declaration
   const [declarationAgreed, setDeclarationAgreed] = useState<boolean>(false);
+
+  // Switch between GST and Non-GST business proofs cleanly
+  const handleGstToggle = (applicable: boolean) => {
+    setGstApplicable(applicable);
+    if (applicable) {
+      setSelectedLicenses([]);
+      setShopActNumber("");
+      setUdyamNumber("");
+      setUploadedDocs((prev) => {
+        const next = { ...prev };
+        delete next["business_license_shop_act"];
+        delete next["business_license_udyam"];
+        return next;
+      });
+    } else {
+      setGstNumber("");
+      setUploadedDocs((prev) => {
+        const next = { ...prev };
+        delete next["gst_certificate"];
+        return next;
+      });
+    }
+  };
 
   // Mark client mount to eliminate hydration mismatch
   useEffect(() => {
@@ -723,12 +749,18 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         if (data.contactPerson !== undefined) setContactPerson(data.contactPerson);
         if (data.gstApplicable !== undefined) setGstApplicable(data.gstApplicable);
         if (data.gstNumber !== undefined) setGstNumber(data.gstNumber);
+        if (data.shopActNumber !== undefined) setShopActNumber(data.shopActNumber);
+        if (data.udyamNumber !== undefined) setUdyamNumber(data.udyamNumber);
         if (data.experienceYears !== undefined) {
           setExperienceYears(String(data.experienceYears));
         } else if (data.hasExperience !== undefined) {
           setExperienceYears(data.hasExperience ? "1" : "0");
         }
+        if (data.priorExperienceDetails !== undefined) setPriorExperienceDetails(data.priorExperienceDetails);
         if (Array.isArray(data.selectedLicenses)) {
+          if (data.selectedLicenses.includes("GST")) {
+            setGstApplicable(true);
+          }
           setSelectedLicenses(
             data.selectedLicenses
               .map((k: string) => {
@@ -736,7 +768,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                 if (k === "UDYAM_REGISTRATION") return "UDYAM";
                 return k;
               })
-              .filter((k: string) => ["SHOP_ACT", "GST", "UDYAM"].includes(k))
+              .filter((k: string) => ["SHOP_ACT", "UDYAM"].includes(k))
           );
         } else if (data.hasLicense !== undefined) {
           setSelectedLicenses(data.hasLicense ? ["SHOP_ACT"] : []);
@@ -835,9 +867,12 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           contactPerson,
           gstApplicable,
           gstNumber,
+          shopActNumber,
+          udyamNumber,
           hasExperience,
           hasLicense,
           experienceYears,
+          priorExperienceDetails,
           selectedLicenses,
           address,
           city,
@@ -906,8 +941,13 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     contactPerson,
     gstApplicable,
     gstNumber,
+    shopActNumber,
+    udyamNumber,
     hasExperience,
     hasLicense,
+    experienceYears,
+    priorExperienceDetails,
+    selectedLicenses,
     address,
     city,
     stateName,
@@ -986,8 +1026,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       });
     }
 
-    // GST Certificate: populates only when user selected GST details (GST Applicable Yes, or GST Number, or GST checked in business licenses)
-    const hasGst = Boolean(gstApplicable) || Boolean(gstNumber) || selectedLicenses.some((k) => k.toUpperCase() === "GST");
+    // GST Certificate: populates only when user selected GST details (GST Applicable Yes)
+    const hasGst = Boolean(gstApplicable);
     if (hasGst) {
       dynamicDocs.push({
         type: "gst_certificate",
@@ -997,20 +1037,19 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       });
     }
 
-    // Dynamic business licenses selected from dropdown with checkboxes (excluding duplicate GST)
-    selectedLicenses.forEach((licKey) => {
-      if (licKey.toUpperCase() === "GST") {
-        return;
-      }
-      const opt = businessLicenseOptions.find((o) => o.key === licKey);
-      const licLabel = opt?.label || licKey;
-      dynamicDocs.push({
-        type: `business_license_${licKey.toLowerCase()}`,
-        label: `Registered Business Proof — ${licLabel}`,
-        required: true,
-        requirementLabel: "Mandatory",
+    // Dynamic business licenses selected from dropdown with checkboxes (Shop Act / Udyam) - ONLY when GST is not applicable
+    if (!gstApplicable) {
+      selectedLicenses.forEach((licKey) => {
+        const opt = businessLicenseOptions.find((o) => o.key === licKey);
+        const licLabel = opt?.label || (licKey === "SHOP_ACT" ? "Shop Act" : licKey === "UDYAM" ? "Udyam" : licKey);
+        dynamicDocs.push({
+          type: `business_license_${licKey.toLowerCase()}`,
+          label: `Registered Business Proof — ${licLabel}`,
+          required: true,
+          requirementLabel: "Mandatory",
+        });
       });
-    });
+    }
 
     // Board Resolution for Entity: populates only when constitution requires it
     if (dsaType === "ENTITY" && ["LLP", "Pvt Ltd", "Public Ltd", "Trust", "Co-op Society"].includes(constitution)) {
@@ -1264,8 +1303,20 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           toast({ title: "Contact Person Required", description: "Key contact person name is mandatory.", variant: "warning" });
           return false;
         }
-        if (gstApplicable && (!gstNumber || gstNumber.trim().length < 15)) {
+      }
+
+      if (gstApplicable) {
+        if (!gstNumber || gstNumber.trim().length < 15) {
           toast({ title: "GST Number Required", description: "Valid 15-character GSTIN is mandatory.", variant: "warning" });
+          return false;
+        }
+      } else {
+        if (selectedLicenses.includes("SHOP_ACT") && !shopActNumber.trim()) {
+          toast({ title: "Shop Act Number Required", description: "Please enter Shop Act license / registration number.", variant: "warning" });
+          return false;
+        }
+        if (selectedLicenses.includes("UDYAM") && !udyamNumber.trim()) {
+          toast({ title: "Udyam Number Required", description: "Please enter Udyam registration number.", variant: "warning" });
           return false;
         }
       }
@@ -1424,6 +1475,27 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     const selectedBranch = branches.find((b) => String(b.id ?? b.branch_id) === String(branchId)) || branches[0];
     const validBranchId = selectedBranch ? Number(selectedBranch.id ?? selectedBranch.branch_id) : (Number(branchId) || 1);
 
+    const resolvedPriorExperience =
+      priorExperienceDetails.trim() ||
+      (experienceYears !== "0" && experienceYears !== ""
+        ? `${experienceYears} years in financial products distribution`
+        : "Fresher / No prior experience");
+
+    const resolvedBusinessProof = gstApplicable
+      ? "GST Certificate"
+      : selectedLicenses.length > 0
+      ? selectedLicenses
+          .map((k) => businessLicenseOptions.find((o) => o.key === k)?.label || k)
+          .join(",")
+      : undefined;
+
+    const resolvedPremisesOwnership =
+      businessPremisesOwnership === "Owned"
+        ? "Self Owned"
+        : businessPremisesOwnership === "Rented"
+        ? "Rented / Leased Premises"
+        : undefined;
+
     // Base payload — fields required by both DsaBranchSubmitRequest & DsaSelfSubmitRequest
     const payload: any = {
       ...(createdDsaId ? { dsa_id: Number(createdDsaId) || createdDsaId } : {}),
@@ -1433,6 +1505,16 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       email,
       mobile,
       contact_person: contactPerson || undefined,
+      applicant_prior_experience: resolvedPriorExperience,
+      registered_business_proof: resolvedBusinessProof,
+      gst_applicable: gstApplicable,
+      gst: gstApplicable && gstNumber ? gstNumber.trim().toUpperCase() : undefined,
+      shop_act_no: !gstApplicable && shopActNumber.trim() ? shopActNumber.trim() : undefined,
+      udyam_no: !gstApplicable && udyamNumber.trim() ? udyamNumber.trim() : undefined,
+      business_license_no: !gstApplicable ? ([
+        shopActNumber.trim() ? `Shop Act: ${shopActNumber.trim()}` : null,
+        udyamNumber.trim() ? `Udyam: ${udyamNumber.trim()}` : null,
+      ].filter(Boolean).join(", ") || undefined) : undefined,
       address,
       city,
       state: stateName,
@@ -1442,6 +1524,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       office_city: isOfficeSameAsResidence ? city : officeCity,
       office_state: isOfficeSameAsResidence ? stateName : officeStateName,
       office_pincode: isOfficeSameAsResidence ? pincode : officePincode,
+      business_premises_ownership: resolvedPremisesOwnership,
       bank_name: bankName,
       account_name: accountName,
       account_number: accountNumber,
@@ -1576,6 +1659,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         manager: currentUser?.name || "Branch Maker",
         branchId: validBranchId,
         created_by_user_id: currentUser?.id,
+        applicant_prior_experience: resolvedPriorExperience,
+        registered_business_proof: resolvedBusinessProof,
+        business_premises_ownership: resolvedPremisesOwnership,
         bank: {
           bankName,
           accountName,
@@ -1583,6 +1669,11 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           ifsc: ifsc.toUpperCase(),
         },
         address,
+        office_address_different: !isOfficeSameAsResidence,
+        office_address_line_1: isOfficeSameAsResidence ? address : officeAddress,
+        office_city: isOfficeSameAsResidence ? city : officeCity,
+        office_state: isOfficeSameAsResidence ? stateName : officeStateName,
+        office_pincode: isOfficeSameAsResidence ? pincode : officePincode,
         dsa_type: dsaType,
         documents: Object.keys(uploadedDocs).map((t) => ({
           document_type: t,
@@ -1687,6 +1778,24 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-600">Documents Attached</span>
                 <span className="font-semibold text-emerald-700">{Object.keys(uploadedDocs).length} files</span>
+              </div>
+              <div className="border-t border-slate-200 pt-3 space-y-2 text-xs text-slate-700">
+                <div>
+                  <span className="font-semibold text-slate-500">Registered Address: </span>
+                  <span>{address ? `${address}, ${city}, ${stateName} - ${pincode}` : `${city}, ${stateName} - ${pincode}`}</span>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-500">Office Address: </span>
+                  <span>
+                    {isOfficeSameAsResidence
+                      ? `Same as Registered Address (${city})`
+                      : `${officeAddress}, ${officeCity}, ${officeStateName} - ${officePincode}`}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-500">Premises Ownership: </span>
+                  <span className="font-medium text-slate-900">{businessPremisesOwnership === "Owned" ? "Self Owned" : businessPremisesOwnership === "Rented" ? "Rented / Leased Premises" : "N/A"}</span>
+                </div>
               </div>
             </div>
 
@@ -1840,7 +1949,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           {step === 1 && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Step 1: Select DSA Type & Basic Information</h3>
+                <h3 className="text-lg font-bold text-slate-900">Select DSA Type & Basic Information</h3>
               </div>
 
               {/* DSA Type Radio Cards */}
@@ -2068,6 +2177,15 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       <Label htmlFor="aadhaar_no" className="text-xs font-semibold">Aadhaar Number * (12 digits)</Label>
                       <Input
                         id="aadhaar_no"
+                        name="aadhaar_no"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
+                        aria-autocomplete="none"
+                        data-lpignore="true"
+                        data-1p-ignore="true"
+                        data-form-type="other"
                         value={getAadhaarDisplayValue()}
                         onFocus={() => setIsAadhaarFocused(true)}
                         onBlur={() => setIsAadhaarFocused(false)}
@@ -2134,7 +2252,52 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                  {/* GST Registration Applicable */}
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <span className="text-xs font-bold text-slate-800">GST Registration Applicable?</span>
+                        <p className="text-[11px] text-slate-500">If registered under GST, certificate upload is mandatory.</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <label className="flex items-center gap-1.5 text-xs cursor-pointer font-medium">
+                          <input
+                            type="radio"
+                            name="individual_gst_applicable"
+                            checked={gstApplicable}
+                            onChange={() => handleGstToggle(true)}
+                          />
+                          Yes
+                        </label>
+                        <label className="flex items-center gap-1.5 text-xs cursor-pointer font-medium">
+                          <input
+                            type="radio"
+                            name="individual_gst_applicable"
+                            checked={!gstApplicable}
+                            onChange={() => handleGstToggle(false)}
+                          />
+                          No
+                        </label>
+                      </div>
+                    </div>
+
+                    {gstApplicable && (
+                      <div className="pt-2">
+                        <Label htmlFor="individual_gst_number" className="text-xs font-semibold">GSTIN / GST Number *</Label>
+                        <Input
+                          id="individual_gst_number"
+                          value={gstNumber}
+                          onChange={(e) => setGstNumber(e.target.value.toUpperCase().slice(0, 15))}
+                          placeholder="27FGHIJ5678K1Z5"
+                          className="mt-1 font-mono uppercase max-w-sm"
+                          maxLength={15}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Prior Experience & Registered Business Proof (Separate from GST) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                     <div>
                       <Label htmlFor="experience_years" className="text-xs font-semibold text-slate-700">
                         Applicant Prior Experience / Empanelment with other Banks/FIs
@@ -2145,29 +2308,92 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         onChange={(e) => setExperienceYears(e.target.value)}
                         className="mt-1"
                       >
-                        <option value="0">0</option>
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="3">3</option>
-                        <option value="3+">3+</option>
+                        <option value="0">0 (No prior experience)</option>
+                        <option value="1">1 year</option>
+                        <option value="2">2 years</option>
+                        <option value="3">3 years</option>
+                        <option value="3+">3+ years</option>
                       </Select>
+                      {experienceYears !== "0" && experienceYears !== "" && (
+                        <Input
+                          id="experience_details"
+                          value={priorExperienceDetails}
+                          onChange={(e) => setPriorExperienceDetails(e.target.value)}
+                          placeholder="Prior experience summary"
+                          className="mt-2 text-xs"
+                        />
+                      )}
                     </div>
 
-                    <div>
-                      <Label className="text-xs font-semibold text-slate-700">
-                        Registered Business Proof
-                      </Label>
-                      <div className="mt-1">
-                        <CheckboxDropdown
-                          id="individual_business_licenses"
-                          placeholder="Business Proof (Shop Act / GST / Udyam)"
-                          options={businessLicenseOptions}
-                          selectedKeys={selectedLicenses}
-                          onChange={setSelectedLicenses}
-                        />
+                    {!gstApplicable && (
+                      <div>
+                        <Label className="text-xs font-semibold text-slate-700">
+                          Registered Business Proof
+                        </Label>
+                        <div className="mt-1">
+                          <CheckboxDropdown
+                            id="individual_business_licenses"
+                            placeholder="Business Proof (Shop Act / Udyam)"
+                            options={businessLicenseOptions}
+                            selectedKeys={selectedLicenses}
+                            onChange={(keys) => {
+                              setSelectedLicenses(keys);
+                              if (!keys.includes("SHOP_ACT")) {
+                                setShopActNumber("");
+                                setUploadedDocs((prev) => {
+                                  const next = { ...prev };
+                                  delete next["business_license_shop_act"];
+                                  return next;
+                                });
+                              }
+                              if (!keys.includes("UDYAM")) {
+                                setUdyamNumber("");
+                                setUploadedDocs((prev) => {
+                                  const next = { ...prev };
+                                  delete next["business_license_udyam"];
+                                  return next;
+                                });
+                              }
+                            }}
+                          />
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
+
+                  {/* Dynamic License Number Fields for Individual */}
+                  {!gstApplicable && (selectedLicenses.includes("SHOP_ACT") || selectedLicenses.includes("UDYAM")) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                      {selectedLicenses.includes("SHOP_ACT") && (
+                        <div>
+                          <Label htmlFor="individual_shop_act_number" className="text-xs font-semibold text-slate-700">
+                            Shop Act License / Registration Number *
+                          </Label>
+                          <Input
+                            id="individual_shop_act_number"
+                            value={shopActNumber}
+                            onChange={(e) => setShopActNumber(e.target.value.toUpperCase())}
+                            placeholder="e.g. MH/PUN/SHOP/12345"
+                            className="mt-1 text-xs font-mono uppercase"
+                          />
+                        </div>
+                      )}
+                      {selectedLicenses.includes("UDYAM") && (
+                        <div>
+                          <Label htmlFor="individual_udyam_number" className="text-xs font-semibold text-slate-700">
+                            Udyam Registration Number *
+                          </Label>
+                          <Input
+                            id="individual_udyam_number"
+                            value={udyamNumber}
+                            onChange={(e) => setUdyamNumber(e.target.value.toUpperCase())}
+                            placeholder="e.g. UDYAM-MH-00-1234567"
+                            className="mt-1 text-xs font-mono uppercase"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2271,7 +2497,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     </div>
                   </div>
 
-                  {/* GST & License Toggles */}
+                  {/* GST Registration Applicable */}
                   <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <div>
@@ -2282,18 +2508,18 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         <label className="flex items-center gap-1.5 text-xs cursor-pointer font-medium">
                           <input
                             type="radio"
-                            name="gst_applicable"
+                            name="entity_gst_applicable"
                             checked={gstApplicable}
-                            onChange={() => setGstApplicable(true)}
+                            onChange={() => handleGstToggle(true)}
                           />
                           Yes
                         </label>
                         <label className="flex items-center gap-1.5 text-xs cursor-pointer font-medium">
                           <input
                             type="radio"
-                            name="gst_applicable"
+                            name="entity_gst_applicable"
                             checked={!gstApplicable}
-                            onChange={() => setGstApplicable(false)}
+                            onChange={() => handleGstToggle(false)}
                           />
                           No
                         </label>
@@ -2313,26 +2539,38 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         />
                       </div>
                     )}
+                  </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                      <div>
-                        <Label htmlFor="entity_experience_years" className="text-xs font-semibold text-slate-700">
-                          Entity Prior Experience / Empanelment Letters
-                        </Label>
-                        <Select
-                          id="entity_experience_years"
-                          value={experienceYears}
-                          onChange={(e) => setExperienceYears(e.target.value)}
-                          className="mt-1"
-                        >
-                          <option value="0">0</option>
-                          <option value="1">1</option>
-                          <option value="2">2</option>
-                          <option value="3">3</option>
-                          <option value="3+">3+</option>
-                        </Select>
-                      </div>
+                  {/* Entity Prior Experience & Registered Business Proof (Separate from GST) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                    <div>
+                      <Label htmlFor="entity_experience_years" className="text-xs font-semibold text-slate-700">
+                        Entity Prior Experience / Empanelment Letters
+                      </Label>
+                      <Select
+                        id="entity_experience_years"
+                        value={experienceYears}
+                        onChange={(e) => setExperienceYears(e.target.value)}
+                        className="mt-1"
+                      >
+                        <option value="0">0 (No prior experience)</option>
+                        <option value="1">1 year</option>
+                        <option value="2">2 years</option>
+                        <option value="3">3 years</option>
+                        <option value="3+">3+</option>
+                      </Select>
+                      {experienceYears !== "0" && experienceYears !== "" && (
+                        <Input
+                          id="entity_experience_details"
+                          value={priorExperienceDetails}
+                          onChange={(e) => setPriorExperienceDetails(e.target.value)}
+                          placeholder="Prior experience summary (e.g. 5 years in loan distribution with Axis Bank)"
+                          className="mt-2 text-xs"
+                        />
+                      )}
+                    </div>
 
+                    {!gstApplicable && (
                       <div>
                         <Label className="text-xs font-semibold text-slate-700">
                           Entity Registered Business Proof
@@ -2340,15 +2578,67 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         <div className="mt-1">
                           <CheckboxDropdown
                             id="entity_business_licenses"
-                            placeholder="Business Proof (Shop Act / GST / Udyam)"
+                            placeholder="Business Proof (Shop Act / Udyam)"
                             options={businessLicenseOptions}
                             selectedKeys={selectedLicenses}
-                            onChange={setSelectedLicenses}
+                            onChange={(keys) => {
+                              setSelectedLicenses(keys);
+                              if (!keys.includes("SHOP_ACT")) {
+                                setShopActNumber("");
+                                setUploadedDocs((prev) => {
+                                  const next = { ...prev };
+                                  delete next["business_license_shop_act"];
+                                  return next;
+                                });
+                              }
+                              if (!keys.includes("UDYAM")) {
+                                setUdyamNumber("");
+                                setUploadedDocs((prev) => {
+                                  const next = { ...prev };
+                                  delete next["business_license_udyam"];
+                                  return next;
+                                });
+                              }
+                            }}
                           />
                         </div>
                       </div>
-                    </div>
+                    )}
                   </div>
+
+                  {/* Dynamic License Number Fields for Entity */}
+                  {!gstApplicable && (selectedLicenses.includes("SHOP_ACT") || selectedLicenses.includes("UDYAM")) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                      {selectedLicenses.includes("SHOP_ACT") && (
+                        <div>
+                          <Label htmlFor="entity_shop_act_number" className="text-xs font-semibold text-slate-700">
+                            Shop Act License / Registration Number *
+                          </Label>
+                          <Input
+                            id="entity_shop_act_number"
+                            value={shopActNumber}
+                            onChange={(e) => setShopActNumber(e.target.value.toUpperCase())}
+                            placeholder="e.g. MH/PUN/SHOP/12345"
+                            className="mt-1 text-xs font-mono uppercase"
+                          />
+                        </div>
+                      )}
+                      {selectedLicenses.includes("UDYAM") && (
+                        <div>
+                          <Label htmlFor="entity_udyam_number" className="text-xs font-semibold text-slate-700">
+                            Udyam Registration Number *
+                          </Label>
+                          <Input
+                            id="entity_udyam_number"
+                            value={udyamNumber}
+                            onChange={(e) => setUdyamNumber(e.target.value.toUpperCase())}
+                            placeholder="e.g. UDYAM-MH-00-1234567"
+                            className="mt-1 text-xs font-mono uppercase"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -2357,7 +2647,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           {/* STEP 2: ADDRESS & PREMISES */}
           {step === 2 && (
             <div className="space-y-3">
-              <h3 className="text-lg font-bold text-slate-900">Step 2: Business & Registered Address Details</h3>
+              <h3 className="text-lg font-bold text-slate-900">Business & Registered Address Details</h3>
               <div className="space-y-4">
                 {/* Residence Address Section */}
                 <div className="space-y-3">
@@ -2592,7 +2882,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           {/* STEP 3: BANK DETAILS */}
           {step === 3 && (
             <div className="space-y-6">
-              <h3 className="text-lg font-bold text-slate-900">Step 3: Bank Details</h3>
+              <h3 className="text-lg font-bold text-slate-900">Bank Details</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="bank_name" className="text-xs font-semibold">Bank Name *</Label>
@@ -2672,7 +2962,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           {step === 4 && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Step 4: References & Entity Stakeholders</h3>
+                <h3 className="text-lg font-bold text-slate-900">References & Entity Stakeholders</h3>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Provide two independent references and key stakeholders for verification.
                 </p>
@@ -2829,6 +3119,12 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                               placeholder="999988887777"
                               className="mt-1 text-xs font-mono"
                               maxLength={12}
+                              autoComplete="off"
+                              autoCorrect="off"
+                              autoCapitalize="off"
+                              spellCheck={false}
+                              aria-autocomplete="none"
+                              data-lpignore="true"
                             />
                           </div>
                           <div>
@@ -2856,7 +3152,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-lg font-bold text-slate-900">
-                      Step 5: {dsaType === "INDIVIDUAL" ? "Individual DSA" : "Entity DSA"} — Document Checklist
+                      {dsaType === "INDIVIDUAL" ? "Individual DSA" : "Entity DSA"} — Document Checklist
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
                       Attach verified documents (Max 2MB per file, PDF/JPG/PNG). All mandatory documents marked below are required to submit.
@@ -2962,87 +3258,68 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
               </div>
 
               {/* 16. DSA Consent Form Download & Signed Upload */}
-              <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50/70 to-indigo-50/40 p-4 sm:p-5 shadow-sm space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-blue-200/70 pb-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 rounded-lg bg-blue-600 text-white shadow-sm flex-shrink-0">
+              <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50/70 to-indigo-50/40 p-4 sm:p-5 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  {/* Left: Icon, Title & Mandatory Badge */}
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-lg bg-blue-600 text-white shadow-sm flex-shrink-0">
                       <FileText className="h-4 w-4" />
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-bold text-slate-900">16. DSA Consent Form</h4>
-                        <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-800">
-                          Mandatory
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-600">
-                        Consent format as per Digital Personal Data Protection (DPDP) Act
-                      </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-sm font-bold text-slate-900">DSA Consent Form</h4>
+                      <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-800">
+                        Mandatory
+                      </span>
                     </div>
                   </div>
 
-                  {/* Download option */}
-                  <a
-                    href="/documents/Cosmos_Bank_DSA_Consent_Form.pdf"
-                    download="Cosmos_Bank_DSA_Consent_Form.pdf"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 shadow-sm hover:bg-blue-50 hover:border-blue-400 transition-colors w-fit"
-                  >
-                    <Download className="h-3.5 w-3.5 text-blue-600" />
-                    <span>Download Consent Form</span>
-                  </a>
-                </div>
+                  {/* Right: Actions (Download & Upload/Attached) */}
+                  <div className="flex items-center flex-wrap gap-3 sm:justify-end">
+                    {/* Download option */}
+                    <a
+                      href="/documents/Cosmos_Bank_DSA_Consent_Form.pdf"
+                      download="Cosmos_Bank_DSA_Consent_Form.pdf"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-700 shadow-sm hover:bg-blue-50 hover:border-blue-400 transition-colors"
+                    >
+                      <Download className="h-3.5 w-3.5 text-blue-600" />
+                      <span>Download Consent Form</span>
+                    </a>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-                  <div className="text-xs text-slate-600 space-y-1">
-                    <p className="font-semibold text-slate-700">Instructions:</p>
-                    <ol className="list-decimal list-inside space-y-0.5 text-[11px]">
-                      <li>Download the official DSA Consent Form template.</li>
-                      <li>Review, sign, and date the form.</li>
-                      <li>Upload the signed copy here (Supports Image & PDF).</li>
-                    </ol>
-                  </div>
-
-                  {/* Upload area */}
-                  <div className="flex flex-col sm:items-end justify-center">
+                    {/* Upload area */}
                     {uploadedDocs["dsa_consent_dpdp"] ? (
-                      <div className="flex items-center gap-2 p-2.5 rounded-lg border border-emerald-200 bg-emerald-50/80 w-full sm:w-auto">
+                      <div className="flex items-center gap-2 p-1.5 px-3 rounded-lg border border-emerald-200 bg-emerald-50/90 shadow-sm">
                         <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
                         <div className="text-left">
-                          <p className="text-xs font-semibold text-emerald-900 truncate max-w-[200px]">
+                          <p className="text-xs font-semibold text-emerald-900 truncate max-w-[180px]">
                             {uploadedDocs["dsa_consent_dpdp"].name}
                           </p>
                           <p className="text-[10px] text-emerald-700">
-                            Signed document attached ({uploadedDocs["dsa_consent_dpdp"].size})
+                            Attached ({uploadedDocs["dsa_consent_dpdp"].size})
                           </p>
                         </div>
                         <button
                           type="button"
                           onClick={() => removeDoc("dsa_consent_dpdp")}
-                          className="text-rose-600 hover:text-rose-800 p-1 rounded hover:bg-rose-100 transition-colors ml-2"
+                          className="text-rose-600 hover:text-rose-800 p-1 rounded hover:bg-rose-100 transition-colors ml-1"
                           title="Remove signed consent form"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     ) : (
-                      <div className="w-full sm:w-auto text-left sm:text-right">
-                        <label className="cursor-pointer inline-flex items-center gap-2 rounded-lg border border-blue-600 bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors">
-                          <UploadCloud className="h-4 w-4" />
-                          <span>Upload Signed Form</span>
-                          <input
-                            type="file"
-                            accept=".pdf,.jpg,.jpeg,.png"
-                            className="hidden"
-                            onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (f) handleFileUpload("dsa_consent_dpdp", f);
-                            }}
-                          />
-                        </label>
-                        <p className="text-[10px] text-slate-500 mt-1">
-                          Supported formats: PDF, JPG, JPEG, PNG (Max 2MB)
-                        </p>
-                      </div>
+                      <label className="cursor-pointer inline-flex items-center gap-2 rounded-lg border border-blue-600 bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors">
+                        <UploadCloud className="h-4 w-4" />
+                        <span>Upload Signed Form</span>
+                        <input
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) handleFileUpload("dsa_consent_dpdp", f);
+                          }}
+                        />
+                      </label>
                     )}
                   </div>
                 </div>
@@ -3068,97 +3345,153 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           {step === 6 && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Step 6: Review Application & Declaration</h3>
+                <h3 className="text-lg font-bold text-slate-900">Review Application & Declaration</h3>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Review and verify all application details and uploaded documents before submission.
                 </p>
               </div>
 
-              {/* Review Cards Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                {/* Identity Summary */}
-                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
-                  <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                    <span className="font-bold text-slate-800 uppercase tracking-wide">Identity & Profile</span>
-                    <span className="font-bold text-blue-600">{dsaType}</span>
+              {/* Dynamic 2-Column Review Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start text-xs">
+                {/* Column 1: Identity & Profile, Bank Account Details, References */}
+                <div className="space-y-4">
+                  {/* Identity Summary */}
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                      <span className="font-bold text-slate-800 uppercase tracking-wide">Identity & Profile</span>
+                      <span className="font-bold text-blue-600">{dsaType}</span>
+                    </div>
+                    <div className="space-y-1 pt-1 text-slate-700">
+                      {dsaType === "INDIVIDUAL" ? (
+                        <>
+                          <p><span className="text-slate-500">Applicant:</span> <span className="font-semibold">{firstName} {middleName} {lastName}</span></p>
+                          <p><span className="text-slate-500">DOB:</span> {formatDate(dateOfBirth)}</p>
+                          <p><span className="text-slate-500">Highest Qualification:</span> {educationQualification}</p>
+                          <p><span className="text-slate-500">Aadhaar:</span> {aadhaarNo ? `XXXX-XXXX-${aadhaarNo.slice(-4)}` : "N/A"}</p>
+                        </>
+                      ) : (
+                        <>
+                          <p><span className="text-slate-500">Entity:</span> <span className="font-semibold">{entityName}</span></p>
+                          <p><span className="text-slate-500">Constitution:</span> {constitution}</p>
+                          <p><span className="text-slate-500">Nature of Business:</span> {natureOfBusiness}</p>
+                          <p><span className="text-slate-500">Contact Person:</span> {contactPerson}</p>
+                        </>
+                      )}
+                      <p><span className="text-slate-500">PAN:</span> <span className="font-mono font-semibold">{pan}</span></p>
+                      {gstApplicable && <p><span className="text-slate-500">GSTIN:</span> <span className="font-mono font-semibold">{gstNumber}</span></p>}
+                      <p><span className="text-slate-500">Mobile:</span> {mobile}</p>
+                      <p><span className="text-slate-500">Email:</span> {email}</p>
+                      <p><span className="text-slate-500">Prior Experience:</span> <span className="font-semibold">{priorExperienceDetails.trim() || (experienceYears === "0" ? "0 (No prior experience)" : `${experienceYears} yrs`)}</span></p>
+                      {!gstApplicable && (
+                        <>
+                          <p><span className="text-slate-500">Business Proof:</span> <span className="font-semibold">{selectedLicenses.length > 0 ? selectedLicenses.map((k) => businessLicenseOptions.find((o) => o.key === k)?.label || k).join(", ") : "None"}</span></p>
+                          {shopActNumber && <p><span className="text-slate-500">Shop Act No:</span> <span className="font-mono font-semibold">{shopActNumber}</span></p>}
+                          {udyamNumber && <p><span className="text-slate-500">Udyam No:</span> <span className="font-mono font-semibold">{udyamNumber}</span></p>}
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div className="space-y-1 pt-1 text-slate-700">
-                    {dsaType === "INDIVIDUAL" ? (
-                      <>
-                        <p><span className="text-slate-500">Applicant:</span> <span className="font-semibold">{firstName} {middleName} {lastName}</span></p>
-                        <p><span className="text-slate-500">DOB:</span> {formatDate(dateOfBirth)}</p>
-                        <p><span className="text-slate-500">Highest Qualification:</span> {educationQualification}</p>
-                        <p><span className="text-slate-500">Aadhaar:</span> {aadhaarNo ? `XXXX-XXXX-${aadhaarNo.slice(-4)}` : "N/A"}</p>
-                      </>
-                    ) : (
-                      <>
-                        <p><span className="text-slate-500">Entity:</span> <span className="font-semibold">{entityName}</span></p>
-                        <p><span className="text-slate-500">Constitution:</span> {constitution}</p>
-                        <p><span className="text-slate-500">Nature of Business:</span> {natureOfBusiness}</p>
-                        <p><span className="text-slate-500">Contact Person:</span> {contactPerson}</p>
-                        {gstApplicable && <p><span className="text-slate-500">GSTIN:</span> {gstNumber}</p>}
-                      </>
-                    )}
-                    <p><span className="text-slate-500">PAN:</span> <span className="font-mono font-semibold">{pan}</span></p>
-                    <p><span className="text-slate-500">Mobile:</span> {mobile}</p>
-                    <p><span className="text-slate-500">Email:</span> {email}</p>
-                    <p><span className="text-slate-500">Prior Experience:</span> <span className="font-semibold">{experienceYears === "0" ? "0 (No prior experience)" : `${experienceYears} yrs`}</span></p>
-                    <p><span className="text-slate-500">Business Licenses:</span> <span className="font-semibold">{selectedLicenses.length > 0 ? selectedLicenses.map((k) => businessLicenseOptions.find((o) => o.key === k)?.label || k).join(", ") : "None"}</span></p>
+
+                  {/* Bank Details Summary */}
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                      <span className="font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                        <Briefcase className="h-3.5 w-3.5 text-emerald-600" />
+                        Bank Account Details
+                      </span>
+                      <span className="font-bold text-emerald-600">{accountType || "Savings"}</span>
+                    </div>
+                    <div className="space-y-1.5 pt-1 text-slate-700">
+                      <p><span className="text-slate-500">Bank Name:</span> <span className="font-medium text-slate-900">{bankName}</span></p>
+                      <p><span className="text-slate-500">Account Name:</span> <span className="font-medium text-slate-900">{accountName}</span></p>
+                      <p><span className="text-slate-500">Account No:</span> <span className="font-mono font-semibold text-slate-900">{accountNumber}</span></p>
+                      <p><span className="text-slate-500">IFSC Code:</span> <span className="font-mono font-semibold text-slate-900">{ifsc}</span></p>
+                    </div>
+                  </div>
+
+                  {/* References */}
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                      <span className="font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                        <Users className="h-3.5 w-3.5 text-blue-600" />
+                        References
+                      </span>
+                    </div>
+                    <div className="space-y-1 pt-1 text-slate-700">
+                      <p><span className="text-slate-500">Ref 1:</span> {reference1Name} ({reference1Contact})</p>
+                      <p><span className="text-slate-500">Ref 2:</span> {reference2Name} ({reference2Contact})</p>
+                      {dsaType === "ENTITY" && (
+                        <p className="pt-1 text-blue-700 font-semibold">
+                          {stakeholders.length} Key Person(s) / Stakeholder(s) Added
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {/* Bank Details Summary */}
-                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
-                  <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                    <span className="font-bold text-slate-800 uppercase tracking-wide">Bank Details</span>
-                    <span className="font-bold text-emerald-600">{accountType}</span>
-                  </div>
-                  <div className="space-y-1 pt-1 text-slate-700">
-                    <p><span className="text-slate-500">Bank:</span> {bankName}</p>
-                    <p><span className="text-slate-500">Account Name:</span> {accountName}</p>
-                    <p><span className="text-slate-500">Account No:</span> <span className="font-mono font-semibold">{accountNumber}</span></p>
-                    <p><span className="text-slate-500">IFSC Code:</span> <span className="font-mono font-semibold">{ifsc}</span></p>
-                    <p><span className="text-slate-500">Premises:</span> {businessPremisesOwnership}</p>
-                    <p><span className="text-slate-500">Residence Address:</span> {address ? `${address}, ${city}, ${stateName} - ${pincode}` : `${city}, ${stateName} - ${pincode}`}</p>
-                    <p>
-                      <span className="text-slate-500">Office Address:</span>{" "}
-                      {isOfficeSameAsResidence
-                        ? "Same as Residence Address"
-                        : `${officeAddress}, ${officeCity}, ${officeStateName} - ${officePincode}`}
-                    </p>
-                  </div>
-                </div>
-              </div>
+                {/* Column 2: Address & Operating Premises, Documents Prepared */}
+                <div className="space-y-4">
+                  {/* Address & Operating Premises Summary */}
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                      <span className="font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5 text-rose-600" />
+                        Address & Premises Details
+                      </span>
+                      <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800">
+                        {businessPremisesOwnership === "Owned" ? "Self Owned" : "Rented / Leased"}
+                      </span>
+                    </div>
+                    <div className="space-y-2 pt-1 text-slate-700">
+                      <div>
+                        <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Residential / Registered Address</p>
+                        <p className="font-medium text-slate-900 mt-0.5 leading-relaxed">
+                          {address ? `${address}, ${city}, ${stateName} - ${pincode}` : `${city}, ${stateName} - ${pincode}`}
+                        </p>
+                      </div>
 
-              {/* References & Docs Summary */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
-                  <span className="font-bold text-slate-800 uppercase tracking-wide block border-b border-slate-200 pb-2">
-                    References
-                  </span>
-                  <div className="space-y-1 pt-1 text-slate-700">
-                    <p><span className="text-slate-500">Ref 1:</span> {reference1Name} ({reference1Contact})</p>
-                    <p><span className="text-slate-500">Ref 2:</span> {reference2Name} ({reference2Contact})</p>
-                    {dsaType === "ENTITY" && (
-                      <p className="pt-1 text-blue-700 font-semibold">
-                        {stakeholders.length} Key Person(s) / Stakeholder(s) Added
-                      </p>
-                    )}
-                  </div>
-                </div>
+                      <div className="pt-1.5 border-t border-slate-200/70">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Office / Operating Premises</p>
+                          {isOfficeSameAsResidence && (
+                            <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                              Same as Residence
+                            </span>
+                          )}
+                        </div>
+                        <p className="font-medium text-slate-900 mt-0.5 leading-relaxed">
+                          {isOfficeSameAsResidence
+                            ? `${address}, ${city}, ${stateName} - ${pincode}`
+                            : `${officeAddress}, ${officeCity}, ${officeStateName} - ${officePincode}`}
+                        </p>
+                      </div>
 
-                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
-                  <span className="font-bold text-slate-800 uppercase tracking-wide block border-b border-slate-200 pb-2">
-                    Documents Prepared ({Object.keys(uploadedDocs).length} files)
-                  </span>
-                  <ul className="space-y-1 pt-1 text-slate-700">
-                    {Object.entries(uploadedDocs).map(([key, item]) => (
-                      <li key={key} className="flex items-center justify-between text-[11px]">
-                        <span className="text-slate-600 truncate max-w-[180px]">{item.name}</span>
-                        <span className="text-emerald-700 font-semibold">Uploaded</span>
-                      </li>
-                    ))}
-                  </ul>
+                      <div className="pt-1.5 border-t border-slate-200/70 flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500">Business Premises Ownership:</span>
+                        <span className="font-semibold text-slate-900">
+                          {businessPremisesOwnership === "Owned" ? "Self Owned" : businessPremisesOwnership === "Rented" ? "Rented / Leased Premises" : "Not Specified"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Documents Prepared */}
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                      <span className="font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                        <FileText className="h-3.5 w-3.5 text-blue-600" />
+                        Documents Prepared ({Object.keys(uploadedDocs).length} files)
+                      </span>
+                    </div>
+                    <ul className="space-y-1 pt-1 text-slate-700">
+                      {Object.entries(uploadedDocs).map(([key, item]) => (
+                        <li key={key} className="flex items-center justify-between text-[11px]">
+                          <span className="text-slate-600 truncate max-w-[200px]">{item.name}</span>
+                          <span className="text-emerald-700 font-semibold">Uploaded</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
               </div>
 

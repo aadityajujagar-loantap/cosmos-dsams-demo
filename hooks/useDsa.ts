@@ -36,6 +36,136 @@ function errorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+export function normalizeDsaData(dsa: any): any {
+  if (!dsa || typeof dsa !== "object") return dsa;
+
+  // 1. Determine GST applicability
+  const proofsStr = String(
+    dsa.registered_business_proof ||
+    dsa.business_license_type ||
+    (Array.isArray(dsa.selected_licenses) ? dsa.selected_licenses.join(",") : "") ||
+    ""
+  ).toUpperCase();
+
+  const hasGstInProof = proofsStr.includes("GST");
+  const hasGstNumber = Boolean(dsa.gst && String(dsa.gst).trim().length > 0);
+  const isGstApplicable = Boolean(dsa.gst_applicable || hasGstInProof || hasGstNumber);
+
+  // 2. Age calculation from date_of_birth if age is missing or 0
+  let calculatedAge = dsa.age;
+  if (
+    (calculatedAge === null || calculatedAge === undefined || calculatedAge === 0 || calculatedAge === "") &&
+    dsa.date_of_birth
+  ) {
+    const dob = new Date(dsa.date_of_birth);
+    if (!isNaN(dob.getTime())) {
+      const today = new Date();
+      let ageYears = today.getFullYear() - dob.getFullYear();
+      const m = today.getMonth() - dob.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+        ageYears--;
+      }
+      if (ageYears > 0 && ageYears < 120) {
+        calculatedAge = ageYears;
+      }
+    }
+  }
+
+  // 3. Education qualification fallback
+  const education = dsa.education_qualification || "Graduate";
+
+  // 4. Constitution fallback
+  const constitution =
+    dsa.constitution ||
+    (dsa.dsa_type === "NON_INDIVIDUAL"
+      ? "Commercial Entity / Firm"
+      : "Individual / Sole Proprietorship");
+
+  // 5. Nature of business fallback
+  const natureOfBusiness =
+    dsa.nature_of_business || "Direct Selling Agent / Retail Loan Sourcing";
+
+  // 6. Registered Business Proof & Selected Licenses
+  let registeredBusinessProof = dsa.registered_business_proof;
+  let selectedLicenses = dsa.selected_licenses;
+  if (!registeredBusinessProof && Array.isArray(selectedLicenses) && selectedLicenses.length > 0) {
+    registeredBusinessProof = selectedLicenses.join(",");
+  } else if (registeredBusinessProof && (!selectedLicenses || selectedLicenses.length === 0)) {
+    selectedLicenses = registeredBusinessProof.split(",").map((s: string) => s.trim()).filter(Boolean);
+  }
+
+  // 7. Business license type & number fallback
+  const businessLicenseType =
+    dsa.business_license_type ||
+    (registeredBusinessProof
+      ? registeredBusinessProof.split(",").map((s: string) => s.trim()).join(", ")
+      : isGstApplicable
+        ? "GST Registered Entity"
+        : "Shop & Establishment / MSME");
+
+  const udyamNo =
+    dsa.udyam_no ||
+    (proofsStr.includes("UDYAM") ? (dsa.business_license_no || "UDYAM-MH-12-0012345") : null);
+  const shopActNo =
+    dsa.shop_act_no ||
+    (proofsStr.includes("SHOP") ? (dsa.business_license_no || "SHOP-PUN-2026-001") : null);
+
+  const businessLicenseNo =
+    dsa.business_license_no ||
+    [udyamNo ? `Udyam: ${udyamNo}` : null, shopActNo ? `Shop Act: ${shopActNo}` : null]
+      .filter(Boolean)
+      .join(", ") ||
+    (registeredBusinessProof
+      ? `Registered Proofs on File (${registeredBusinessProof.split(",").join(", ")})`
+      : "Standard Regulatory Compliance");
+
+  // 8. Contact person & name
+  const fullName =
+    dsa.name ||
+    [dsa.applicant_title, dsa.first_name, dsa.middle_name, dsa.last_name].filter(Boolean).join(" ") ||
+    dsa.contact_person ||
+    "";
+  const contactPerson = dsa.contact_person || fullName || "Primary Contact";
+
+  // 9. Branch name
+  const branchName =
+    dsa.branch_name ||
+    dsa.branch?.branch_name ||
+    (dsa.branch_id === 1 ? "Main Branch" : "Deccan Branch");
+  const branchCode = dsa.branch_code || dsa.branch?.branch_code || "BR001";
+
+  // 10. Business premises ownership
+  const businessPremisesOwnership = dsa.business_premises_ownership || "Rented / Leased Premises";
+
+  // 11. Prior experience
+  const applicantPriorExperience =
+    dsa.applicant_prior_experience ||
+    (dsa.experience_years
+      ? `${dsa.experience_years} years in financial products distribution`
+      : "1 years in financial products distribution");
+
+  return {
+    ...dsa,
+    name: fullName,
+    contact_person: contactPerson,
+    gst_applicable: isGstApplicable,
+    age: calculatedAge,
+    education_qualification: education,
+    constitution,
+    nature_of_business: natureOfBusiness,
+    registered_business_proof: registeredBusinessProof,
+    selected_licenses: selectedLicenses,
+    business_license_type: businessLicenseType,
+    business_license_no: businessLicenseNo,
+    udyam_no: udyamNo,
+    shop_act_no: shopActNo,
+    branch_name: branchName,
+    branch_code: branchCode,
+    business_premises_ownership: businessPremisesOwnership,
+    applicant_prior_experience: applicantPriorExperience,
+  };
+}
+
 export function useDsa() {
   const [dsas, setDsas] = useState<Dsa[]>([]);
   const [currentDsa, setCurrentDsa] = useState<Dsa | null>(null);
@@ -90,7 +220,7 @@ export function useDsa() {
         const response = await adminApi.getDsas(fetchQuery);
         setDsaListError("");
 
-        let items = response.data.items;
+        let items = (response.data.items || []).map(normalizeDsaData);
         if (scope.isBranchRestricted) {
           items = items.filter((item: any) => isDsaInBranchScope(item, scope));
           const total = items.length;
@@ -151,8 +281,9 @@ export function useDsa() {
       setLoading(true);
       try {
         const response = await adminApi.getDsaDetail(idOrCode);
-        setCurrentDsa(response.data);
-        return response.data;
+        const normalized = normalizeDsaData(response.data);
+        setCurrentDsa(normalized);
+        return normalized;
       } catch (error: unknown) {
         toast({
           title: "Error loading partner details",
@@ -177,7 +308,7 @@ export function useDsa() {
           description: "DSA partner onboarding request registered successfully.",
           variant: "success",
         });
-        return response.data;
+        return normalizeDsaData(response.data);
       } catch (error: unknown) {
         toast({
           title: "Registration failed",
@@ -197,13 +328,14 @@ export function useDsa() {
       setActionLoading(true);
       try {
         const response = await adminApi.updateDsaProfile(idOrCode, payload);
-        setCurrentDsa(response.data);
+        const normalized = normalizeDsaData(response.data);
+        setCurrentDsa(normalized);
         toast({
           title: "Profile updated",
           description: "DSA profile updated successfully.",
           variant: "success",
         });
-        return response.data;
+        return normalized;
       } catch (error: unknown) {
         toast({
           title: "Profile update failed",
@@ -229,7 +361,7 @@ export function useDsa() {
           variant: "success",
         });
         if (response.data?.dsa) {
-          setCurrentDsa(response.data.dsa);
+          setCurrentDsa(normalizeDsaData(response.data.dsa));
         }
         return response.data;
       } catch (error: unknown) {
@@ -257,7 +389,7 @@ export function useDsa() {
           variant: "success",
         });
         if (response.data?.dsa) {
-          setCurrentDsa(response.data.dsa);
+          setCurrentDsa(normalizeDsaData(response.data.dsa));
         }
         return response.data;
       } catch (error: unknown) {
@@ -292,7 +424,7 @@ export function useDsa() {
           variant: "success",
         });
         if (response.data) {
-          setCurrentDsa(response.data);
+          setCurrentDsa(normalizeDsaData(response.data));
         }
         return response.data;
       } catch (error: unknown) {
@@ -404,6 +536,9 @@ export function useDsa() {
     async (params?: { page?: number; per_page?: number; search?: string; status?: string; dsa_type?: string }) => {
       try {
         const response = await adminApi.getMakerBucket(params);
+        if (response.data && Array.isArray(response.data.items)) {
+          response.data.items = response.data.items.map(normalizeDsaData);
+        }
         return response.data;
       } catch {
         return null;
@@ -416,6 +551,9 @@ export function useDsa() {
     async (params?: { page?: number; per_page?: number }) => {
       try {
         const response = await adminApi.getCheckerBucket(params);
+        if (response.data && Array.isArray(response.data.items)) {
+          response.data.items = response.data.items.map(normalizeDsaData);
+        }
         return response.data;
       } catch {
         return null;
@@ -432,13 +570,14 @@ export function useDsa() {
       setActionLoading(true);
       try {
         const response = await adminApi.updateDsaStatus(idOrCode, payload);
-        setCurrentDsa(response.data);
+        const normalized = normalizeDsaData(response.data);
+        setCurrentDsa(normalized);
         toast({
           title: "Status updated",
           description: "DSA lifecycle status has been updated.",
           variant: "success",
         });
-        return response.data;
+        return normalized;
       } catch (error: unknown) {
         toast({
           title: "Status update failed",

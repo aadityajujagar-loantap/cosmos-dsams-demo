@@ -88,15 +88,24 @@ export function ActionPair({
   );
 }
 
-export function DetailGrid({ children }: { children: ReactNode }) {
-  return <div className="grid gap-3 sm:grid-cols-2">{children}</div>;
+export function DetailGrid({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={`grid gap-3 sm:grid-cols-2 ${className || ""}`}>{children}</div>;
 }
 
-export function DetailItem({ label, value }: { label: string; value: ReactNode }) {
+export function DetailItem({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value: ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
+    <div className={`rounded-md border border-slate-100 bg-slate-50 p-3 ${className || ""}`}>
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
       <div className="mt-1 text-sm font-medium text-slate-950">{value}</div>
     </div>
   );
 }
+

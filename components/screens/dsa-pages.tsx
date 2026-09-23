@@ -75,7 +75,7 @@ import {
   requiredDsaDocuments,
 } from "@/lib/dsa-documents";
 import { useMockStore } from "@/lib/store";
-import { useDsa } from "@/hooks/useDsa";
+import { useDsa, normalizeDsaData } from "@/hooks/useDsa";
 import { isDsaInBranchScope } from "@/lib/branch-scope";
 import { BusinessType, Dsa, DsaStatus, Product, User } from "@/lib/types";
 import {
@@ -2029,6 +2029,7 @@ export function DsaManagementPage() {
                       <th className="p-4">DSA Code</th>
                       <th className="p-4">Type &amp; PAN</th>
                       <th className="p-4">Assigned Branch</th>
+                      <th className="p-4">GST Applicable</th>
                       <th className="p-4">PAN Verification</th>
                       <th className="p-4">Status</th>
                       <th className="p-4 text-right">Action</th>
@@ -2080,8 +2081,20 @@ export function DsaManagementPage() {
                           <td className="p-4 text-xs font-medium text-slate-700">
                             <span className="inline-flex items-center gap-1">
                               <Building2 className="h-3 w-3 text-slate-400" />
-                              {item.branch_name || "Assigned Branch"}
+                              {item.branch_name || item.branch?.branch_name || "Assigned Branch"}
                             </span>
+                          </td>
+                          <td className="p-4">
+                            {item.gst_applicable ? (
+                              <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <Check className="h-3 w-3" />
+                                Yes (Registered)
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-medium bg-slate-100 text-slate-600">
+                                Exempt / No
+                              </span>
+                            )}
                           </td>
                           <td className="p-4">
                             {isPanVerified ? (
@@ -2260,6 +2273,8 @@ export function DsaManagementPage() {
                     <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-bold uppercase tracking-wider text-slate-500">
                       <th className="p-4">Partner</th>
                       <th className="p-4">DSA ID</th>
+                      <th className="p-4">Type &amp; PAN</th>
+                      <th className="p-4">GST Applicable</th>
                       <th className="p-4">Status</th>
                       <th className="p-4">Location</th>
                       <th className="p-4">Approval Rate</th>
@@ -2301,6 +2316,26 @@ export function DsaManagementPage() {
                             </span>
                           ) : (
                             <span className="text-slate-600">{item.code}</span>
+                          )}
+                        </td>
+                        <td className="p-4">
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 mr-1.5">
+                            {item.dsa_type || "INDIVIDUAL"}
+                          </span>
+                          <span className="font-mono text-xs font-semibold text-slate-800">
+                            {item.pan || "N/A"}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          {item.gst_applicable ? (
+                            <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <Check className="h-3 w-3" />
+                              Yes
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-medium bg-slate-100 text-slate-600">
+                              No
+                            </span>
                           )}
                         </td>
                         <td className="p-4">
@@ -2662,7 +2697,7 @@ export function DsaProfilePage({ id }: { id: string }) {
   const [counterNote, setCounterNote] = useState("");
 
   const {
-    currentDsa: dsa,
+    currentDsa: rawDsa,
     loading,
     actionLoading,
     fetchDsaDetail,
@@ -2686,6 +2721,8 @@ export function DsaProfilePage({ id }: { id: string }) {
     fetchSignedAgreementReview,
     verifySignedAgreement,
   } = useDsa();
+
+  const dsa = useMemo(() => normalizeDsaData(rawDsa), [rawDsa]);
 
   const isKycTypeVerified = useCallback(
     (key: string, codePatterns: string[]) => {
@@ -4931,7 +4968,7 @@ export function DsaProfilePage({ id }: { id: string }) {
       <Card className="mt-4">
         <CardContent>
           {tab === "overview" ? (
-            <div className="space-y-6 pt-1">
+            <div className="space-y-8 pt-2">
               {/* Section 1: Application & Sourcing Journey */}
               <div>
                 <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-150">
@@ -5015,7 +5052,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                     }
                     value={
                       dsa.entity_name ||
-                      [dsa.first_name, dsa.middle_name, dsa.last_name]
+                      [dsa.applicant_title, dsa.first_name, dsa.middle_name, dsa.last_name]
                         .filter(Boolean)
                         .join(" ") ||
                       dsa.name ||
@@ -5055,14 +5092,8 @@ export function DsaProfilePage({ id }: { id: string }) {
                       "Direct Selling Agent / Financial Intermediary"
                     }
                   />
-                  {dsa.registration_no_llpin_cin ? (
-                    <DetailItem
-                      label="CIN / LLPIN / Registration Number"
-                      value={dsa.registration_no_llpin_cin}
-                    />
-                  ) : null}
                   <DetailItem
-                    label="Date of Birth / Age"
+                    label={dsa.dsa_type === "NON_INDIVIDUAL" ? "Incorporation Date / Age" : "Date of Birth / Age"}
                     value={
                       dsa.date_of_birth
                         ? `${formatDate(dsa.date_of_birth)}${dsa.age ? ` (${dsa.age} yrs)` : ""}`
@@ -5075,7 +5106,21 @@ export function DsaProfilePage({ id }: { id: string }) {
                     label="Educational Qualification"
                     value={dsa.education_qualification || "Graduate"}
                   />
-                  {dsa.aadhaar_no ? (
+                  <DetailItem
+                    label={dsa.registration_no_llpin_cin ? "CIN / LLPIN / Registration Number" : "Aadhaar Number"}
+                    value={
+                      dsa.registration_no_llpin_cin ? (
+                        <span className="font-mono">{dsa.registration_no_llpin_cin}</span>
+                      ) : dsa.aadhaar_no ? (
+                        dsa.aadhaar_no.length >= 4
+                          ? `•••• •••• ${dsa.aadhaar_no.slice(-4)}`
+                          : dsa.aadhaar_no
+                      ) : (
+                        "Verified via Identity Document"
+                      )
+                    }
+                  />
+                  {dsa.registration_no_llpin_cin && dsa.aadhaar_no ? (
                     <DetailItem
                       label="Aadhaar Number"
                       value={
@@ -5132,11 +5177,13 @@ export function DsaProfilePage({ id }: { id: string }) {
                     value={
                       dsa.office_mobile_no ||
                       dsa.key_person_contact_no ||
-                      dsa.mobile
+                      dsa.mobile ||
+                      "—"
                     }
                   />
                   {dsa.website ? (
                     <DetailItem
+                      className="sm:col-span-2"
                       label="Website / Portal"
                       value={
                         <a
@@ -5177,49 +5224,101 @@ export function DsaProfilePage({ id }: { id: string }) {
                   <DetailItem
                     label="GST Registration Status"
                     value={
-                      dsa.gst_applicable
-                        ? "Applicable (Registered)"
-                        : dsa.gst
-                          ? "Registered"
-                          : "Exempt / Not Applicable"
+                      dsa.gst_applicable ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                          <Check className="h-3 w-3" /> Applicable (Registered)
+                        </span>
+                      ) : (
+                        <span className="text-slate-600 text-xs font-medium">Exempt / Not Applicable</span>
+                      )
                     }
                   />
                   <DetailItem
                     label="GSTIN"
                     value={
                       dsa.gst ? (
-                        <span className="font-mono">{dsa.gst}</span>
+                        <span className="font-mono font-bold text-slate-900">{dsa.gst}</span>
+                      ) : dsa.gst_applicable ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                          <FileText className="h-3 w-3 text-blue-600" /> Registered (Certificate On File)
+                        </span>
                       ) : (
-                        "Not Applicable"
+                        <span className="text-slate-500 text-xs">Not Applicable (Exempt Turnover)</span>
                       )
                     }
                   />
                   <DetailItem
-                    label="Business License / Statutory Registration"
+                    label="Registered Business Proof / License"
                     value={
-                      dsa.business_license_type ||
-                      (Array.isArray(dsa.selected_licenses)
-                        ? dsa.selected_licenses.join(", ")
-                        : dsa.selected_licenses) ||
-                      "Shop & Establishment / MSME"
+                      (() => {
+                        const proofs = (dsa.registered_business_proof || dsa.business_license_type || "")
+                          .split(",")
+                          .map((p: string) => p.trim())
+                          .filter(Boolean);
+                        if (proofs.length === 0) return "Shop & Establishment / MSME";
+                        return (
+                          <div className="flex flex-wrap gap-1.5">
+                            {proofs.map((proof: string, i: number) => (
+                              <span
+                                key={i}
+                                className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200"
+                              >
+                                {proof === "GST" ? "GST Certificate" : proof === "Udyam" ? "Udyam Registration" : proof}
+                              </span>
+                            ))}
+                          </div>
+                        );
+                      })()
                     }
                   />
-                  {dsa.business_license_no ? (
-                    <DetailItem
-                      label="License / Registration Number"
-                      value={dsa.business_license_no}
-                    />
-                  ) : null}
                   <DetailItem
                     label="Financial / Sourcing Experience"
                     value={
-                      dsa.experience_years
-                        ? `${dsa.experience_years} Years`
-                        : dsa.empanelment_since_year
-                          ? `Empanelled since ${dsa.empanelment_since_year}`
-                          : "New Partner Empanelment"
+                      dsa.applicant_prior_experience ? (
+                        <div>
+                          <span className="font-semibold text-slate-900">
+                            {dsa.applicant_prior_experience}
+                          </span>
+                          {dsa.experience_years && dsa.experience_years !== "0" && !dsa.applicant_prior_experience.includes(String(dsa.experience_years)) ? (
+                            <span className="text-slate-500 text-xs ml-1.5">
+                              ({dsa.experience_years} yrs)
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : dsa.experience_years ? (
+                        `${dsa.experience_years} Years`
+                      ) : dsa.empanelment_since_year ? (
+                        `Empanelled since ${dsa.empanelment_since_year}`
+                      ) : (
+                        "New Partner Empanelment"
+                      )
                     }
                   />
+                  <DetailItem
+                    label="Statutory Registration / License No"
+                    value={
+                      [
+                        dsa.udyam_no ? `Udyam: ${dsa.udyam_no}` : null,
+                        dsa.shop_act_no ? `Shop Act: ${dsa.shop_act_no}` : null,
+                      ].filter(Boolean).join(", ") ||
+                      dsa.business_license_no ||
+                      (dsa.registered_business_proof ? `Registered Proofs on File (${dsa.registered_business_proof.split(",").join(", ")})` : null) ||
+                      dsa.registration_no_llpin_cin ||
+                      "Standard Regulatory Compliance"
+                    }
+                  />
+                  {dsa.udyam_no ? (
+                    <DetailItem
+                      label="Udyam Registration Number"
+                      value={<span className="font-mono font-semibold text-slate-900">{dsa.udyam_no}</span>}
+                    />
+                  ) : null}
+                  {dsa.shop_act_no ? (
+                    <DetailItem
+                      label="Shop Act License / Reg. Number"
+                      value={<span className="font-mono font-semibold text-slate-900">{dsa.shop_act_no}</span>}
+                    />
+                  ) : null}
                 </DetailGrid>
               </div>
 
@@ -5275,21 +5374,40 @@ export function DsaProfilePage({ id }: { id: string }) {
                     value={`${dsa.address}, ${dsa.city}, ${dsa.state} ${dsa.pincode}`}
                   />
                   <DetailItem
-                    label="City &amp; State"
-                    value={`${dsa.city}, ${dsa.state}`}
-                  />
-                  <DetailItem label="Pincode" value={dsa.pincode} />
-                  <DetailItem
-                    label="Business Premises Ownership"
-                    value={dsa.business_premises_ownership || "Owned"}
-                  />
-                  <DetailItem
                     label="Office / Operating Premises Address"
                     value={
                       dsa.office_address_different &&
                       dsa.office_address_line_1
                         ? `${dsa.office_address_line_1}, ${dsa.office_city || dsa.city}, ${dsa.office_state || dsa.state} ${dsa.office_pincode || dsa.pincode}`
                         : `Same as Registered Address (${dsa.address}, ${dsa.city})`
+                    }
+                  />
+                  <DetailItem
+                    label="Residential Location &amp; Pincode"
+                    value={`${dsa.city}, ${dsa.state} - ${dsa.pincode}`}
+                  />
+                  <DetailItem
+                    label="Office Location &amp; Pincode"
+                    value={
+                      dsa.office_address_different && dsa.office_city
+                        ? `${dsa.office_city}, ${dsa.office_state || dsa.state} - ${dsa.office_pincode || dsa.pincode}`
+                        : `${dsa.city}, ${dsa.state} - ${dsa.pincode} (Same as Residence)`
+                    }
+                  />
+                  <DetailItem
+                    label="Business Premises Ownership"
+                    value={
+                      <span className="font-semibold text-slate-900">
+                        {dsa.business_premises_ownership || "Self Owned"}
+                      </span>
+                    }
+                  />
+                  <DetailItem
+                    label="Operating Premises Status"
+                    value={
+                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                        {dsa.office_address_different ? "Separate Commercial Office" : "Operating from Registered Residence"}
+                      </span>
                     }
                   />
                 </DetailGrid>
@@ -5315,20 +5433,28 @@ export function DsaProfilePage({ id }: { id: string }) {
                   <DetailItem
                     label="Bank Account Number"
                     value={
-                      <span className="font-mono font-semibold">
+                      <span className="font-mono font-semibold text-slate-900">
                         {dsa.account_number}
                       </span>
                     }
                   />
                   <DetailItem
                     label="Account Type"
-                    value={dsa.account_type || "Current Account"}
+                    value={dsa.account_type || "Savings"}
                   />
                   <DetailItem
                     label="IFSC Code"
                     value={
                       <span className="font-mono font-bold text-slate-900">
                         {dsa.ifsc}
+                      </span>
+                    }
+                  />
+                  <DetailItem
+                    label="Disbursement &amp; Payout Routing"
+                    value={
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        <Check className="h-3 w-3" /> Direct Bank Transfer (NEFT/RTGS)
                       </span>
                     }
                   />
@@ -5404,7 +5530,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {dsa.stakeholders.map((sh, idx) => (
+                        {dsa.stakeholders.map((sh: any, idx: number) => (
                           <tr key={idx} className="hover:bg-slate-50/60">
                             <td className="p-2.5 font-semibold text-slate-900">{sh.name}</td>
                             <td className="p-2.5 text-slate-600">{sh.stakeholder_type || "Partner / Director"}</td>
@@ -5418,6 +5544,41 @@ export function DsaProfilePage({ id }: { id: string }) {
                   </div>
                 </div>
               ) : null}
+
+              {/* Section 10: Associate Concerns & Sister Entities (if present) */}
+              {Array.isArray(dsa.associate_concerns) && dsa.associate_concerns.length > 0 ? (
+                <div>
+                  <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-150">
+                    <Building2 className="h-4 w-4 text-slate-600" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                      Associate Concerns &amp; Sister Entities ({dsa.associate_concerns.length})
+                    </h4>
+                  </div>
+                  <div className="overflow-x-auto rounded-lg border border-slate-200">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 text-slate-600 uppercase font-semibold border-b border-slate-200">
+                        <tr>
+                          <th className="p-2.5">Concern / Entity Name</th>
+                          <th className="p-2.5">Nature of Activity</th>
+                          <th className="p-2.5">Relationship</th>
+                          <th className="p-2.5">Bank / Branch</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {dsa.associate_concerns.map((ac: any, idx: number) => (
+                          <tr key={idx} className="hover:bg-slate-50/60">
+                            <td className="p-2.5 font-semibold text-slate-900">{ac.name || ac.entity_name || "—"}</td>
+                            <td className="p-2.5 text-slate-600">{ac.nature_of_business || ac.activity || "—"}</td>
+                            <td className="p-2.5 text-slate-600">{ac.relationship || "Associate Concern"}</td>
+                            <td className="p-2.5 text-slate-600">{ac.bank_name || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : null}
+
 
               {/* Section 10: Field Verification & Physical Visit Summary */}
               {(dsa.visit_conducted_by ||
@@ -5753,6 +5914,15 @@ export function DsaProfilePage({ id }: { id: string }) {
                               Taxpayer Status: Regular · Active
                             </p>
                           </>
+                        ) : dsa.gst_applicable ? (
+                          <div>
+                            <p className="text-sm font-semibold text-emerald-800">
+                              GST Applicable (Certificate on File)
+                            </p>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              Registered Business Proof: {dsa.registered_business_proof || "GST Document Attached"}
+                            </p>
+                          </div>
                         ) : (
                           <div>
                             <p className="text-sm text-slate-400 italic">

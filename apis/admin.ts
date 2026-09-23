@@ -449,6 +449,13 @@ export const adminApi = {
     });
   },
 
+  updateDsa: async (idOrCode: number | string, payload: Partial<Dsa>): Promise<BackendResponse<Dsa>> => {
+    return request<BackendResponse<Dsa>>(`/v1/dsa/${idOrCode}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
   // ── DSA Onboarding (V1 Multi-Step Architecture) ───────────────────────────
   sendSelfOnboardingOtp: async (payload: { mobile: string; branch_id: number }): Promise<BackendResponse<{ mobile: string; reference_id: string; expires_at: string }>> => {
     return request<BackendResponse<any>>("/v1/dsa/self/send-otp", {

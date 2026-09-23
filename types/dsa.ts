@@ -148,7 +148,11 @@ export interface Dsa {
   gst_applicable?: boolean | null;
   business_license_type?: string | null;
   business_license_no?: string | null;
+  shop_act_no?: string | null;
+  udyam_no?: string | null;
   experience_years?: string | number | null;
+  applicant_prior_experience?: string | null;
+  registered_business_proof?: string | null;
   empanelment_since_year?: string | number | null;
   selected_licenses?: string[] | string | null;
   key_person_contact_no?: string | null;
@@ -180,6 +184,15 @@ export interface Dsa {
     pan?: string;
     aadhaar?: string;
     din_dpin_no?: string;
+  }>;
+  associate_concerns?: Array<{
+    id?: number;
+    name?: string;
+    entity_name?: string;
+    nature_of_business?: string;
+    activity?: string;
+    relationship?: string;
+    bank_name?: string;
   }>;
 }
 
