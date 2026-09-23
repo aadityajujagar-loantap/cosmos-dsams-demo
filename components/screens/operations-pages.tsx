@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useState, useEffect, useCallback } from "react";
-import { Layers, Plus, Shield, Edit, Trash2, AlertCircle, TrendingUp, Users, Calendar, Check, Send, X } from "lucide-react";
+import { Layers, Plus, Shield, Edit, Trash2, AlertCircle, TrendingUp, Users, Calendar, Check, Send, X, Sliders, FileSpreadsheet, RefreshCw } from "lucide-react";
 
 import { ActionPair, PageHeader } from "@/components/module";
 import { Button, Modal, Select } from "@/components/ui/primitives";
@@ -1549,8 +1549,8 @@ function SchemeParametersTab() {
         .then((res) => {
           const params = res.data;
           if (params) {
-            setMinLoanAmount(String(params.min_loan_amount ? Math.round(params.min_loan_amount * 100000) : ""));
-            setMaxLoanAmount(String(params.max_loan_amount ? Math.round(params.max_loan_amount * 100000) : ""));
+            setMinLoanAmount(String(params.min_loan_amount ? Math.round(Number(params.min_loan_amount) * 100000) : ""));
+            setMaxLoanAmount(String(params.max_loan_amount ? Math.round(Number(params.max_loan_amount) * 100000) : ""));
             setMinPeriodMonths(String(params.min_period_months ?? ""));
             setMaxPeriodMonths(String(params.max_period_months ?? ""));
             setRoiLabel(params.roi_label ?? "Floating");
@@ -2088,8 +2088,450 @@ function SchemeParametersTab() {
   );
 }
 
+function ParameterMappingTab() {
+  const [products, setProducts] = useState<any[]>([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [selectedProductId, setSelectedProductId] = useState<string>(""); // "" means All Products
+
+  const [schemes, setSchemes] = useState<any[]>([]);
+  const [schemesLoading, setSchemesLoading] = useState(false);
+  const [schemeParams, setSchemeParams] = useState<Record<number, any>>({});
+
+  // Editing state
+  const [editingScheme, setEditingScheme] = useState<any | null>(null);
+  const [minAmount, setMinAmount] = useState<string>("1000");
+  const [maxAmount, setMaxAmount] = useState<string>("30000000");
+  const [minTenure, setMinTenure] = useState<string>("12");
+  const [maxTenure, setMaxTenure] = useState<string>("240");
+  const [ltvLabel, setLtvLabel] = useState<string>("");
+  const [maxLtv, setMaxLtv] = useState<string>("90");
+  const [makerComment, setMakerComment] = useState<string>("");
+  const [savingParam, setSavingParam] = useState<boolean>(false);
+
+  const { currentUser } = useMockStore();
+  const { toast } = useToast();
+
+  const canEdit = currentUser?.role === "DSA Manager" || currentUser?.role === "DSA Credit";
+
+  const loadSchemesAndParams = useCallback(async (prodIdStr: string, prodList: any[]) => {
+    setSchemesLoading(true);
+    try {
+      let schemeList: any[] = [];
+      if (prodIdStr) {
+        // Specific product selected
+        const pObj = prodList.find((p) => String(p.id) === String(prodIdStr));
+        const res = await adminApi.getSchemes(Number(prodIdStr));
+        schemeList = (res.data || []).map((sch: any) => ({
+          ...sch,
+          product_name: pObj?.name || "Product #" + prodIdStr,
+        }));
+      } else {
+        // All products selected
+        const allSchemesArrays = await Promise.all(
+          prodList.map(async (p: any) => {
+            try {
+              const res = await adminApi.getSchemes(p.id);
+              return (res.data || []).map((sch: any) => ({
+                ...sch,
+                product_name: p.name,
+              }));
+            } catch (e) {
+              return [];
+            }
+          })
+        );
+        schemeList = allSchemesArrays.flat();
+      }
+
+      setSchemes(schemeList);
+
+      // Fetch parameters for each scheme
+      const paramsMap: Record<number, any> = {};
+      await Promise.all(
+        schemeList.map(async (sch: any) => {
+          try {
+            const paramRes = await adminApi.getSchemeParameters(sch.id);
+            if (paramRes.data) {
+              paramsMap[sch.id] = paramRes.data;
+            }
+          } catch (e) {
+            // parameter record might not exist yet
+          }
+        })
+      );
+      setSchemeParams(paramsMap);
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: "Load Failed",
+        description: "Failed to load schemes and parameter mappings.",
+        variant: "warning",
+      });
+    } finally {
+      setSchemesLoading(false);
+    }
+  }, [toast]);
+
+  const loadProducts = useCallback(async () => {
+    setProductsLoading(true);
+    try {
+      const res = await adminApi.getProducts();
+      const list = res.data || [];
+      setProducts(list);
+      loadSchemesAndParams(selectedProductId, list);
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: "Load Failed",
+        description: "Failed to load loan products list.",
+        variant: "warning",
+      });
+    } finally {
+      setProductsLoading(false);
+    }
+  }, [selectedProductId, loadSchemesAndParams, toast]);
+
+  useEffect(() => {
+    loadProducts();
+  }, []);
+
+  useEffect(() => {
+    if (products.length > 0) {
+      loadSchemesAndParams(selectedProductId, products);
+    }
+  }, [selectedProductId, products, loadSchemesAndParams]);
+
+  const openEditModal = (sch: any) => {
+    setEditingScheme(sch);
+    const existing = schemeParams[sch.id] || {};
+    setMinAmount(existing.min_loan_amount !== undefined ? String(existing.min_loan_amount) : "1000");
+    setMaxAmount(existing.max_loan_amount !== undefined ? String(existing.max_loan_amount) : "30000000");
+    setMinTenure(existing.min_period_months !== undefined ? String(existing.min_period_months) : "12");
+    setMaxTenure(existing.max_period_months !== undefined ? String(existing.max_period_months) : "240");
+    setLtvLabel(existing.ltv_label || "Up to ₹100L: 90% LTV; Above ₹100L: 80% LTV");
+    setMaxLtv(existing.max_ltv !== undefined ? String(existing.max_ltv) : "90");
+    setMakerComment("");
+  };
+
+  const handleSaveParameters = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingScheme) return;
+
+    setSavingParam(true);
+    try {
+      const payload = {
+        min_loan_amount: minAmount,
+        max_loan_amount: maxAmount,
+        min_period_months: Number(minTenure || 12),
+        max_period_months: Number(maxTenure || 240),
+        ltv_label: ltvLabel,
+        max_ltv: maxLtv,
+        maker_comment: makerComment || "Updating scheme parameters from Admin Portal",
+      };
+
+      await adminApi.upsertSchemeParameters(editingScheme.id, payload);
+
+      toast({
+        title: "Submitted to Checker",
+        description: `Parameter mapping for '${editingScheme.name}' saved successfully.`,
+        variant: "success",
+      });
+
+      setEditingScheme(null);
+      loadSchemesAndParams(selectedProductId, products);
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: "Update Failed",
+        description: "Failed to update scheme parameters.",
+        variant: "warning",
+      });
+    } finally {
+      setSavingParam(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Parameter Mapping Card */}
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="bg-[#1a2744] px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-white">
+          <div className="flex items-center gap-2">
+            <Sliders className="h-5 w-5 text-blue-400" />
+            <span className="font-bold tracking-wide text-sm">Loan Type Parameter Mapping</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="text-xs text-slate-300 font-semibold">Filter Product:</label>
+            <select
+              value={selectedProductId}
+              onChange={(e) => setSelectedProductId(e.target.value)}
+              className="rounded-md border border-slate-600 bg-slate-800 text-white px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">-- All Products --</option>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => loadSchemesAndParams(selectedProductId, products)}
+              className="p-1.5 bg-blue-700 hover:bg-blue-600 text-white rounded transition"
+              title="Refresh parameters"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${schemesLoading ? "animate-spin" : ""}`} />
+            </button>
+            {canEdit && (
+              <button
+                onClick={() => {
+                  if (schemes.length > 0) {
+                    const unmapped = schemes.find((s) => !schemeParams[s.id]);
+                    openEditModal(unmapped || schemes[0]);
+                  } else {
+                    toast({
+                      title: "No Schemes Found",
+                      description: "Please add a scheme/product type under 'PRODUCT & SCHEME MANAGEMENT' first.",
+                      variant: "warning",
+                    });
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded transition shadow-sm"
+              >
+                <Plus className="h-3.5 w-3.5" /> Add / Map Parameters
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {schemesLoading ? (
+            <div className="flex justify-center py-12">
+              <span className="h-7 w-7 animate-spin rounded-full border-b-2 border-blue-600" />
+            </div>
+          ) : schemes.length === 0 ? (
+            <div className="text-center py-10 border border-dashed border-slate-200 rounded-lg bg-slate-50 space-y-2">
+              <p className="text-xs text-slate-500 font-medium">No Loan Types (Schemes) configured.</p>
+              <p className="text-[11px] text-slate-400">Add a new Loan Type under the "PRODUCT & SCHEME MANAGEMENT" tab first.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-slate-200">
+              <table className="min-w-full text-xs text-left">
+                <thead>
+                  <tr className="bg-slate-100 font-bold text-slate-700 border-b border-slate-200">
+                    <th className="px-4 py-3">#</th>
+                    <th className="px-4 py-3">Loan Product</th>
+                    <th className="px-4 py-3">Loan Type (Scheme Name)</th>
+                    <th className="px-4 py-3">Loan Amount Range</th>
+                    <th className="px-4 py-3">Tenure (Months)</th>
+                    <th className="px-4 py-3">Max LTV %</th>
+                    <th className="px-4 py-3">LTV Description Label</th>
+                    <th className="px-4 py-3">Status</th>
+                    {canEdit && <th className="px-4 py-3 text-right">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {schemes.map((sch, idx) => {
+                    const param = schemeParams[sch.id];
+                    return (
+                      <tr key={sch.id} className="hover:bg-slate-50/70 transition">
+                        <td className="px-4 py-3.5 text-slate-500 font-medium">#{idx + 1}</td>
+                        <td className="px-4 py-3.5 font-semibold text-slate-700">{sch.product_name || "Loan Product"}</td>
+                        <td className="px-4 py-3.5 font-bold text-slate-800">{sch.name}</td>
+                        <td className="px-4 py-3.5 font-mono text-slate-700">
+                          {param ? (
+                            <span>
+                              ₹{Number(param.min_loan_amount || 0).toLocaleString("en-IN")} - ₹{Number(param.max_loan_amount || 0).toLocaleString("en-IN")}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 italic">Unmapped (Default ₹1K - ₹3Cr)</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5 font-mono text-slate-700">
+                          {param ? (
+                            <span>{param.min_period_months}M - {param.max_period_months}M</span>
+                          ) : (
+                            <span className="text-slate-400 italic">Unmapped (12M - 240M)</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5 font-bold text-emerald-700 font-mono">
+                          {param?.max_ltv ? `${param.max_ltv}%` : "90%"}
+                        </td>
+                        <td className="px-4 py-3.5 text-slate-600 max-w-xs truncate">
+                          {param?.ltv_label || <span className="text-slate-400 italic">Standard LTV Rules</span>}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          {param ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                              Mapped
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                              New / Unmapped
+                            </span>
+                          )}
+                        </td>
+                        {canEdit && (
+                          <td className="px-4 py-3.5 text-right">
+                            {param ? (
+                              <button
+                                onClick={() => openEditModal(sch)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold rounded text-xs border border-blue-200 transition"
+                              >
+                                <Edit className="h-3.5 w-3.5" /> Edit Parameters
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => openEditModal(sch)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold rounded text-xs border border-emerald-200 transition"
+                              >
+                                <Plus className="h-3.5 w-3.5" /> Map Parameters
+                              </button>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Parameter Edit / Add Modal */}
+      {editingScheme && (
+        <Modal
+          open={Boolean(editingScheme)}
+          onClose={() => setEditingScheme(null)}
+          title={schemeParams[editingScheme.id] ? `Edit Parameter Mapping: ${editingScheme.name}` : `Add Parameter Mapping: ${editingScheme.name}`}
+        >
+          <form onSubmit={handleSaveParameters} className="space-y-4 pt-2">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700">Scheme / Product Type *</label>
+              <select
+                value={editingScheme.id}
+                onChange={(e) => {
+                  const found = schemes.find((s) => String(s.id) === e.target.value);
+                  if (found) openEditModal(found);
+                }}
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-800"
+              >
+                {schemes.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    [{s.product_name || "Product"}] {s.name} {schemeParams[s.id] ? "(Mapped)" : "(New / Unmapped)"}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">Min Loan Amount (₹) *</label>
+                <input
+                  type="number"
+                  required
+                  value={minAmount}
+                  onChange={(e) => setMinAmount(e.target.value)}
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">Max Loan Amount (₹) *</label>
+                <input
+                  type="number"
+                  required
+                  value={maxAmount}
+                  onChange={(e) => setMaxAmount(e.target.value)}
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">Min Tenure (Months) *</label>
+                <input
+                  type="number"
+                  required
+                  value={minTenure}
+                  onChange={(e) => setMinTenure(e.target.value)}
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">Max Tenure (Months) *</label>
+                <input
+                  type="number"
+                  required
+                  value={maxTenure}
+                  onChange={(e) => setMaxTenure(e.target.value)}
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">Max LTV (%)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. 90.00"
+                  value={maxLtv}
+                  onChange={(e) => setMaxLtv(e.target.value)}
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">LTV Description Label</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Up to ₹100L: 90% LTV; Above ₹100L: 80% LTV"
+                  value={ltvLabel}
+                  onChange={(e) => setLtvLabel(e.target.value)}
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-bold text-slate-700">Maker Comment</label>
+                <span className="text-[10px] text-slate-400">{makerComment.length} / 500</span>
+              </div>
+              <textarea
+                placeholder="Enter maker comment for review..."
+                maxLength={500}
+                value={makerComment}
+                onChange={(e) => setMakerComment(e.target.value)}
+                rows={3}
+                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setEditingScheme(null)}
+                className="px-4 py-2 text-xs font-semibold border border-slate-200 rounded-md hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={savingParam}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-md shadow-sm transition disabled:opacity-50"
+              >
+                {savingParam ? "Saving..." : "Save Parameters"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 export function BreRulesPage() {
-  const [activeTab, setActiveTab] = useState<"product_type" | "scheme_params" | "slab_config">("product_type");
+  const [activeTab, setActiveTab] = useState<"product_type" | "param_mapping">("product_type");
 
   return (
     <div className="space-y-6">
@@ -2114,45 +2556,30 @@ export function BreRulesPage() {
             }`}>
               1
             </span>
-            PRODUCT TYPE
+            PRODUCT & SCHEME MANAGEMENT
           </button>
+          
           <button
-            onClick={() => setActiveTab("scheme_params")}
+            onClick={() => setActiveTab("param_mapping")}
             className={`flex items-center gap-2 border-b-2 py-3 px-1 text-sm font-semibold transition-all ${
-              activeTab === "scheme_params"
+              activeTab === "param_mapping"
                 ? "border-blue-600 text-blue-600 font-bold"
                 : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700"
             }`}
           >
             <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-extrabold ${
-              activeTab === "scheme_params" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
+              activeTab === "param_mapping" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
             }`}>
               2
             </span>
-            SCHEME PARAMETERS
-          </button>
-          <button
-            onClick={() => setActiveTab("slab_config")}
-            className={`flex items-center gap-2 border-b-2 py-3 px-1 text-sm font-semibold transition-all ${
-              activeTab === "slab_config"
-                ? "border-blue-600 text-blue-600 font-bold"
-                : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700"
-            }`}
-          >
-            <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-extrabold ${
-              activeTab === "slab_config" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
-            }`}>
-              3
-            </span>
-            SLAB CONFIGURATION
+            PARAMETER MAPPING TO PRODUCT TYPE
           </button>
         </nav>
       </div>
 
       <div className="pt-2">
         {activeTab === "product_type" && <ProductTypeTab />}
-        {activeTab === "scheme_params" && <SchemeParametersTab />}
-        {activeTab === "slab_config" && <SlabsTab />}
+        {activeTab === "param_mapping" && <ParameterMappingTab />}
       </div>
     </div>
   );

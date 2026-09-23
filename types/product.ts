@@ -53,15 +53,16 @@ export interface FoirSlab {
 export interface SchemeParameter {
   id: number;
   loan_scheme_id: number;
-  min_loan_amount: number;
-  max_loan_amount: number;
+  min_loan_amount: number | string;
+  max_loan_amount: number | string;
   min_period_months: number;
   max_period_months: number;
-  roi_label: string;
+  roi_label?: string;
   ltv_label: string;
-  foir_income_range_label: string;
-  foir_deviation_pct: number;
-  status: "draft" | "pending_approval" | "active" | "rejected";
+  max_ltv?: number | string;
+  foir_income_range_label?: string;
+  foir_deviation_pct?: number;
+  status?: "draft" | "pending_approval" | "active" | "rejected";
   roi_slabs?: RoiSlab[];
   ltv_slabs?: LtvSlab[];
   foir_slabs?: FoirSlab[];
