@@ -78,6 +78,14 @@ const ENTITY_DOCS: DocDef[] = [
   { type: "other_document", label: "Any other document", required: false, requirementLabel: "Optional" },
 ];
 
+const FALLBACK_TITLE_OPTIONS = [
+  { key: "Mr.", label: "Mr." },
+  { key: "Mrs.", label: "Mrs." },
+  { key: "Miss", label: "Miss" },
+  { key: "Master", label: "Master" },
+  { key: "Dr.", label: "Dr." },
+];
+
 const FALLBACK_EDUCATION_OPTIONS = [
   { key: "Professional Degree", label: "Professional Degree" },
   { key: "Post Graduate", label: "Post Graduate" },
@@ -406,6 +414,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   const [isVerifyingOtp, setIsVerifyingOtp] = useState<boolean>(false);
 
   // Form Fields - Individual
+  const [applicantTitle, setApplicantTitle] = useState<string>("");
+  const [titleOptions, setTitleOptions] = useState<{ key: string; label: string }[]>(FALLBACK_TITLE_OPTIONS);
+  const [loadingTitle, setLoadingTitle] = useState<boolean>(false);
   const [firstName, setFirstName] = useState<string>("");
   const [middleName, setMiddleName] = useState<string>("");
   const [lastName, setLastName] = useState<string>("");
@@ -538,6 +549,36 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           setBranchId((curr) => curr || "1");
         }
       });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Fetch title options from master values API
+  useEffect(() => {
+    let mounted = true;
+    setLoadingTitle(true);
+    adminApi
+      .getMasterValuesDropdown("title")
+      .then((res: any) => {
+        if (!mounted) return;
+        const items = Array.isArray(res) ? res : res?.data || [];
+        if (items.length > 0) {
+          setTitleOptions(
+            items.map((item: any) => ({
+              key: item.meta_value || item.meta_key,
+              label: item.meta_value || item.meta_key,
+            }))
+          );
+        }
+      })
+      .catch(() => {
+        // Retain fallback options
+      })
+      .finally(() => {
+        if (mounted) setLoadingTitle(false);
+      });
+
     return () => {
       mounted = false;
     };
@@ -768,6 +809,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         if (data.otpSent !== undefined) setOtpSent(Boolean(data.otpSent));
         if (data.otpVerified !== undefined) setOtpVerified(Boolean(data.otpVerified));
         if (data.uploadedDocs) setUploadedDocs(parseUploadedDocs(data.uploadedDocs));
+        if (data.applicantTitle !== undefined) setApplicantTitle(data.applicantTitle);
         if (data.firstName !== undefined) setFirstName(data.firstName);
         if (data.middleName !== undefined) setMiddleName(data.middleName);
         if (data.lastName !== undefined) setLastName(data.lastName);
@@ -892,6 +934,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           otpSent,
           otpVerified,
           uploadedDocs: serializedDocs,
+          applicantTitle,
           firstName,
           middleName,
           lastName,
@@ -966,6 +1009,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     otpSent,
     otpVerified,
     uploadedDocs,
+    applicantTitle,
     firstName,
     middleName,
     lastName,
@@ -1306,6 +1350,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       }
 
       if (dsaType === "INDIVIDUAL") {
+        if (!applicantTitle) {
+          toast({ title: "Title Required", description: "Please select title.", variant: "warning" });
+          return false;
+        }
         if (!firstName.trim() || !lastName.trim()) {
           toast({ title: "Name Required", description: "First and Last name are mandatory.", variant: "warning" });
           return false;
@@ -1579,6 +1627,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
     // Type-specific fields — only send what belongs to the chosen DSA type
     if (dsaType === "INDIVIDUAL") {
+      if (applicantTitle) payload.applicant_title = applicantTitle;
       payload.first_name = firstName;
       if (middleName) payload.middle_name = middleName;
       payload.last_name = lastName;
@@ -1859,6 +1908,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       setSubmittedDsa(null);
                       setStep(1);
                       setUploadedDocs({});
+                      setApplicantTitle("");
                       setFirstName("");
                       setLastName("");
                       setMiddleName("");
@@ -2148,7 +2198,24 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     Individual Personal Details
                   </h4>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                      <Label htmlFor="applicant_title" className="text-xs font-semibold">Title *</Label>
+                      <Select
+                        id="applicant_title"
+                        value={applicantTitle}
+                        onChange={(e) => setApplicantTitle(e.target.value)}
+                        className="mt-1"
+                      >
+                        <option value="">{loadingTitle ? "Loading..." : "Select Title"}</option>
+                        {titleOptions.map((opt) => (
+                          <option key={opt.key} value={opt.key}>{opt.label}</option>
+                        ))}
+                        {applicantTitle && !titleOptions.some((o) => o.key === applicantTitle) && (
+                          <option value={applicantTitle}>{applicantTitle}</option>
+                        )}
+                      </Select>
+                    </div>
                     <div>
                       <Label htmlFor="first_name" className="text-xs font-semibold">First Name *</Label>
                       <Input
@@ -3400,7 +3467,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     <div className="space-y-1 pt-1 text-slate-700">
                       {dsaType === "INDIVIDUAL" ? (
                         <>
-                          <p><span className="text-slate-500">Applicant:</span> <span className="font-semibold">{firstName} {middleName} {lastName}</span></p>
+                          <p><span className="text-slate-500">Applicant:</span> <span className="font-semibold">{applicantTitle ? `${applicantTitle} ` : ""}{firstName} {middleName} {lastName}</span></p>
                           <p><span className="text-slate-500">DOB:</span> {formatDate(dateOfBirth)}</p>
                           <p><span className="text-slate-500">Highest Qualification:</span> {educationQualification}</p>
                           <p><span className="text-slate-500">Aadhaar:</span> {aadhaarNo ? `XXXX-XXXX-${aadhaarNo.slice(-4)}` : "N/A"}</p>
