@@ -3002,12 +3002,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           {/* STEP 4: REFERENCES & STAKEHOLDERS */}
           {step === 4 && (
             <div className="space-y-6">
-              <div>
                 <h3 className="text-lg font-bold text-slate-900">References & Entity Stakeholders</h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Provide two independent references and key stakeholders for verification.
-                </p>
-              </div>
 
               {/* Two References Section */}
               <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-4">
