@@ -2160,7 +2160,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       <div className="mt-1">
                         <CheckboxDropdown
                           id="individual_business_licenses"
-                          placeholder="Select Registered Business Proof (Shop Act / GST / Udyam)"
+                          placeholder="Business Proof (Shop Act / GST / Udyam)"
                           options={businessLicenseOptions}
                           selectedKeys={selectedLicenses}
                           onChange={setSelectedLicenses}
@@ -2340,7 +2340,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         <div className="mt-1">
                           <CheckboxDropdown
                             id="entity_business_licenses"
-                            placeholder="Select Registered Business Proof (Shop Act / GST / Udyam)"
+                            placeholder="Business Proof (Shop Act / GST / Udyam)"
                             options={businessLicenseOptions}
                             selectedKeys={selectedLicenses}
                             onChange={setSelectedLicenses}
