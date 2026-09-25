@@ -197,10 +197,12 @@ export function LeadManagementScreen() {
 
   // Separate static master data loading (fetches ONCE)
   const [masterLoaded, setMasterLoaded] = useState(false);
+  const [masterLoading, setMasterLoading] = useState(false);
 
   const loadStaticMasterData = async () => {
-    if (masterLoaded) return;
+    if (masterLoaded || masterLoading) return;
     try {
+      setMasterLoading(true);
       const [prodRes, branchRes, titleRes, genderRes, empRes, occRes, devRes, purpRes] = await Promise.all([
         fetchLoanProducts(),
         fetchBranchesDropdown(),
@@ -227,10 +229,12 @@ export function LeadManagementScreen() {
       setMasterLoaded(true);
     } catch (err) {
       console.error("Failed to load static master data:", err);
+    } finally {
+      setMasterLoading(false);
     }
   };
 
-  // Fast Lead Data Loader (fetches ONLY table/queue data on pagination & filter changes)
+  // Fast Lead Data Loader (fetches ONLY active view data on pagination, filters & tab changes)
   const loadLeadDataOnly = async (page = currentPage, limit = perPage) => {
     try {
       setLoading(true);
@@ -245,26 +249,23 @@ export function LeadManagementScreen() {
       if (fromDateFilter) queryParams.from_date = fromDateFilter;
       if (toDateFilter) queryParams.to_date = toDateFilter;
 
-      const [leadsRes, makerRes, reportsRes] = await Promise.all([
-        fetchLeads(queryParams),
-        fetchMakerQueue(queryParams),
-        fetchLeadReports(),
-      ]);
-
-      const items = leadsRes?.data?.items || [];
-      setLeads(items);
-
-      if (leadsRes?.data?.pagination) {
-        setTotalLeadsCount(leadsRes.data.pagination.total || items.length);
-        setTotalPages(leadsRes.data.pagination.total_pages || 1);
+      if (activeTab === "maker-queue" && isBankUser) {
+        const makerRes = await fetchMakerQueue(queryParams);
+        const mqItems = makerRes?.data?.items || [];
+        setMakerQueue(mqItems);
       } else {
-        setTotalLeadsCount(items.length);
-        setTotalPages(1);
-      }
+        const leadsRes = await fetchLeads(queryParams);
+        const items = leadsRes?.data?.items || [];
+        setLeads(items);
 
-      const mqItems = makerRes?.data?.items || [];
-      setMakerQueue(mqItems);
-      setReports(reportsRes?.data || null);
+        if (leadsRes?.data?.pagination) {
+          setTotalLeadsCount(leadsRes.data.pagination.total || items.length);
+          setTotalPages(leadsRes.data.pagination.total_pages || 1);
+        } else {
+          setTotalLeadsCount(items.length);
+          setTotalPages(1);
+        }
+      }
     } catch (err: any) {
       console.error("Failed to fetch lead data:", err);
     } finally {
@@ -410,13 +411,17 @@ export function LeadManagementScreen() {
     }
   };
 
+  // Lazy load master dropdown data ONCE when Create, Edit, or Disburse modal opens
   useEffect(() => {
-    loadStaticMasterData();
-  }, []);
+    if (isCreateModalOpen || isEditModalOpen || isDisburseModalOpen) {
+      loadStaticMasterData();
+    }
+  }, [isCreateModalOpen, isEditModalOpen, isDisburseModalOpen]);
 
+  // Load leads data on pagination, filter, or tab change
   useEffect(() => {
     loadLeadDataOnly(currentPage, perPage);
-  }, [currentPage, perPage]);
+  }, [currentPage, perPage, activeTab]);
 
   const handleProductChange = async (productId: number) => {
     setCreateForm((prev) => ({ ...prev, loan_product_id: productId, loan_type_id: undefined }));
@@ -1077,7 +1082,16 @@ export function LeadManagementScreen() {
 
       {/* Create Lead Modal (Redesigned Premium UI/UX) */}
       <Modal open={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} title="Create New Lead Application" width="max-w-2xl">
-        <form onSubmit={handleCreateLead} className="space-y-4 text-xs">
+        <form onSubmit={handleCreateLead} className="relative space-y-4 text-xs">
+
+          {/* Master Values Loading State Overlay (Centered Spinner) */}
+          {masterLoading && (
+            <div className="absolute inset-0 z-50 flex justify-center bg-white/75 backdrop-blur-xs rounded-2xl transition-all">
+              <div className="sticky top-[35%] h-16 w-16 bg-white shadow-2xl border border-slate-200/90 rounded-2xl flex items-center justify-center my-auto">
+                <RefreshCw className="h-7 w-7 animate-spin text-blue-600" />
+              </div>
+            </div>
+          )}
 
           {/* STEP 1: Customer Basic & Branch Location */}
           <div className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-4 space-y-3 shadow-xs">
@@ -2408,7 +2422,16 @@ export function LeadManagementScreen() {
 
       {/* Edit Lead Information Modal */}
       <Modal open={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title={`Edit Lead Information: ${selectedLead?.CustName || selectedLead?.lead_uuid}`} width="max-w-2xl">
-        <form onSubmit={handleEditSubmit} className="space-y-4 text-xs">
+        <form onSubmit={handleEditSubmit} className="relative space-y-4 text-xs">
+
+          {/* Master Values Loading State Overlay (Centered Spinner) */}
+          {masterLoading && (
+            <div className="absolute inset-0 z-50 flex justify-center bg-white/75 backdrop-blur-xs rounded-2xl transition-all">
+              <div className="sticky top-[35%] h-16 w-16 bg-white shadow-2xl border border-slate-200/90 rounded-2xl flex items-center justify-center my-auto">
+                <RefreshCw className="h-7 w-7 animate-spin text-blue-600" />
+              </div>
+            </div>
+          )}
           {editForm.constitution === "Individual" ? (
             /* Individual Edit Fields */
             <div className="space-y-3">
