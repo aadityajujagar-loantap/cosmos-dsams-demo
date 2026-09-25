@@ -22,12 +22,16 @@ import {
   Loader2,
   ChevronDown,
   Download,
+  Mail,
+  Smartphone,
+  Send,
+  ShieldCheck,
 } from "lucide-react";
 import { adminApi } from "@/apis/admin";
 import { useMockStore } from "@/lib/store";
 import { useToast } from "@/components/ui/toast";
 import { Button, Card, CardContent, DatePicker, Input, Label, Select } from "@/components/ui/primitives";
-import { formatDate, generateDsaId } from "@/lib/utils";
+import { cn, formatDate, generateDsaId } from "@/lib/utils";
 
 export type OnboardingMode = "branch" | "self";
 export type DsaType = "INDIVIDUAL" | "ENTITY";
@@ -228,14 +232,14 @@ function CheckboxDropdown({
         id={id}
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm transition hover:border-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 min-h-[38px]"
+        className="flex h-9 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:opacity-50 disabled:pointer-events-none disabled:bg-slate-50"
       >
-        <div className="flex flex-wrap items-center gap-1.5 overflow-hidden text-left">
+        <div className="flex items-center gap-1.5 overflow-hidden text-left truncate">
           {selectedKeys.length === 0 ? (
-            <span className="text-slate-400 font-normal">{placeholder}</span>
+            <span className="text-slate-400 font-normal truncate">{placeholder}</span>
           ) : (
             <div className="flex items-center gap-1.5 truncate">
-              <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800">
+              <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800 shrink-0">
                 {selectedKeys.length} selected
               </span>
               <span className="truncate text-slate-700 font-medium max-w-[180px] sm:max-w-[260px]">
@@ -245,7 +249,7 @@ function CheckboxDropdown({
           )}
         </div>
         <ChevronDown
-          className={`h-4 w-4 flex-shrink-0 text-slate-400 transition-transform duration-200 ${
+          className={`h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 ${
             isOpen ? "rotate-180 text-blue-600" : ""
           }`}
         />
@@ -412,6 +416,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   const [otpReferenceId, setOtpReferenceId] = useState<string>("");
   const [isSendingOtp, setIsSendingOtp] = useState<boolean>(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState<boolean>(false);
+  const [emailOtpSent, setEmailOtpSent] = useState<boolean>(false);
+  const [emailDeliveryNote, setEmailDeliveryNote] = useState<string>("");
+  const [smsDeliveryNote, setSmsDeliveryNote] = useState<string>("");
+  const [selfEmail, setSelfEmail] = useState<string>("");
 
   // Form Fields - Individual
   const [applicantTitle, setApplicantTitle] = useState<string>("");
@@ -445,6 +453,17 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
   // Common Identity / Contact
   const [pan, setPan] = useState<string>("");
+  const [isVerifyingPan, setIsVerifyingPan] = useState<boolean>(false);
+  const [panVerified, setPanVerified] = useState<boolean>(false);
+  const [panVerificationData, setPanVerificationData] = useState<{
+    fullName?: string;
+    aadhaarLinked?: string;
+    maskedAadhaar?: string;
+    category?: string;
+    email?: string;
+    referenceId?: string;
+  } | null>(null);
+  const [verifyingStakeholderIdx, setVerifyingStakeholderIdx] = useState<number | null>(null);
   const [email, setEmail] = useState<string>("");
   const [mobile, setMobile] = useState<string>("");
   const [contactPerson, setContactPerson] = useState<string>("");
@@ -759,6 +778,13 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
   const getAadhaarDisplayValue = () => {
     if (isAadhaarFocused) return aadhaarNo;
+    if (!aadhaarNo) return "";
+    if (aadhaarNo.toUpperCase().includes("X")) {
+      if (aadhaarNo.length === 12) {
+        return `${aadhaarNo.slice(0, 4)}-${aadhaarNo.slice(4, 8)}-${aadhaarNo.slice(8)}`;
+      }
+      return aadhaarNo;
+    }
     const clean = aadhaarNo.replace(/\D/g, "");
     if (!clean) return "";
     if (clean.length === 12) {
@@ -790,6 +816,15 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       if (full) setContactPerson(full);
     }
   }, [firstName, lastName, dsaType]);
+
+  // Auto-populate lower email from verified PAN details (ensuring it never mirrors upper selfEmail)
+  useEffect(() => {
+    if (panVerificationData?.email) {
+      if (!email || (selfEmail && email.trim().toLowerCase() === selfEmail.trim().toLowerCase())) {
+        setEmail(panVerificationData.email.trim());
+      }
+    }
+  }, [panVerificationData?.email, selfEmail, email]);
 
   // Restore draft state from sessionStorage or localStorage
   useEffect(() => {
@@ -827,7 +862,22 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         if (data.natureOfBusiness !== undefined) setNatureOfBusiness(data.natureOfBusiness);
         if (data.stakeholders) setStakeholders(data.stakeholders);
         if (data.pan !== undefined) setPan(data.pan);
-        if (data.email !== undefined) setEmail(data.email);
+        if (data.panVerified !== undefined) setPanVerified(Boolean(data.panVerified));
+        if (data.panVerificationData !== undefined) setPanVerificationData(data.panVerificationData);
+
+        const restoredSelfEmail = data.selfEmail || (mode === "self" && data.email ? data.email : "");
+        if (restoredSelfEmail) setSelfEmail(restoredSelfEmail);
+
+        // Separate lower email from selfEmail (avoid legacy draft bug where both inputs shared data.email)
+        if (data.panVerificationData?.email) {
+          setEmail(String(data.panVerificationData.email).trim());
+        } else if (data.email && (!restoredSelfEmail || data.email.trim().toLowerCase() !== restoredSelfEmail.trim().toLowerCase())) {
+          setEmail(data.email);
+        } else if (mode === "self" && restoredSelfEmail && data.email?.trim().toLowerCase() === restoredSelfEmail.trim().toLowerCase()) {
+          setEmail("");
+        } else if (data.email !== undefined) {
+          setEmail(data.email);
+        }
         if (data.mobile !== undefined) setMobile(data.mobile);
         if (data.contactPerson !== undefined) setContactPerson(data.contactPerson);
         if (data.gstApplicable !== undefined) setGstApplicable(data.gstApplicable);
@@ -946,6 +996,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           natureOfBusiness,
           stakeholders,
           pan,
+          panVerified,
+          panVerificationData,
+          selfEmail,
           email,
           mobile,
           contactPerson,
@@ -1021,6 +1074,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     natureOfBusiness,
     stakeholders,
     pan,
+    panVerified,
+    panVerificationData,
+    selfEmail,
     email,
     mobile,
     contactPerson,
@@ -1242,21 +1298,43 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
     setIsSendingOtp(true);
     try {
-      const res: any = await adminApi.sendSelfOnboardingOtp({ mobile, branch_id: validBranchId });
+      const applicantName = dsaType === "INDIVIDUAL" ? `${firstName} ${lastName}`.trim() : entityName;
+      const res: any = await adminApi.sendSelfOnboardingOtp({
+        mobile,
+        branch_id: validBranchId,
+        email: selfEmail.trim() || undefined,
+        name: applicantName || undefined,
+      });
       setOtpSent(true);
       setOtpValue("");
       const refId = res?.data?.reference_id || res?.reference_id;
       if (refId) setOtpReferenceId(refId);
+
       const note = res?.data?.note || res?.note;
+      const emailSent = res?.data?.email_sent ?? res?.email_sent;
+      const emailNote = res?.data?.email_note ?? res?.email_note;
+
+      if (emailSent) {
+        setEmailOtpSent(true);
+      }
+      setSmsDeliveryNote(note || "SMS dispatched");
+      setEmailDeliveryNote(emailNote || (emailSent ? `Sent to ${selfEmail}` : ""));
+
+      let description = res?.message || `OTP sent to ${mobile}.`;
+      if (selfEmail.trim() && emailSent) {
+        description = `OTP dispatched to mobile (+91 ${mobile}) and email (${selfEmail.trim()}). Enter code from either channel.`;
+      }
+
       toast({
-        title: "OTP Sent",
-        description: res?.message ? `${res.message}${note ? ` (${note})` : ""}` : `OTP sent to ${mobile}.`,
+        title: "OTP Dispatched",
+        description,
         variant: "success",
       });
     } catch (err: any) {
       setOtpSent(false);
       setOtpValue("");
       setOtpReferenceId("");
+      setEmailOtpSent(false);
       const msg = err?.data?.message || err?.message || "Failed to send OTP.";
       toast({
         title: "Cannot Send OTP",
@@ -1287,6 +1365,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         dsa_type: dsaType,
       });
       setOtpVerified(true);
+      if (typeof document !== "undefined") {
+        (document.activeElement as HTMLElement)?.blur();
+      }
       toast({
         title: "Mobile Verified",
         description: res?.message || "Mobile number successfully verified.",
@@ -1302,6 +1383,256 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       });
     } finally {
       setIsVerifyingOtp(false);
+    }
+  };
+
+  const parseDobOrDoi = (dateStr: string): { iso: string; display: string } | null => {
+    if (!dateStr) return null;
+    const trimmed = dateStr.trim();
+    const dMmmY = trimmed.match(/^(\d{1,2})[-/]([A-Za-z]{3})[-/](\d{4})$/);
+    if (dMmmY) {
+      const day = dMmmY[1].padStart(2, "0");
+      const monthNames: Record<string, string> = {
+        jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
+        jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
+      };
+      const month = monthNames[dMmmY[2].toLowerCase()] || "01";
+      const year = dMmmY[3];
+      return { iso: `${year}-${month}-${day}`, display: `${day}/${month}/${year}` };
+    }
+    const dmy = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    if (dmy) {
+      const day = dmy[1].padStart(2, "0");
+      const month = dmy[2].padStart(2, "0");
+      const year = dmy[3];
+      return { iso: `${year}-${month}-${day}`, display: `${day}/${month}/${year}` };
+    }
+    const ymd = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+    if (ymd) {
+      const year = ymd[1];
+      const month = ymd[2].padStart(2, "0");
+      const day = ymd[3].padStart(2, "0");
+      return { iso: `${year}-${month}-${day}`, display: `${day}/${month}/${year}` };
+    }
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return { iso: `${year}-${month}-${day}`, display: `${day}/${month}/${year}` };
+    }
+    return null;
+  };
+
+  const handleVerifyPan = async () => {
+    const trimmedPan = pan.trim().toUpperCase();
+    const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/i;
+    if (!trimmedPan || !panRegex.test(trimmedPan)) {
+      toast({
+        title: "Valid PAN Required",
+        description: "Please enter a valid 10-character PAN format (e.g. ABCDE1234F).",
+        variant: "warning",
+      });
+      return;
+    }
+
+    setIsVerifyingPan(true);
+    try {
+      const res: any = await adminApi.verifyPanAdvance({
+        pan: trimmedPan,
+        dsa_temp_id: otpReferenceId || undefined,
+      });
+
+      const resData = res?.data ?? res;
+      const isSuccess = Boolean(res?.success || resData?.status === "SUCCESS");
+      const detailsData = resData?.details?.data || resData?.data || resData;
+
+      if (isSuccess && detailsData) {
+        const panApiEmail =
+          detailsData?.email ||
+          detailsData?.emailAddress ||
+          detailsData?.email_id ||
+          resData?.details?.data?.email ||
+          resData?.data?.email ||
+          res?.data?.details?.data?.email ||
+          res?.data?.email;
+
+        setPan(trimmedPan);
+        setPanVerified(true);
+        setPanVerificationData({
+          fullName: detailsData.fullName,
+          aadhaarLinked: detailsData.aadhaarLinked,
+          maskedAadhaar: detailsData.maskedAadhaarNumber,
+          category: detailsData.category,
+          email: panApiEmail ? String(panApiEmail).trim() : undefined,
+          referenceId: resData?.reference_id || resData?.details?.referenceId,
+        });
+
+        // 1. Name & Identity Population
+        if (dsaType === "INDIVIDUAL") {
+          if (detailsData.firstName) setFirstName(detailsData.firstName);
+          const resolvedMiddleName = detailsData.middleName || detailsData.fatherName || "";
+          if (resolvedMiddleName) setMiddleName(resolvedMiddleName);
+          if (detailsData.lastName) setLastName(detailsData.lastName);
+          if (!detailsData.firstName && detailsData.fullName) {
+            const parts = String(detailsData.fullName).trim().split(/\s+/);
+            if (parts.length === 1) {
+              setFirstName(parts[0]);
+            } else if (parts.length === 2) {
+              setFirstName(parts[0]);
+              setLastName(parts[1]);
+            } else if (parts.length >= 3) {
+              setFirstName(parts[0]);
+              if (!resolvedMiddleName) setMiddleName(parts.slice(1, -1).join(" "));
+              setLastName(parts[parts.length - 1]);
+            }
+          }
+          if (detailsData.gender) {
+            const g = String(detailsData.gender).toLowerCase();
+            if (g === "male" && !applicantTitle) setApplicantTitle("Mr.");
+            else if (g === "female" && !applicantTitle) setApplicantTitle("Mrs.");
+          }
+        } else {
+          // ENTITY Mode
+          if (detailsData.fullName) {
+            if (detailsData.category !== "P" || !entityName) {
+              setEntityName(detailsData.fullName);
+            }
+            if (!contactPerson) {
+              setContactPerson(detailsData.fullName);
+            }
+          }
+          if (!constitution && detailsData.category) {
+            if (detailsData.category === "C") setConstitution("Pvt Ltd");
+            else if (detailsData.category === "F") setConstitution("Partnership");
+            else if (detailsData.category === "T") setConstitution("Trust");
+            else if (detailsData.category === "P") setConstitution("Proprietorship");
+          }
+        }
+
+        // 2. Date of Birth / Incorporation
+        if (detailsData.dobOrDoi) {
+          const parsed = parseDobOrDoi(detailsData.dobOrDoi);
+          if (parsed) {
+            setDateOfBirth(parsed.iso);
+            setDisplayDob(parsed.display);
+          }
+        }
+
+        // 3. Contact Info
+        if (detailsData.phone && !mobile) {
+          setMobile(String(detailsData.phone).replace(/\D/g, "").slice(0, 10));
+        }
+        if (panApiEmail) {
+          setEmail(String(panApiEmail).trim());
+        }
+
+        // 3b. Aadhaar Auto-Population
+        if (detailsData.maskedAadhaarNumber) {
+          setAadhaarNo(String(detailsData.maskedAadhaarNumber).trim().toUpperCase());
+        }
+
+        // 4. Address Details (Step 2)
+        const addrParts = [
+          detailsData.buildingName,
+          detailsData.streetName,
+          detailsData.locality,
+        ].filter(Boolean);
+        const combinedAddress = addrParts.join(", ");
+
+        if (combinedAddress) setAddress(combinedAddress);
+        if (detailsData.state) setStateName(detailsData.state);
+        if (detailsData.city) setCity(detailsData.city);
+        if (detailsData.pinCode) setPincode(String(detailsData.pinCode).slice(0, 6));
+
+        // Office Address fallback if separate
+        if (!isOfficeSameAsResidence) {
+          if (!officeAddress && combinedAddress) setOfficeAddress(combinedAddress);
+          if (!officeStateName && detailsData.state) setOfficeStateName(detailsData.state);
+          if (!officeCity && detailsData.city) setOfficeCity(detailsData.city);
+          if (!officePincode && detailsData.pinCode) setOfficePincode(String(detailsData.pinCode).slice(0, 6));
+        }
+
+        toast({
+          title: "PAN Verified & Auto-Populated",
+          description: `Verified for ${detailsData.fullName || trimmedPan}. Personal & address fields auto-populated across pages.`,
+          variant: "success",
+        });
+      } else {
+        setPanVerified(false);
+        toast({
+          title: "PAN Verification Failed",
+          description: res?.message || "Invalid PAN or record not found.",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      setPanVerified(false);
+      const msg = err?.data?.message || err?.message || "Could not connect to ScoreMe verification gateway.";
+      toast({
+        title: "Verification Request Failed",
+        description: msg,
+        variant: "destructive",
+      });
+    } finally {
+      setIsVerifyingPan(false);
+    }
+  };
+
+  const handleVerifyStakeholderPan = async (index: number) => {
+    const s = stakeholders[index];
+    const trimmedPan = s?.pan?.trim()?.toUpperCase();
+    const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/i;
+    if (!trimmedPan || !panRegex.test(trimmedPan)) {
+      toast({
+        title: "Valid PAN Required",
+        description: "Please enter a valid 10-character PAN format for stakeholder.",
+        variant: "warning",
+      });
+      return;
+    }
+
+    setVerifyingStakeholderIdx(index);
+    try {
+      const res: any = await adminApi.verifyPanAdvance({ pan: trimmedPan });
+      const resData = res?.data ?? res;
+      const isSuccess = Boolean(res?.success || resData?.status === "SUCCESS");
+      const detailsData = resData?.details?.data || resData?.data || resData;
+
+      if (isSuccess && detailsData) {
+        setStakeholders((prev) => {
+          const next = [...prev];
+          const updated = { ...next[index] };
+          if (detailsData.fullName) updated.name = detailsData.fullName;
+          if (detailsData.phone && !updated.mobile_no) {
+            updated.mobile_no = String(detailsData.phone).replace(/\D/g, "").slice(0, 10);
+          }
+          if (detailsData.maskedAadhaarNumber && !updated.aadhaar) {
+            updated.aadhaar = String(detailsData.maskedAadhaarNumber).trim().toUpperCase();
+          }
+          next[index] = updated;
+          return next;
+        });
+        toast({
+          title: "Stakeholder PAN Verified",
+          description: `Verified for ${detailsData.fullName || trimmedPan}. Name auto-populated.`,
+          variant: "success",
+        });
+      } else {
+        toast({
+          title: "Stakeholder PAN Verification Failed",
+          description: res?.message || "Invalid PAN or record not found.",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Verification Error",
+        description: err?.message || "Failed to verify stakeholder PAN.",
+        variant: "destructive",
+      });
+    } finally {
+      setVerifyingStakeholderIdx(null);
     }
   };
 
@@ -1339,8 +1670,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         toast({ title: "Valid PAN Required", description: "Valid 10-character PAN format (e.g. ABCDE1234F) is mandatory.", variant: "warning" });
         return false;
       }
+      const resolvedEmail = email.trim() || selfEmail.trim();
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!email || !emailRegex.test(email.trim())) {
+      if (!resolvedEmail || !emailRegex.test(resolvedEmail)) {
         toast({ title: "Valid Email Required", description: "Valid email address is mandatory.", variant: "warning" });
         return false;
       }
@@ -1366,13 +1698,14 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           toast({ title: "Qualification Required", description: "Please select highest educational qualification.", variant: "warning" });
           return false;
         }
+        const isMaskedAadhaar = /^[0-9X]{12}$/i.test(aadhaarNo.trim());
         const cleanAadhaar = aadhaarNo.replace(/\D/g, "");
-        if (!cleanAadhaar) {
+        if (!aadhaarNo.trim()) {
           toast({ title: "Aadhaar Required", description: "Aadhaar number is mandatory.", variant: "warning" });
           return false;
         }
-        if (cleanAadhaar.length !== 12) {
-          toast({ title: "Invalid Aadhaar", description: "Aadhaar number must be exactly 12 digits.", variant: "warning" });
+        if (cleanAadhaar.length !== 12 && !isMaskedAadhaar) {
+          toast({ title: "Invalid Aadhaar", description: "Aadhaar number must be exactly 12 digits or verified masked Aadhaar.", variant: "warning" });
           return false;
         }
       } else {
@@ -1500,7 +1833,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
             });
             return false;
           }
-          if (s.aadhaar && s.aadhaar.replace(/\D/g, "").length !== 12) {
+          const isStakeholderMasked = s.aadhaar ? /^[0-9X]{12}$/i.test(s.aadhaar.trim()) : false;
+          if (s.aadhaar && s.aadhaar.replace(/\D/g, "").length !== 12 && !isStakeholderMasked) {
             toast({
               title: `Stakeholder ${i + 1} Invalid Aadhaar`,
               description: "Aadhaar number must be 12 digits.",
@@ -1591,7 +1925,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       dsa_type: dsaType,
       branch_id: validBranchId,
       pan: pan.toUpperCase(),
-      email,
+      email: email.trim() || selfEmail.trim(),
       mobile,
       contact_person: contactPerson || undefined,
       applicant_prior_experience: resolvedPriorExperience,
@@ -1633,7 +1967,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       payload.last_name = lastName;
       payload.date_of_birth = dateOfBirth;
       payload.education_qualification = educationQualification;
-      payload.aadhaar_no = aadhaarNo.replace(/\D/g, "");
+      payload.aadhaar_no = aadhaarNo.toUpperCase().includes("X") ? aadhaarNo.toUpperCase() : aadhaarNo.replace(/\D/g, "");
     } else {
       payload.entity_name = entityName;
       payload.constitution = constitution;
@@ -1913,6 +2247,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       setLastName("");
                       setMiddleName("");
                       setPan("");
+                      setSelfEmail("");
                       setEmail("");
                       setMobile("");
                       setAadhaarNo("");
@@ -2090,22 +2425,34 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                 </div>
               </div>
 
-              {/* Branch Selection (Public Self-Onboarding) */}
+              {/* Branch Selection & Contact Verification (Public Self-Onboarding) */}
               {mode === "self" && (
-                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-4">
-                  <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    <Building className="h-4 w-4 text-blue-600" />
-                    Target Branch & Mobile Verification
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-5 space-y-4 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-blue-100 text-blue-700 rounded-lg">
+                        <ShieldCheck className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                          Target Branch & Contact Verification (SMS & Email)
+                        </h4> 
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="branch_id" className="text-xs font-semibold">Select Home Branch *</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="branch_id" className="text-xs font-semibold text-slate-700 leading-none">
+                          Select Home Branch *
+                        </Label>
+                      </div>
                       <Select
                         id="branch_id"
                         value={branchId}
                         onChange={(e) => setBranchId(e.target.value)}
-                        className="mt-1"
+                        className="mt-1.5"
                       >
                         {branches.map((b, idx) => {
                           const val = String(b.id ?? b.branch_id ?? idx + 1);
@@ -2118,75 +2465,172 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       </Select>
                     </div>
 
-                    <div>
-                      <Label htmlFor="self_mobile" className="text-xs font-semibold">Applicant Mobile Number *</Label>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Input
-                          id="self_mobile"
-                          value={mobile}
-                          onChange={(e) => {
-                            setMobile(e.target.value.replace(/\D/g, "").slice(0, 10));
-                            setOtpSent(false);
-                            setOtpVerified(false);
-                            setOtpValue("");
-                            setOtpReferenceId("");
-                          }}
-                          placeholder="Enter 10-digit mobile"
-                          disabled={otpVerified}
-                          maxLength={10}
-                        />
-                        {!otpVerified && (
-                          <Button
-                            type="button"
-                            onClick={handleSendOtp}
-                            disabled={isSendingOtp || mobile.length !== 10}
-                            className="text-xs whitespace-nowrap bg-blue-600 hover:bg-blue-700 text-white"
-                          >
-                            {isSendingOtp ? "Sending..." : otpSent ? "Resend" : "Send OTP"}
-                          </Button>
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="self_mobile" className="text-xs font-semibold text-slate-700 leading-none">
+                          Applicant Mobile Number *
+                        </Label>
+                      </div>
+                      <Input
+                        id="self_mobile"
+                        disabled={false}
+                        value={mobile}
+                        onChange={(e) => {
+                          setMobile(e.target.value.replace(/\D/g, "").slice(0, 10));
+                          setOtpSent(false);
+                          setOtpVerified(false);
+                          setOtpValue("");
+                          setOtpReferenceId("");
+                          setEmailOtpSent(false);
+                        }}
+                        placeholder="10-digit mobile number"
+                        maxLength={10}
+                        className="mt-1.5 font-mono text-sm h-9 bg-white cursor-text focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="self_email" className="text-xs font-semibold text-slate-700 leading-none">
+                          Applicant Email Address *
+                        </Label>
+                      </div>
+                      <Input
+                        id="self_email"
+                        disabled={false}
+                        type="email"
+                        value={selfEmail}
+                        onChange={(e) => {
+                          setSelfEmail(e.target.value);
+                          setEmailOtpSent(false);
+                        }}
+                        placeholder="applicant@example.com"
+                        className="mt-1.5 text-sm h-9 bg-white cursor-text focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Actions / Status before verification */}
+                  {!otpVerified && (
+                    <div className="pt-1 flex flex-wrap items-center gap-2.5">
+                      <Button
+                        type="button"
+                        onClick={handleSendOtp}
+                        disabled={isSendingOtp || mobile.length !== 10}
+                        className="text-xs bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm flex items-center gap-1.5"
+                      >
+                        {isSendingOtp ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Send className="h-3.5 w-3.5" />
                         )}
-                        {otpVerified && (
-                          <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
-                              <Check className="h-3.5 w-3.5" /> Verified
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setOtpVerified(false);
-                                setOtpSent(false);
-                                setOtpValue("");
-                                setOtpReferenceId("");
-                              }}
-                              className="text-[11px] text-blue-600 hover:underline font-medium whitespace-nowrap"
-                            >
-                              Change
-                            </button>
+                        {isSendingOtp
+                          ? "Dispatching OTP..."
+                          : otpSent
+                          ? "Resend to Mobile & Email"
+                          : "Send OTP (SMS & Email)"}
+                      </Button>
+
+                      <span className="text-[11px] text-slate-500">
+                        {otpSent
+                          ? "The same OTP is valid from either channel."
+                          : "Sends a single 6-digit OTP code to both your mobile text message and email address."}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* OTP Verification & Channel Status Box */}
+                  {otpSent && (
+                    <div className="rounded-xl border border-blue-200/80 bg-blue-50/40 p-4 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 border-b border-blue-100 pb-2.5">
+                        <div>
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-blue-950">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                            {otpVerified ? "Mobile & Email Identity Verified" : "OTP Dispatched Successfully"}
                           </div>
-                        )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 rounded bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700 border border-slate-200">
+                            <Smartphone className="h-3 w-3 text-emerald-600" />
+                            SMS: +91 {mobile}
+                          </span>
+                          {selfEmail.trim() ? (
+                            <span className="inline-flex items-center gap-1 rounded bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700 border border-slate-200">
+                              <Mail className="h-3.5 w-3.5 text-indigo-600" />
+                              Email: {selfEmail}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 border border-amber-200">
+                              Email not provided
+                            </span>
+                          )}
+                        </div>
                       </div>
 
-                      {otpSent && !otpVerified && (
-                        <div className="mt-3 flex items-center gap-2">
+                      <div className="pt-1">
+                        <div className="h-5 flex items-center">
+                          <Label htmlFor="otp_code_input" className="text-xs font-semibold text-slate-700 leading-none">
+                            Enter 6-Digit OTP *
+                          </Label>
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-3">
                           <Input
+                            id="otp_code_input"
                             value={otpValue}
-                            onChange={(e) => setOtpValue(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                            placeholder="Enter 6-digit OTP"
+                            disabled={otpVerified}
+                            tabIndex={otpVerified ? -1 : 0}
+                            onChange={(e) => {
+                              setOtpValue(e.target.value.replace(/\D/g, "").slice(0, 6));
+                              if (otpVerified) setOtpVerified(false);
+                            }}
+                            placeholder="• • • • • •"
                             maxLength={6}
-                            className="font-mono text-sm"
+                            className={cn(
+                              "font-mono text-center tracking-[0.4em] text-base font-bold bg-white w-48 h-9 shrink-0",
+                              otpVerified && "disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed pointer-events-none select-none focus:ring-0 focus:outline-none focus:border-slate-200"
+                            )}
                           />
                           <Button
                             type="button"
                             onClick={handleVerifyOtp}
-                            disabled={isVerifyingOtp || otpValue.length !== 6}
-                            className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white whitespace-nowrap"
+                            disabled={isVerifyingOtp || otpValue.length !== 6 || otpVerified}
+                            tabIndex={otpVerified ? -1 : 0}
+                            className={cn(
+                              "text-xs font-semibold whitespace-nowrap h-9 px-4 shrink-0 flex items-center gap-1.5",
+                              otpVerified
+                                ? "bg-emerald-600 text-white opacity-90 cursor-default pointer-events-none select-none focus:ring-0 focus:outline-none"
+                                : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                            )}
                           >
-                            {isVerifyingOtp ? "Verifying..." : "Verify OTP"}
+                            {isVerifyingOtp ? (
+                              <span className="flex items-center gap-1.5">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Verifying...
+                              </span>
+                            ) : otpVerified ? (
+                              <span className="flex items-center gap-1.5">
+                                <CheckCircle2 className="h-3.5 w-3.5" /> Verified
+                              </span>
+                            ) : (
+                              "Verify OTP"
+                            )}
                           </Button>
+
+                          <div className="flex items-center gap-1.5 text-xs text-slate-500 pl-1 sm:pl-2">
+                            <span>Didn't receive the OTP?</span>
+                            <button
+                              type="button"
+                              onClick={handleSendOtp}
+                              disabled={isSendingOtp}
+                              className="text-blue-600 hover:underline font-semibold disabled:opacity-50 inline-flex items-center gap-1"
+                            >
+                              {isSendingOtp ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                              Resend to Mobile & Email
+                            </button>
+                          </div>
                         </div>
-                      )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
 
@@ -2198,14 +2642,16 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     Individual Personal Details
                   </h4>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                    <div>
-                      <Label htmlFor="applicant_title" className="text-xs font-semibold">Title *</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-start">
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="applicant_title" className="text-xs font-semibold text-slate-700 leading-none">Title *</Label>
+                      </div>
                       <Select
                         id="applicant_title"
                         value={applicantTitle}
                         onChange={(e) => setApplicantTitle(e.target.value)}
-                        className="mt-1"
+                        className="mt-1.5"
                       >
                         <option value="">{loadingTitle ? "Loading..." : "Select Title"}</option>
                         {titleOptions.map((opt) => (
@@ -2216,41 +2662,49 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         )}
                       </Select>
                     </div>
-                    <div>
-                      <Label htmlFor="first_name" className="text-xs font-semibold">First Name *</Label>
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="first_name" className="text-xs font-semibold text-slate-700 leading-none">First Name *</Label>
+                      </div>
                       <Input
                         id="first_name"
                         value={firstName}
                         onChange={(e) => setFirstName(e.target.value)}
                         placeholder="e.g. Ramesh"
-                        className="mt-1"
+                        className="mt-1.5 h-9"
                       />
                     </div>
-                    <div>
-                      <Label htmlFor="middle_name" className="text-xs font-semibold">Middle Name (Optional)</Label>
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="middle_name" className="text-xs font-semibold text-slate-700 leading-none">Middle Name (Optional)</Label>
+                      </div>
                       <Input
                         id="middle_name"
                         value={middleName}
                         onChange={(e) => setMiddleName(e.target.value)}
                         placeholder="e.g. Kumar"
-                        className="mt-1"
+                        className="mt-1.5 h-9"
                       />
                     </div>
-                    <div>
-                      <Label htmlFor="last_name" className="text-xs font-semibold">Last Name *</Label>
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="last_name" className="text-xs font-semibold text-slate-700 leading-none">Last Name *</Label>
+                      </div>
                       <Input
                         id="last_name"
                         value={lastName}
                         onChange={(e) => setLastName(e.target.value)}
                         placeholder="e.g. Sharma"
-                        className="mt-1"
+                        className="mt-1.5 h-9"
                       />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <Label htmlFor="date_of_birth" className="text-xs font-semibold">Date of Birth * (DD/MM/YYYY)</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="date_of_birth" className="text-xs font-semibold text-slate-700 leading-none">Date of Birth * (DD/MM/YYYY)</Label>
+                      </div>
                       <DatePicker
                         id="date_of_birth"
                         value={dateOfBirth}
@@ -2266,23 +2720,63 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         }}
                         max={new Date().toISOString().slice(0, 10)}
                         placeholder="DD/MM/YYYY"
-                        className="mt-1"
+                        className="mt-1.5"
                         required
                       />
                     </div>
-                    <div>
-                      <Label htmlFor="pan" className="text-xs font-semibold">Individual PAN *</Label>
-                      <Input
-                        id="pan"
-                        value={pan}
-                        onChange={(e) => setPan(e.target.value.toUpperCase().slice(0, 10))}
-                        placeholder="ABCDE1234F"
-                        className="mt-1 font-mono uppercase"
-                        maxLength={10}
-                      />
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center justify-between">
+                        <Label htmlFor="pan" className="text-xs font-semibold text-slate-700 leading-none">Individual PAN *</Label>
+                        {panVerified && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                            Verified
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <Input
+                          id="pan"
+                          value={pan}
+                          onChange={(e) => {
+                            setPan(e.target.value.toUpperCase().slice(0, 10));
+                            if (panVerified) setPanVerified(false);
+                          }}
+                          placeholder="ABCDE1234F"
+                          className="font-mono uppercase flex-1 h-9"
+                          maxLength={10}
+                        />
+                        <Button
+                          type="button"
+                          variant={panVerified ? "secondary" : "primary"}
+                          size="md"
+                          disabled={isVerifyingPan || !pan || pan.length !== 10}
+                          onClick={handleVerifyPan}
+                          className="h-9 shrink-0 px-3 text-xs flex items-center gap-1.5 whitespace-nowrap"
+                        >
+                          {isVerifyingPan ? (
+                            <>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              Verifying...
+                            </>
+                          ) : panVerified ? (
+                            <>
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                              Re-verify
+                            </>
+                          ) : (
+                            <>
+                              <ShieldCheck className="h-3.5 w-3.5" />
+                              Verify
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </div>
-                    <div>
-                      <Label htmlFor="aadhaar_no" className="text-xs font-semibold">Aadhaar Number * (12 digits)</Label>
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="aadhaar_no" className="text-xs font-semibold text-slate-700 leading-none">Aadhaar Number * (12 digits)</Label>
+                      </div>
                       <Input
                         id="aadhaar_no"
                         name="aadhaar_no"
@@ -2300,52 +2794,63 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         onChange={(e) => {
                           const val = e.target.value;
                           if (isAadhaarFocused) {
-                            setAadhaarNo(val.replace(/\D/g, "").slice(0, 12));
+                            setAadhaarNo(val.replace(/[^0-9Xx]/g, "").slice(0, 12).toUpperCase());
                           } else {
-                            const digits = val.replace(/\D/g, "");
-                            if (digits.length === 12) setAadhaarNo(digits);
+                            const clean = val.replace(/[^0-9Xx]/g, "").toUpperCase();
+                            if (clean.length === 12) setAadhaarNo(clean);
                           }
                         }}
                         placeholder={isAadhaarFocused ? "Enter 12-digit Aadhaar" : "XXXX-XXXX-XXXX"}
-                        className="mt-1 font-mono tracking-wider"
+                        className="mt-1.5 font-mono tracking-wider h-9"
                         maxLength={isAadhaarFocused ? 12 : 14}
                         required
                       />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
                     {mode === "branch" && (
-                      <div>
-                        <Label htmlFor="branch_mobile" className="text-xs font-semibold">Mobile Number *</Label>
+                      <div className="flex flex-col">
+                        <div className="h-5 flex items-center">
+                          <Label htmlFor="branch_mobile" className="text-xs font-semibold text-slate-700 leading-none">Mobile Number *</Label>
+                        </div>
                         <Input
                           id="branch_mobile"
                           value={mobile}
                           onChange={(e) => setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
                           placeholder="9876543210"
-                          className="mt-1 font-mono"
+                          className="mt-1.5 font-mono h-9"
                           maxLength={10}
                         />
                       </div>
                     )}
-                    <div>
-                      <Label htmlFor="email" className="text-xs font-semibold">Email Address *</Label>
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center justify-between">
+                        <Label htmlFor="email" className="text-xs font-semibold text-slate-700 leading-none">Email Address *</Label>
+                        {panVerificationData?.email && email === panVerificationData.email && (
+                          <span className="text-[10px] text-emerald-600 font-medium flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" /> Auto-filled from PAN
+                          </span>
+                        )}
+                      </div>
                       <Input
                         id="email"
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="ramesh.sharma@example.com"
-                        className="mt-1"
+                        className="mt-1.5 h-9"
                       />
                     </div>
-                    <div>
-                      <Label htmlFor="education" className="text-xs font-semibold">Highest Educational Qualification *</Label>
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="education" className="text-xs font-semibold text-slate-700 leading-none">Highest Educational Qualification *</Label>
+                      </div>
                       <Select
                         id="education"
                         value={educationQualification}
                         onChange={(e) => setEducationQualification(e.target.value)}
-                        className="mt-1"
+                        className="mt-1.5"
                       >
                         <option value="">{loadingEducation ? "Loading qualifications..." : "Select Qualification"}</option>
                         {educationOptions.map((opt) => (
@@ -2405,16 +2910,18 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   </div>
 
                   {/* Prior Experience & Registered Business Proof (Separate from GST) */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                    <div>
-                      <Label htmlFor="experience_years" className="text-xs font-semibold text-slate-700">
-                        Applicant Prior Experience / Empanelment with other Banks/FIs
-                      </Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 items-start">
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="experience_years" className="text-xs font-semibold text-slate-700 leading-none">
+                          Applicant Prior Experience / Empanelment with other Banks/FIs
+                        </Label>
+                      </div>
                       <Select
                         id="experience_years"
                         value={experienceYears}
                         onChange={(e) => setExperienceYears(e.target.value)}
-                        className="mt-1"
+                        className="mt-1.5"
                       >
                         <option value="0">0 (No prior experience)</option>
                         <option value="1">1 year</option>
@@ -2434,37 +2941,38 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     </div>
 
                     {!gstApplicable && (
-                      <div>
-                        <Label className="text-xs font-semibold text-slate-700">
-                          Registered Business Proof
-                        </Label>
-                        <div className="mt-1">
-                          <CheckboxDropdown
-                            id="individual_business_licenses"
-                            placeholder="Business Proof (Shop Act / Udyam)"
-                            options={businessLicenseOptions}
-                            selectedKeys={selectedLicenses}
-                            onChange={(keys) => {
-                              setSelectedLicenses(keys);
-                              if (!keys.includes("SHOP_ACT")) {
-                                setShopActNumber("");
-                                setUploadedDocs((prev) => {
-                                  const next = { ...prev };
-                                  delete next["business_license_shop_act"];
-                                  return next;
-                                });
-                              }
-                              if (!keys.includes("UDYAM")) {
-                                setUdyamNumber("");
-                                setUploadedDocs((prev) => {
-                                  const next = { ...prev };
-                                  delete next["business_license_udyam"];
-                                  return next;
-                                });
-                              }
-                            }}
-                          />
+                      <div className="flex flex-col">
+                        <div className="h-5 flex items-center">
+                          <Label htmlFor="individual_business_licenses" className="text-xs font-semibold text-slate-700 leading-none">
+                            Registered Business Proof
+                          </Label>
                         </div>
+                        <CheckboxDropdown
+                          id="individual_business_licenses"
+                          placeholder="Business Proof (Shop Act / Udyam)"
+                          options={businessLicenseOptions}
+                          selectedKeys={selectedLicenses}
+                          className="mt-1.5"
+                          onChange={(keys) => {
+                            setSelectedLicenses(keys);
+                            if (!keys.includes("SHOP_ACT")) {
+                              setShopActNumber("");
+                              setUploadedDocs((prev) => {
+                                const next = { ...prev };
+                                delete next["business_license_shop_act"];
+                                return next;
+                              });
+                            }
+                            if (!keys.includes("UDYAM")) {
+                              setUdyamNumber("");
+                              setUploadedDocs((prev) => {
+                                const next = { ...prev };
+                                delete next["business_license_udyam"];
+                                return next;
+                              });
+                            }
+                          }}
+                        />
                       </div>
                     )}
                   </div>
@@ -2556,15 +3064,53 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="entity_pan" className="text-xs font-semibold">Business Entity PAN *</Label>
-                      <Input
-                        id="entity_pan"
-                        value={pan}
-                        onChange={(e) => setPan(e.target.value.toUpperCase().slice(0, 10))}
-                        placeholder="FGHIJ5678K"
-                        className="mt-1 font-mono uppercase"
-                        maxLength={10}
-                      />
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="entity_pan" className="text-xs font-semibold">Business Entity PAN *</Label>
+                        {panVerified && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                            Verified
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 flex items-center gap-2">
+                        <Input
+                          id="entity_pan"
+                          value={pan}
+                          onChange={(e) => {
+                            setPan(e.target.value.toUpperCase().slice(0, 10));
+                            if (panVerified) setPanVerified(false);
+                          }}
+                          placeholder="FGHIJ5678K"
+                          className="font-mono uppercase flex-1"
+                          maxLength={10}
+                        />
+                        <Button
+                          type="button"
+                          variant={panVerified ? "secondary" : "primary"}
+                          size="md"
+                          disabled={isVerifyingPan || !pan || pan.length !== 10}
+                          onClick={handleVerifyPan}
+                          className="h-9 shrink-0 px-3 text-xs flex items-center gap-1.5 whitespace-nowrap"
+                        >
+                          {isVerifyingPan ? (
+                            <>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              Verifying...
+                            </>
+                          ) : panVerified ? (
+                            <>
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                              Re-verify
+                            </>
+                          ) : (
+                            <>
+                              <ShieldCheck className="h-3.5 w-3.5" />
+                              Verify
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </div>
                     <div>
                       <Label htmlFor="contact_person" className="text-xs font-semibold">Key Contact Person Name *</Label>
@@ -2593,7 +3139,14 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       </div>
                     )}
                     <div>
-                      <Label htmlFor="entity_email" className="text-xs font-semibold">Official Contact Email *</Label>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="entity_email" className="text-xs font-semibold">Official Contact Email *</Label>
+                        {panVerificationData?.email && email === panVerificationData.email && (
+                          <span className="text-[10px] text-emerald-600 font-medium flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" /> Auto-filled from PAN
+                          </span>
+                        )}
+                      </div>
                       <Input
                         id="entity_email"
                         type="email"
@@ -2650,16 +3203,18 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   </div>
 
                   {/* Entity Prior Experience & Registered Business Proof (Separate from GST) */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                    <div>
-                      <Label htmlFor="entity_experience_years" className="text-xs font-semibold text-slate-700">
-                        Entity Prior Experience / Empanelment Letters
-                      </Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 items-start">
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="entity_experience_years" className="text-xs font-semibold text-slate-700 leading-none">
+                          Entity Prior Experience / Empanelment Letters
+                        </Label>
+                      </div>
                       <Select
                         id="entity_experience_years"
                         value={experienceYears}
                         onChange={(e) => setExperienceYears(e.target.value)}
-                        className="mt-1"
+                        className="mt-1.5"
                       >
                         <option value="0">0 (No prior experience)</option>
                         <option value="1">1 year</option>
@@ -2679,37 +3234,38 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     </div>
 
                     {!gstApplicable && (
-                      <div>
-                        <Label className="text-xs font-semibold text-slate-700">
-                          Entity Registered Business Proof
-                        </Label>
-                        <div className="mt-1">
-                          <CheckboxDropdown
-                            id="entity_business_licenses"
-                            placeholder="Business Proof (Shop Act / Udyam)"
-                            options={businessLicenseOptions}
-                            selectedKeys={selectedLicenses}
-                            onChange={(keys) => {
-                              setSelectedLicenses(keys);
-                              if (!keys.includes("SHOP_ACT")) {
-                                setShopActNumber("");
-                                setUploadedDocs((prev) => {
-                                  const next = { ...prev };
-                                  delete next["business_license_shop_act"];
-                                  return next;
-                                });
-                              }
-                              if (!keys.includes("UDYAM")) {
-                                setUdyamNumber("");
-                                setUploadedDocs((prev) => {
-                                  const next = { ...prev };
-                                  delete next["business_license_udyam"];
-                                  return next;
-                                });
-                              }
-                            }}
-                          />
+                      <div className="flex flex-col">
+                        <div className="h-5 flex items-center">
+                          <Label htmlFor="entity_business_licenses" className="text-xs font-semibold text-slate-700 leading-none">
+                            Entity Registered Business Proof
+                          </Label>
                         </div>
+                        <CheckboxDropdown
+                          id="entity_business_licenses"
+                          placeholder="Business Proof (Shop Act / Udyam)"
+                          options={businessLicenseOptions}
+                          selectedKeys={selectedLicenses}
+                          className="mt-1.5"
+                          onChange={(keys) => {
+                            setSelectedLicenses(keys);
+                            if (!keys.includes("SHOP_ACT")) {
+                              setShopActNumber("");
+                              setUploadedDocs((prev) => {
+                                const next = { ...prev };
+                                delete next["business_license_shop_act"];
+                                return next;
+                              });
+                            }
+                            if (!keys.includes("UDYAM")) {
+                              setUdyamNumber("");
+                              setUploadedDocs((prev) => {
+                                const next = { ...prev };
+                                delete next["business_license_udyam"];
+                                return next;
+                              });
+                            }
+                          }}
+                        />
                       </div>
                     )}
                   </div>
@@ -3206,19 +3762,35 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
                           <div>
                             <Label className="text-[11px] font-semibold">Individual PAN *</Label>
-                            <Input
-                              value={s.pan}
-                              onChange={(e) => handleUpdateStakeholder(idx, "pan", e.target.value.toUpperCase().slice(0, 10))}
-                              placeholder="ABCDE1111A"
-                              className="mt-1 text-xs font-mono uppercase"
-                              maxLength={10}
-                            />
+                            <div className="mt-1 flex items-center gap-1.5">
+                              <Input
+                                value={s.pan}
+                                onChange={(e) => handleUpdateStakeholder(idx, "pan", e.target.value.toUpperCase().slice(0, 10))}
+                                placeholder="ABCDE1111A"
+                                className="text-xs font-mono uppercase h-8 flex-1"
+                                maxLength={10}
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={verifyingStakeholderIdx === idx || !s.pan || s.pan.length !== 10}
+                                onClick={() => handleVerifyStakeholderPan(idx)}
+                                className="h-8 shrink-0 px-2 text-[11px] flex items-center gap-1"
+                              >
+                                {verifyingStakeholderIdx === idx ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  "Verify"
+                                )}
+                              </Button>
+                            </div>
                           </div>
                           <div>
                             <Label className="text-[11px] font-semibold">Aadhaar Number *</Label>
                             <Input
                               value={s.aadhaar}
-                              onChange={(e) => handleUpdateStakeholder(idx, "aadhaar", e.target.value.replace(/\D/g, "").slice(0, 12))}
+                              onChange={(e) => handleUpdateStakeholder(idx, "aadhaar", e.target.value.replace(/[^0-9Xx]/g, "").slice(0, 12).toUpperCase())}
                               placeholder="999988887777"
                               className="mt-1 text-xs font-mono"
                               maxLength={12}
@@ -3470,7 +4042,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           <p><span className="text-slate-500">Applicant:</span> <span className="font-semibold">{applicantTitle ? `${applicantTitle} ` : ""}{firstName} {middleName} {lastName}</span></p>
                           <p><span className="text-slate-500">DOB:</span> {formatDate(dateOfBirth)}</p>
                           <p><span className="text-slate-500">Highest Qualification:</span> {educationQualification}</p>
-                          <p><span className="text-slate-500">Aadhaar:</span> {aadhaarNo ? `XXXX-XXXX-${aadhaarNo.slice(-4)}` : "N/A"}</p>
+                          <p><span className="text-slate-500">Aadhaar:</span> {aadhaarNo ? (aadhaarNo.length === 12 ? `${aadhaarNo.slice(0, 4)}-${aadhaarNo.slice(4, 8)}-${aadhaarNo.slice(8)}` : aadhaarNo) : "N/A"}</p>
                         </>
                       ) : (
                         <>
@@ -3480,10 +4052,19 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           <p><span className="text-slate-500">Contact Person:</span> {contactPerson}</p>
                         </>
                       )}
-                      <p><span className="text-slate-500">PAN:</span> <span className="font-mono font-semibold">{pan}</span></p>
+                      <p>
+                        <span className="text-slate-500">PAN:</span>{" "}
+                        <span className="font-mono font-semibold">{pan}</span>
+                        {panVerified && (
+                          <span className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                            ScoreMe Verified
+                          </span>
+                        )}
+                      </p>
                       {gstApplicable && <p><span className="text-slate-500">GSTIN:</span> <span className="font-mono font-semibold">{gstNumber}</span></p>}
                       <p><span className="text-slate-500">Mobile:</span> {mobile}</p>
-                      <p><span className="text-slate-500">Email:</span> {email}</p>
+                      <p><span className="text-slate-500">Email:</span> {email || selfEmail}</p>
                       <p><span className="text-slate-500">Prior Experience:</span> <span className="font-semibold">{priorExperienceDetails.trim() || (experienceYears === "0" ? "0 (No prior experience)" : `${experienceYears} yrs`)}</span></p>
                       {!gstApplicable && (
                         <>

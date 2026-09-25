@@ -142,7 +142,12 @@ export function normalizeDsaData(dsa: any): any {
     dsa.applicant_prior_experience ||
     (dsa.experience_years
       ? `${dsa.experience_years} years in financial products distribution`
-      : "1 years in financial products distribution");
+      : "");
+
+  const experienceYears =
+    dsa.experience_years !== undefined && dsa.experience_years !== null
+      ? String(dsa.experience_years)
+      : null;
 
   return {
     ...dsa,
@@ -163,6 +168,7 @@ export function normalizeDsaData(dsa: any): any {
     branch_code: branchCode,
     business_premises_ownership: businessPremisesOwnership,
     applicant_prior_experience: applicantPriorExperience,
+    experience_years: experienceYears,
   };
 }
 
@@ -722,6 +728,31 @@ export function useDsa() {
     [toast]
   );
 
+  const approveSignedAgreement = useCallback(
+    async (idOrCode: number | string, remarks?: string) => {
+      setActionLoading(true);
+      try {
+        const response = await adminApi.approveSignedAgreement(idOrCode, remarks);
+        toast({
+          title: "Agreement Approved & DSA Activated",
+          description: response.message || "Signed agreement verified. DSA partner is now ACTIVE.",
+          variant: "success",
+        });
+        return response.data;
+      } catch (error: unknown) {
+        toast({
+          title: "Approval failed",
+          description: errorMessage(error, "Failed to approve signed agreement."),
+          variant: "warning",
+        });
+        return null;
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [toast]
+  );
+
   const uploadDsaDocument = useCallback(
     async (idOrCode: number | string, payload: { file: File; document_type: string; owner_name?: string }) => {
       setActionLoading(true);
@@ -895,6 +926,7 @@ export function useDsa() {
     fetchDsaAgreement,
     fetchSignedAgreementReview,
     verifySignedAgreement,
+    approveSignedAgreement,
     uploadDsaDocument,
     updateDsaDocumentStatus,
     deleteDsaDocument,

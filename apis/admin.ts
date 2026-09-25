@@ -457,8 +457,39 @@ export const adminApi = {
   },
 
   // ── DSA Onboarding (V1 Multi-Step Architecture) ───────────────────────────
-  sendSelfOnboardingOtp: async (payload: { mobile: string; branch_id: number }): Promise<BackendResponse<{ mobile: string; reference_id: string; expires_at: string }>> => {
+  sendSelfOnboardingOtp: async (payload: {
+    mobile: string;
+    branch_id: number;
+    email?: string;
+    name?: string;
+  }): Promise<BackendResponse<{
+    mobile: string;
+    email?: string;
+    reference_id: string;
+    otp_sent?: boolean;
+    email_sent?: boolean;
+    expires_at?: string;
+    note?: string;
+    email_note?: string;
+  }>> => {
     return request<BackendResponse<any>>("/v1/dsa/self/send-otp", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  triggerEmailOtp: async (payload: {
+    email: string;
+    reference_id?: string;
+    mobile?: string;
+    name?: string;
+  }): Promise<BackendResponse<{
+    email: string;
+    reference_id: string;
+    email_sent: boolean;
+    email_note?: string;
+  }>> => {
+    return request<BackendResponse<any>>("/v1/dsa/self/trigger-email-otp", {
       method: "POST",
       body: JSON.stringify(payload),
     });
@@ -927,6 +958,33 @@ export const adminApi = {
     });
   },
 
+  approveSignedAgreement: async (
+    idOrCode: number | string,
+    remarks?: string
+  ): Promise<BackendResponse<{
+    success: boolean;
+    message: string;
+    dsa_id: number;
+    dsa_code: string;
+    agreement_status: string;
+    agreement_approved_at: string;
+    agreement_expires_at: string;
+    operational_status: string;
+    upload_locked: boolean;
+    document: {
+      document_id: number;
+      status: string;
+      remarks?: string;
+      file_name?: string;
+      file_url?: string;
+    };
+  }>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/agreement/approve`, {
+      method: "POST",
+      body: JSON.stringify({ remarks }),
+    });
+  },
+
   // ── DSA Documents ───────────────────────────────────────────────────────────
   getDsaDocuments: async (idOrCode: number | string): Promise<BackendResponse<DsaDocument[]>> => {
     return request<BackendResponse<DsaDocument[]>>(`/v1/dsa/${idOrCode}/documents`, {
@@ -937,6 +995,11 @@ export const adminApi = {
   getDsaDocumentFileUrl: (idOrCode: number | string, documentId: number | string): string => {
     const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").replace(/\/api\/?$/, "");
     return `${apiBase}/api/v1/dsa/${idOrCode}/documents/${documentId}/file`;
+  },
+
+  getDsaVisitReportFileUrl: (idOrCode: number | string): string => {
+    const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").replace(/\/api\/?$/, "");
+    return `${apiBase}/api/v1/dsa/${idOrCode}/visit-report/file`;
   },
 
   uploadDsaDocument: async (
