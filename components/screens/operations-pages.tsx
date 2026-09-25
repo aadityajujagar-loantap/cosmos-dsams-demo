@@ -23,9 +23,7 @@ const cibilBandStyle: Record<CibilScoreBand, { pill: string; dot: string }> = {
 };
 
 function formatLoanAmount(amount: number) {
-  if (amount >= 10000000) return `₹${(amount / 10000000).toFixed(1)} Cr`;
-  if (amount >= 100000) return `₹${(amount / 100000).toFixed(0)} Lakhs`;
-  return `₹${amount.toLocaleString("en-IN")}`;
+  return `₹${Math.round(amount).toLocaleString("en-IN")}`;
 }
 
 function SlabsTab() {
@@ -418,7 +416,7 @@ function SlabsTab() {
           <table className="min-w-full text-sm">
             <thead>
               <tr className="bg-[#1a2744] text-left text-xs font-semibold uppercase tracking-wide text-white">
-                <th className="px-4 py-3">Scheme / Product</th>
+                <th className="px-4 py-3">Loan Type / Product</th>
                 <th className="px-4 py-3">Max Loan</th>
                 <th className="px-4 py-3">CIBIL Band</th>
                 <th className="px-4 py-3">Gender</th>
@@ -522,7 +520,7 @@ function SlabsTab() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-600">Scheme *</label>
+                  <label className="text-xs font-bold text-slate-600">Loan Type *</label>
                   <select
                     value={modalSchemeId}
                     onChange={(e) => setModalSchemeId(e.target.value)}
@@ -530,7 +528,7 @@ function SlabsTab() {
                     disabled={!modalProductId}
                     className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 disabled:bg-slate-50 font-medium"
                   >
-                    <option value="">-- Select Scheme --</option>
+                    <option value="">-- Select Loan Type --</option>
                     {schemes.map((s) => (
                       <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
@@ -746,7 +744,7 @@ function SlabsTab() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-600">Scheme *</label>
+                  <label className="text-xs font-bold text-slate-600">Loan Type *</label>
                   <select
                     value={modalSchemeId}
                     onChange={(e) => setModalSchemeId(e.target.value)}
@@ -754,7 +752,7 @@ function SlabsTab() {
                     disabled={!modalProductId}
                     className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 disabled:bg-slate-50 font-medium"
                   >
-                    <option value="">-- Select Scheme --</option>
+                    <option value="">-- Select Loan Type --</option>
                     {schemes.map((s) => (
                       <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
@@ -1270,11 +1268,11 @@ function ProductTypeTab() {
           </div>
         </div>
 
-        {/* Schemes under this Product Card */}
+        {/* Loan Types under this Product Card */}
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div className="bg-[#1a2744] px-5 py-4 flex justify-between items-center text-white">
             <div className="flex items-center gap-2">
-              <span className="font-bold tracking-wide text-sm">Schemes under this Product</span>
+              <span className="font-bold tracking-wide text-sm">Loan Types under this Product</span>
               <span className="bg-blue-600 text-[10px] uppercase font-bold px-2 py-0.5 rounded">Section 2</span>
             </div>
             {canEdit && (
@@ -1282,7 +1280,7 @@ function ProductTypeTab() {
                 onClick={resetSchemeForm}
                 className="flex items-center gap-1 text-xs bg-blue-700 hover:bg-blue-800 text-white font-semibold px-3 py-1.5 rounded transition"
               >
-                <Plus className="h-3.5 w-3.5 mr-1" /> Add New Scheme
+                <Plus className="h-3.5 w-3.5 mr-1" /> Add New Loan Type
               </button>
             )}
           </div>
@@ -1290,7 +1288,7 @@ function ProductTypeTab() {
             <form onSubmit={handleSaveScheme} className="space-y-4">
               <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1.5 mb-2">
                 <Edit className="h-3.5 w-3.5" />
-                {editingScheme ? `Edit Scheme: ${editingScheme.name}` : "New Scheme"}
+                {editingScheme ? `Edit Loan Type: ${editingScheme.name}` : "New Loan Type"}
               </h4>
 
               <div className="space-y-1">
@@ -1309,10 +1307,10 @@ function ProductTypeTab() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-600">Scheme Name *</label>
+                <label className="text-xs font-bold text-slate-600">Loan Type Name *</label>
                 <input
                   type="text"
-                  placeholder={schemeProductId ? "e.g. Star Home Loan" : "Please select a product first"}
+                  placeholder={schemeProductId ? "e.g. Home Loan Takeover, Commercial Vehicle" : "Please select a product first"}
                   value={schemeName}
                   onChange={(e) => setSchemeName(e.target.value)}
                   disabled={!canEdit || !schemeProductId}
@@ -1352,7 +1350,7 @@ function ProductTypeTab() {
                     disabled={!schemeProductId}
                     className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-md shadow-sm transition disabled:opacity-50 disabled:pointer-events-none"
                   >
-                    Update Scheme
+                    Save Loan Type
                   </button>
                 </div>
               )}
@@ -1409,10 +1407,10 @@ function ProductTypeTab() {
           </div>
         </div>
 
-        {/* Scheme List Card */}
+        {/* Loan Type List Card */}
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div className="bg-[#1a2744] px-5 py-4 flex justify-between items-center text-white">
-            <span className="font-bold tracking-wide text-sm">Scheme List</span>
+            <span className="font-bold tracking-wide text-sm">Loan Type List</span>
           </div>
           <div className="p-4 space-y-4">
             <div className="space-y-1">
@@ -1439,14 +1437,14 @@ function ProductTypeTab() {
                 <span className="h-6 w-6 animate-spin rounded-full border-b-2 border-blue-600" />
               </div>
             ) : schemesList.length === 0 ? (
-              <p className="text-xs text-slate-500 text-center py-6">No schemes configured for this product.</p>
+              <p className="text-xs text-slate-500 text-center py-6">No loan types configured for this product.</p>
             ) : (
               <div className="overflow-x-auto rounded-lg border border-slate-100">
                 <table className="min-w-full text-xs text-left">
                   <thead>
                     <tr className="bg-slate-50 font-bold text-slate-600 border-b border-slate-100">
                       <th className="px-4 py-2.5">ID</th>
-                      <th className="px-4 py-2.5">Scheme Name</th>
+                      <th className="px-4 py-2.5">Loan Type Name</th>
                       {canEdit && <th className="px-4 py-2.5 text-right">Actions</th>}
                     </tr>
                   </thead>
@@ -2097,8 +2095,11 @@ function ParameterMappingTab() {
   const [schemesLoading, setSchemesLoading] = useState(false);
   const [schemeParams, setSchemeParams] = useState<Record<number, any>>({});
 
-  // Editing state
+  // Modal state
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalProductId, setModalProductId] = useState<string>("");
   const [editingScheme, setEditingScheme] = useState<any | null>(null);
+
   const [minAmount, setMinAmount] = useState<string>("1000");
   const [maxAmount, setMaxAmount] = useState<string>("30000000");
   const [minTenure, setMinTenure] = useState<string>("12");
@@ -2116,55 +2117,59 @@ function ParameterMappingTab() {
   const loadSchemesAndParams = useCallback(async (prodIdStr: string, prodList: any[]) => {
     setSchemesLoading(true);
     try {
-      let schemeList: any[] = [];
       if (prodIdStr) {
         // Specific product selected
         const pObj = prodList.find((p) => String(p.id) === String(prodIdStr));
         const res = await adminApi.getSchemes(Number(prodIdStr));
-        schemeList = (res.data || []).map((sch: any) => ({
+        const schemeList = (res.data || []).map((sch: any) => ({
           ...sch,
           product_name: pObj?.name || "Product #" + prodIdStr,
         }));
-      } else {
-        // All products selected
-        const allSchemesArrays = await Promise.all(
-          prodList.map(async (p: any) => {
+
+        setSchemes(schemeList);
+
+        const paramsMap: Record<number, any> = {};
+        await Promise.all(
+          schemeList.map(async (sch: any) => {
             try {
-              const res = await adminApi.getSchemes(p.id);
-              return (res.data || []).map((sch: any) => ({
-                ...sch,
-                product_name: p.name,
-              }));
+              const paramRes = await adminApi.getSchemeParameters(sch.id);
+              if (paramRes.data) {
+                paramsMap[sch.id] = paramRes.data;
+              }
             } catch (e) {
-              return [];
+              // parameter record might not exist yet
             }
           })
         );
-        schemeList = allSchemesArrays.flat();
-      }
+        setSchemeParams(paramsMap);
+      } else {
+        // All products selected -> Single fast bulk fetch
+        const res = await adminApi.getAllProductSlabs();
+        const allProducts = res.data || [];
+        const schemeList: any[] = [];
+        const paramsMap: Record<number, any> = {};
 
-      setSchemes(schemeList);
-
-      // Fetch parameters for each scheme
-      const paramsMap: Record<number, any> = {};
-      await Promise.all(
-        schemeList.map(async (sch: any) => {
-          try {
-            const paramRes = await adminApi.getSchemeParameters(sch.id);
-            if (paramRes.data) {
-              paramsMap[sch.id] = paramRes.data;
+        allProducts.forEach((prod: any) => {
+          const types = prod.loan_types || prod.schemes || [];
+          types.forEach((sch: any) => {
+            schemeList.push({
+              ...sch,
+              product_name: prod.name,
+            });
+            if (sch.parameter) {
+              paramsMap[sch.id] = sch.parameter;
             }
-          } catch (e) {
-            // parameter record might not exist yet
-          }
-        })
-      );
-      setSchemeParams(paramsMap);
+          });
+        });
+
+        setSchemes(schemeList);
+        setSchemeParams(paramsMap);
+      }
     } catch (err) {
       console.error(err);
       toast({
         title: "Load Failed",
-        description: "Failed to load schemes and parameter mappings.",
+        description: "Failed to load loan types and parameter mappings.",
         variant: "warning",
       });
     } finally {
@@ -2201,21 +2206,73 @@ function ParameterMappingTab() {
     }
   }, [selectedProductId, products, loadSchemesAndParams]);
 
+  const resetParamForm = () => {
+    setMinAmount("1000");
+    setMaxAmount("30000000");
+    setMinTenure("12");
+    setMaxTenure("240");
+    setLtvLabel("");
+    setMaxLtv("90");
+    setMakerComment("");
+  };
+
+  const openAddModal = () => {
+    setModalProductId(selectedProductId || "");
+    setEditingScheme(null);
+    resetParamForm();
+    setIsModalOpen(true);
+  };
+
   const openEditModal = (sch: any) => {
+    const prodId = String(
+      sch.loan_product_id ||
+      products.find((p) => p.name === sch.product_name)?.id ||
+      ""
+    );
+    setModalProductId(prodId);
     setEditingScheme(sch);
+
     const existing = schemeParams[sch.id] || {};
-    setMinAmount(existing.min_loan_amount !== undefined ? String(existing.min_loan_amount) : "1000");
-    setMaxAmount(existing.max_loan_amount !== undefined ? String(existing.max_loan_amount) : "30000000");
+    const minVal = existing.min_loan_amount !== undefined ? (Number(existing.min_loan_amount) < 500 ? Math.round(Number(existing.min_loan_amount) * 100000) : Number(existing.min_loan_amount)) : 1000;
+    const maxVal = existing.max_loan_amount !== undefined ? (Number(existing.max_loan_amount) < 500 ? Math.round(Number(existing.max_loan_amount) * 100000) : Number(existing.max_loan_amount)) : 30000000;
+    setMinAmount(String(minVal));
+    setMaxAmount(String(maxVal));
     setMinTenure(existing.min_period_months !== undefined ? String(existing.min_period_months) : "12");
     setMaxTenure(existing.max_period_months !== undefined ? String(existing.max_period_months) : "240");
     setLtvLabel(existing.ltv_label || "Up to ₹100L: 90% LTV; Above ₹100L: 80% LTV");
     setMaxLtv(existing.max_ltv !== undefined ? String(existing.max_ltv) : "90");
     setMakerComment("");
+    setIsModalOpen(true);
+  };
+
+  const handleModalProductChange = (prodIdStr: string) => {
+    setModalProductId(prodIdStr);
+    setEditingScheme(null);
+    resetParamForm();
+  };
+
+  const handleModalLoanTypeChange = (typeIdStr: string) => {
+    if (!typeIdStr) {
+      setEditingScheme(null);
+      resetParamForm();
+      return;
+    }
+    const found = schemes.find((s) => String(s.id) === typeIdStr);
+    if (found) {
+      openEditModal(found);
+    }
   };
 
   const handleSaveParameters = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingScheme) return;
+    if (!editingScheme) {
+      toast({
+        title: "Validation Error",
+        description: "Please select a Loan Type first.",
+        variant: "warning",
+      });
+      return;
+    }
 
     setSavingParam(true);
     try {
@@ -2237,6 +2294,7 @@ function ParameterMappingTab() {
         variant: "success",
       });
 
+      setIsModalOpen(false);
       setEditingScheme(null);
       loadSchemesAndParams(selectedProductId, products);
     } catch (err) {
@@ -2281,18 +2339,7 @@ function ParameterMappingTab() {
             </button>
             {canEdit && (
               <button
-                onClick={() => {
-                  if (schemes.length > 0) {
-                    const unmapped = schemes.find((s) => !schemeParams[s.id]);
-                    openEditModal(unmapped || schemes[0]);
-                  } else {
-                    toast({
-                      title: "No Schemes Found",
-                      description: "Please add a scheme/product type under 'PRODUCT & SCHEME MANAGEMENT' first.",
-                      variant: "warning",
-                    });
-                  }
-                }}
+                onClick={openAddModal}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded transition shadow-sm"
               >
                 <Plus className="h-3.5 w-3.5" /> Add / Map Parameters
@@ -2308,8 +2355,8 @@ function ParameterMappingTab() {
             </div>
           ) : schemes.length === 0 ? (
             <div className="text-center py-10 border border-dashed border-slate-200 rounded-lg bg-slate-50 space-y-2">
-              <p className="text-xs text-slate-500 font-medium">No Loan Types (Schemes) configured.</p>
-              <p className="text-[11px] text-slate-400">Add a new Loan Type under the "PRODUCT & SCHEME MANAGEMENT" tab first.</p>
+              <p className="text-xs text-slate-500 font-medium">No Loan Types configured.</p>
+              <p className="text-[11px] text-slate-400">Add a new Loan Type under the "PRODUCT & LOAN TYPE MANAGEMENT" tab first.</p>
             </div>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-slate-200">
@@ -2318,7 +2365,7 @@ function ParameterMappingTab() {
                   <tr className="bg-slate-100 font-bold text-slate-700 border-b border-slate-200">
                     <th className="px-4 py-3">#</th>
                     <th className="px-4 py-3">Loan Product</th>
-                    <th className="px-4 py-3">Loan Type (Scheme Name)</th>
+                    <th className="px-4 py-3">Loan Type Name</th>
                     <th className="px-4 py-3">Loan Amount Range</th>
                     <th className="px-4 py-3">Tenure (Months)</th>
                     <th className="px-4 py-3">Max LTV %</th>
@@ -2338,7 +2385,7 @@ function ParameterMappingTab() {
                         <td className="px-4 py-3.5 font-mono text-slate-700">
                           {param ? (
                             <span>
-                              ₹{Number(param.min_loan_amount || 0).toLocaleString("en-IN")} - ₹{Number(param.max_loan_amount || 0).toLocaleString("en-IN")}
+                              {formatLoanAmount(Number(param.min_loan_amount) < 500 ? Number(param.min_loan_amount) * 100000 : Number(param.min_loan_amount))} - {formatLoanAmount(Number(param.max_loan_amount) < 500 ? Number(param.max_loan_amount) * 100000 : Number(param.max_loan_amount))}
                             </span>
                           ) : (
                             <span className="text-slate-400 italic">Unmapped (Default ₹1K - ₹3Cr)</span>
@@ -2398,29 +2445,64 @@ function ParameterMappingTab() {
       </div>
 
       {/* Parameter Edit / Add Modal */}
-      {editingScheme && (
+      {isModalOpen && (
         <Modal
-          open={Boolean(editingScheme)}
-          onClose={() => setEditingScheme(null)}
-          title={schemeParams[editingScheme.id] ? `Edit Parameter Mapping: ${editingScheme.name}` : `Add Parameter Mapping: ${editingScheme.name}`}
+          open={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false);
+            setEditingScheme(null);
+          }}
+          title={
+            editingScheme
+              ? schemeParams[editingScheme.id]
+                ? `Edit Parameter Mapping: ${editingScheme.name}`
+                : `Add Parameter Mapping: ${editingScheme.name}`
+              : "Add Parameter Mapping"
+          }
         >
           <form onSubmit={handleSaveParameters} className="space-y-4 pt-2">
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-700">Scheme / Product Type *</label>
-              <select
-                value={editingScheme.id}
-                onChange={(e) => {
-                  const found = schemes.find((s) => String(s.id) === e.target.value);
-                  if (found) openEditModal(found);
-                }}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-800"
-              >
-                {schemes.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    [{s.product_name || "Product"}] {s.name} {schemeParams[s.id] ? "(Mapped)" : "(New / Unmapped)"}
-                  </option>
-                ))}
-              </select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-2 border-b border-slate-100">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">1. Select Loan Product *</label>
+                <select
+                  value={modalProductId}
+                  onChange={(e) => handleModalProductChange(e.target.value)}
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-800"
+                >
+                  <option value="">-- Select Product --</option>
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">2. Select Loan Type *</label>
+                <select
+                  value={editingScheme?.id || ""}
+                  disabled={!modalProductId}
+                  onChange={(e) => handleModalLoanTypeChange(e.target.value)}
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-800 disabled:bg-slate-50 disabled:text-slate-400"
+                >
+                  <option value="">-- Select Loan Type --</option>
+                  {modalProductId &&
+                    schemes
+                      .filter(
+                        (s) =>
+                          String(
+                            s.loan_product_id ||
+                              products.find((p) => p.name === s.product_name)?.id
+                          ) === String(modalProductId)
+                      )
+                      .map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} {schemeParams[s.id] ? "(Mapped)" : "(New / Unmapped)"}
+                        </option>
+                      ))}
+                </select>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -2429,9 +2511,10 @@ function ParameterMappingTab() {
                 <input
                   type="number"
                   required
+                  disabled={!editingScheme}
                   value={minAmount}
                   onChange={(e) => setMinAmount(e.target.value)}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono disabled:bg-slate-50 disabled:text-slate-400"
                 />
               </div>
               <div className="space-y-1">
@@ -2439,9 +2522,10 @@ function ParameterMappingTab() {
                 <input
                   type="number"
                   required
+                  disabled={!editingScheme}
                   value={maxAmount}
                   onChange={(e) => setMaxAmount(e.target.value)}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono disabled:bg-slate-50 disabled:text-slate-400"
                 />
               </div>
             </div>
@@ -2452,9 +2536,10 @@ function ParameterMappingTab() {
                 <input
                   type="number"
                   required
+                  disabled={!editingScheme}
                   value={minTenure}
                   onChange={(e) => setMinTenure(e.target.value)}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
                 />
               </div>
               <div className="space-y-1">
@@ -2462,9 +2547,10 @@ function ParameterMappingTab() {
                 <input
                   type="number"
                   required
+                  disabled={!editingScheme}
                   value={maxTenure}
                   onChange={(e) => setMaxTenure(e.target.value)}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
                 />
               </div>
             </div>
@@ -2475,9 +2561,10 @@ function ParameterMappingTab() {
                 <input
                   type="text"
                   placeholder="e.g. 90.00"
+                  disabled={!editingScheme}
                   value={maxLtv}
                   onChange={(e) => setMaxLtv(e.target.value)}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono disabled:bg-slate-50 disabled:text-slate-400"
                 />
               </div>
               <div className="space-y-1">
@@ -2485,9 +2572,10 @@ function ParameterMappingTab() {
                 <input
                   type="text"
                   placeholder="e.g. Up to ₹100L: 90% LTV; Above ₹100L: 80% LTV"
+                  disabled={!editingScheme}
                   value={ltvLabel}
                   onChange={(e) => setLtvLabel(e.target.value)}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
                 />
               </div>
             </div>
@@ -2498,27 +2586,31 @@ function ParameterMappingTab() {
                 <span className="text-[10px] text-slate-400">{makerComment.length} / 500</span>
               </div>
               <textarea
-                placeholder="Enter maker comment for review..."
+                placeholder={editingScheme ? "Enter maker comment for review..." : "Select Loan Product and Loan Type first..."}
                 maxLength={500}
+                disabled={!editingScheme}
                 value={makerComment}
                 onChange={(e) => setMakerComment(e.target.value)}
                 rows={3}
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
               />
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 type="button"
-                onClick={() => setEditingScheme(null)}
+                onClick={() => {
+                  setIsModalOpen(false);
+                  setEditingScheme(null);
+                }}
                 className="px-4 py-2 text-xs font-semibold border border-slate-200 rounded-md hover:bg-slate-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={savingParam}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-md shadow-sm transition disabled:opacity-50"
+                disabled={savingParam || !editingScheme}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-md shadow-sm transition disabled:opacity-50 disabled:pointer-events-none"
               >
                 {savingParam ? "Saving..." : "Save Parameters"}
               </button>
@@ -2556,7 +2648,7 @@ export function BreRulesPage() {
             }`}>
               1
             </span>
-            PRODUCT & SCHEME MANAGEMENT
+            PRODUCT & LOAN TYPE MANAGEMENT
           </button>
           
           <button

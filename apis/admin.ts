@@ -11,7 +11,7 @@ import type {
   SubRegionOption,
   RegionOption,
 } from "@/types/dsa";
-import type { LoanProduct, LoanScheme, SchemeParameter, SchemeSlab } from "@/types/product";
+import type { LoanProduct, LoanType, LoanScheme, LoanTypeParameter, SchemeParameter, LoanTypeSlab, SchemeSlab } from "@/types/product";
 import type {
   MasterValue,
   MasterValueDropdownItem,
@@ -1032,74 +1032,110 @@ export const adminApi = {
     return request<BackendResponse<any>>(`/v1/loan-products/${id}`, { method: "DELETE" });
   },
 
-  getSchemes: async (productId: number): Promise<BackendResponse<LoanScheme[]>> => {
-    return request<BackendResponse<LoanScheme[]>>(`/v1/loan-products/${productId}/schemes`, { method: "GET" });
+  getLoanTypes: async (productId: number): Promise<BackendResponse<LoanType[]>> => {
+    return request<BackendResponse<LoanType[]>>(`/v1/loan-products/${productId}/loan-types`, { method: "GET" });
+  },
+  getSchemes: async (productId: number): Promise<BackendResponse<LoanType[]>> => {
+    return adminApi.getLoanTypes(productId);
   },
 
-  createScheme: async (productId: number, payload: Partial<LoanScheme> & { maker_comment?: string }): Promise<BackendResponse<LoanScheme>> => {
-    return request<BackendResponse<LoanScheme>>(`/v1/loan-products/${productId}/schemes`, {
+  createLoanType: async (productId: number, payload: Partial<LoanType> & { maker_comment?: string }): Promise<BackendResponse<LoanType>> => {
+    return request<BackendResponse<LoanType>>(`/v1/loan-products/${productId}/loan-types`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
   },
-
-  getSchemeDetail: async (schemeId: number): Promise<BackendResponse<LoanScheme>> => {
-    return request<BackendResponse<LoanScheme>>(`/v1/schemes/${schemeId}`, { method: "GET" });
+  createScheme: async (productId: number, payload: Partial<LoanType> & { maker_comment?: string }): Promise<BackendResponse<LoanType>> => {
+    return adminApi.createLoanType(productId, payload);
   },
 
-  updateScheme: async (schemeId: number, payload: Partial<LoanScheme> & { maker_comment?: string }): Promise<BackendResponse<LoanScheme>> => {
-    return request<BackendResponse<LoanScheme>>(`/v1/schemes/${schemeId}`, {
+  getLoanTypeDetail: async (typeId: number): Promise<BackendResponse<LoanType>> => {
+    return request<BackendResponse<LoanType>>(`/v1/loan-types/${typeId}`, { method: "GET" });
+  },
+  getSchemeDetail: async (schemeId: number): Promise<BackendResponse<LoanType>> => {
+    return adminApi.getLoanTypeDetail(schemeId);
+  },
+
+  updateLoanType: async (typeId: number, payload: Partial<LoanType> & { maker_comment?: string }): Promise<BackendResponse<LoanType>> => {
+    return request<BackendResponse<LoanType>>(`/v1/loan-types/${typeId}`, {
       method: "PUT",
       body: JSON.stringify(payload),
     });
   },
+  updateScheme: async (schemeId: number, payload: Partial<LoanType> & { maker_comment?: string }): Promise<BackendResponse<LoanType>> => {
+    return adminApi.updateLoanType(schemeId, payload);
+  },
 
+  deleteLoanType: async (typeId: number): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/loan-types/${typeId}`, { method: "DELETE" });
+  },
   deleteScheme: async (schemeId: number): Promise<BackendResponse<any>> => {
-    return request<BackendResponse<any>>(`/v1/schemes/${schemeId}`, { method: "DELETE" });
+    return adminApi.deleteLoanType(schemeId);
   },
 
-  getSchemeParameters: async (schemeId: number): Promise<BackendResponse<SchemeParameter>> => {
-    return request<BackendResponse<SchemeParameter>>(`/v1/schemes/${schemeId}/parameters`, { method: "GET" });
+  getLoanTypeParameters: async (typeId: number): Promise<BackendResponse<LoanTypeParameter>> => {
+    return request<BackendResponse<LoanTypeParameter>>(`/v1/loan-types/${typeId}/parameters`, { method: "GET" });
+  },
+  getSchemeParameters: async (schemeId: number): Promise<BackendResponse<LoanTypeParameter>> => {
+    return adminApi.getLoanTypeParameters(schemeId);
   },
 
-  upsertSchemeParameters: async (schemeId: number, payload: Partial<SchemeParameter> & { maker_comment?: string }): Promise<BackendResponse<SchemeParameter>> => {
-    return request<BackendResponse<SchemeParameter>>(`/v1/schemes/${schemeId}/parameters`, {
+  upsertLoanTypeParameters: async (typeId: number, payload: Partial<LoanTypeParameter> & { maker_comment?: string }): Promise<BackendResponse<LoanTypeParameter>> => {
+    return request<BackendResponse<LoanTypeParameter>>(`/v1/loan-types/${typeId}/parameters`, {
       method: "PUT",
       body: JSON.stringify(payload),
     });
   },
-
-  getSchemeSlabs: async (schemeId: number): Promise<BackendResponse<SchemeSlab[]>> => {
-    return request<BackendResponse<SchemeSlab[]>>(`/v1/schemes/${schemeId}/slabs`, { method: "GET" });
+  upsertSchemeParameters: async (schemeId: number, payload: Partial<LoanTypeParameter> & { maker_comment?: string }): Promise<BackendResponse<LoanTypeParameter>> => {
+    return adminApi.upsertLoanTypeParameters(schemeId, payload);
   },
 
-  createSchemeSlab: async (schemeId: number, payload: Partial<SchemeSlab> & { maker_comment?: string }): Promise<BackendResponse<SchemeSlab>> => {
-    return request<BackendResponse<SchemeSlab>>(`/v1/schemes/${schemeId}/slabs`, {
+  getLoanTypeSlabs: async (typeId: number): Promise<BackendResponse<LoanTypeSlab[]>> => {
+    return request<BackendResponse<LoanTypeSlab[]>>(`/v1/loan-types/${typeId}/slabs`, { method: "GET" });
+  },
+  getSchemeSlabs: async (schemeId: number): Promise<BackendResponse<LoanTypeSlab[]>> => {
+    return adminApi.getLoanTypeSlabs(schemeId);
+  },
+
+  createLoanTypeSlab: async (typeId: number, payload: Partial<LoanTypeSlab> & { maker_comment?: string }): Promise<BackendResponse<LoanTypeSlab>> => {
+    return request<BackendResponse<LoanTypeSlab>>(`/v1/loan-types/${typeId}/slabs`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
   },
+  createSchemeSlab: async (schemeId: number, payload: Partial<LoanTypeSlab> & { maker_comment?: string }): Promise<BackendResponse<LoanTypeSlab>> => {
+    return adminApi.createLoanTypeSlab(schemeId, payload);
+  },
 
-  updateSchemeSlab: async (slabId: number, payload: Partial<SchemeSlab> & { maker_comment?: string }): Promise<BackendResponse<SchemeSlab>> => {
-    return request<BackendResponse<SchemeSlab>>(`/v1/slabs/${slabId}`, {
+  updateLoanTypeSlab: async (slabId: number, payload: Partial<LoanTypeSlab> & { maker_comment?: string }): Promise<BackendResponse<LoanTypeSlab>> => {
+    return request<BackendResponse<LoanTypeSlab>>(`/v1/slabs/${slabId}`, {
       method: "PUT",
       body: JSON.stringify(payload),
     });
   },
+  updateSchemeSlab: async (slabId: number, payload: Partial<LoanTypeSlab> & { maker_comment?: string }): Promise<BackendResponse<LoanTypeSlab>> => {
+    return adminApi.updateLoanTypeSlab(slabId, payload);
+  },
 
-  deleteSchemeSlab: async (slabId: number): Promise<BackendResponse<any>> => {
+  deleteLoanTypeSlab: async (slabId: number): Promise<BackendResponse<any>> => {
     return request<BackendResponse<any>>(`/v1/slabs/${slabId}`, { method: "DELETE" });
   },
+  deleteSchemeSlab: async (slabId: number): Promise<BackendResponse<any>> => {
+    return adminApi.deleteLoanTypeSlab(slabId);
+  },
 
-  bulkStoreSchemeSlabs: async (schemeId: number, payload: { slabs: Partial<SchemeSlab>[]; maker_comment?: string }): Promise<BackendResponse<any>> => {
-    return request<BackendResponse<any>>(`/v1/schemes/${schemeId}/slabs/bulk`, {
+  bulkStoreLoanTypeSlabs: async (typeId: number, payload: { slabs: Partial<LoanTypeSlab>[]; maker_comment?: string }): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/loan-types/${typeId}/slabs/bulk`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
   },
+  bulkStoreSchemeSlabs: async (schemeId: number, payload: { slabs: Partial<LoanTypeSlab>[]; maker_comment?: string }): Promise<BackendResponse<any>> => {
+    return adminApi.bulkStoreLoanTypeSlabs(schemeId, payload);
+  },
 
-  getProductMasterSlabs: async (productId: number): Promise<BackendResponse<{ product: LoanProduct; schemes: { id: number; name: string; slabs: SchemeSlab[] }[] }>> => {
-    return request<BackendResponse<{ product: LoanProduct; schemes: { id: number; name: string; slabs: SchemeSlab[] }[] }>>(`/v1/loan-products/${productId}/slabs`, { method: "GET" });
+  getProductMasterSlabs: async (productId: number): Promise<BackendResponse<{ product: LoanProduct; loan_types: { id: number; name: string; slabs: LoanTypeSlab[] }[] }>> => {
+    return request<BackendResponse<{ product: LoanProduct; loan_types: { id: number; name: string; slabs: LoanTypeSlab[] }[] }>>(`/v1/loan-products/${productId}/slabs`, { method: "GET" });
   },
 
   getAllProductSlabs: async (params?: { search?: string; status?: string }): Promise<BackendResponse<LoanProduct[]>> => {
@@ -1827,4 +1863,23 @@ export const adminApi = {
     });
   },
 };
+
+export const fetchLoanProducts = async (): Promise<any> => {
+  return request<any>("/loan-products-list", { method: "GET" });
+};
+
+export const fetchLoanTypesByProduct = async (productId: number | string): Promise<any> => {
+  return request<any>(`/loan-types/${productId}`, { method: "GET" });
+};
+
+export const getMasterValues = async (params: { group?: string; call_type?: string }): Promise<any> => {
+  const group = params.group || params.call_type;
+  return request<any>(`/master-values/dropdown?call_type=${encodeURIComponent(group || '')}`, { method: "GET" });
+};
+
+export const verifyPanAdvance = async (pan: string): Promise<any> => {
+  return adminApi.verifyPanAdvance({ pan });
+};
+
+
 

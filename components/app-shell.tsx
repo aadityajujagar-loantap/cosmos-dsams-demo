@@ -85,6 +85,8 @@ function isPathAllowedForRole(role: string, pathname: string) {
       pathname === "/" ||
       pathname === "/dsa/management" ||
       partnerDsaProfile ||
+      pathname === "/leads" ||
+      pathname.startsWith("/leads/") ||
       pathname === "/applications" ||
       pathname.startsWith("/applications/") ||
       pathname === "/sell-now" ||
@@ -108,6 +110,8 @@ function isPathAllowedForRole(role: string, pathname: string) {
       pathname === "/" ||
       pathname === "/dsa/management" ||
       pathname.startsWith("/dsa/") ||
+      pathname === "/leads" ||
+      pathname.startsWith("/leads/") ||
       pathname === "/applications" ||
       pathname.startsWith("/applications/") ||
       pathname.startsWith("/administration/location-hierarchy") ||
@@ -120,6 +124,8 @@ function isPathAllowedForRole(role: string, pathname: string) {
       pathname === "/" ||
       pathname === "/dsa/management" ||
       pathname.startsWith("/dsa/") ||
+      pathname === "/leads" ||
+      pathname.startsWith("/leads/") ||
       pathname === "/applications" ||
       pathname.startsWith("/applications/") ||
       pathname.startsWith("/administration/maker-requests") ||
@@ -231,8 +237,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           label: "Partners",
         },
         {
-          items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications" }],
-          label: "Applications",
+          items: [
+            { href: "/leads", icon: ClipboardCheck, label: "Lead Management" },
+            { href: "/applications", icon: ClipboardCheck, label: "Applications" },
+          ],
+          label: "Applications & Leads",
         },
         {
           items: [{ href: "/sell-now", icon: Send, label: "Sell Now" }],
@@ -480,8 +489,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           label: "Network",
         },
         {
-          items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications" }],
-          label: "Applications",
+          items: [
+            { href: "/leads", icon: ClipboardCheck, label: "Lead Management" },
+            { href: "/applications", icon: ClipboardCheck, label: "Applications" },
+          ],
+          label: "Applications & Leads",
         },
         {
           items: [{ href: "/sell-now", icon: Send, label: "Sell Now" }],
