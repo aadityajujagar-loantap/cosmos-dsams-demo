@@ -75,6 +75,7 @@ export interface LeadData {
   loan_product_id: number;
   loan_type_id?: number;
   loan_scheme_id?: number;
+  loan_purpose?: string;
   loan_amount_required: number;
   loan_period_months: number;
   status?: string;

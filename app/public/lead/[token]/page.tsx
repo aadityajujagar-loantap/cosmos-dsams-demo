@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { fetchPublicTokenInfo, submitCustomerLeadPublic, sendLeadOtp, verifyLeadOtp, LeadData } from '@/apis/lead';
 import { fetchLoanProducts, fetchLoanTypesByProduct, getMasterValues, verifyPanAdvance, fetchBranchesDropdown } from '@/apis/admin';
+import { getLoanPurposeOptionsFromApi } from '@/lib/loan-purpose';
 
 export default function CustomerSelfFillPage() {
   const params = useParams();
@@ -38,6 +39,7 @@ export default function CustomerSelfFillPage() {
   const [genders, setGenders] = useState<any[]>([]);
   const [employmentTypes, setEmploymentTypes] = useState<any[]>([]);
   const [occupationTypes, setOccupationTypes] = useState<any[]>([]);
+  const [loanPurposes, setLoanPurposes] = useState<any[]>([]);
 
   // Form State
   const [constitution, setConstitution] = useState<'Individual' | 'Non-Individual'>('Individual');
@@ -73,6 +75,7 @@ export default function CustomerSelfFillPage() {
     annual_gross_turnover_last_fy: undefined,
     loan_product_id: undefined,
     loan_type_id: undefined,
+    loan_purpose: '',
     loan_amount_required: 100000,
     loan_period_months: 12,
   });
@@ -83,7 +86,7 @@ export default function CustomerSelfFillPage() {
     const init = async () => {
       try {
         setLoading(true);
-        const [tokenRes, prodRes, branchRes, titleRes, genderRes, empRes, occRes] = await Promise.all([
+        const [tokenRes, prodRes, branchRes, titleRes, genderRes, empRes, occRes, purpRes] = await Promise.all([
           fetchPublicTokenInfo(token),
           fetchLoanProducts(),
           fetchBranchesDropdown(),
@@ -91,6 +94,7 @@ export default function CustomerSelfFillPage() {
           getMasterValues({ group: 'gender' }),
           getMasterValues({ group: 'employment_type' }),
           getMasterValues({ group: 'occupation_type' }),
+          getMasterValues({ group: 'loan_purpose' }),
         ]);
 
         if (tokenRes?.status === 'success') {
@@ -109,6 +113,7 @@ export default function CustomerSelfFillPage() {
         setGenders(Array.isArray(genderRes?.data || genderRes) ? (genderRes?.data || genderRes) : []);
         setEmploymentTypes(Array.isArray(empRes?.data || empRes) ? (empRes?.data || empRes) : []);
         setOccupationTypes(Array.isArray(occRes?.data || occRes) ? (occRes?.data || occRes) : []);
+        setLoanPurposes(Array.isArray(purpRes?.data || purpRes) ? (purpRes?.data || purpRes) : []);
 
       } catch (err: any) {
         setError(err?.response?.data?.message || err?.message || 'Failed to load link.');
@@ -989,6 +994,28 @@ export default function CustomerSelfFillPage() {
                     <option key={t.id} value={t.id}>
                       {t.name || t.type_name}
                     </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">Loan Purpose *</label>
+                <select
+                  required
+                  disabled={!formData.loan_product_id}
+                  value={formData.loan_purpose || ''}
+                  onChange={(e) => handleChange('loan_purpose', e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                >
+                  <option value="">-- Select Purpose --</option>
+                  {getLoanPurposeOptionsFromApi(
+                    loanPurposes,
+                    products.find((p) => Number(p.id) === Number(formData.loan_product_id))?.name ||
+                    products.find((p) => Number(p.id) === Number(formData.loan_product_id))?.product_name,
+                    loanTypes.find((t) => Number(t.id) === Number(formData.loan_type_id))?.name ||
+                    loanTypes.find((t) => Number(t.id) === Number(formData.loan_type_id))?.type_name
+                  ).map((purp, idx) => (
+                    <option key={idx} value={purp}>{purp}</option>
                   ))}
                 </select>
               </div>

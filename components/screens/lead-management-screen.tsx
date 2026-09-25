@@ -48,6 +48,7 @@ import { Button, Card, CardContent, CardHeader, Modal, StatusBadge, Tabs } from 
 import { useMockStore } from "@/lib/store";
 import { useToast } from "@/components/ui/toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { getLoanPurposeOptionsFromApi } from "@/lib/loan-purpose";
 
 export function LeadManagementScreen() {
   const { currentUser } = useMockStore();
@@ -65,7 +66,16 @@ export function LeadManagementScreen() {
   const [makerQueue, setMakerQueue] = useState<LeadData[]>([]);
   const [reports, setReports] = useState<any>(null);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [applicationNoFilter, setApplicationNoFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [fromDateFilter, setFromDateFilter] = useState("");
+  const [toDateFilter, setToDateFilter] = useState("");
+
+  // Pagination state (default 10)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
+  const [totalLeadsCount, setTotalLeadsCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   // Helper to normalize status string
   const getNormalizedStatus = (rawStatus?: string): string => {
@@ -115,6 +125,7 @@ export function LeadManagementScreen() {
   const [employmentTypes, setEmploymentTypes] = useState<any[]>([]);
   const [occupationTypes, setOccupationTypes] = useState<any[]>([]);
   const [deviationTypes, setDeviationTypes] = useState<any[]>([]);
+  const [loanPurposes, setLoanPurposes] = useState<any[]>([]);
 
   // PAN Verification State
   const [verifyingPan, setVerifyingPan] = useState(false);
@@ -159,6 +170,7 @@ export function LeadManagementScreen() {
     pan_no: "",
     loan_product_id: undefined,
     loan_type_id: undefined,
+    loan_purpose: "",
     loan_amount_required: 100000,
     loan_period_months: 12,
   });
@@ -184,12 +196,23 @@ export function LeadManagementScreen() {
   const [deviationType, setDeviationType] = useState<string>("");
 
   // Load initial data
-  const loadAllData = async () => {
+  const loadAllData = async (page = currentPage, limit = perPage) => {
     try {
       setLoading(true);
-      const [leadsRes, makerRes, reportsRes, prodRes, branchRes, titleRes, genderRes, empRes, occRes, devRes] = await Promise.all([
-        fetchLeads({ search, status: statusFilter }),
-        fetchMakerQueue(),
+      const queryParams: Record<string, any> = {
+        page: page,
+        per_page: limit,
+      };
+
+      if (search.trim()) queryParams.search = search.trim();
+      if (applicationNoFilter.trim()) queryParams.application_no = applicationNoFilter.trim();
+      if (statusFilter && statusFilter !== "ALL") queryParams.status = statusFilter;
+      if (fromDateFilter) queryParams.from_date = fromDateFilter;
+      if (toDateFilter) queryParams.to_date = toDateFilter;
+
+      const [leadsRes, makerRes, reportsRes, prodRes, branchRes, titleRes, genderRes, empRes, occRes, devRes, purpRes] = await Promise.all([
+        fetchLeads(queryParams),
+        fetchMakerQueue(queryParams),
         fetchLeadReports(),
         fetchLoanProducts(),
         fetchBranchesDropdown(),
@@ -198,10 +221,19 @@ export function LeadManagementScreen() {
         getMasterValues({ group: "employment_type" }),
         getMasterValues({ group: "occupation_type" }),
         getMasterValues({ group: "deviation_type" }),
+        getMasterValues({ group: "loan_purpose" }),
       ]);
 
       const items = leadsRes?.data?.items || [];
       setLeads(items);
+
+      if (leadsRes?.data?.pagination) {
+        setTotalLeadsCount(leadsRes.data.pagination.total || items.length);
+        setTotalPages(leadsRes.data.pagination.total_pages || 1);
+      } else {
+        setTotalLeadsCount(items.length);
+        setTotalPages(1);
+      }
 
       const mqItems = makerRes?.data?.items || [];
       setMakerQueue(mqItems);
@@ -219,11 +251,22 @@ export function LeadManagementScreen() {
       setEmploymentTypes(Array.isArray(empRes?.data || empRes) ? (empRes?.data || empRes) : []);
       setOccupationTypes(Array.isArray(occRes?.data || occRes) ? (occRes?.data || occRes) : []);
       setDeviationTypes(Array.isArray(devRes?.data || devRes) ? (devRes?.data || devRes) : []);
+      setLoanPurposes(Array.isArray(purpRes?.data || purpRes) ? (purpRes?.data || purpRes) : []);
     } catch (err: any) {
       console.error("Failed to fetch lead data:", err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleResetFilters = () => {
+    setSearch("");
+    setApplicationNoFilter("");
+    setStatusFilter("ALL");
+    setFromDateFilter("");
+    setToDateFilter("");
+    setCurrentPage(1);
+    loadAllData(1, perPage);
   };
 
   const handleSendOtp = async () => {
@@ -355,8 +398,8 @@ export function LeadManagementScreen() {
   };
 
   useEffect(() => {
-    loadAllData();
-  }, [search, statusFilter]);
+    loadAllData(currentPage, perPage);
+  }, [currentPage, perPage]);
 
   const handleProductChange = async (productId: number) => {
     setCreateForm((prev) => ({ ...prev, loan_product_id: productId, loan_type_id: undefined }));
@@ -630,6 +673,7 @@ export function LeadManagementScreen() {
       annual_gross_turnover_last_fy: lead.annual_gross_turnover_last_fy,
       loan_product_id: lead.loan_product_id,
       loan_type_id: lead.loan_type_id || lead.loan_scheme_id,
+      loan_purpose: lead.loan_purpose || "",
       loan_amount_required: lead.loan_amount_required,
       loan_period_months: lead.loan_period_months,
     });
@@ -729,38 +773,139 @@ export function LeadManagementScreen() {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex justify-between items-center bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
+      {/* Tabs Bar */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm gap-3">
         <Tabs
-          onChange={setActiveTab}
+          onChange={(tab) => {
+            setActiveTab(tab);
+            setCurrentPage(1);
+            loadAllData(1, perPage);
+          }}
           tabs={
             isBankUser
               ? [
-                  { label: `All Leads (${leads.length})`, value: "all-leads" },
+                  { label: `All Leads (${activeTab === "all-leads" ? totalLeadsCount : leads.length})`, value: "all-leads" },
                   { label: `Bank Maker Queue (${makerQueue.length})`, value: "maker-queue" },
                 ]
-              : [{ label: `My Leads (${leads.length})`, value: "all-leads" }]
+              : [{ label: `My Leads (${totalLeadsCount})`, value: "all-leads" }]
           }
           value={activeTab}
         />
-
-        <div className="flex gap-2">
-          <input
-            type="text"
-            placeholder="Search leads..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500"
-          />
-          <button
-            onClick={() => loadAllData()}
-            className="p-2 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-100"
-            title="Refresh"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </button>
-        </div>
       </div>
+
+      {/* Advanced Filter Options Bar */}
+      <Card className="border-slate-200 shadow-sm bg-white">
+        <CardContent className="p-4 space-y-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              setCurrentPage(1);
+              loadAllData(1, perPage);
+            }}
+            className="space-y-4"
+          >
+            <div className="flex items-center justify-between border-b pb-2">
+              <div className="flex items-center gap-2 font-bold text-slate-800 text-xs uppercase tracking-wider">
+                <Filter className="h-4 w-4 text-blue-600" />
+                <span>Search & Filter Options</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
+              {/* Date Range: From Date */}
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">From Date</label>
+                <input
+                  type="date"
+                  value={fromDateFilter}
+                  onChange={(e) => setFromDateFilter(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg p-2 focus:ring-1 focus:ring-blue-500 bg-slate-50/50"
+                />
+              </div>
+
+              {/* Date Range: To Date */}
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">To Date</label>
+                <input
+                  type="date"
+                  value={toDateFilter}
+                  onChange={(e) => setToDateFilter(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg p-2 focus:ring-1 focus:ring-blue-500 bg-slate-50/50"
+                />
+              </div>
+
+              {/* Application Number */}
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">Application Number</label>
+                <input
+                  type="text"
+                  placeholder="App ID / Ref No."
+                  value={applicationNoFilter}
+                  onChange={(e) => setApplicationNoFilter(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg p-2 font-mono focus:ring-1 focus:ring-blue-500 bg-slate-50/50"
+                />
+              </div>
+
+              {/* By Status */}
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">Filter by Status</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg p-2 focus:ring-1 focus:ring-blue-500 bg-white"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="NEW">New / Submitted to Maker</option>
+                  <option value="IN_PROCESS">In Process</option>
+                  <option value="QUERY">Query Raised</option>
+                  <option value="SANCTIONED">Sanctioned</option>
+                  <option value="DISBURSED">Disbursed</option>
+                  <option value="REJECTED">Rejected</option>
+                  <option value="CANCELLED">Cancelled</option>
+                </select>
+              </div>
+
+              {/* General Search */}
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">Applicant / Mobile / PAN</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Name, Mobile, PAN..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg pl-8 pr-3 py-2 focus:ring-1 focus:ring-blue-500 bg-slate-50/50"
+                  />
+                  <Search className="h-4 w-4 absolute left-2.5 top-2.5 text-slate-400" />
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons: Apply Filter & Reset */}
+            <div className="flex justify-end items-center gap-3 pt-3 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleResetFilters}
+                className="text-xs text-slate-700 border-slate-300 hover:bg-slate-100 whitespace-nowrap px-3"
+              >
+                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                Reset Filters
+              </Button>
+
+              <Button
+                type="submit"
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-5 whitespace-nowrap"
+              >
+                <Search className="h-3.5 w-3.5 mr-1.5" />
+                Apply Filters & Load Data
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
 
       {/* Table Content */}
       <Card>
@@ -779,50 +924,108 @@ export function LeadManagementScreen() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">
-                {(activeTab === "all-leads" ? leads : makerQueue).map((lead) => (
-                  <tr key={lead.id} className="hover:bg-slate-50/80 transition">
-                    <td className="py-3 px-4">
-                      <p className="font-bold text-slate-900">{lead.CustName || `${lead.first_name || ""} ${lead.last_name || ""}`.trim() || lead.entity_name}</p>
-                      <p className="text-[11px] font-mono text-slate-500">{lead.application_id || lead.lead_uuid?.slice(0, 13)}</p>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${lead.constitution === 'Individual' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>
-                        {lead.constitution}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <p className="text-slate-800">{lead.product?.name || "Loan Product"}</p>
-                      <p className="text-slate-400 text-[11px]">{lead.loan_type?.name || lead.loanType?.name || "Standard"}</p>
-                    </td>
-                    <td className="py-3 px-4 font-mono font-semibold text-slate-900">
-                      {formatCurrency(Number(lead.loan_amount_required || 0))}
-                    </td>
-                    <td className="py-3 px-4 text-slate-600">
-                      <span className="capitalize font-semibold">{lead.created_by_type || "dsa"}</span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <StatusBadge status={lead.status || "NEW"} />
-                    </td>
-                    <td className="py-3 px-4 text-right space-x-2">
-                      <Button size="sm" variant="outline" onClick={() => handleViewDetail(lead.id!)}>
-                        <Eye className="h-3.5 w-3.5 mr-1" />
-                        View
-                      </Button>
-                      {isBankUser && lead.status === "NEW" && (
-                        <Button size="sm" onClick={() => handleForwardToChecker(lead.id!)}>
-                          Forward →
-                        </Button>
-                      )}
-                      {isBankUser && lead.status === "SANCTIONED" && (
-                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => openDisbursementModal(lead)}>
-                          Disburse
-                        </Button>
-                      )}
+                {(activeTab === "all-leads" ? leads : makerQueue).length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-slate-500">
+                      No lead applications found matching the selected filter criteria.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  (activeTab === "all-leads" ? leads : makerQueue).map((lead) => (
+                    <tr key={lead.id} className="hover:bg-slate-50/80 transition">
+                      <td className="py-3 px-4">
+                        <p className="font-bold text-slate-900">{lead.CustName || `${lead.first_name || ""} ${lead.last_name || ""}`.trim() || lead.entity_name}</p>
+                        <p className="text-[11px] font-mono text-slate-500">{lead.application_id || lead.lead_uuid?.slice(0, 13)}</p>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${lead.constitution === 'Individual' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>
+                          {lead.constitution}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <p className="text-slate-800">{lead.product?.name || "Loan Product"}</p>
+                        <p className="text-slate-400 text-[11px]">{lead.loan_type?.name || lead.loanType?.name || "Standard"}</p>
+                      </td>
+                      <td className="py-3 px-4 font-mono font-semibold text-slate-900">
+                        {formatCurrency(Number(lead.loan_amount_required || 0))}
+                      </td>
+                      <td className="py-3 px-4 text-slate-600">
+                        <span className="capitalize font-semibold">{lead.created_by_type || "dsa"}</span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <StatusBadge status={lead.status || "NEW"} />
+                      </td>
+                      <td className="py-3 px-4 text-right space-x-2">
+                        <Button size="sm" variant="outline" onClick={() => handleViewDetail(lead.id!)}>
+                          <Eye className="h-3.5 w-3.5 mr-1" />
+                          View
+                        </Button>
+                        {isBankUser && lead.status === "NEW" && (
+                          <Button size="sm" onClick={() => handleForwardToChecker(lead.id!)}>
+                            Forward →
+                          </Button>
+                        )}
+                        {isBankUser && lead.status === "SANCTIONED" && (
+                          <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => openDisbursementModal(lead)}>
+                            Disburse
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
+          </div>
+
+          {/* Pagination Controls (Default 10) */}
+          <div className="flex flex-col sm:flex-row justify-between items-center p-4 border-t border-slate-200 bg-slate-50/50 text-xs gap-3">
+            <div className="flex items-center gap-4 text-slate-600">
+              <span>
+                Showing <strong className="text-slate-900">{totalLeadsCount === 0 ? 0 : (currentPage - 1) * perPage + 1}</strong> to{" "}
+                <strong className="text-slate-900">{Math.min(currentPage * perPage, totalLeadsCount)}</strong> of{" "}
+                <strong className="text-slate-900">{totalLeadsCount}</strong> leads
+              </span>
+
+              <div className="flex items-center gap-1.5">
+                <span>Per page:</span>
+                <select
+                  value={perPage}
+                  onChange={(e) => {
+                    setPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="border rounded px-2 py-1 bg-white focus:outline-none focus:border-blue-500 font-semibold"
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage <= 1 || loading}
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              >
+                Previous
+              </Button>
+              <span className="px-3 py-1 font-semibold text-slate-700 bg-white border rounded">
+                Page {currentPage} of {totalPages || 1}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage >= totalPages || loading}
+                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+              >
+                Next
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -1380,6 +1583,29 @@ export function LeadManagementScreen() {
               </div>
             </div>
 
+            {/* Loan Purpose Select */}
+            <div>
+              <label className="block text-slate-600 font-semibold mb-1">Loan Purpose *</label>
+              <select
+                required
+                disabled={!createForm.loan_product_id}
+                value={createForm.loan_purpose || ""}
+                onChange={(e) => setCreateForm({ ...createForm, loan_purpose: e.target.value })}
+                className="w-full border rounded-lg p-2 bg-white disabled:opacity-50"
+              >
+                <option value="">-- Choose Purpose --</option>
+                {getLoanPurposeOptionsFromApi(
+                  loanPurposes,
+                  products.find((p) => Number(p.id) === Number(createForm.loan_product_id))?.name ||
+                  products.find((p) => Number(p.id) === Number(createForm.loan_product_id))?.product_name,
+                  loanTypes.find((t) => Number(t.id) === Number(createForm.loan_type_id))?.name ||
+                  loanTypes.find((t) => Number(t.id) === Number(createForm.loan_type_id))?.type_name
+                ).map((purp, idx) => (
+                  <option key={idx} value={purp}>{purp}</option>
+                ))}
+              </select>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-slate-600 font-semibold mb-1">Required Amount (₹) *</label>
@@ -1728,6 +1954,10 @@ export function LeadManagementScreen() {
                 <div>
                   <p className="text-slate-400 font-medium">Loan Type</p>
                   <p className="font-bold text-slate-900 mt-0.5">{selectedLead.loan_type?.name || selectedLead.loanType?.name || "Standard"}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">Loan Purpose</p>
+                  <p className="font-bold text-emerald-800 mt-0.5">{selectedLead.loan_purpose || "Not Specified"}</p>
                 </div>
                 <div>
                   <p className="text-slate-400 font-medium">Loan Amount Required</p>
@@ -2302,7 +2532,7 @@ export function LeadManagementScreen() {
           {/* Loan Requirement Edit Fields */}
           <div className="space-y-3 pt-2 border-t">
             <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">Loan Requirement Details</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-slate-600 mb-1 font-semibold">Loan Amount Required (₹) *</label>
                 <input
@@ -2322,6 +2552,23 @@ export function LeadManagementScreen() {
                   onChange={(e) => setEditForm({ ...editForm, loan_period_months: Number(e.target.value) })}
                   className="w-full border rounded p-2 font-mono"
                 />
+              </div>
+              <div>
+                <label className="block text-slate-600 mb-1 font-semibold">Loan Purpose</label>
+                <select
+                  value={editForm.loan_purpose || ""}
+                  onChange={(e) => setEditForm({ ...editForm, loan_purpose: e.target.value })}
+                  className="w-full border rounded p-2 bg-white"
+                >
+                  <option value="">-- Select Purpose --</option>
+                  {getLoanPurposeOptionsFromApi(
+                    loanPurposes,
+                    selectedLead?.product?.name,
+                    selectedLead?.loan_type?.name || selectedLead?.loanType?.name
+                  ).map((purp, idx) => (
+                    <option key={idx} value={purp}>{purp}</option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
