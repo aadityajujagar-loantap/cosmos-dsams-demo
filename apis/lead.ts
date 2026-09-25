@@ -38,7 +38,7 @@ export interface LeadData {
   lead_uuid?: string;
   application_id?: string;
   CustName?: string;
-  constitution: 'Individual' | 'Non-Individual';
+  constitution: string;
   mobile: string;
   email?: string;
   pincode?: string;
@@ -173,4 +173,13 @@ export const fetchPublicTokenInfo = async (token: string): Promise<any> => {
 export const submitCustomerLeadPublic = async (token: string, leadData: LeadData): Promise<any> => {
   return request(`/public/lead/submit/${token}`, { method: 'POST', body: JSON.stringify(leadData) });
 };
+
+export const sendLeadOtp = async (mobile: string): Promise<any> => {
+  return request('/v1/lead/send-otp', { method: 'POST', body: JSON.stringify({ mobile }) });
+};
+
+export const verifyLeadOtp = async (referenceId: string, otp: string): Promise<any> => {
+  return request('/v1/lead/verify-otp', { method: 'POST', body: JSON.stringify({ reference_id: referenceId, otp }) });
+};
+
 

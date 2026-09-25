@@ -45,9 +45,13 @@ import { useMockStore } from "@/lib/store";
 import { useToast } from "@/components/ui/toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
-export function Phase2LeadManagementScreen() {
+export function LeadManagementScreen() {
   const { currentUser } = useMockStore();
   const { toast } = useToast();
+
+  const userRole = (currentUser?.role || (currentUser as any)?.role_name || "").toLowerCase();
+  const isDsa = userRole === "dsa" || (userRole.includes("dsa") && !userRole.includes("maker") && !userRole.includes("checker") && !userRole.includes("admin"));
+  const isBankUser = !isDsa;
 
   const [activeTab, setActiveTab] = useState("all-leads");
   const [loading, setLoading] = useState(true);
@@ -524,9 +528,9 @@ export function Phase2LeadManagementScreen() {
             </Button>
           </div>
         }
-        description=""
+        description=" "
         eyebrow="Lead Management"
-        title="Lead Lifecycle"
+        title="Lead Management"
       />
 
       {/* KPI Cards */}
@@ -590,10 +594,14 @@ export function Phase2LeadManagementScreen() {
       <div className="flex justify-between items-center bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
         <Tabs
           onChange={setActiveTab}
-          tabs={[
-            { label: `All Leads (${leads.length})`, value: "all-leads" },
-            { label: `Bank Maker Queue (${makerQueue.length})`, value: "maker-queue" },
-          ]}
+          tabs={
+            isBankUser
+              ? [
+                  { label: `All Leads (${leads.length})`, value: "all-leads" },
+                  { label: `Bank Maker Queue (${makerQueue.length})`, value: "maker-queue" },
+                ]
+              : [{ label: `My Leads (${leads.length})`, value: "all-leads" }]
+          }
           value={activeTab}
         />
 
@@ -661,12 +669,12 @@ export function Phase2LeadManagementScreen() {
                         <Eye className="h-3.5 w-3.5 mr-1" />
                         View
                       </Button>
-                      {lead.status === "NEW" && (
+                      {isBankUser && lead.status === "NEW" && (
                         <Button size="sm" onClick={() => handleForwardToChecker(lead.id!)}>
                           Forward →
                         </Button>
                       )}
-                      {lead.status === "SANCTIONED" && (
+                      {isBankUser && lead.status === "SANCTIONED" && (
                         <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => openDisbursementModal(lead)}>
                           Disburse
                         </Button>
@@ -736,10 +744,16 @@ export function Phase2LeadManagementScreen() {
                 <select
                   value={createForm.constitution}
                   onChange={(e) => setCreateForm({ ...createForm, constitution: e.target.value as any })}
-                  className="w-full border rounded-lg p-2 bg-white"
+                  className="w-full border rounded-lg p-2 bg-white font-medium"
                 >
                   <option value="Individual">Individual</option>
-                  <option value="Non-Individual">Non-Individual</option>
+                  <option value="Proprietory">Proprietory</option>
+                  <option value="Partnership">Partnership</option>
+                  <option value="Limited Liability Partnership">Limited Liability Partnership</option>
+                  <option value="Pvt. Ltd. Company">Pvt. Ltd. Company</option>
+                  <option value="Public Ltd. Company">Public Ltd. Company</option>
+                  <option value="Charitable Trust">Charitable Trust</option>
+                  <option value="Co-op. Society">Co-op. Society</option>
                 </select>
               </div>
             </div>
@@ -895,7 +909,7 @@ export function Phase2LeadManagementScreen() {
             )}
           </div>
 
-          {/* STEP 4: Applicant Details (Pre-filled from PAN) */}
+          {/* STEP 4: Applicant / Entity Details */}
           {createForm.constitution === "Individual" ? (
             <div className="space-y-3 border-t pt-3">
               <p className="font-semibold text-slate-700 text-[11px] uppercase tracking-wider">Applicant Personal Information</p>
@@ -1084,7 +1098,7 @@ export function Phase2LeadManagementScreen() {
             </div>
           ) : (
             <div className="space-y-3 border-t pt-3">
-              <p className="font-semibold text-slate-700 text-[11px] uppercase tracking-wider">Entity Details</p>
+              <p className="font-semibold text-slate-700 text-[11px] uppercase tracking-wider">Entity Details (Non-Individual)</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-600 mb-1">Entity Name *</label>
@@ -1097,9 +1111,10 @@ export function Phase2LeadManagementScreen() {
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 mb-1">Date of Incorporation (DOI)</label>
+                  <label className="block text-slate-600 mb-1">Date of Incorporation (DOI) *</label>
                   <input
                     type="date"
+                    required
                     value={createForm.doi || ""}
                     onChange={(e) => setCreateForm({ ...createForm, doi: e.target.value })}
                     className="w-full border rounded-lg p-2"
@@ -1107,39 +1122,146 @@ export function Phase2LeadManagementScreen() {
                 </div>
               </div>
               <div>
-                <label className="block text-slate-600 mb-1">Business Address</label>
+                <label className="block text-slate-600 mb-1">Business Address *</label>
                 <input
                   type="text"
+                  required
                   placeholder="Full office address..."
                   value={createForm.business_address || ""}
                   onChange={(e) => setCreateForm({ ...createForm, business_address: e.target.value })}
                   className="w-full border rounded-lg p-2"
                 />
               </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-600 mb-1">Name of Prop / Partner / Director *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Key promoter name..."
+                    value={createForm.proprietor_partner_director_name || ""}
+                    onChange={(e) => setCreateForm({ ...createForm, proprietor_partner_director_name: e.target.value })}
+                    className="w-full border rounded-lg p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 mb-1">Annual Gross Sales Turnover Last FY (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    value={createForm.annual_gross_turnover_last_fy || ""}
+                    onChange={(e) => setCreateForm({ ...createForm, annual_gross_turnover_last_fy: Number(e.target.value) })}
+                    className="w-full border rounded-lg p-2 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-slate-600 mb-1">Avg Annual Gross Income (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    value={createForm.avg_annual_gross_income || ""}
+                    onChange={(e) => setCreateForm({ ...createForm, avg_annual_gross_income: Number(e.target.value) })}
+                    className="w-full border rounded-lg p-2 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 mb-1">Avg Annual Net Income (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    value={createForm.avg_annual_net_income || ""}
+                    onChange={(e) => setCreateForm({ ...createForm, avg_annual_net_income: Number(e.target.value) })}
+                    className="w-full border rounded-lg p-2 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 mb-1">Existing Monthly Obligation (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    value={createForm.existing_monthly_repayment_obligation || ""}
+                    onChange={(e) => setCreateForm({ ...createForm, existing_monthly_repayment_obligation: Number(e.target.value) })}
+                    className="w-full border rounded-lg p-2 font-mono"
+                  />
+                </div>
+              </div>
             </div>
           )}
 
           {/* STEP 5: Loan Requirements */}
-          <div className="grid grid-cols-2 gap-3 border-t pt-3">
-            <div>
-              <label className="block text-slate-600 font-semibold mb-1">Required Amount (₹) *</label>
-              <input
-                type="number"
-                required
-                value={createForm.loan_amount_required}
-                onChange={(e) => setCreateForm({ ...createForm, loan_amount_required: Number(e.target.value) })}
-                className="w-full border rounded-lg p-2 font-mono"
-              />
+          <div className="space-y-3 border-t pt-3">
+            <p className="font-semibold text-slate-700 text-[11px] uppercase tracking-wider">Loan Product & Type</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">Loan Product *</label>
+                <select
+                  required
+                  value={createForm.loan_product_id || ""}
+                  onChange={(e) => handleProductChange(Number(e.target.value))}
+                  className="w-full border rounded-lg p-2 bg-white"
+                >
+                  <option value="">-- Choose Product --</option>
+                  {products
+                    .filter((p) => {
+                      if (createForm.constitution !== "Individual") {
+                        const nameLower = (p.name || p.product_name || "").toLowerCase();
+                        if (nameLower.includes("home loan") || nameLower.includes("education loan")) {
+                          return false;
+                        }
+                      }
+                      return true;
+                    })
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>{p.name || p.product_name}</option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">Loan Type *</label>
+                <select
+                  required
+                  disabled={!createForm.loan_product_id}
+                  value={createForm.loan_type_id || ""}
+                  onChange={(e) => setCreateForm({ ...createForm, loan_type_id: Number(e.target.value) })}
+                  className="w-full border rounded-lg p-2 bg-white disabled:opacity-50"
+                >
+                  <option value="">-- Choose Type --</option>
+                  {loanTypes.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name || t.type_name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div>
-              <label className="block text-slate-600 font-semibold mb-1">Tenure (Months) *</label>
-              <input
-                type="number"
-                required
-                value={createForm.loan_period_months}
-                onChange={(e) => setCreateForm({ ...createForm, loan_period_months: Number(e.target.value) })}
-                className="w-full border rounded-lg p-2 font-mono"
-              />
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">Required Amount (₹) *</label>
+                <input
+                  type="number"
+                  required
+                  value={createForm.loan_amount_required}
+                  onChange={(e) => setCreateForm({ ...createForm, loan_amount_required: Number(e.target.value) })}
+                  className="w-full border rounded-lg p-2 font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">Tenure (Months) *</label>
+                <input
+                  type="number"
+                  required
+                  value={createForm.loan_period_months}
+                  onChange={(e) => setCreateForm({ ...createForm, loan_period_months: Number(e.target.value) })}
+                  className="w-full border rounded-lg p-2 font-mono"
+                />
+              </div>
             </div>
           </div>
 
@@ -1170,28 +1292,32 @@ export function Phase2LeadManagementScreen() {
               </div>
             </div>
 
-            {/* Checker Action Toolbar */}
+            {/* Action Toolbar - Sanction/Reject/Disburse restricted to Bank users */}
             <div className="flex flex-wrap gap-2 pt-2 border-t">
               <Button size="sm" variant="outline" onClick={() => setIsQueryModalOpen(true)}>
                 <HelpCircle className="h-3.5 w-3.5 mr-1" />
                 Raise Query
               </Button>
-              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => {
-                setSanctionAmount(selectedLead.loan_amount_required || 0);
-                setIsSanctionModalOpen(true);
-              }}>
-                <FileCheck className="h-3.5 w-3.5 mr-1" />
-                Sanction
-              </Button>
-              <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white" onClick={() => setIsRejectModalOpen(true)}>
-                <XCircle className="h-3.5 w-3.5 mr-1" />
-                Reject
-              </Button>
-              {selectedLead.status === "SANCTIONED" && (
-                <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white" onClick={() => openDisbursementModal(selectedLead)}>
-                  <Banknote className="h-3.5 w-3.5 mr-1" />
-                  Manual Disburse
-                </Button>
+              {isBankUser && (
+                <>
+                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => {
+                    setSanctionAmount(selectedLead.loan_amount_required || 0);
+                    setIsSanctionModalOpen(true);
+                  }}>
+                    <FileCheck className="h-3.5 w-3.5 mr-1" />
+                    Sanction
+                  </Button>
+                  <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white" onClick={() => setIsRejectModalOpen(true)}>
+                    <XCircle className="h-3.5 w-3.5 mr-1" />
+                    Reject
+                  </Button>
+                  {selectedLead.status === "SANCTIONED" && (
+                    <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white" onClick={() => openDisbursementModal(selectedLead)}>
+                      <Banknote className="h-3.5 w-3.5 mr-1" />
+                      Manual Disburse
+                    </Button>
+                  )}
+                </>
               )}
             </div>
 
@@ -1448,3 +1574,4 @@ export function Phase2LeadManagementScreen() {
     </div>
   );
 }
+

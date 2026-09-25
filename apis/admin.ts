@@ -1881,5 +1881,10 @@ export const verifyPanAdvance = async (pan: string): Promise<any> => {
   return adminApi.verifyPanAdvance({ pan });
 };
 
+export const fetchBranchesDropdown = async (): Promise<any> => {
+  return request<any>("/branches/dropdown", { method: "GET" });
+};
+
+
 
 

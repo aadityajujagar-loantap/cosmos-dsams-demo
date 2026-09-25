@@ -2,8 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { fetchPublicTokenInfo, submitCustomerLeadPublic, LeadData } from '@/apis/lead';
-import { fetchLoanProducts, fetchLoanTypesByProduct, getMasterValues, verifyPanAdvance } from '@/apis/admin';
+import { fetchPublicTokenInfo, submitCustomerLeadPublic, sendLeadOtp, verifyLeadOtp, LeadData } from '@/apis/lead';
+import { fetchLoanProducts, fetchLoanTypesByProduct, getMasterValues, verifyPanAdvance, fetchBranchesDropdown } from '@/apis/admin';
 
 export default function CustomerSelfFillPage() {
   const params = useParams();
@@ -21,37 +21,49 @@ export default function CustomerSelfFillPage() {
   const [panVerified, setPanVerified] = useState(false);
   const [panMessage, setPanMessage] = useState<string | null>(null);
 
+  // Mobile OTP State
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [otpReferenceId, setOtpReferenceId] = useState<string | null>(null);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpMessage, setOtpMessage] = useState<string | null>(null);
+
   // Dynamic dropdown LOVs
   const [products, setProducts] = useState<any[]>([]);
   const [loanTypes, setLoanTypes] = useState<any[]>([]);
+  const [branches, setBranches] = useState<any[]>([]);
   const [titles, setTitles] = useState<any[]>([]);
   const [genders, setGenders] = useState<any[]>([]);
   const [employmentTypes, setEmploymentTypes] = useState<any[]>([]);
   const [occupationTypes, setOccupationTypes] = useState<any[]>([]);
-  const [propertyCategories, setPropertyCategories] = useState<any[]>([]);
 
   // Form State
   const [constitution, setConstitution] = useState<'Individual' | 'Non-Individual'>('Individual');
   const [formData, setFormData] = useState<Partial<LeadData>>({
     constitution: 'Individual',
-    mobile: '',
-    email: '',
+    pincode: '400001',
+    city: 'Mumbai',
+    state: 'Maharashtra',
+    Branch_id: '',
     pan_no: '',
+    title: 'MR',
     first_name: '',
     middle_name: '',
     last_name: '',
-    title: 'MR',
     gender: 'MALE',
     dob: '',
+    age: undefined,
+    mobile: '',
+    email: '',
     address: '',
-    city: 'Mumbai',
-    state: 'Maharashtra',
-    pincode: '400001',
     employment_type: '',
     occupation_type: '',
     employer_business_name: '',
     avg_gross_monthly_income: undefined,
     avg_net_monthly_income: undefined,
+    existing_monthly_repayment_obligation: undefined,
     entity_name: '',
     doi: '',
     business_address: '',
@@ -59,7 +71,6 @@ export default function CustomerSelfFillPage() {
     avg_annual_gross_income: undefined,
     avg_annual_net_income: undefined,
     annual_gross_turnover_last_fy: undefined,
-    existing_monthly_repayment_obligation: undefined,
     loan_product_id: undefined,
     loan_type_id: undefined,
     loan_amount_required: 100000,
@@ -72,14 +83,14 @@ export default function CustomerSelfFillPage() {
     const init = async () => {
       try {
         setLoading(true);
-        const [tokenRes, prodRes, titleRes, genderRes, empRes, occRes, propRes] = await Promise.all([
+        const [tokenRes, prodRes, branchRes, titleRes, genderRes, empRes, occRes] = await Promise.all([
           fetchPublicTokenInfo(token),
           fetchLoanProducts(),
+          fetchBranchesDropdown(),
           getMasterValues({ group: 'title' }),
           getMasterValues({ group: 'gender' }),
           getMasterValues({ group: 'employment_type' }),
           getMasterValues({ group: 'occupation_type' }),
-          getMasterValues({ group: 'property_category' }),
         ]);
 
         if (tokenRes?.status === 'success') {
@@ -91,11 +102,13 @@ export default function CustomerSelfFillPage() {
         const productItems = prodRes?.data?.data || prodRes?.data || prodRes || [];
         setProducts(Array.isArray(productItems) ? productItems : []);
 
+        const branchItems = branchRes?.data || branchRes || [];
+        setBranches(Array.isArray(branchItems) ? branchItems : []);
+
         setTitles(Array.isArray(titleRes?.data || titleRes) ? (titleRes?.data || titleRes) : []);
         setGenders(Array.isArray(genderRes?.data || genderRes) ? (genderRes?.data || genderRes) : []);
         setEmploymentTypes(Array.isArray(empRes?.data || empRes) ? (empRes?.data || empRes) : []);
         setOccupationTypes(Array.isArray(occRes?.data || occRes) ? (occRes?.data || occRes) : []);
-        setPropertyCategories(Array.isArray(propRes?.data || propRes) ? (propRes?.data || propRes) : []);
 
       } catch (err: any) {
         setError(err?.response?.data?.message || err?.message || 'Failed to load link.');
@@ -107,7 +120,7 @@ export default function CustomerSelfFillPage() {
     init();
   }, [token]);
 
-  // When product changes, fetch corresponding loan types
+  // Handle Product selection & Loan types
   const handleProductChange = async (productId: number) => {
     setFormData((prev) => ({ ...prev, loan_product_id: productId, loan_type_id: undefined }));
     if (!productId) {
@@ -124,10 +137,25 @@ export default function CustomerSelfFillPage() {
   };
 
   const handleChange = (field: string, value: any) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData((prev) => {
+      const updated = { ...prev, [field]: value };
+      if (field === 'dob' && value) {
+        const birthDate = new Date(value);
+        if (!isNaN(birthDate.getTime())) {
+          const today = new Date();
+          let calculatedAge = today.getFullYear() - birthDate.getFullYear();
+          const monthDiff = today.getMonth() - birthDate.getMonth();
+          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+            calculatedAge--;
+          }
+          updated.age = calculatedAge;
+        }
+      }
+      return updated;
+    });
   };
 
-  // PAN Verification & Pre-filling Handler
+  // PAN Verification Handler
   const handleVerifyPan = async () => {
     const pan = (formData.pan_no || '').trim().toUpperCase();
     if (!pan || pan.length !== 10) {
@@ -155,23 +183,28 @@ export default function CustomerSelfFillPage() {
 
         // DOB / DOI formatting
         let formattedDate = '';
+        let calculatedAge = formData.age;
         const rawDob = detailsData.dobOrDoi || detailsData.dob || detailsData.doi;
         if (rawDob) {
           const d = new Date(rawDob);
           if (!isNaN(d.getTime())) {
             formattedDate = d.toISOString().split('T')[0];
+            const today = new Date();
+            calculatedAge = today.getFullYear() - d.getFullYear();
+            const m = today.getMonth() - d.getMonth();
+            if (m < 0 || (m === 0 && today.getDate() < d.getDate())) {
+              calculatedAge--;
+            }
           } else {
             formattedDate = rawDob;
           }
         }
 
-        // Gender mapping
         let genderVal = (detailsData.gender || 'MALE').toUpperCase();
         if (genderVal.startsWith('M')) genderVal = 'MALE';
         else if (genderVal.startsWith('F')) genderVal = 'FEMALE';
         else if (genderVal.startsWith('T')) genderVal = 'TRANSGENDER';
 
-        // Address concatenation
         const addrParts = [
           detailsData.buildingName,
           detailsData.streetName,
@@ -195,6 +228,7 @@ export default function CustomerSelfFillPage() {
           entity_name: fullName || prev.entity_name,
           dob: formattedDate || prev.dob,
           doi: formattedDate || prev.doi,
+          age: calculatedAge,
           gender: genderVal || prev.gender,
           address: fullAddress || prev.address,
           business_address: fullAddress || prev.business_address,
@@ -214,6 +248,55 @@ export default function CustomerSelfFillPage() {
     }
   };
 
+  // Mobile OTP Handlers
+  const handleSendOtp = async () => {
+    const mobile = (formData.mobile || '').trim();
+    if (!mobile || mobile.length !== 10) {
+      setOtpMessage('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+
+    try {
+      setSendingOtp(true);
+      setOtpMessage(null);
+      const res = await sendLeadOtp(mobile);
+      if (res?.status === 'success') {
+        setOtpSent(true);
+        setOtpReferenceId(res.data?.reference_id || 'mock-ref-id');
+        setOtpMessage(`OTP sent successfully! (Dev/UAT Mock OTP: ${res.data?.mock_otp || '123456'})`);
+      } else {
+        setOtpMessage(res?.message || 'Failed to send OTP.');
+      }
+    } catch (err: any) {
+      setOtpMessage(err?.response?.data?.message || err?.message || 'Failed to send OTP.');
+    } finally {
+      setSendingOtp(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otpReferenceId || !otpCode || otpCode.length !== 6) {
+      setOtpMessage('Please enter 6-digit OTP code.');
+      return;
+    }
+
+    try {
+      setVerifyingOtp(true);
+      setOtpMessage(null);
+      const res = await verifyLeadOtp(otpReferenceId, otpCode);
+      if (res?.status === 'success') {
+        setOtpVerified(true);
+        setOtpMessage('✓ Mobile OTP Verified successfully.');
+      } else {
+        setOtpMessage(res?.message || 'Invalid OTP entered.');
+      }
+    } catch (err: any) {
+      setOtpMessage(err?.response?.data?.message || err?.message || 'OTP verification failed.');
+    } finally {
+      setVerifyingOtp(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -226,8 +309,16 @@ export default function CustomerSelfFillPage() {
       setError('Please enter a valid 10-digit mobile number.');
       return;
     }
+    if (!otpVerified) {
+      setError('Please verify your Mobile OTP before submitting.');
+      return;
+    }
     if (!formData.pan_no || formData.pan_no.length !== 10) {
       setError('Please enter a valid 10-character PAN Number.');
+      return;
+    }
+    if (constitution === 'Individual' && formData.age !== undefined && (formData.age < 18 || formData.age > 70)) {
+      setError(`Applicant age must be between 18 and 70 years. Current calculated age: ${formData.age}`);
       return;
     }
 
@@ -328,117 +419,106 @@ export default function CustomerSelfFillPage() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* STEP 1: Loan Product & Loan Type Selection */}
+          
+          {/* SECTION 1: Customer Basic Information */}
           <div className="space-y-4">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
-              1. Select Loan Product & Type
+              1. Customer Basic Information
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">Loan Product *</label>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">Branch *</label>
                 <select
-                  required
-                  value={formData.loan_product_id || ''}
-                  onChange={(e) => handleProductChange(Number(e.target.value))}
+                  value={formData.Branch_id || ''}
+                  onChange={(e) => handleChange('Branch_id', e.target.value)}
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
                 >
-                  <option value="">-- Select Loan Product --</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name || p.product_name}
+                  <option value="">-- Select Branch --</option>
+                  {branches.map((b) => (
+                    <option key={b.branch_code || b.id} value={b.branch_code || b.id}>
+                      {b.branch_name || b.name} ({b.branch_code || b.code})
                     </option>
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">Loan Type *</label>
-                <select
-                  required
-                  disabled={!formData.loan_product_id}
-                  value={formData.loan_type_id || ''}
-                  onChange={(e) => handleChange('loan_type_id', Number(e.target.value))}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 disabled:opacity-50"
-                >
-                  <option value="">-- Select Loan Type --</option>
-                  {loanTypes.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name || t.type_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
 
-          {/* STEP 2: Constitution & Contact Information */}
-          <div className="border-t border-slate-800 pt-6 space-y-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
-              2. Constitution & Contact Information
-            </h3>
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-2">Applicant Constitution *</label>
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConstitution('Individual');
-                    handleChange('constitution', 'Individual');
-                  }}
-                  className={`py-3 px-4 rounded-xl border text-sm font-semibold transition ${
-                    constitution === 'Individual'
-                      ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-900/30'
-                      : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:border-slate-600'
-                  }`}
-                >
-                  👤 Individual
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConstitution('Non-Individual');
-                    handleChange('constitution', 'Non-Individual');
-                  }}
-                  className={`py-3 px-4 rounded-xl border text-sm font-semibold transition ${
-                    constitution === 'Non-Individual'
-                      ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-900/30'
-                      : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:border-slate-600'
-                  }`}
-                >
-                  🏢 Entity / Business
-                </button>
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">Applicant Constitution *</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConstitution('Individual');
+                      handleChange('constitution', 'Individual');
+                    }}
+                    className={`py-2.5 px-3 rounded-xl border text-xs font-semibold transition ${
+                      constitution === 'Individual'
+                        ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg'
+                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
+                    }`}
+                  >
+                    👤 Individual
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConstitution('Non-Individual');
+                      handleChange('constitution', 'Non-Individual');
+                    }}
+                    className={`py-2.5 px-3 rounded-xl border text-xs font-semibold transition ${
+                      constitution === 'Non-Individual'
+                        ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg'
+                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
+                    }`}
+                  >
+                    🏢 Entity / Business
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">Mobile Number *</label>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">Pincode *</label>
                 <input
                   type="text"
                   required
-                  maxLength={10}
-                  placeholder="10-digit mobile"
-                  value={formData.mobile || ''}
-                  onChange={(e) => handleChange('mobile', e.target.value)}
+                  maxLength={6}
+                  placeholder="e.g. 400001"
+                  value={formData.pincode || ''}
+                  onChange={(e) => handleChange('pincode', e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">City *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="City"
+                  value={formData.city || ''}
+                  onChange={(e) => handleChange('city', e.target.value)}
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">Email Address</label>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">State *</label>
                 <input
-                  type="email"
-                  placeholder="email@domain.com"
-                  value={formData.email || ''}
-                  onChange={(e) => handleChange('email', e.target.value)}
+                  type="text"
+                  required
+                  placeholder="State"
+                  value={formData.state || ''}
+                  onChange={(e) => handleChange('state', e.target.value)}
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>
             </div>
           </div>
 
-          {/* STEP 3: PAN Verification (FIRST before Name/Address/DOB) */}
+          {/* SECTION 2: Primary Identity Details (PAN FIRST) */}
           <div className="border-t border-slate-800 pt-6 space-y-4">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
-              3. Identity Verification (PAN Verification API)
+              2. Primary Identity Verification (Advanced PAN API)
             </h3>
             <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 space-y-3">
               <label className="block text-xs font-medium text-slate-300">
@@ -456,7 +536,7 @@ export default function CustomerSelfFillPage() {
                     setPanVerified(false);
                     setPanMessage(null);
                   }}
-                  className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white uppercase tracking-wider focus:outline-none focus:border-emerald-500"
+                  className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white uppercase tracking-wider focus:outline-none focus:border-emerald-500 font-mono font-semibold"
                 />
                 <button
                   type="button"
@@ -464,11 +544,7 @@ export default function CustomerSelfFillPage() {
                   onClick={handleVerifyPan}
                   className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-5 py-2.5 rounded-xl transition flex items-center justify-center space-x-2 disabled:opacity-50"
                 >
-                  {verifyingPan ? (
-                    <span>Verifying...</span>
-                  ) : (
-                    <span>🔍 Verify PAN & Pre-Fill</span>
-                  )}
+                  {verifyingPan ? <span>Verifying...</span> : <span>🔍 Verify PAN & Pre-Fill</span>}
                 </button>
               </div>
 
@@ -480,16 +556,100 @@ export default function CustomerSelfFillPage() {
             </div>
           </div>
 
-          {/* STEP 4: Applicant Details (Pre-filled from PAN) */}
+          {/* SECTION 3: Contact Details & Mobile OTP Verification */}
+          <div className="border-t border-slate-800 pt-6 space-y-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
+              3. Contact & Mobile OTP Verification
+            </h3>
+            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Mobile Number *</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      required
+                      maxLength={10}
+                      placeholder="10-digit mobile"
+                      disabled={otpVerified}
+                      value={formData.mobile || ''}
+                      onChange={(e) => {
+                        handleChange('mobile', e.target.value);
+                        setOtpSent(false);
+                        setOtpVerified(false);
+                      }}
+                      className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 disabled:opacity-60"
+                    />
+                    {!otpVerified && (
+                      <button
+                        type="button"
+                        disabled={sendingOtp || (formData.mobile || '').length !== 10}
+                        onClick={handleSendOtp}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition disabled:opacity-50"
+                      >
+                        {sendingOtp ? 'Sending...' : 'Send OTP'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">E-Mail ID *</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="email@domain.com"
+                    value={formData.email || ''}
+                    onChange={(e) => handleChange('email', e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {/* OTP Verification Input */}
+              {otpSent && !otpVerified && (
+                <div className="border-t border-slate-700 pt-3 flex flex-col sm:flex-row items-center gap-3">
+                  <input
+                    type="text"
+                    maxLength={6}
+                    placeholder="Enter 6-digit OTP (e.g. 123456)"
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value)}
+                    className="w-full sm:w-64 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-white font-mono tracking-widest text-center focus:outline-none focus:border-emerald-500"
+                  />
+                  <button
+                    type="button"
+                    disabled={verifyingOtp || otpCode.length !== 6}
+                    onClick={handleVerifyOtp}
+                    className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-6 py-2.5 rounded-xl transition disabled:opacity-50"
+                  >
+                    {verifyingOtp ? 'Verifying OTP...' : 'Verify OTP'}
+                  </button>
+                </div>
+              )}
+
+              {otpVerified && (
+                <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-2.5 rounded-xl text-xs font-semibold flex items-center space-x-2">
+                  <span>✓ Mobile Number Verified with OTP</span>
+                </div>
+              )}
+
+              {otpMessage && !otpVerified && (
+                <p className="text-xs text-amber-400 mt-1">{otpMessage}</p>
+              )}
+            </div>
+          </div>
+
+          {/* SECTION 4: Applicant Details (Individual) */}
           {constitution === 'Individual' ? (
             <div className="space-y-4 border-t border-slate-800 pt-6">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
-                4. Applicant Details (Auto-filled from PAN)
+                4. Applicant Personal Information
               </h3>
               
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Title</label>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Title *</label>
                   <select
                     value={formData.title || 'MR'}
                     onChange={(e) => handleChange('title', e.target.value)}
@@ -542,18 +702,9 @@ export default function CustomerSelfFillPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Date of Birth</label>
-                  <input
-                    type="date"
-                    value={formData.dob || ''}
-                    onChange={(e) => handleChange('dob', e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Gender</label>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Gender *</label>
                   <select
                     value={formData.gender || 'MALE'}
                     onChange={(e) => handleChange('gender', e.target.value)}
@@ -574,12 +725,31 @@ export default function CustomerSelfFillPage() {
                     )}
                   </select>
                 </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Date of Birth (DOB) *</label>
+                  <input
+                    type="date"
+                    required
+                    value={formData.dob || ''}
+                    onChange={(e) => handleChange('dob', e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Age (Auto Calculated)</label>
+                  <div className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-emerald-400 font-bold font-mono">
+                    {formData.age !== undefined ? `${formData.age} Years` : '--'}
+                  </div>
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">Residential Address</label>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">Residential Address *</label>
                 <textarea
                   rows={2}
+                  required
                   value={formData.address || ''}
                   onChange={(e) => handleChange('address', e.target.value)}
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
@@ -589,8 +759,9 @@ export default function CustomerSelfFillPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Employment Type</label>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Employment Type *</label>
                   <select
+                    required
                     value={formData.employment_type || ''}
                     onChange={(e) => handleChange('employment_type', e.target.value)}
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
@@ -604,8 +775,9 @@ export default function CustomerSelfFillPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Occupation Type</label>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Occupation Type *</label>
                   <select
+                    required
                     value={formData.occupation_type || ''}
                     onChange={(e) => handleChange('occupation_type', e.target.value)}
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
@@ -620,20 +792,47 @@ export default function CustomerSelfFillPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">Employer / Business Entity Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Company / Employer name"
+                  value={formData.employer_business_name || ''}
+                  onChange={(e) => handleChange('employer_business_name', e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Gross Monthly Income (₹)</label>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Average Gross Monthly Income (₹) *</label>
                   <input
                     type="number"
+                    required
+                    min={0}
                     value={formData.avg_gross_monthly_income || ''}
                     onChange={(e) => handleChange('avg_gross_monthly_income', e.target.value)}
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Existing Monthly Obligation (₹)</label>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Average Net Monthly Income (₹) *</label>
                   <input
                     type="number"
+                    required
+                    min={0}
+                    value={formData.avg_net_monthly_income || ''}
+                    onChange={(e) => handleChange('avg_net_monthly_income', e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Existing Monthly Obligation (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
                     value={formData.existing_monthly_repayment_obligation || ''}
                     onChange={(e) => handleChange('existing_monthly_repayment_obligation', e.target.value)}
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 font-mono"
@@ -644,12 +843,12 @@ export default function CustomerSelfFillPage() {
           ) : (
             <div className="space-y-4 border-t border-slate-800 pt-6">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
-                4. Business / Entity Details (Auto-filled from PAN)
+                4. Business / Entity Details
               </h3>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Entity / Firm Name *</label>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Entity Name *</label>
                   <input
                     type="text"
                     required
@@ -659,9 +858,10 @@ export default function CustomerSelfFillPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Date of Incorporation (DOI)</label>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Date of Incorporation (DOI) *</label>
                   <input
                     type="date"
+                    required
                     value={formData.doi || ''}
                     onChange={(e) => handleChange('doi', e.target.value)}
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
@@ -670,32 +870,71 @@ export default function CustomerSelfFillPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">Business Address</label>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">Business Address *</label>
                 <textarea
                   rows={2}
+                  required
                   value={formData.business_address || ''}
                   onChange={(e) => handleChange('business_address', e.target.value)}
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
-                  placeholder="Full office/registered business address..."
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Proprietor / Partner / Director Name</label>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Name of Prop / Partner / Director *</label>
                   <input
                     type="text"
+                    required
                     value={formData.proprietor_partner_director_name || ''}
                     onChange={(e) => handleChange('proprietor_partner_director_name', e.target.value)}
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Annual Gross Turnover Last FY (₹)</label>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Annual Gross Sales Turnover Last FY (₹) *</label>
                   <input
                     type="number"
+                    required
+                    min={0}
                     value={formData.annual_gross_turnover_last_fy || ''}
                     onChange={(e) => handleChange('annual_gross_turnover_last_fy', e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Avg Annual Gross Income (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    value={formData.avg_annual_gross_income || ''}
+                    onChange={(e) => handleChange('avg_annual_gross_income', e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Avg Annual Net Income (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    value={formData.avg_annual_net_income || ''}
+                    onChange={(e) => handleChange('avg_annual_net_income', e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Existing Monthly Obligation (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    value={formData.existing_monthly_repayment_obligation || ''}
+                    onChange={(e) => handleChange('existing_monthly_repayment_obligation', e.target.value)}
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 font-mono"
                   />
                 </div>
@@ -703,37 +942,90 @@ export default function CustomerSelfFillPage() {
             </div>
           )}
 
-          {/* STEP 5: Financial & Loan Requirements */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-800 pt-6">
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Loan Amount Required (₹) *</label>
-              <input
-                type="number"
-                required
-                min={1000}
-                placeholder="e.g. 500000"
-                value={formData.loan_amount_required || ''}
-                onChange={(e) => handleChange('loan_amount_required', e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 font-mono"
-              />
+          {/* SECTION 5: Loan Details */}
+          <div className="border-t border-slate-800 pt-6 space-y-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
+              5. Loan Product & Requirement Details
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">Loan Product *</label>
+                <select
+                  required
+                  value={formData.loan_product_id || ''}
+                  onChange={(e) => handleProductChange(Number(e.target.value))}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="">-- Select Loan Product --</option>
+                  {products
+                    .filter((p) => {
+                      if (constitution !== 'Individual') {
+                        const nameLower = (p.name || p.product_name || '').toLowerCase();
+                        if (nameLower.includes('home loan') || nameLower.includes('education loan')) {
+                          return false;
+                        }
+                      }
+                      return true;
+                    })
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name || p.product_name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">Loan Type *</label>
+                <select
+                  required
+                  disabled={!formData.loan_product_id}
+                  value={formData.loan_type_id || ''}
+                  onChange={(e) => handleChange('loan_type_id', Number(e.target.value))}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                >
+                  <option value="">-- Select Loan Type --</option>
+                  {loanTypes.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name || t.type_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Loan Period (Months) *</label>
-              <input
-                type="number"
-                required
-                min={1}
-                max={360}
-                value={formData.loan_period_months || 12}
-                onChange={(e) => handleChange('loan_period_months', e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 font-mono"
-              />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">Loan Amount Required (₹) *</label>
+                <input
+                  type="number"
+                  required
+                  min={1000}
+                  placeholder="e.g. 500000"
+                  value={formData.loan_amount_required || ''}
+                  onChange={(e) => handleChange('loan_amount_required', e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">Loan Period (Months) *</label>
+                <input
+                  type="number"
+                  required
+                  min={1}
+                  max={360}
+                  value={formData.loan_period_months || 12}
+                  onChange={(e) => handleChange('loan_period_months', e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 font-mono"
+                />
+              </div>
             </div>
           </div>
 
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || !otpVerified}
             className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 px-6 rounded-xl shadow-lg shadow-emerald-900/40 transition flex items-center justify-center space-x-2 disabled:opacity-50"
           >
             {submitting ? (
