@@ -195,8 +195,43 @@ export function LeadManagementScreen() {
   const [hasDeviation, setHasDeviation] = useState<string>("No");
   const [deviationType, setDeviationType] = useState<string>("");
 
-  // Load initial data
-  const loadAllData = async (page = currentPage, limit = perPage) => {
+  // Separate static master data loading (fetches ONCE)
+  const [masterLoaded, setMasterLoaded] = useState(false);
+
+  const loadStaticMasterData = async () => {
+    if (masterLoaded) return;
+    try {
+      const [prodRes, branchRes, titleRes, genderRes, empRes, occRes, devRes, purpRes] = await Promise.all([
+        fetchLoanProducts(),
+        fetchBranchesDropdown(),
+        getMasterValues({ group: "title" }),
+        getMasterValues({ group: "gender" }),
+        getMasterValues({ group: "employment_type" }),
+        getMasterValues({ group: "occupation_type" }),
+        getMasterValues({ group: "deviation_type" }),
+        getMasterValues({ group: "loan_purpose" }),
+      ]);
+
+      const prods = prodRes?.data?.data || prodRes?.data || prodRes || [];
+      setProducts(Array.isArray(prods) ? prods : []);
+
+      const branchItems = branchRes?.data || branchRes || [];
+      setBranches(Array.isArray(branchItems) ? branchItems : []);
+
+      setTitles(Array.isArray(titleRes?.data || titleRes) ? (titleRes?.data || titleRes) : []);
+      setGenders(Array.isArray(genderRes?.data || genderRes) ? (genderRes?.data || genderRes) : []);
+      setEmploymentTypes(Array.isArray(empRes?.data || empRes) ? (empRes?.data || empRes) : []);
+      setOccupationTypes(Array.isArray(occRes?.data || occRes) ? (occRes?.data || occRes) : []);
+      setDeviationTypes(Array.isArray(devRes?.data || devRes) ? (devRes?.data || devRes) : []);
+      setLoanPurposes(Array.isArray(purpRes?.data || purpRes) ? (purpRes?.data || purpRes) : []);
+      setMasterLoaded(true);
+    } catch (err) {
+      console.error("Failed to load static master data:", err);
+    }
+  };
+
+  // Fast Lead Data Loader (fetches ONLY table/queue data on pagination & filter changes)
+  const loadLeadDataOnly = async (page = currentPage, limit = perPage) => {
     try {
       setLoading(true);
       const queryParams: Record<string, any> = {
@@ -210,18 +245,10 @@ export function LeadManagementScreen() {
       if (fromDateFilter) queryParams.from_date = fromDateFilter;
       if (toDateFilter) queryParams.to_date = toDateFilter;
 
-      const [leadsRes, makerRes, reportsRes, prodRes, branchRes, titleRes, genderRes, empRes, occRes, devRes, purpRes] = await Promise.all([
+      const [leadsRes, makerRes, reportsRes] = await Promise.all([
         fetchLeads(queryParams),
         fetchMakerQueue(queryParams),
         fetchLeadReports(),
-        fetchLoanProducts(),
-        fetchBranchesDropdown(),
-        getMasterValues({ group: "title" }),
-        getMasterValues({ group: "gender" }),
-        getMasterValues({ group: "employment_type" }),
-        getMasterValues({ group: "occupation_type" }),
-        getMasterValues({ group: "deviation_type" }),
-        getMasterValues({ group: "loan_purpose" }),
       ]);
 
       const items = leadsRes?.data?.items || [];
@@ -237,21 +264,7 @@ export function LeadManagementScreen() {
 
       const mqItems = makerRes?.data?.items || [];
       setMakerQueue(mqItems);
-
       setReports(reportsRes?.data || null);
-
-      const prods = prodRes?.data?.data || prodRes?.data || prodRes || [];
-      setProducts(Array.isArray(prods) ? prods : []);
-
-      const branchItems = branchRes?.data || branchRes || [];
-      setBranches(Array.isArray(branchItems) ? branchItems : []);
-
-      setTitles(Array.isArray(titleRes?.data || titleRes) ? (titleRes?.data || titleRes) : []);
-      setGenders(Array.isArray(genderRes?.data || genderRes) ? (genderRes?.data || genderRes) : []);
-      setEmploymentTypes(Array.isArray(empRes?.data || empRes) ? (empRes?.data || empRes) : []);
-      setOccupationTypes(Array.isArray(occRes?.data || occRes) ? (occRes?.data || occRes) : []);
-      setDeviationTypes(Array.isArray(devRes?.data || devRes) ? (devRes?.data || devRes) : []);
-      setLoanPurposes(Array.isArray(purpRes?.data || purpRes) ? (purpRes?.data || purpRes) : []);
     } catch (err: any) {
       console.error("Failed to fetch lead data:", err);
     } finally {
@@ -266,7 +279,7 @@ export function LeadManagementScreen() {
     setFromDateFilter("");
     setToDateFilter("");
     setCurrentPage(1);
-    loadAllData(1, perPage);
+    loadLeadDataOnly(1, perPage);
   };
 
   const handleSendOtp = async () => {
@@ -398,7 +411,11 @@ export function LeadManagementScreen() {
   };
 
   useEffect(() => {
-    loadAllData(currentPage, perPage);
+    loadStaticMasterData();
+  }, []);
+
+  useEffect(() => {
+    loadLeadDataOnly(currentPage, perPage);
   }, [currentPage, perPage]);
 
   const handleProductChange = async (productId: number) => {
@@ -427,7 +444,7 @@ export function LeadManagementScreen() {
       if (res?.status === "success") {
         toast({ title: "Success", description: "Lead created successfully", variant: "success" });
         setIsCreateModalOpen(false);
-        loadAllData();
+        loadLeadDataOnly();
       }
     } catch (err: any) {
       toast({ title: "Error", description: err?.response?.data?.message || err?.message, variant: "error" });
@@ -463,7 +480,7 @@ export function LeadManagementScreen() {
       const res = await forwardToChecker(leadId, "Maker verified details");
       if (res?.status === "success") {
         toast({ title: "Success", description: "Lead forwarded to Checker", variant: "success" });
-        loadAllData();
+        loadLeadDataOnly();
       }
     } catch (err: any) {
       toast({ title: "Error", description: "Failed to forward lead", variant: "error" });
@@ -515,7 +532,7 @@ export function LeadManagementScreen() {
         toast({ title: "Success", description: "Lead sanctioned successfully", variant: "success" });
         setIsSanctionModalOpen(false);
         handleViewDetail(selectedLead.id!);
-        loadAllData();
+        loadLeadDataOnly();
       }
     } catch (err: any) {
       toast({ title: "Error", description: err?.message, variant: "error" });
@@ -532,7 +549,7 @@ export function LeadManagementScreen() {
         setIsRejectModalOpen(false);
         setRejectionReason("");
         handleViewDetail(selectedLead.id!);
-        loadAllData();
+        loadLeadDataOnly();
       }
     } catch (err: any) {
       toast({ title: "Error", description: err?.message, variant: "error" });
@@ -587,7 +604,7 @@ export function LeadManagementScreen() {
         toast({ title: "Success", description: "Loan disbursed successfully", variant: "success" });
         setIsDisburseModalOpen(false);
         handleViewDetail(selectedLead.id!);
-        loadAllData();
+        loadLeadDataOnly();
       }
     } catch (err: any) {
       toast({ title: "Error", description: err?.message, variant: "error" });
@@ -600,7 +617,7 @@ export function LeadManagementScreen() {
       if (res?.status === "success") {
         toast({ title: "Lead Processed", description: "Lead transitioned to IN_PROCESS status.", variant: "success" });
         handleViewDetail(leadId);
-        loadAllData();
+        loadLeadDataOnly();
       }
     } catch (err: any) {
       toast({ title: "Error", description: err?.message, variant: "error" });
@@ -617,7 +634,7 @@ export function LeadManagementScreen() {
         setIsCancelModalOpen(false);
         setCancellationReason("");
         handleViewDetail(selectedLead.id!);
-        loadAllData();
+        loadLeadDataOnly();
       }
     } catch (err: any) {
       toast({ title: "Error", description: err?.message, variant: "error" });
@@ -637,7 +654,7 @@ export function LeadManagementScreen() {
         setIsUpdateStatusModalOpen(false);
         setUpdateRemarks("");
         handleViewDetail(selectedLead.id!);
-        loadAllData();
+        loadLeadDataOnly();
       }
     } catch (err: any) {
       toast({ title: "Error", description: err?.message, variant: "error" });
@@ -689,7 +706,7 @@ export function LeadManagementScreen() {
         toast({ title: "Lead Updated", description: "Lead information updated successfully.", variant: "success" });
         setIsEditModalOpen(false);
         handleViewDetail(selectedLead.id!);
-        loadAllData();
+        loadLeadDataOnly();
       }
     } catch (err: any) {
       toast({ title: "Error", description: err?.message, variant: "error" });
@@ -779,7 +796,7 @@ export function LeadManagementScreen() {
           onChange={(tab) => {
             setActiveTab(tab);
             setCurrentPage(1);
-            loadAllData(1, perPage);
+            loadLeadDataOnly(1, perPage);
           }}
           tabs={
             isBankUser
@@ -800,7 +817,7 @@ export function LeadManagementScreen() {
             onSubmit={(e) => {
               e.preventDefault();
               setCurrentPage(1);
-              loadAllData(1, perPage);
+              loadLeadDataOnly(1, perPage);
             }}
             className="space-y-4"
           >
@@ -1058,22 +1075,27 @@ export function LeadManagementScreen() {
         </div>
       </Modal>
 
-      {/* Create Lead Modal */}
-      <Modal open={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} title="Create New Lead" width="max-w-3xl">
+      {/* Create Lead Modal (Redesigned Premium UI/UX) */}
+      <Modal open={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} title="Create New Lead Application" width="max-w-2xl">
         <form onSubmit={handleCreateLead} className="space-y-4 text-xs">
 
-          {/* STEP 1: Customer Basic Information */}
-          <div className="bg-slate-50 p-3 rounded-lg border space-y-2">
-            <p className="font-bold text-slate-700 uppercase tracking-wider text-[11px]">1. Customer Basic Information</p>
-            <div className="grid grid-cols-2 gap-3">
+          {/* STEP 1: Customer Basic & Branch Location */}
+          <div className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-4 space-y-3 shadow-xs">
+            <div className="flex items-center gap-2 border-b border-slate-200/70 pb-2">
+              <div className="p-1.5 bg-blue-100 text-blue-700 rounded-lg">
+                <Building2 className="h-4 w-4" />
+              </div>
+              <p className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">1. Branch Location & Constitution</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-slate-600 font-semibold mb-1">Branch *</label>
+                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Select Branch *</label>
                 <select
                   value={createForm.Branch_id || ""}
                   onChange={(e) => setCreateForm({ ...createForm, Branch_id: e.target.value })}
-                  className="w-full border rounded-lg p-2 bg-white"
+                  className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs hover:border-slate-300"
                 >
-                  <option value="">-- Select Branch --</option>
+                  <option value="">-- Choose Branch Location --</option>
                   {branches.map((b) => (
                     <option key={b.branch_code || b.id} value={b.branch_code || b.id}>
                       {b.branch_name || b.name} ({b.branch_code || b.code})
@@ -1082,16 +1104,16 @@ export function LeadManagementScreen() {
                 </select>
               </div>
               <div>
-                <label className="block text-slate-600 font-semibold mb-1">Constitution *</label>
+                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Constitution Type *</label>
                 <select
                   value={createForm.constitution}
                   onChange={(e) => setCreateForm({ ...createForm, constitution: e.target.value as any })}
-                  className="w-full border rounded-lg p-2 bg-white font-medium"
+                  className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs hover:border-slate-300"
                 >
-                  <option value="Individual">Individual</option>
-                  <option value="Proprietory">Proprietory</option>
-                  <option value="Partnership">Partnership</option>
-                  <option value="Limited Liability Partnership">Limited Liability Partnership</option>
+                  <option value="Individual">Individual Applicant</option>
+                  <option value="Proprietory">Proprietory Firm</option>
+                  <option value="Partnership">Partnership Firm</option>
+                  <option value="Limited Liability Partnership">Limited Liability Partnership (LLP)</option>
                   <option value="Pvt. Ltd. Company">Pvt. Ltd. Company</option>
                   <option value="Public Ltd. Company">Public Ltd. Company</option>
                   <option value="Charitable Trust">Charitable Trust</option>
@@ -1100,9 +1122,9 @@ export function LeadManagementScreen() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-slate-600 mb-1">Pincode *</label>
+                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Pincode *</label>
                 <input
                   type="text"
                   required
@@ -1110,40 +1132,53 @@ export function LeadManagementScreen() {
                   placeholder="e.g. 400001"
                   value={createForm.pincode || ""}
                   onChange={(e) => setCreateForm({ ...createForm, pincode: e.target.value })}
-                  className="w-full border rounded-lg p-2 font-mono"
+                  className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono transition-all shadow-xs hover:border-slate-300"
                 />
               </div>
               <div>
-                <label className="block text-slate-600 mb-1">City *</label>
+                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">City *</label>
                 <input
                   type="text"
                   required
                   placeholder="City"
                   value={createForm.city || ""}
                   onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })}
-                  className="w-full border rounded-lg p-2"
+                  className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs hover:border-slate-300"
                 />
               </div>
               <div>
-                <label className="block text-slate-600 mb-1">State *</label>
+                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">State *</label>
                 <input
                   type="text"
                   required
                   placeholder="State"
                   value={createForm.state || ""}
                   onChange={(e) => setCreateForm({ ...createForm, state: e.target.value })}
-                  className="w-full border rounded-lg p-2"
+                  className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs hover:border-slate-300"
                 />
               </div>
             </div>
           </div>
 
-          {/* STEP 2: PAN Verification FIRST before Name/Address/DOB */}
-          <div className="bg-emerald-50/60 border border-emerald-200 rounded-lg p-3 space-y-2">
-            <label className="block text-emerald-900 font-bold">
-              {createForm.constitution === "Individual" ? "Individual PAN Number *" : "Entity PAN Number *"}
-            </label>
-            <div className="flex gap-2">
+          {/* STEP 2: PAN Verification Card */}
+          <div className="bg-gradient-to-r from-emerald-50/90 via-teal-50/50 to-emerald-50/30 border border-emerald-200/90 rounded-2xl p-4 space-y-2.5 shadow-xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg">
+                  <FileText className="h-4 w-4" />
+                </div>
+                <label className="text-emerald-950 font-bold text-[11px] uppercase tracking-wider">
+                  2. {createForm.constitution === "Individual" ? "Individual PAN Verification *" : "Entity PAN Verification *"}
+                </label>
+              </div>
+              {panVerified && (
+                <span className="bg-emerald-600 text-white font-bold text-[10px] px-2.5 py-0.5 rounded-full shadow-xs">
+                  ✓ Verified
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
                 required
@@ -1155,31 +1190,37 @@ export function LeadManagementScreen() {
                   setPanVerified(false);
                   setPanMessage(null);
                 }}
-                className="flex-1 border border-emerald-300 rounded-lg p-2 uppercase font-mono font-semibold"
+                className="flex-1 border border-emerald-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600 rounded-xl px-3.5 py-2 uppercase font-mono font-bold tracking-wider text-sm shadow-xs"
               />
               <Button
                 type="button"
                 disabled={verifyingPan || (createForm.pan_no || "").length !== 10}
                 onClick={handleVerifyPan}
-                className="bg-emerald-700 hover:bg-emerald-800 text-white font-medium"
+                className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl px-4 py-2 text-xs shadow-md shadow-emerald-600/20 transition-all hover:scale-[1.01] active:scale-[0.98]"
               >
-                {verifyingPan ? "Verifying..." : "Verify PAN & Auto-fill"}
+                {verifyingPan ? "Verifying PAN..." : "Verify PAN & Auto-fill"}
               </Button>
             </div>
             {panMessage && (
-              <p className={`text-[11px] mt-1 ${panVerified ? "text-emerald-700 font-bold" : "text-amber-700 font-medium"}`}>
+              <p className={`text-[11px] font-medium mt-1 ${panVerified ? "text-emerald-800 bg-emerald-100/80 p-2 rounded-lg border border-emerald-200" : "text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200"}`}>
                 {panMessage}
               </p>
             )}
           </div>
 
           {/* STEP 3: Contact Details & Mobile OTP Verification */}
-          <div className="border rounded-lg p-3 bg-slate-50 space-y-2">
-            <p className="font-bold text-slate-700 uppercase tracking-wider text-[11px]">Contact & Mobile OTP</p>
-            <div className="grid grid-cols-2 gap-3">
+          <div className="bg-blue-50/50 border border-blue-200/80 rounded-2xl p-4 space-y-3 shadow-xs">
+            <div className="flex items-center gap-2 border-b border-blue-200/60 pb-2">
+              <div className="p-1.5 bg-blue-100 text-blue-700 rounded-lg">
+                <Send className="h-4 w-4" />
+              </div>
+              <p className="font-bold text-blue-950 uppercase tracking-wider text-[11px]">3. Contact & Mobile OTP Authentication</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-slate-600 font-semibold mb-1">Mobile Number *</label>
-                <div className="flex gap-1.5">
+                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Mobile Number *</label>
+                <div className="flex gap-2">
                   <input
                     type="text"
                     required
@@ -1192,14 +1233,14 @@ export function LeadManagementScreen() {
                       setOtpSent(false);
                       setOtpVerified(false);
                     }}
-                    className="flex-1 border rounded-lg p-2 bg-white disabled:opacity-60"
+                    className="flex-1 border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono font-medium transition-all shadow-xs disabled:opacity-60"
                   />
                   {!otpVerified && (
                     <Button
                       type="button"
                       disabled={sendingOtp || (createForm.mobile || "").length !== 10}
                       onClick={handleSendOtp}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] px-2.5 py-1.5"
+                      className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl px-3.5 py-2 text-xs shadow-sm transition-all"
                     >
                       {sendingOtp ? "Sending..." : "Send OTP"}
                     </Button>
@@ -1207,33 +1248,33 @@ export function LeadManagementScreen() {
                 </div>
               </div>
               <div>
-                <label className="block text-slate-600 font-semibold mb-1">E-Mail ID *</label>
+                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">E-Mail Address *</label>
                 <input
                   type="email"
                   required
                   placeholder="email@domain.com"
                   value={createForm.email}
                   onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
-                  className="w-full border rounded-lg p-2 bg-white"
+                  className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs hover:border-slate-300"
                 />
               </div>
             </div>
 
             {otpSent && !otpVerified && (
-              <div className="flex gap-2 pt-2 border-t border-slate-200">
+              <div className="flex gap-2 pt-2 border-t border-blue-200/60">
                 <input
                   type="text"
                   maxLength={6}
                   placeholder="6-digit OTP (e.g. 123456)"
                   value={otpCode}
                   onChange={(e) => setOtpCode(e.target.value)}
-                  className="flex-1 border rounded-lg p-2 font-mono text-center bg-white"
+                  className="flex-1 border border-blue-300 rounded-xl p-2 font-mono text-center bg-white font-bold text-sm tracking-widest"
                 />
                 <Button
                   type="button"
                   disabled={verifyingOtp || otpCode.length !== 6}
                   onClick={handleVerifyOtp}
-                  className="bg-emerald-600 text-white font-bold"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl px-4 py-2 text-xs shadow-sm"
                 >
                   {verifyingOtp ? "Verifying..." : "Verify OTP"}
                 </Button>
@@ -1241,27 +1282,33 @@ export function LeadManagementScreen() {
             )}
 
             {otpVerified && (
-              <div className="bg-emerald-100 text-emerald-800 p-1.5 rounded text-[11px] font-bold">
-                ✓ Mobile Number Verified with OTP
+              <div className="bg-emerald-100/90 text-emerald-900 border border-emerald-300 p-2 rounded-xl text-[11px] font-bold flex items-center gap-1.5">
+                <Check className="h-4 w-4 text-emerald-700" /> Mobile Number Verified Successfully
               </div>
             )}
 
             {otpMessage && !otpVerified && (
-              <p className="text-[11px] text-amber-700">{otpMessage}</p>
+              <p className="text-[11px] text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200 font-medium">{otpMessage}</p>
             )}
           </div>
 
-          {/* STEP 4: Applicant / Entity Details */}
+          {/* STEP 4: Applicant Personal / Business Details */}
           {createForm.constitution === "Individual" ? (
-            <div className="space-y-3 border-t pt-3">
-              <p className="font-semibold text-slate-700 text-[11px] uppercase tracking-wider">Applicant Personal Information</p>
-              <div className="grid grid-cols-4 gap-2">
+            <div className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-4 space-y-3 shadow-xs">
+              <div className="flex items-center gap-2 border-b border-slate-200/70 pb-2">
+                <div className="p-1.5 bg-indigo-100 text-indigo-700 rounded-lg">
+                  <User className="h-4 w-4" />
+                </div>
+                <p className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">4. Applicant Personal & Financial Profile</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div>
-                  <label className="block text-slate-600 mb-1">Title *</label>
+                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Title *</label>
                   <select
                     value={createForm.title || "MR"}
                     onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
-                    className="w-full border rounded-lg p-2"
+                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
                   >
                     {titles.map((t: any) => (
                       <option key={t.meta_key || t.id} value={t.meta_key || t.meta_value}>{t.meta_value}</option>
@@ -1269,43 +1316,46 @@ export function LeadManagementScreen() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-600 mb-1">First Name *</label>
+                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">First Name *</label>
                   <input
                     type="text"
                     required
+                    placeholder="First Name"
                     value={createForm.first_name || ""}
                     onChange={(e) => setCreateForm({ ...createForm, first_name: e.target.value })}
-                    className="w-full border rounded-lg p-2"
+                    className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 mb-1">Middle Name</label>
+                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Middle Name</label>
                   <input
                     type="text"
+                    placeholder="Middle Name"
                     value={createForm.middle_name || ""}
                     onChange={(e) => setCreateForm({ ...createForm, middle_name: e.target.value })}
-                    className="w-full border rounded-lg p-2"
+                    className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 mb-1">Last Name *</label>
+                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Last Name *</label>
                   <input
                     type="text"
                     required
+                    placeholder="Last Name"
                     value={createForm.last_name || ""}
                     onChange={(e) => setCreateForm({ ...createForm, last_name: e.target.value })}
-                    className="w-full border rounded-lg p-2"
+                    className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-slate-600 mb-1">Gender *</label>
+                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Gender *</label>
                   <select
                     value={createForm.gender || "MALE"}
                     onChange={(e) => setCreateForm({ ...createForm, gender: e.target.value })}
-                    className="w-full border rounded-lg p-2"
+                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
                   >
                     {genders.map((g: any) => (
                       <option key={g.meta_key || g.id} value={g.meta_key || g.meta_value}>{g.meta_value}</option>
@@ -1314,7 +1364,7 @@ export function LeadManagementScreen() {
                 </div>
 
                 <div>
-                  <label className="block text-slate-600 mb-1">Date of Birth (DOB) *</label>
+                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Date of Birth (DOB) *</label>
                   <input
                     type="date"
                     required
@@ -1335,38 +1385,41 @@ export function LeadManagementScreen() {
                       }
                       setCreateForm({ ...createForm, dob: dobVal, age: ageVal });
                     }}
-                    className="w-full border rounded-lg p-2"
+                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-600 mb-1">Age (Calculated)</label>
-                  <div className="w-full border rounded-lg p-2 bg-slate-100 font-mono font-bold text-slate-700">
-                    {createForm.age !== undefined ? `${createForm.age} Yrs` : "--"}
+                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Age (Calculated)</label>
+                  <div className="w-full border border-slate-200 rounded-xl px-3.5 py-2 bg-slate-100 font-mono font-bold text-slate-700 flex items-center justify-between text-xs shadow-inner">
+                    <span>{createForm.age !== undefined ? `${createForm.age} Years` : "--"}</span>
+                    {createForm.age !== undefined && (
+                      <span className="bg-blue-100 text-blue-800 text-[10px] px-2 py-0.5 rounded-md font-bold">Auto</span>
+                    )}
                   </div>
                 </div>
               </div>
 
               <div>
-                <label className="block text-slate-600 mb-1">Residential Address *</label>
+                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Residential Address *</label>
                 <input
                   type="text"
                   required
                   placeholder="Full residential address..."
                   value={createForm.address || ""}
                   onChange={(e) => setCreateForm({ ...createForm, address: e.target.value })}
-                  className="w-full border rounded-lg p-2"
+                  className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-600 mb-1">Employment Type *</label>
+                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Employment Type *</label>
                   <select
                     required
                     value={createForm.employment_type || ""}
                     onChange={(e) => setCreateForm({ ...createForm, employment_type: e.target.value })}
-                    className="w-full border rounded-lg p-2"
+                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
                   >
                     <option value="">-- Choose Employment --</option>
                     {employmentTypes.map((item: any) => (
@@ -1375,12 +1428,12 @@ export function LeadManagementScreen() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-600 mb-1">Occupation Type *</label>
+                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Occupation Type *</label>
                   <select
                     required
                     value={createForm.occupation_type || ""}
                     onChange={(e) => setCreateForm({ ...createForm, occupation_type: e.target.value })}
-                    className="w-full border rounded-lg p-2"
+                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
                   >
                     <option value="">-- Choose Occupation --</option>
                     {occupationTypes.map((item: any) => (
@@ -1391,164 +1444,176 @@ export function LeadManagementScreen() {
               </div>
 
               <div>
-                <label className="block text-slate-600 mb-1">Employer / Business Entity Name *</label>
+                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Employer / Business Entity Name *</label>
                 <input
                   type="text"
                   required
                   placeholder="Company / Employer name"
                   value={createForm.employer_business_name || ""}
                   onChange={(e) => setCreateForm({ ...createForm, employer_business_name: e.target.value })}
-                  className="w-full border rounded-lg p-2"
+                  className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-slate-600 mb-1">Avg Gross Monthly Income *</label>
+                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Avg Gross Monthly Income (₹) *</label>
                   <input
                     type="number"
                     required
                     min={0}
                     value={createForm.avg_gross_monthly_income || ""}
                     onChange={(e) => setCreateForm({ ...createForm, avg_gross_monthly_income: Number(e.target.value) })}
-                    className="w-full border rounded-lg p-2 font-mono"
+                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono transition-all shadow-xs"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 mb-1">Avg Net Monthly Income *</label>
+                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Avg Net Monthly Income (₹) *</label>
                   <input
                     type="number"
                     required
                     min={0}
                     value={createForm.avg_net_monthly_income || ""}
                     onChange={(e) => setCreateForm({ ...createForm, avg_net_monthly_income: Number(e.target.value) })}
-                    className="w-full border rounded-lg p-2 font-mono"
+                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono transition-all shadow-xs"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 mb-1">Monthly Obligation *</label>
+                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Monthly Obligation (₹) *</label>
                   <input
                     type="number"
                     required
                     min={0}
                     value={createForm.existing_monthly_repayment_obligation || ""}
                     onChange={(e) => setCreateForm({ ...createForm, existing_monthly_repayment_obligation: Number(e.target.value) })}
-                    className="w-full border rounded-lg p-2 font-mono"
+                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono transition-all shadow-xs"
                   />
                 </div>
               </div>
             </div>
           ) : (
-            <div className="space-y-3 border-t pt-3">
-              <p className="font-semibold text-slate-700 text-[11px] uppercase tracking-wider">Entity Details (Non-Individual)</p>
-              <div className="grid grid-cols-2 gap-3">
+            <div className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-4 space-y-3 shadow-xs">
+              <div className="flex items-center gap-2 border-b border-slate-200/70 pb-2">
+                <div className="p-1.5 bg-indigo-100 text-indigo-700 rounded-lg">
+                  <Building2 className="h-4 w-4" />
+                </div>
+                <p className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">4. Entity Information (Non-Individual)</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-600 mb-1">Entity Name *</label>
+                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Entity Name *</label>
                   <input
                     type="text"
                     required
+                    placeholder="Registered Legal Entity Name"
                     value={createForm.entity_name || ""}
                     onChange={(e) => setCreateForm({ ...createForm, entity_name: e.target.value })}
-                    className="w-full border rounded-lg p-2"
+                    className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 mb-1">Date of Incorporation (DOI) *</label>
+                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Date of Incorporation (DOI) *</label>
                   <input
                     type="date"
                     required
                     value={createForm.doi || ""}
                     onChange={(e) => setCreateForm({ ...createForm, doi: e.target.value })}
-                    className="w-full border rounded-lg p-2"
+                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-slate-600 mb-1">Business Address *</label>
+                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Registered Business Address *</label>
                 <input
                   type="text"
                   required
                   placeholder="Full office address..."
                   value={createForm.business_address || ""}
                   onChange={(e) => setCreateForm({ ...createForm, business_address: e.target.value })}
-                  className="w-full border rounded-lg p-2"
+                  className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-600 mb-1">Name of Prop / Partner / Director *</label>
+                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Proprietor / Partner / Director Name *</label>
                   <input
                     type="text"
                     required
                     placeholder="Key promoter name..."
                     value={createForm.proprietor_partner_director_name || ""}
                     onChange={(e) => setCreateForm({ ...createForm, proprietor_partner_director_name: e.target.value })}
-                    className="w-full border rounded-lg p-2"
+                    className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 mb-1">Annual Gross Sales Turnover Last FY (₹) *</label>
+                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Annual Gross Sales Turnover (₹) *</label>
                   <input
                     type="number"
                     required
                     min={0}
                     value={createForm.annual_gross_turnover_last_fy || ""}
                     onChange={(e) => setCreateForm({ ...createForm, annual_gross_turnover_last_fy: Number(e.target.value) })}
-                    className="w-full border rounded-lg p-2 font-mono"
+                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono transition-all shadow-xs"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-slate-600 mb-1">Avg Annual Gross Income (₹) *</label>
+                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Avg Annual Gross Income (₹) *</label>
                   <input
                     type="number"
                     required
                     min={0}
                     value={createForm.avg_annual_gross_income || ""}
                     onChange={(e) => setCreateForm({ ...createForm, avg_annual_gross_income: Number(e.target.value) })}
-                    className="w-full border rounded-lg p-2 font-mono"
+                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono transition-all shadow-xs"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 mb-1">Avg Annual Net Income (₹) *</label>
+                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Avg Annual Net Income (₹) *</label>
                   <input
                     type="number"
                     required
                     min={0}
                     value={createForm.avg_annual_net_income || ""}
                     onChange={(e) => setCreateForm({ ...createForm, avg_annual_net_income: Number(e.target.value) })}
-                    className="w-full border rounded-lg p-2 font-mono"
+                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono transition-all shadow-xs"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 mb-1">Existing Monthly Obligation (₹) *</label>
+                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Monthly Obligation (₹) *</label>
                   <input
                     type="number"
                     required
                     min={0}
                     value={createForm.existing_monthly_repayment_obligation || ""}
                     onChange={(e) => setCreateForm({ ...createForm, existing_monthly_repayment_obligation: Number(e.target.value) })}
-                    className="w-full border rounded-lg p-2 font-mono"
+                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono transition-all shadow-xs"
                   />
                 </div>
               </div>
             </div>
           )}
 
-          {/* STEP 5: Loan Requirements */}
-          <div className="space-y-3 border-t pt-3">
-            <p className="font-semibold text-slate-700 text-[11px] uppercase tracking-wider">Loan Product & Type</p>
-            <div className="grid grid-cols-2 gap-3">
+          {/* STEP 5: Loan Product, Type & Purpose */}
+          <div className="bg-gradient-to-r from-purple-50/70 via-indigo-50/50 to-slate-50/90 border border-purple-200/80 rounded-2xl p-4 space-y-3 shadow-xs">
+            <div className="flex items-center gap-2 border-b border-purple-200/70 pb-2">
+              <div className="p-1.5 bg-purple-100 text-purple-700 rounded-lg">
+                <Banknote className="h-4 w-4" />
+              </div>
+              <p className="font-bold text-purple-950 uppercase tracking-wider text-[11px]">5. Loan Product & Purpose Selection</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-slate-600 font-semibold mb-1">Loan Product *</label>
+                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Loan Product *</label>
                 <select
                   required
                   value={createForm.loan_product_id || ""}
                   onChange={(e) => handleProductChange(Number(e.target.value))}
-                  className="w-full border rounded-lg p-2 bg-white"
+                  className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs hover:border-slate-300"
                 >
                   <option value="">-- Choose Product --</option>
                   {products
@@ -1567,13 +1632,13 @@ export function LeadManagementScreen() {
                 </select>
               </div>
               <div>
-                <label className="block text-slate-600 font-semibold mb-1">Loan Type *</label>
+                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Loan Type *</label>
                 <select
                   required
                   disabled={!createForm.loan_product_id}
                   value={createForm.loan_type_id || ""}
                   onChange={(e) => setCreateForm({ ...createForm, loan_type_id: Number(e.target.value) })}
-                  className="w-full border rounded-lg p-2 bg-white disabled:opacity-50"
+                  className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs hover:border-slate-300 disabled:opacity-50"
                 >
                   <option value="">-- Choose Type --</option>
                   {loanTypes.map((t) => (
@@ -1585,13 +1650,13 @@ export function LeadManagementScreen() {
 
             {/* Loan Purpose Select */}
             <div>
-              <label className="block text-slate-600 font-semibold mb-1">Loan Purpose *</label>
+              <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Loan Purpose *</label>
               <select
                 required
                 disabled={!createForm.loan_product_id}
                 value={createForm.loan_purpose || ""}
                 onChange={(e) => setCreateForm({ ...createForm, loan_purpose: e.target.value })}
-                className="w-full border rounded-lg p-2 bg-white disabled:opacity-50"
+                className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs hover:border-slate-300 disabled:opacity-50"
               >
                 <option value="">-- Choose Purpose --</option>
                 {getLoanPurposeOptionsFromApi(
@@ -1606,33 +1671,37 @@ export function LeadManagementScreen() {
               </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-slate-600 font-semibold mb-1">Required Amount (₹) *</label>
+                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Required Amount (₹) *</label>
                 <input
                   type="number"
                   required
                   value={createForm.loan_amount_required}
                   onChange={(e) => setCreateForm({ ...createForm, loan_amount_required: Number(e.target.value) })}
-                  className="w-full border rounded-lg p-2 font-mono"
+                  className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 rounded-xl px-3 py-2 text-xs font-mono font-bold transition-all shadow-xs"
                 />
               </div>
               <div>
-                <label className="block text-slate-600 font-semibold mb-1">Tenure (Months) *</label>
+                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Tenure (Months) *</label>
                 <input
                   type="number"
                   required
                   value={createForm.loan_period_months}
                   onChange={(e) => setCreateForm({ ...createForm, loan_period_months: Number(e.target.value) })}
-                  className="w-full border rounded-lg p-2 font-mono"
+                  className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 rounded-xl px-3 py-2 text-xs font-mono font-bold transition-all shadow-xs"
                 />
               </div>
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-3">
-            <Button type="button" variant="outline" onClick={() => setIsCreateModalOpen(false)}>Cancel</Button>
-            <Button type="submit">Create Lead</Button>
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+            <Button type="button" variant="outline" onClick={() => setIsCreateModalOpen(false)} className="rounded-xl px-5 py-2.5 text-xs font-bold">
+              Cancel
+            </Button>
+            <Button type="submit" className="bg-gradient-to-r from-blue-600 via-indigo-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white font-bold rounded-xl px-7 py-2.5 text-xs shadow-md shadow-blue-600/20 transition-all hover:scale-[1.01] active:scale-[0.98]">
+              Create Lead Application
+            </Button>
           </div>
         </form>
       </Modal>
@@ -1640,7 +1709,7 @@ export function LeadManagementScreen() {
       {/* Detail Modal */}
       {selectedLead && (
         <Modal open={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} title={`Lead Workstation: ${selectedLead.CustName || selectedLead.lead_uuid}`} width="max-w-4xl">
-          <div className="space-y-6 text-xs max-h-[80vh] overflow-y-auto pr-1">
+          <div className="space-y-6 text-xs">
             {/* Lead Summary */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-900 text-white p-4 rounded-xl shadow">
               <div>
@@ -2338,8 +2407,8 @@ export function LeadManagementScreen() {
       </Modal>
 
       {/* Edit Lead Information Modal */}
-      <Modal open={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title={`Edit Lead Information: ${selectedLead?.CustName || selectedLead?.lead_uuid}`} width="max-w-3xl">
-        <form onSubmit={handleEditSubmit} className="space-y-4 text-xs max-h-[75vh] overflow-y-auto pr-1">
+      <Modal open={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title={`Edit Lead Information: ${selectedLead?.CustName || selectedLead?.lead_uuid}`} width="max-w-2xl">
+        <form onSubmit={handleEditSubmit} className="space-y-4 text-xs">
           {editForm.constitution === "Individual" ? (
             /* Individual Edit Fields */
             <div className="space-y-3">
