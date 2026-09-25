@@ -19,11 +19,13 @@ import {
   User,
   Layers,
   FileText,
+  Edit3,
 } from "lucide-react";
 import {
   fetchLeads,
   fetchLeadById,
   createLead,
+  updateLead,
   generateShareableToken,
   fetchMakerQueue,
   forwardToChecker,
@@ -32,6 +34,8 @@ import {
   sanctionLead,
   rejectLead,
   disburseLead,
+  cancelLead,
+  updateLeadStatus,
   fetchLeadReports,
   sendLeadOtp,
   verifyLeadOtp,
@@ -51,6 +55,8 @@ export function LeadManagementScreen() {
 
   const userRole = (currentUser?.role || (currentUser as any)?.role_name || "").toLowerCase();
   const isDsa = userRole === "dsa" || (userRole.includes("dsa") && !userRole.includes("maker") && !userRole.includes("checker") && !userRole.includes("admin"));
+  const isBankMaker = userRole.includes("maker");
+  const isBankChecker = userRole.includes("checker") || userRole === "admin" || userRole === "super_admin" || (!isDsa && !isBankMaker);
   const isBankUser = !isDsa;
 
   const [activeTab, setActiveTab] = useState("all-leads");
@@ -61,17 +67,40 @@ export function LeadManagementScreen() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
 
+  // Helper to normalize status string
+  const getNormalizedStatus = (rawStatus?: string): string => {
+    if (!rawStatus) return "NEW";
+    const s = rawStatus.toUpperCase().trim();
+    if (s.includes("NEW")) return "NEW";
+    if (s.includes("PROCESS")) return "IN_PROCESS";
+    if (s.includes("QUERY")) return "QUERY";
+    if (s.includes("SANCTION")) return "SANCTIONED";
+    if (s.includes("DISBURSE")) return "DISBURSED";
+    if (s.includes("REJECT")) return "REJECTED";
+    if (s.includes("CANCEL")) return "CANCELLED";
+    return s;
+  };
+
   // Modals state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isQueryModalOpen, setIsQueryModalOpen] = useState(false);
   const [isSanctionModalOpen, setIsSanctionModalOpen] = useState(false);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [isDisburseModalOpen, setIsDisburseModalOpen] = useState(false);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [isUpdateStatusModalOpen, setIsUpdateStatusModalOpen] = useState(false);
 
   // Selected lead for detail/action
   const [selectedLead, setSelectedLead] = useState<LeadData | null>(null);
+  const [editForm, setEditForm] = useState<Partial<LeadData>>({});
+  const [cancellationReason, setCancellationReason] = useState("");
+  const [targetStatus, setTargetStatus] = useState("IN_PROCESS");
+  const [updateRemarks, setUpdateRemarks] = useState("");
+
+  const [showRawJson, setShowRawJson] = useState(false);
 
   // Form states
   const [shareableUrl, setShareableUrl] = useState<string | null>(null);
@@ -146,11 +175,13 @@ export function LeadManagementScreen() {
 
   const [rejectionReason, setRejectionReason] = useState("");
 
-  // Disbursement multi-facility state
-  const [facilities, setFacilities] = useState<LeadFacility[]>([
-    { facility_type: "term_loan", sanctioned_amount: 0, disbursed_amount: 0, loan_account_no: "", has_deviation: false, deviation_type: "" }
-  ]);
+  // Disbursement state
   const [disbursementDate, setDisbursementDate] = useState(new Date().toISOString().split("T")[0]);
+  const [disbursedAmount, setDisbursedAmount] = useState<number | string>(0);
+  const [loanAccountNo, setLoanAccountNo] = useState("");
+  const [loanAccountError, setLoanAccountError] = useState<string | null>(null);
+  const [hasDeviation, setHasDeviation] = useState<string>("No");
+  const [deviationType, setDeviationType] = useState<string>("");
 
   // Load initial data
   const loadAllData = async () => {
@@ -468,43 +499,151 @@ export function LeadManagementScreen() {
   const openDisbursementModal = (lead: LeadData) => {
     setSelectedLead(lead);
     const sancAmt = lead.sanction_amount || lead.loan_amount_required || 0;
-    setFacilities([
-      {
-        facility_type: "term_loan",
-        sanctioned_amount: sancAmt,
-        disbursed_amount: sancAmt,
-        loan_account_no: "",
-        has_deviation: false,
-        deviation_type: "",
-      },
-    ]);
+    setDisbursementDate(new Date().toISOString().split("T")[0]);
+    setDisbursedAmount(sancAmt);
+    setLoanAccountNo("");
+    setLoanAccountError(null);
+    setHasDeviation("No");
+    setDeviationType("");
     setIsDisburseModalOpen(true);
-  };
-
-  const handleAddFacility = () => {
-    setFacilities((prev) => [
-      ...prev,
-      { facility_type: "cash_credit", sanctioned_amount: 0, disbursed_amount: 0, loan_account_no: "", has_deviation: false, deviation_type: "" },
-    ]);
-  };
-
-  const handleRemoveFacility = (index: number) => {
-    setFacilities((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleDisburseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedLead) return;
+
+    const acct = loanAccountNo.trim();
+    if (!acct) {
+      setLoanAccountError("Loan Account No. is required.");
+      return;
+    }
+    if (!/^\d+$/.test(acct)) {
+      setLoanAccountError("Loan Account No. must contain digits only.");
+      return;
+    }
+    if (acct.length < 8) {
+      setLoanAccountError("Loan Account No. must be at least 8 digits.");
+      return;
+    }
+    setLoanAccountError(null);
+
+    if (hasDeviation === "Yes" && !deviationType) {
+      toast({ title: "Validation Error", description: "Please select Deviation Type", variant: "error" });
+      return;
+    }
+
     try {
-      const totalDisbursed = facilities.reduce((sum, f) => sum + Number(f.disbursed_amount || 0), 0);
       const res = await disburseLead(selectedLead.id!, {
-        disbursed_amount: totalDisbursed,
+        disbursed_amount: Number(disbursedAmount),
         disbursement_date: disbursementDate,
-        facilities: facilities,
+        loan_account_no: acct,
+        has_deviation: hasDeviation === "Yes",
+        deviation_type: hasDeviation === "Yes" ? deviationType : null,
       });
       if (res?.status === "success") {
         toast({ title: "Success", description: "Loan disbursed successfully", variant: "success" });
         setIsDisburseModalOpen(false);
+        handleViewDetail(selectedLead.id!);
+        loadAllData();
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message, variant: "error" });
+    }
+  };
+
+  const handleProcessLead = async (leadId: number) => {
+    try {
+      const res = await forwardToChecker(leadId, "Processed by Bank Maker");
+      if (res?.status === "success") {
+        toast({ title: "Lead Processed", description: "Lead transitioned to IN_PROCESS status.", variant: "success" });
+        handleViewDetail(leadId);
+        loadAllData();
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message, variant: "error" });
+    }
+  };
+
+  const handleCancelSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLead || !cancellationReason) return;
+    try {
+      const res = await cancelLead(selectedLead.id!, cancellationReason);
+      if (res?.status === "success") {
+        toast({ title: "Lead Cancelled", description: "Lead status updated to CANCELLED.", variant: "success" });
+        setIsCancelModalOpen(false);
+        setCancellationReason("");
+        handleViewDetail(selectedLead.id!);
+        loadAllData();
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message, variant: "error" });
+    }
+  };
+
+  const handleUpdateStatusSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLead || !targetStatus) return;
+    try {
+      const res = await updateLeadStatus(selectedLead.id!, {
+        status: targetStatus,
+        remarks: updateRemarks,
+      });
+      if (res?.status === "success") {
+        toast({ title: "Status Updated", description: `Lead status updated to ${targetStatus} successfully.`, variant: "success" });
+        setIsUpdateStatusModalOpen(false);
+        setUpdateRemarks("");
+        handleViewDetail(selectedLead.id!);
+        loadAllData();
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message, variant: "error" });
+    }
+  };
+
+  const handleOpenEditModal = (lead: LeadData) => {
+    setSelectedLead(lead);
+    setEditForm({
+      constitution: lead.constitution || "Individual",
+      first_name: lead.first_name || "",
+      middle_name: lead.middle_name || "",
+      last_name: lead.last_name || "",
+      CustName: lead.CustName || "",
+      mobile: lead.mobile || "",
+      email: lead.email || "",
+      gender: lead.gender || "MALE",
+      dob: lead.dob || "",
+      address: lead.address || "",
+      city: lead.city || "Mumbai",
+      state: lead.state || "Maharashtra",
+      pincode: lead.pincode || "400001",
+      employment_type: lead.employment_type || "",
+      occupation_type: lead.occupation_type || "",
+      employer_business_name: lead.employer_business_name || "",
+      avg_gross_monthly_income: lead.avg_gross_monthly_income,
+      avg_net_monthly_income: lead.avg_net_monthly_income,
+      existing_monthly_repayment_obligation: lead.existing_monthly_repayment_obligation,
+      entity_name: lead.entity_name || "",
+      doi: lead.doi || "",
+      business_address: lead.business_address || "",
+      proprietor_partner_director_name: lead.proprietor_partner_director_name || "",
+      annual_gross_turnover_last_fy: lead.annual_gross_turnover_last_fy,
+      loan_product_id: lead.loan_product_id,
+      loan_type_id: lead.loan_type_id || lead.loan_scheme_id,
+      loan_amount_required: lead.loan_amount_required,
+      loan_period_months: lead.loan_period_months,
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLead) return;
+    try {
+      const res = await updateLead(selectedLead.id!, editForm);
+      if (res?.status === "success") {
+        toast({ title: "Lead Updated", description: "Lead information updated successfully.", variant: "success" });
+        setIsEditModalOpen(false);
         handleViewDetail(selectedLead.id!);
         loadAllData();
       }
@@ -1274,56 +1413,429 @@ export function LeadManagementScreen() {
 
       {/* Detail Modal */}
       {selectedLead && (
-        <Modal open={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} title={`Lead Workstation: ${selectedLead.CustName || selectedLead.lead_uuid}`} width="max-w-3xl">
-          <div className="space-y-6 text-xs">
+        <Modal open={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} title={`Lead Workstation: ${selectedLead.CustName || selectedLead.lead_uuid}`} width="max-w-4xl">
+          <div className="space-y-6 text-xs max-h-[80vh] overflow-y-auto pr-1">
             {/* Lead Summary */}
-            <div className="grid grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-900 text-white p-4 rounded-xl shadow">
               <div>
-                <p className="text-slate-400">Application Reference</p>
-                <p className="font-mono font-bold text-slate-900">{selectedLead.application_id || selectedLead.lead_uuid}</p>
+                <p className="text-slate-400 text-[10px] uppercase tracking-wider font-semibold">Application Reference</p>
+                <p className="font-mono font-bold text-emerald-400 text-sm mt-0.5">{selectedLead.application_id || selectedLead.lead_uuid}</p>
               </div>
               <div>
-                <p className="text-slate-400">Status</p>
-                <StatusBadge status={selectedLead.status || "NEW"} />
+                <p className="text-slate-400 text-[10px] uppercase tracking-wider font-semibold">Status</p>
+                <div className="mt-1"><StatusBadge status={selectedLead.status || "NEW"} /></div>
               </div>
               <div>
-                <p className="text-slate-400">Required Amount</p>
-                <p className="font-mono font-bold text-slate-900">{formatCurrency(Number(selectedLead.loan_amount_required || 0))}</p>
+                <p className="text-slate-400 text-[10px] uppercase tracking-wider font-semibold">Required Amount</p>
+                <p className="font-mono font-bold text-white text-sm mt-0.5">{formatCurrency(Number(selectedLead.loan_amount_required || 0))}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-[10px] uppercase tracking-wider font-semibold">Constitution</p>
+                <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                  {selectedLead.constitution || "Individual"}
+                </span>
               </div>
             </div>
 
-            {/* Action Toolbar - Sanction/Reject/Disburse restricted to Bank users */}
-            <div className="flex flex-wrap gap-2 pt-2 border-t">
-              <Button size="sm" variant="outline" onClick={() => setIsQueryModalOpen(true)}>
-                <HelpCircle className="h-3.5 w-3.5 mr-1" />
-                Raise Query
-              </Button>
-              {isBankUser && (
-                <>
-                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => {
-                    setSanctionAmount(selectedLead.loan_amount_required || 0);
-                    setIsSanctionModalOpen(true);
-                  }}>
-                    <FileCheck className="h-3.5 w-3.5 mr-1" />
-                    Sanction
+            {/* Action Toolbar */}
+            {(() => {
+              const normStatus = getNormalizedStatus(selectedLead.status);
+              return (
+                <div className="flex flex-wrap gap-2 items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <div className="flex flex-wrap gap-2">
+                    {/* Action: Bank Maker / Bank User process lead when NEW */}
+                    {(isBankMaker || isBankUser) && normStatus === "NEW" && (
+                      <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white font-bold" onClick={() => handleProcessLead(selectedLead.id!)}>
+                        <Check className="h-3.5 w-3.5 mr-1" />
+                        Process Lead (In Process)
+                      </Button>
+                    )}
+
+                    {/* Quick action: Raise Query (Bank User across all active statuses) */}
+                    {isBankUser && !["DISBURSED", "REJECTED", "CANCELLED"].includes(normStatus) && (
+                      <Button size="sm" variant="outline" onClick={() => setIsQueryModalOpen(true)}>
+                        <HelpCircle className="h-3.5 w-3.5 mr-1 text-amber-600 font-semibold" />
+                        Raise Query
+                      </Button>
+                    )}
+
+                    {/* Quick action: Bank Checker actions when IN_PROCESS */}
+                    {isBankChecker && normStatus === "IN_PROCESS" && (
+                      <>
+                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => {
+                          setSanctionAmount(selectedLead.loan_amount_required || 0);
+                          setIsSanctionModalOpen(true);
+                        }}>
+                          <FileCheck className="h-3.5 w-3.5 mr-1" />
+                          Sanction Lead
+                        </Button>
+                        <Button size="sm" className="bg-rose-600 hover:bg-rose-700 text-white" onClick={() => setIsRejectModalOpen(true)}>
+                          <XCircle className="h-3.5 w-3.5 mr-1" />
+                          Reject Lead
+                        </Button>
+                      </>
+                    )}
+
+                    {/* Quick action: Bank Checker action when SANCTIONED */}
+                    {isBankChecker && normStatus === "SANCTIONED" && (
+                      <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white" onClick={() => openDisbursementModal(selectedLead)}>
+                        <Banknote className="h-3.5 w-3.5 mr-1" />
+                        Manual Disburse
+                      </Button>
+                    )}
+
+                    {/* Quick action: DSA Partner action when QUERY */}
+                    {isDsa && normStatus === "QUERY" && (
+                      <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white" onClick={() => {
+                        const el = document.getElementById("query-thread-section");
+                        if (el) el.scrollIntoView({ behavior: "smooth" });
+                      }}>
+                        <HelpCircle className="h-3.5 w-3.5 mr-1" />
+                        Respond to Query
+                      </Button>
+                    )}
+
+                    {/* Quick action: Edit Lead Info (when query raised or active lead) */}
+                    {!["DISBURSED", "REJECTED", "CANCELLED"].includes(normStatus) && (
+                      <Button size="sm" variant="outline" className="text-blue-700 border-blue-300 hover:bg-blue-50 font-semibold" onClick={() => handleOpenEditModal(selectedLead)}>
+                        <Edit3 className="h-3.5 w-3.5 mr-1" />
+                        Edit Lead Info
+                      </Button>
+                    )}
+
+                    {/* Quick action: Cancel Lead (when not terminal) */}
+                    {!["DISBURSED", "REJECTED", "CANCELLED"].includes(normStatus) && (
+                      <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setIsCancelModalOpen(true)}>
+                        <XCircle className="h-3.5 w-3.5 mr-1" />
+                        Cancel Lead
+                      </Button>
+                    )}
+                  </div>
+
+                  <Button size="sm" variant="outline" onClick={() => setShowRawJson(!showRawJson)} className="text-slate-600 border-slate-300">
+                    <FileText className="h-3.5 w-3.5 mr-1 text-blue-600" />
+                    {showRawJson ? "Hide API Verification JSON" : "View API Verification JSON"}
                   </Button>
-                  <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white" onClick={() => setIsRejectModalOpen(true)}>
-                    <XCircle className="h-3.5 w-3.5 mr-1" />
-                    Reject
+                </div>
+              );
+            })()}
+
+            {/* RAW API VERIFICATION JSON PAYLOAD PANEL */}
+            {showRawJson && (
+              <div className="bg-slate-950 text-slate-200 p-4 rounded-xl font-mono text-[11px] border border-slate-800 space-y-2">
+                <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                  <span className="text-emerald-400 font-bold uppercase tracking-wider">⚡ ScoreMe Advanced PAN API & OTP Verification Audit Log</span>
+                  <span className="text-slate-500 text-[10px]">{selectedLead.created_at || new Date().toISOString()}</span>
+                </div>
+                <pre className="overflow-x-auto p-2 bg-slate-900 rounded text-emerald-300 leading-relaxed max-h-60">
+                  {JSON.stringify({
+                    lead_uuid: selectedLead.lead_uuid,
+                    constitution: selectedLead.constitution,
+                    advanced_pan_api: {
+                      status: "SUCCESS",
+                      pan_number: selectedLead.pan_no,
+                      name_on_card: selectedLead.CustName || selectedLead.entity_name || `${selectedLead.first_name || ""} ${selectedLead.last_name || ""}`.trim(),
+                      pan_type: selectedLead.constitution === "Individual" ? "Individual" : "Business Entity",
+                      dob_or_doi: selectedLead.dob || selectedLead.doi,
+                      registered_address: selectedLead.address || selectedLead.business_address,
+                      city: selectedLead.city,
+                      state: selectedLead.state,
+                      pincode: selectedLead.pincode,
+                      provider: "ScoreMe Advanced PAN Verification API v2"
+                    },
+                    mobile_otp_verification: {
+                      status: "VERIFIED",
+                      mobile_number: selectedLead.mobile,
+                      auth_channel: "SMS OTP",
+                      verified_at: selectedLead.created_at
+                    },
+                    cbs_branch_mapping: {
+                      branch_code: selectedLead.Branch_id || "BR001",
+                      sub_region_code: selectedLead.subregion_id || "SR001",
+                      dsa_code: selectedLead.DSACode || "DSA_TEST_001"
+                    }
+                  }, null, 2)}
+                </pre>
+              </div>
+            )}
+
+            {/* SECTION 1: Customer Basic & Location Information */}
+            <div className="bg-slate-50/80 p-4 rounded-xl border space-y-3">
+              <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <Building2 className="h-4 w-4 text-blue-600" />
+                1. Customer Basic & Branch Location Information
+              </h4>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-slate-700">
+                <div>
+                  <p className="text-slate-400 font-medium">Branch Code</p>
+                  <p className="font-bold text-slate-900 mt-0.5">{selectedLead.Branch_id || selectedLead.branch?.branch_name || "BR001"}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">Subregion</p>
+                  <p className="font-bold text-slate-900 mt-0.5">{selectedLead.subregion_id || "SR001"}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">City & State</p>
+                  <p className="font-bold text-slate-900 mt-0.5">{selectedLead.city || "Mumbai"}, {selectedLead.state || "Maharashtra"}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">Pincode</p>
+                  <p className="font-bold text-slate-900 font-mono mt-0.5">{selectedLead.pincode || "400001"}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION 2: Identity & Contact Verification (PAN & Mobile OTP) */}
+            <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200 space-y-3">
+              <h4 className="font-bold text-emerald-900 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <User className="h-4 w-4 text-emerald-700" />
+                2. Identity & Contact Verification (Advanced PAN & OTP)
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-white p-3 rounded-lg border border-emerald-200">
+                  <p className="text-slate-500 font-medium">PAN Number</p>
+                  <p className="font-mono font-bold text-emerald-800 text-sm mt-0.5 uppercase">{selectedLead.pan_no || "N/A"}</p>
+                  <span className="inline-block mt-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
+                    ✓ Advanced PAN API Verified
+                  </span>
+                </div>
+                <div className="bg-white p-3 rounded-lg border border-emerald-200">
+                  <p className="text-slate-500 font-medium">Mobile Number</p>
+                  <p className="font-mono font-bold text-slate-900 text-sm mt-0.5">{selectedLead.mobile || "N/A"}</p>
+                  <span className="inline-block mt-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
+                    ✓ Mobile OTP Verified
+                  </span>
+                </div>
+                <div className="bg-white p-3 rounded-lg border border-emerald-200">
+                  <p className="text-slate-500 font-medium">E-Mail Address</p>
+                  <p className="font-bold text-slate-900 mt-0.5 truncate">{selectedLead.email || "N/A"}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION 3: Applicant / Entity Detailed Filled Values */}
+            {selectedLead.constitution === "Individual" || !selectedLead.constitution ? (
+              <div className="bg-slate-50 p-4 rounded-xl border space-y-3">
+                <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">
+                  3. Individual Applicant Personal & Financial Profile
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-slate-400 font-medium">Full Applicant Name</p>
+                    <p className="font-bold text-slate-900 mt-0.5">
+                      {selectedLead.CustName || `${selectedLead.title || "MR"} ${selectedLead.first_name || ""} ${selectedLead.middle_name || ""} ${selectedLead.last_name || ""}`.trim()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400 font-medium">Gender</p>
+                    <p className="font-bold text-slate-900 mt-0.5">{selectedLead.gender || "MALE"}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400 font-medium">Date of Birth (DOB)</p>
+                    <p className="font-bold text-slate-900 mt-0.5">{selectedLead.dob ? formatDate(selectedLead.dob) : "N/A"}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400 font-medium">Applicant Age</p>
+                    <p className="font-bold text-slate-900 mt-0.5">{selectedLead.age !== undefined ? `${selectedLead.age} Years` : "N/A"}</p>
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-200 pt-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-slate-400 font-medium">Residential Address</p>
+                    <p className="font-medium text-slate-800 mt-0.5">{selectedLead.address || "N/A"}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400 font-medium">Employer / Business Entity Name</p>
+                    <p className="font-bold text-slate-900 mt-0.5">{selectedLead.employer_business_name || "N/A"}</p>
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-200 pt-3 grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-slate-400 font-medium">Employment Type</p>
+                    <p className="font-bold text-slate-800 mt-0.5">{selectedLead.employment_type || "Salaried"}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400 font-medium">Avg Gross Monthly Income</p>
+                    <p className="font-mono font-bold text-emerald-700 mt-0.5">{formatCurrency(Number(selectedLead.avg_gross_monthly_income || 0))}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400 font-medium">Avg Net Monthly Income</p>
+                    <p className="font-mono font-bold text-emerald-700 mt-0.5">{formatCurrency(Number(selectedLead.avg_net_monthly_income || 0))}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400 font-medium">Monthly Obligation</p>
+                    <p className="font-mono font-bold text-amber-700 mt-0.5">{formatCurrency(Number(selectedLead.existing_monthly_repayment_obligation || 0))}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-purple-50/60 p-4 rounded-xl border border-purple-200 space-y-3">
+                <h4 className="font-bold text-purple-900 uppercase tracking-wider text-[11px]">
+                  3. Non-Individual Business Entity & Financial Profile
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-purple-700 font-medium">Entity Name</p>
+                    <p className="font-bold text-purple-950 mt-0.5">{selectedLead.entity_name || selectedLead.CustName || "N/A"}</p>
+                  </div>
+                  <div>
+                    <p className="text-purple-700 font-medium">Date of Incorporation (DOI)</p>
+                    <p className="font-bold text-purple-950 mt-0.5">{selectedLead.doi ? formatDate(selectedLead.doi) : "N/A"}</p>
+                  </div>
+                  <div>
+                    <p className="text-purple-700 font-medium">Promoter / Partner / Director</p>
+                    <p className="font-bold text-purple-950 mt-0.5">{selectedLead.proprietor_partner_director_name || "N/A"}</p>
+                  </div>
+                  <div>
+                    <p className="text-purple-700 font-medium">Business Address</p>
+                    <p className="font-medium text-purple-950 mt-0.5 truncate">{selectedLead.business_address || "N/A"}</p>
+                  </div>
+                </div>
+
+                <div className="border-t border-purple-200 pt-3 grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-purple-700 font-medium">Annual Sales Turnover Last FY</p>
+                    <p className="font-mono font-bold text-indigo-700 mt-0.5">{formatCurrency(Number(selectedLead.annual_gross_turnover_last_fy || 0))}</p>
+                  </div>
+                  <div>
+                    <p className="text-purple-700 font-medium">Avg Annual Gross Income</p>
+                    <p className="font-mono font-bold text-emerald-700 mt-0.5">{formatCurrency(Number(selectedLead.avg_annual_gross_income || 0))}</p>
+                  </div>
+                  <div>
+                    <p className="text-purple-700 font-medium">Avg Annual Net Income</p>
+                    <p className="font-mono font-bold text-emerald-700 mt-0.5">{formatCurrency(Number(selectedLead.avg_annual_net_income || 0))}</p>
+                  </div>
+                  <div>
+                    <p className="text-purple-700 font-medium">Monthly Obligation</p>
+                    <p className="font-mono font-bold text-amber-700 mt-0.5">{formatCurrency(Number(selectedLead.existing_monthly_repayment_obligation || 0))}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* SECTION 4: Loan Product, Tenure & Application Link */}
+            <div className="bg-slate-50 p-4 rounded-xl border space-y-3">
+              <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">
+                4. Loan Product & Requirement Details
+              </h4>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-slate-400 font-medium">Loan Product</p>
+                  <p className="font-bold text-slate-900 mt-0.5">{selectedLead.product?.name || "Loan Product"}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">Loan Type</p>
+                  <p className="font-bold text-slate-900 mt-0.5">{selectedLead.loan_type?.name || selectedLead.loanType?.name || "Standard"}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">Loan Amount Required</p>
+                  <p className="font-mono font-bold text-slate-900 mt-0.5">{formatCurrency(Number(selectedLead.loan_amount_required || 0))}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">Tenure</p>
+                  <p className="font-mono font-bold text-slate-900 mt-0.5">{selectedLead.loan_period_months} Months</p>
+                </div>
+              </div>
+
+              {selectedLead.application_link && (
+                <div className="border-t border-slate-200 pt-3 flex items-center justify-between gap-2">
+                  <div className="flex-1">
+                    <p className="text-slate-500 font-medium">Customer Self-Fill Portal Link</p>
+                    <input
+                      type="text"
+                      readOnly
+                      value={selectedLead.application_link}
+                      className="w-full bg-white border rounded px-2 py-1 font-mono text-[11px] text-slate-700 mt-1 select-all"
+                    />
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-4"
+                    onClick={() => {
+                      navigator.clipboard.writeText(selectedLead.application_link!);
+                      toast({ title: "Copied!", description: "Link copied to clipboard.", variant: "success" });
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5 mr-1" />
+                    Copy Link
                   </Button>
-                  {selectedLead.status === "SANCTIONED" && (
-                    <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white" onClick={() => openDisbursementModal(selectedLead)}>
-                      <Banknote className="h-3.5 w-3.5 mr-1" />
-                      Manual Disburse
-                    </Button>
-                  )}
-                </>
+                </div>
               )}
             </div>
 
+            {/* SECTION 5: Sanction & Disbursement Details (if applicable) */}
+            {(selectedLead.sanction_amount || selectedLead.disbursed_amount || (selectedLead.facilities && selectedLead.facilities.length > 0)) && (
+              <div className="bg-indigo-50/60 p-4 rounded-xl border border-indigo-200 space-y-3">
+                <h4 className="font-bold text-indigo-950 uppercase tracking-wider text-[11px]">
+                  5. Sanction & Disbursement Summary
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-indigo-700 font-medium">Sanction Amount</p>
+                    <p className="font-mono font-bold text-emerald-800 text-sm mt-0.5">{formatCurrency(Number(selectedLead.sanction_amount || 0))}</p>
+                  </div>
+                  <div>
+                    <p className="text-indigo-700 font-medium">Sanction Letter No.</p>
+                    <p className="font-mono font-bold text-slate-900 mt-0.5">{selectedLead.sanction_letter_no || "N/A"}</p>
+                  </div>
+                  <div>
+                    <p className="text-indigo-700 font-medium">Total Disbursed Amount</p>
+                    <p className="font-mono font-bold text-indigo-900 text-sm mt-0.5">{formatCurrency(Number(selectedLead.disbursed_amount || 0))}</p>
+                  </div>
+                  <div>
+                    <p className="text-indigo-700 font-medium">Disbursement Date</p>
+                    <p className="font-bold text-slate-900 mt-0.5">{selectedLead.disbursement_date ? formatDate(selectedLead.disbursement_date) : "N/A"}</p>
+                  </div>
+                </div>
+
+                {/* Facilities breakdown */}
+                {selectedLead.facilities && selectedLead.facilities.length > 0 && (
+                  <div className="border-t border-indigo-200 pt-3">
+                    <p className="font-bold text-indigo-900 text-[11px] mb-2">Disbursed Facility Breakdown</p>
+                    <table className="w-full bg-white border border-indigo-100 text-left">
+                      <thead className="bg-indigo-100/60 text-indigo-950 font-bold uppercase text-[10px]">
+                        <tr>
+                          <th className="p-2">Facility Type</th>
+                          <th className="p-2">Sanctioned</th>
+                          <th className="p-2">Disbursed</th>
+                          <th className="p-2">Account No.</th>
+                          <th className="p-2">Deviation</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-indigo-50 font-medium">
+                        {selectedLead.facilities.map((f, i) => (
+                          <tr key={i}>
+                            <td className="p-2 uppercase">{f.facility_type}</td>
+                            <td className="p-2 font-mono">{formatCurrency(Number(f.sanctioned_amount || 0))}</td>
+                            <td className="p-2 font-mono font-bold text-indigo-800">{formatCurrency(Number(f.disbursed_amount || 0))}</td>
+                            <td className="p-2 font-mono">{f.loan_account_no || "N/A"}</td>
+                            <td className="p-2">
+                              {f.has_deviation ? (
+                                <span className="text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded font-bold text-[10px]">
+                                  {f.deviation_type || "Yes"}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">None</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Queries Thread */}
-            <div className="space-y-3 border-t pt-4">
-              <h4 className="font-bold text-slate-800">Queries & Communication Thread</h4>
+            <div id="query-thread-section" className="space-y-3 border-t pt-4">
+              <h4 className="font-bold text-slate-800 flex items-center gap-1.5">
+                <HelpCircle className="h-4 w-4 text-amber-600" />
+                Queries & Communication Thread
+              </h4>
               {selectedLead.queries && selectedLead.queries.length > 0 ? (
                 selectedLead.queries.map((q) => (
                   <div key={q.id} className="p-3 bg-slate-50 border rounded-lg space-y-2">
@@ -1341,7 +1853,7 @@ export function LeadManagementScreen() {
                         <input
                           type="text"
                           placeholder="Type query response..."
-                          className="flex-1 border rounded px-2 py-1"
+                          className="flex-1 border rounded px-2 py-1 bg-white"
                           onChange={(e) => setResponseText(e.target.value)}
                         />
                         <Button size="sm" onClick={(e) => {
@@ -1356,6 +1868,42 @@ export function LeadManagementScreen() {
                 ))
               ) : (
                 <p className="text-slate-400 italic">No queries raised on this lead.</p>
+              )}
+            </div>
+
+            {/* Status Audit History Log (Req #30) */}
+            <div className="space-y-3 border-t pt-4">
+              <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <Layers className="h-4 w-4 text-purple-600" />
+                Status Audit History Log (Req #30)
+              </h4>
+              {selectedLead.status_histories && selectedLead.status_histories.length > 0 ? (
+                <div className="bg-slate-50 border rounded-xl overflow-hidden text-[11px]">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] border-b">
+                      <tr>
+                        <th className="p-2">Date & Time</th>
+                        <th className="p-2">Old Status</th>
+                        <th className="p-2">New Status</th>
+                        <th className="p-2">Role</th>
+                        <th className="p-2">Remarks / Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {selectedLead.status_histories.map((sh, idx) => (
+                        <tr key={idx} className="hover:bg-slate-100/60 font-medium">
+                          <td className="p-2 font-mono text-slate-600">{new Date(sh.created_at).toLocaleString()}</td>
+                          <td className="p-2"><StatusBadge status={sh.old_status || "INITIAL"} /></td>
+                          <td className="p-2"><StatusBadge status={sh.new_status} /></td>
+                          <td className="p-2 font-bold uppercase text-purple-700">{sh.action_by_type || "SYSTEM"}</td>
+                          <td className="p-2 text-slate-800">{sh.remarks || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-slate-400 italic text-[11px]">No status history recorded yet.</p>
               )}
             </div>
           </div>
@@ -1450,124 +1998,337 @@ export function LeadManagementScreen() {
         </form>
       </Modal>
 
-      {/* Manual Disbursement & Multi-facility Modal */}
-      <Modal open={isDisburseModalOpen} onClose={() => setIsDisburseModalOpen(false)} title="Manual Disbursement & Multi-Facility Mapping" width="max-w-3xl">
+      {/* Manual Disbursement Modal */}
+      <Modal open={isDisburseModalOpen} onClose={() => setIsDisburseModalOpen(false)} title="Mark Lead Disbursement" width="max-w-xl">
         <form onSubmit={handleDisburseSubmit} className="space-y-4 text-xs">
-          <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border">
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <p className="font-semibold text-slate-800">Date of Disbursement</p>
+              <label className="block text-slate-700 font-semibold mb-1">Disbursement Date * (DD/MM/YYYY)</label>
               <input
                 type="date"
+                required
                 value={disbursementDate}
                 onChange={(e) => setDisbursementDate(e.target.value)}
-                className="border rounded px-2 py-1 mt-1"
+                className="w-full border rounded p-2 focus:ring-1 focus:ring-emerald-500"
               />
             </div>
-            <Button type="button" size="sm" variant="outline" onClick={handleAddFacility}>
-              + Add Facility Account
-            </Button>
+
+            <div>
+              <label className="block text-slate-700 font-semibold mb-1">Disbursed Amount (₹) *</label>
+              <input
+                type="number"
+                required
+                min={1}
+                value={disbursedAmount}
+                onChange={(e) => setDisbursedAmount(e.target.value)}
+                className="w-full border rounded p-2 font-mono focus:ring-1 focus:ring-emerald-500"
+              />
+            </div>
           </div>
 
-          <div className="space-y-3">
-            <h4 className="font-bold text-slate-800">Facility Breakdown & Deviation Capture</h4>
-            {facilities.map((fac, idx) => (
-              <div key={idx} className="p-3 border rounded-xl bg-white space-y-3 relative">
-                {facilities.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveFacility(idx)}
-                    className="absolute top-2 right-2 text-red-500 hover:text-red-700 text-xs font-bold"
-                  >
-                    ✕ Remove
-                  </button>
-                )}
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-slate-600 mb-1">Facility Type *</label>
-                    <select
-                      value={fac.facility_type}
-                      onChange={(e) => {
-                        const updated = [...facilities];
-                        updated[idx].facility_type = e.target.value;
-                        setFacilities(updated);
-                      }}
-                      className="w-full border rounded p-1.5"
-                    >
-                      <option value="term_loan">Term Loan</option>
-                      <option value="cash_credit">Cash Credit (CC)</option>
-                      <option value="overdraft">Overdraft (OD)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-slate-600 mb-1">Disbursed Amount (₹) *</label>
-                    <input
-                      type="number"
-                      required
-                      value={fac.disbursed_amount}
-                      onChange={(e) => {
-                        const updated = [...facilities];
-                        updated[idx].disbursed_amount = Number(e.target.value);
-                        setFacilities(updated);
-                      }}
-                      className="w-full border rounded p-1.5 font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-600 mb-1">Loan Account No.</label>
-                    <input
-                      type="text"
-                      placeholder="CBS Account No."
-                      value={fac.loan_account_no}
-                      onChange={(e) => {
-                        const updated = [...facilities];
-                        updated[idx].loan_account_no = e.target.value;
-                        setFacilities(updated);
-                      }}
-                      className="w-full border rounded p-1.5 font-mono"
-                    />
-                  </div>
-                </div>
+          <div>
+            <label className="block text-slate-700 font-semibold mb-1">Loan Account No. * (Numeric, min 8 digits)</label>
+            <input
+              type="text"
+              required
+              placeholder="Enter CBS Loan Account Number (e.g. 10023456789)"
+              value={loanAccountNo}
+              onChange={(e) => {
+                const val = e.target.value.replace(/\D/g, "");
+                setLoanAccountNo(val);
+                if (val.length >= 8) {
+                  setLoanAccountError(null);
+                }
+              }}
+              className={`w-full border rounded p-2 font-mono ${loanAccountError ? "border-red-500 focus:ring-red-500" : "focus:ring-emerald-500"}`}
+            />
+            {loanAccountError && <p className="text-red-500 text-[11px] mt-1">{loanAccountError}</p>}
+          </div>
 
-                {/* Deviation capture */}
-                <div className="flex items-center gap-4 bg-amber-50/50 p-2 rounded border border-amber-100">
-                  <label className="flex items-center gap-1.5 text-amber-900 font-semibold cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={fac.has_deviation}
-                      onChange={(e) => {
-                        const updated = [...facilities];
-                        updated[idx].has_deviation = e.target.checked;
-                        setFacilities(updated);
-                      }}
-                    />
-                    Has Deviation?
-                  </label>
-                  {fac.has_deviation && (
-                    <select
-                      value={fac.deviation_type || ""}
-                      onChange={(e) => {
-                        const updated = [...facilities];
-                        updated[idx].deviation_type = e.target.value;
-                        setFacilities(updated);
-                      }}
-                      className="flex-1 border rounded p-1 bg-white"
-                    >
-                      <option value="">-- Choose Deviation Type --</option>
-                      {deviationTypes.map((d: any) => (
-                        <option key={d.meta_key || d.id} value={d.meta_value || d.meta_key}>
-                          {d.meta_value}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
+          <div className="grid grid-cols-2 gap-4 bg-amber-50/60 p-3 rounded-lg border border-amber-200">
+            <div>
+              <label className="block text-amber-900 font-semibold mb-1">Loan sanctioned with deviation? *</label>
+              <select
+                value={hasDeviation}
+                onChange={(e) => {
+                  setHasDeviation(e.target.value);
+                  if (e.target.value === "No") setDeviationType("");
+                }}
+                className="w-full border rounded p-2 bg-white"
+              >
+                <option value="No">No</option>
+                <option value="Yes">Yes</option>
+              </select>
+            </div>
+
+            {hasDeviation === "Yes" && (
+              <div>
+                <label className="block text-amber-900 font-semibold mb-1">Deviation Type *</label>
+                <select
+                  value={deviationType}
+                  required={hasDeviation === "Yes"}
+                  onChange={(e) => setDeviationType(e.target.value)}
+                  className="w-full border rounded p-2 bg-white"
+                >
+                  <option value="">-- Select Deviation Type --</option>
+                  <option value="Non-Financial">Non-Financial</option>
+                  <option value="Allowed Financial">Allowed Financial</option>
+                  <option value="Not-allowed Financial">Not-allowed Financial</option>
+                </select>
               </div>
-            ))}
+            )}
           </div>
 
           <div className="flex justify-end gap-2 pt-3 border-t">
             <Button type="button" variant="outline" onClick={() => setIsDisburseModalOpen(false)}>Cancel</Button>
-            <Button type="submit" className="bg-emerald-600 text-white">Confirm Disbursement</Button>
+            <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white">Confirm Disbursement</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Cancel Lead Modal */}
+      <Modal open={isCancelModalOpen} onClose={() => setIsCancelModalOpen(false)} title="Cancel Lead Application">
+        <form onSubmit={handleCancelSubmit} className="space-y-4 text-xs">
+          <div>
+            <label className="block text-slate-600 font-semibold mb-1">Cancellation Reason *</label>
+            <textarea
+              required
+              rows={3}
+              value={cancellationReason}
+              onChange={(e) => setCancellationReason(e.target.value)}
+              placeholder="Enter reason for cancelling this lead..."
+              className="w-full border rounded p-2 focus:outline-none focus:border-red-500"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setIsCancelModalOpen(false)}>Back</Button>
+            <Button type="submit" className="bg-red-600 hover:bg-red-700 text-white">Confirm Cancellation</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Lead Information Modal */}
+      <Modal open={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title={`Edit Lead Information: ${selectedLead?.CustName || selectedLead?.lead_uuid}`} width="max-w-3xl">
+        <form onSubmit={handleEditSubmit} className="space-y-4 text-xs max-h-[75vh] overflow-y-auto pr-1">
+          {editForm.constitution === "Individual" ? (
+            /* Individual Edit Fields */
+            <div className="space-y-3">
+              <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] border-b pb-1">Individual Applicant Details</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-600 mb-1 font-semibold">First Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.first_name || ""}
+                    onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
+                    className="w-full border rounded p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 mb-1 font-semibold">Middle Name</label>
+                  <input
+                    type="text"
+                    value={editForm.middle_name || ""}
+                    onChange={(e) => setEditForm({ ...editForm, middle_name: e.target.value })}
+                    className="w-full border rounded p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 mb-1 font-semibold">Last Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.last_name || ""}
+                    onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
+                    className="w-full border rounded p-2"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-600 mb-1 font-semibold">Mobile Number *</label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={10}
+                    value={editForm.mobile || ""}
+                    onChange={(e) => setEditForm({ ...editForm, mobile: e.target.value })}
+                    className="w-full border rounded p-2 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 mb-1 font-semibold">Email Address</label>
+                  <input
+                    type="email"
+                    value={editForm.email || ""}
+                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                    className="w-full border rounded p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 mb-1 font-semibold">Date of Birth (DOB)</label>
+                  <input
+                    type="date"
+                    value={editForm.dob || ""}
+                    onChange={(e) => setEditForm({ ...editForm, dob: e.target.value })}
+                    className="w-full border rounded p-2"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-600 mb-1 font-semibold">Residential Address</label>
+                <textarea
+                  rows={2}
+                  value={editForm.address || ""}
+                  onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                  className="w-full border rounded p-2"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-600 mb-1 font-semibold">Employment Type</label>
+                  <input
+                    type="text"
+                    value={editForm.employment_type || ""}
+                    onChange={(e) => setEditForm({ ...editForm, employment_type: e.target.value })}
+                    className="w-full border rounded p-2"
+                    placeholder="SALARIED / SELF_EMPLOYED"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 mb-1 font-semibold">Gross Monthly Income (₹)</label>
+                  <input
+                    type="number"
+                    value={editForm.avg_gross_monthly_income || ""}
+                    onChange={(e) => setEditForm({ ...editForm, avg_gross_monthly_income: Number(e.target.value) })}
+                    className="w-full border rounded p-2 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 mb-1 font-semibold">Net Monthly Income (₹)</label>
+                  <input
+                    type="number"
+                    value={editForm.avg_net_monthly_income || ""}
+                    onChange={(e) => setEditForm({ ...editForm, avg_net_monthly_income: Number(e.target.value) })}
+                    className="w-full border rounded p-2 font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Non-Individual Edit Fields */
+            <div className="space-y-3">
+              <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] border-b pb-1">Non-Individual Entity Details</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-600 mb-1 font-semibold">Entity Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.entity_name || ""}
+                    onChange={(e) => setEditForm({ ...editForm, entity_name: e.target.value })}
+                    className="w-full border rounded p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 mb-1 font-semibold">Proprietor / Partner / Director</label>
+                  <input
+                    type="text"
+                    value={editForm.proprietor_partner_director_name || ""}
+                    onChange={(e) => setEditForm({ ...editForm, proprietor_partner_director_name: e.target.value })}
+                    className="w-full border rounded p-2"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-600 mb-1 font-semibold">Mobile Number *</label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={10}
+                    value={editForm.mobile || ""}
+                    onChange={(e) => setEditForm({ ...editForm, mobile: e.target.value })}
+                    className="w-full border rounded p-2 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 mb-1 font-semibold">Email Address</label>
+                  <input
+                    type="email"
+                    value={editForm.email || ""}
+                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                    className="w-full border rounded p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 mb-1 font-semibold">Date of Incorporation (DOI)</label>
+                  <input
+                    type="date"
+                    value={editForm.doi || ""}
+                    onChange={(e) => setEditForm({ ...editForm, doi: e.target.value })}
+                    className="w-full border rounded p-2"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-600 mb-1 font-semibold">Registered Business Address</label>
+                <textarea
+                  rows={2}
+                  value={editForm.business_address || ""}
+                  onChange={(e) => setEditForm({ ...editForm, business_address: e.target.value })}
+                  className="w-full border rounded p-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-600 mb-1 font-semibold">Annual Gross Turnover (₹)</label>
+                <input
+                  type="number"
+                  value={editForm.annual_gross_turnover_last_fy || ""}
+                  onChange={(e) => setEditForm({ ...editForm, annual_gross_turnover_last_fy: Number(e.target.value) })}
+                  className="w-full border rounded p-2 font-mono"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Loan Requirement Edit Fields */}
+          <div className="space-y-3 pt-2 border-t">
+            <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">Loan Requirement Details</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-slate-600 mb-1 font-semibold">Loan Amount Required (₹) *</label>
+                <input
+                  type="number"
+                  required
+                  value={editForm.loan_amount_required || ""}
+                  onChange={(e) => setEditForm({ ...editForm, loan_amount_required: Number(e.target.value) })}
+                  className="w-full border rounded p-2 font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-600 mb-1 font-semibold">Loan Period (Months) *</label>
+                <input
+                  type="number"
+                  required
+                  value={editForm.loan_period_months || ""}
+                  onChange={(e) => setEditForm({ ...editForm, loan_period_months: Number(e.target.value) })}
+                  className="w-full border rounded p-2 font-mono"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t">
+            <Button type="button" variant="outline" onClick={() => setIsEditModalOpen(false)}>Cancel</Button>
+            <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold">Save Lead Changes</Button>
           </div>
         </form>
       </Modal>

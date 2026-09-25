@@ -1,5 +1,5 @@
-import { ApplicationsPage } from "@/components/screens/lead-application-pages";
+import { LeadManagementScreen } from "@/components/screens/lead-management-screen";
 
 export default function Page() {
-  return <ApplicationsPage />;
+  return <LeadManagementScreen />;
 }

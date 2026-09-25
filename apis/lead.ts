@@ -45,6 +45,11 @@ export interface LeadData {
   city?: string;
   state?: string;
   Branch_id?: string;
+  subregion_id?: string;
+  DSACode?: string;
+  application_link?: string;
+  branch?: any;
+  subRegion?: any;
   title?: string;
   first_name?: string;
   middle_name?: string;
@@ -116,6 +121,10 @@ export const createLead = async (leadData: LeadData): Promise<any> => {
   return request('/leads', { method: 'POST', body: JSON.stringify(leadData) });
 };
 
+export const updateLead = async (id: string | number, leadData: Partial<LeadData>): Promise<any> => {
+  return request(`/leads/${id}`, { method: 'PUT', body: JSON.stringify(leadData) });
+};
+
 export const generateShareableToken = async (): Promise<any> => {
   return request('/leads/public/generate-token', { method: 'POST' });
 };
@@ -151,13 +160,21 @@ export const rejectLead = async (id: string | number, rejection_reason: string):
 export const disburseLead = async (id: string | number, disbursementData: {
   disbursed_amount?: number;
   disbursement_date?: string;
-  loan_account_no?: string;
+  loan_account_no?: string | null;
   has_deviation?: boolean;
-  deviation_type?: string;
+  deviation_type?: string | null;
   facilities?: LeadFacility[];
   remarks?: string;
 }): Promise<any> => {
   return request(`/leads/${id}/disburse`, { method: 'POST', body: JSON.stringify(disbursementData) });
+};
+
+export const cancelLead = async (id: string | number, cancellation_reason: string): Promise<any> => {
+  return request(`/leads/${id}/cancel`, { method: 'POST', body: JSON.stringify({ cancellation_reason }) });
+};
+
+export const updateLeadStatus = async (id: string | number, statusData: { status: string; remarks?: string }): Promise<any> => {
+  return request(`/leads/${id}/update-status`, { method: 'POST', body: JSON.stringify(statusData) });
 };
 
 export const fetchLeadReports = async (params?: Record<string, any>): Promise<any> => {
