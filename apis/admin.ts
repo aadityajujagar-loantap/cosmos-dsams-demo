@@ -1885,6 +1885,10 @@ export const fetchBranchesDropdown = async (): Promise<any> => {
   return request<any>("/branches/dropdown", { method: "GET" });
 };
 
+export const fetchDsasDropdown = async (): Promise<any> => {
+  return request<any>("/dsas/dropdown", { method: "GET" });
+};
+
 
 
 

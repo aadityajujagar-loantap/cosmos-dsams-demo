@@ -47,6 +47,8 @@ export interface LeadData {
   Branch_id?: string;
   subregion_id?: string;
   DSACode?: string;
+  dsa_code?: string;
+  dsa?: any;
   application_link?: string;
   branch?: any;
   subRegion?: any;

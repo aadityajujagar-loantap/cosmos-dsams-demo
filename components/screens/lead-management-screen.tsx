@@ -20,6 +20,8 @@ import {
   Layers,
   FileText,
   Edit3,
+  ChevronDown,
+  X,
 } from "lucide-react";
 import {
   fetchLeads,
@@ -42,13 +44,147 @@ import {
   LeadData,
   LeadFacility,
 } from "@/apis/lead";
-import { fetchLoanProducts, fetchLoanTypesByProduct, getMasterValues, verifyPanAdvance, fetchBranchesDropdown } from "@/apis/admin";
+import { fetchLoanProducts, fetchLoanTypesByProduct, getMasterValues, verifyPanAdvance, fetchBranchesDropdown, fetchDsasDropdown } from "@/apis/admin";
 import { PageHeader } from "@/components/module";
 import { Button, Card, CardContent, CardHeader, Modal, StatusBadge, Tabs } from "@/components/ui/primitives";
 import { useMockStore } from "@/lib/store";
 import { useToast } from "@/components/ui/toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { getLoanPurposeOptionsFromApi } from "@/lib/loan-purpose";
+
+function SearchableDsaSelect({
+  dsaList,
+  selectedCode,
+  onSelect,
+}: {
+  dsaList: any[];
+  selectedCode: string;
+  onSelect: (code: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
+
+  const selectedDsa = dsaList.find((d) => d.dsa_code === selectedCode);
+
+  const filteredList = dsaList.filter((dsa) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      (dsa.dsa_code || "").toLowerCase().includes(q) ||
+      (dsa.name || "").toLowerCase().includes(q) ||
+      (dsa.label || "").toLowerCase().includes(q) ||
+      (dsa.mobile || "").toLowerCase().includes(q)
+    );
+  });
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className={`w-full border rounded-xl px-3 py-2 text-xs font-medium cursor-pointer transition-all flex items-center justify-between bg-white shadow-xs ${
+          isOpen
+            ? "border-blue-500 ring-2 ring-blue-500/20"
+            : selectedCode
+            ? "border-blue-400 text-slate-900 bg-blue-50/20 font-bold"
+            : "border-blue-200 text-slate-400 hover:border-blue-300"
+        }`}
+      >
+        <span className="truncate">
+          {selectedDsa
+            ? selectedDsa.label || `${selectedDsa.name} (${selectedDsa.dsa_code})`
+            : "-- Search / Select DSA Partner --"}
+        </span>
+        <div className="flex items-center gap-1.5 ml-2 shrink-0">
+          {selectedCode && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect("");
+              }}
+              className="p-0.5 text-slate-400 hover:text-red-500 rounded-md hover:bg-slate-100 transition-colors"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${isOpen ? "rotate-180 text-blue-600" : ""}`} />
+        </div>
+      </div>
+
+      {isOpen && (
+        <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white border border-slate-200/90 rounded-2xl shadow-xl p-2.5 space-y-2 animate-in fade-in slide-in-from-top-1 duration-150">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-blue-500" />
+            <input
+              type="text"
+              autoFocus
+              placeholder="Search by DSA Code, Name, or Mobile..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-7 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all font-medium"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 p-0.5"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+
+          <div className="max-h-52 overflow-y-auto space-y-1 divide-y divide-slate-100/60 pr-1">
+            {filteredList.length === 0 ? (
+              <div className="p-3 text-center text-slate-400 text-[11px] font-medium">
+                No matching DSA partner found
+              </div>
+            ) : (
+              filteredList.map((dsa) => {
+                const isSelected = dsa.dsa_code === selectedCode;
+                return (
+                  <div
+                    key={dsa.id || dsa.dsa_code}
+                    onClick={() => {
+                      onSelect(dsa.dsa_code);
+                      setIsOpen(false);
+                      setSearchQuery("");
+                    }}
+                    className={`p-2 rounded-xl cursor-pointer flex items-center justify-between text-xs transition-colors ${
+                      isSelected
+                        ? "bg-blue-50 text-blue-900 font-bold border border-blue-200/80"
+                        : "hover:bg-slate-50 text-slate-800 font-medium"
+                    }`}
+                  >
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-semibold text-slate-900">{dsa.name}</span>
+                      <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono">
+                        <span className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-bold">{dsa.dsa_code}</span>
+                        {dsa.mobile && <span>📱 {dsa.mobile}</span>}
+                      </div>
+                    </div>
+                    {isSelected && <Check className="h-4 w-4 text-blue-600 shrink-0 ml-2" />}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function LeadManagementScreen() {
   const { currentUser } = useMockStore();
@@ -126,6 +262,7 @@ export function LeadManagementScreen() {
   const [occupationTypes, setOccupationTypes] = useState<any[]>([]);
   const [deviationTypes, setDeviationTypes] = useState<any[]>([]);
   const [loanPurposes, setLoanPurposes] = useState<any[]>([]);
+  const [dsaList, setDsaList] = useState<any[]>([]);
 
   // PAN Verification State
   const [verifyingPan, setVerifyingPan] = useState(false);
@@ -143,6 +280,8 @@ export function LeadManagementScreen() {
 
   // Create Form State
   const [createForm, setCreateForm] = useState<Partial<LeadData>>({
+    DSACode: "",
+    dsa_code: "",
     constitution: "Individual",
     pincode: "400001",
     city: "Mumbai",
@@ -203,7 +342,7 @@ export function LeadManagementScreen() {
     if (masterLoaded || masterLoading) return;
     try {
       setMasterLoading(true);
-      const [prodRes, branchRes, titleRes, genderRes, empRes, occRes, devRes, purpRes] = await Promise.all([
+      const [prodRes, branchRes, titleRes, genderRes, empRes, occRes, devRes, purpRes, dsaRes] = await Promise.all([
         fetchLoanProducts(),
         fetchBranchesDropdown(),
         getMasterValues({ group: "title" }),
@@ -212,6 +351,7 @@ export function LeadManagementScreen() {
         getMasterValues({ group: "occupation_type" }),
         getMasterValues({ group: "deviation_type" }),
         getMasterValues({ group: "loan_purpose" }),
+        fetchDsasDropdown(),
       ]);
 
       const prods = prodRes?.data?.data || prodRes?.data || prodRes || [];
@@ -226,6 +366,10 @@ export function LeadManagementScreen() {
       setOccupationTypes(Array.isArray(occRes?.data || occRes) ? (occRes?.data || occRes) : []);
       setDeviationTypes(Array.isArray(devRes?.data || devRes) ? (devRes?.data || devRes) : []);
       setLoanPurposes(Array.isArray(purpRes?.data || purpRes) ? (purpRes?.data || purpRes) : []);
+
+      const dsaItems = dsaRes?.data || dsaRes || [];
+      setDsaList(Array.isArray(dsaItems) ? dsaItems : []);
+
       setMasterLoaded(true);
     } catch (err) {
       console.error("Failed to load static master data:", err);
@@ -440,6 +584,10 @@ export function LeadManagementScreen() {
 
   const handleCreateLead = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isBankUser && !((createForm as any).DSACode || (createForm as any).dsa_code)) {
+      toast({ title: "Error", description: "Please select a DSA Partner / DSA Code", variant: "error" });
+      return;
+    }
     if (!createForm.loan_product_id || !createForm.loan_type_id) {
       toast({ title: "Error", description: "Please select Loan Product & Type", variant: "error" });
       return;
@@ -1102,6 +1250,18 @@ export function LeadManagementScreen() {
               <p className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">1. Branch Location & Constitution</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {isBankUser && (
+                <div className="col-span-1 sm:col-span-2 bg-blue-50/60 p-3 rounded-xl border border-blue-200/80">
+                  <label className="block text-blue-950 font-bold text-[11px] mb-1 tracking-wide">
+                    Select DSA Partner / DSA Code *
+                  </label>
+                  <SearchableDsaSelect
+                    dsaList={dsaList}
+                    selectedCode={(createForm as any).DSACode || (createForm as any).dsa_code || ""}
+                    onSelect={(code) => setCreateForm({ ...createForm, DSACode: code, dsa_code: code } as any)}
+                  />
+                </div>
+              )}
               <div>
                 <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Select Branch *</label>
                 <select
@@ -1746,6 +1906,58 @@ export function LeadManagementScreen() {
               </div>
             </div>
 
+            {/* Sourcing Channel & DSA Partner Information */}
+            <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white p-4 rounded-xl border border-blue-800/80 shadow-md space-y-3">
+              <div className="flex items-center justify-between border-b border-blue-800/70 pb-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-blue-500/20 text-blue-300 rounded-lg">
+                    <User className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white uppercase tracking-wider text-[11px]">
+                      DSA Sourcing Partner Details
+                    </h4>
+                    <p className="text-[10px] text-blue-200/80 font-medium">
+                      Channel partner responsible for lead origination
+                    </p>
+                  </div>
+                </div>
+                <span className="bg-blue-500/20 text-blue-300 border border-blue-400/30 font-mono font-bold text-[10px] px-2.5 py-0.5 rounded-full">
+                  {selectedLead.DSACode || selectedLead.dsa_code || selectedLead.dsa?.dsa_code || selectedLead.dsa?.code || "DSA_N/A"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                <div>
+                  <p className="text-blue-300/80 text-[10px] uppercase font-semibold">DSA Agency / Name</p>
+                  <p className="font-bold text-white mt-0.5">
+                    {selectedLead.dsa?.entity_name ||
+                      (selectedLead.dsa ? `${selectedLead.dsa.first_name || ""} ${selectedLead.dsa.last_name || ""}`.trim() : null) ||
+                      selectedLead.dsa?.name ||
+                      "DSA Partner"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-blue-300/80 text-[10px] uppercase font-semibold">DSA Code</p>
+                  <p className="font-mono font-bold text-emerald-400 mt-0.5">
+                    {selectedLead.DSACode || selectedLead.dsa_code || selectedLead.dsa?.dsa_code || selectedLead.dsa?.code || "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-blue-300/80 text-[10px] uppercase font-semibold">DSA Contact Mobile</p>
+                  <p className="font-mono font-semibold text-slate-200 mt-0.5">
+                    {selectedLead.dsa?.mobile || selectedLead.dsa?.phone || "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-blue-300/80 text-[10px] uppercase font-semibold">DSA E-Mail</p>
+                  <p className="font-medium text-slate-200 mt-0.5 truncate">
+                    {selectedLead.dsa?.email || "N/A"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* Action Toolbar */}
             {(() => {
               const normStatus = getNormalizedStatus(selectedLead.status);
@@ -1880,8 +2092,8 @@ export function LeadManagementScreen() {
                   <p className="font-bold text-slate-900 mt-0.5">{selectedLead.Branch_id || selectedLead.branch?.branch_name || "BR001"}</p>
                 </div>
                 <div>
-                  <p className="text-slate-400 font-medium">Subregion</p>
-                  <p className="font-bold text-slate-900 mt-0.5">{selectedLead.subregion_id || "SR001"}</p>
+                  <p className="text-slate-400 font-medium">DSA Partner / Code</p>
+                  <p className="font-bold text-slate-900 font-mono mt-0.5">{selectedLead.DSACode || (selectedLead as any).dsa_code || selectedLead.dsa?.dsa_code || "N/A"}</p>
                 </div>
                 <div>
                   <p className="text-slate-400 font-medium">City & State</p>
