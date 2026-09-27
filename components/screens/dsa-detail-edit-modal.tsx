@@ -811,7 +811,7 @@ export function DsaDetailEditModal({
                 <Label htmlFor="applicant_prior_experience">Financial / Sourcing Experience Description</Label>
                 <Input
                   id="applicant_prior_experience"
-                  placeholder="e.g. 5 years loan DSA experience"
+                  placeholder="Prior experience summary"
                   value={formData.applicant_prior_experience || ""}
                   onChange={(e) => handleChange("applicant_prior_experience", e.target.value)}
                 />

@@ -1293,6 +1293,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       toast({ title: "Mobile Required", description: "Enter valid 10-digit mobile number.", variant: "warning" });
       return;
     }
+    if (!selfEmail || !selfEmail.trim()) {
+      toast({ title: "Email Required", description: "Enter applicant email address.", variant: "warning" });
+      return;
+    }
     const selectedBranch = branches.find((b) => String(b.id ?? b.branch_id) === String(branchId)) || branches[0];
     const validBranchId = selectedBranch ? Number(selectedBranch.id ?? selectedBranch.branch_id) : (Number(branchId) || 1);
 
@@ -1437,15 +1441,22 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     }
 
     setIsVerifyingPan(true);
+    const isEntity = dsaType === "ENTITY";
     try {
-      const res: any = await adminApi.verifyPanAdvance({
-        pan: trimmedPan,
-        dsa_temp_id: otpReferenceId || undefined,
-      });
+      const res: any = isEntity
+        ? await adminApi.verifyPanEntity({
+            pan: trimmedPan,
+            dsa_temp_id: otpReferenceId || undefined,
+            entity_name: entityName || undefined,
+          })
+        : await adminApi.verifyPanAdvance({
+            pan: trimmedPan,
+            dsa_temp_id: otpReferenceId || undefined,
+          });
 
       const resData = res?.data ?? res;
-      const isSuccess = Boolean(res?.success || resData?.status === "SUCCESS");
-      const detailsData = resData?.details?.data || resData?.data || resData;
+      const isSuccess = Boolean(res?.success || resData?.status === "SUCCESS" || resData?.statusCode === 101);
+      const detailsData = resData?.details?.data || resData?.details?.result || resData?.data || resData?.result || resData;
 
       if (isSuccess && detailsData) {
         const panApiEmail =
@@ -1457,10 +1468,16 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           res?.data?.details?.data?.email ||
           res?.data?.email;
 
+        const resolvedName =
+          detailsData.fullName ||
+          detailsData.name ||
+          detailsData.entity_name ||
+          "";
+
         setPan(trimmedPan);
         setPanVerified(true);
         setPanVerificationData({
-          fullName: detailsData.fullName,
+          fullName: resolvedName,
           aadhaarLinked: detailsData.aadhaarLinked,
           maskedAadhaar: detailsData.maskedAadhaarNumber,
           category: detailsData.category,
@@ -1474,8 +1491,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           const resolvedMiddleName = detailsData.middleName || detailsData.fatherName || "";
           if (resolvedMiddleName) setMiddleName(resolvedMiddleName);
           if (detailsData.lastName) setLastName(detailsData.lastName);
-          if (!detailsData.firstName && detailsData.fullName) {
-            const parts = String(detailsData.fullName).trim().split(/\s+/);
+          if (!detailsData.firstName && resolvedName) {
+            const parts = String(resolvedName).trim().split(/\s+/);
             if (parts.length === 1) {
               setFirstName(parts[0]);
             } else if (parts.length === 2) {
@@ -1494,25 +1511,28 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           }
         } else {
           // ENTITY Mode
-          if (detailsData.fullName) {
+          if (resolvedName) {
             if (detailsData.category !== "P" || !entityName) {
-              setEntityName(detailsData.fullName);
+              setEntityName(resolvedName);
             }
             if (!contactPerson) {
-              setContactPerson(detailsData.fullName);
+              setContactPerson(resolvedName);
             }
           }
           if (!constitution && detailsData.category) {
-            if (detailsData.category === "C") setConstitution("Pvt Ltd");
-            else if (detailsData.category === "F") setConstitution("Partnership");
-            else if (detailsData.category === "T") setConstitution("Trust");
-            else if (detailsData.category === "P") setConstitution("Proprietorship");
+            const cat = String(detailsData.category).toUpperCase();
+            if (cat === "C" || cat === "COMPANY") setConstitution("Pvt Ltd");
+            else if (cat === "F" || cat === "FIRM" || cat === "PARTNERSHIP") setConstitution("Partnership");
+            else if (cat === "T" || cat === "TRUST") setConstitution("Trust");
+            else if (cat === "P" || cat === "PROPRIETORSHIP") setConstitution("Proprietorship");
+            else if (cat === "L" || cat === "LLP") setConstitution("LLP");
           }
         }
 
         // 2. Date of Birth / Incorporation
-        if (detailsData.dobOrDoi) {
-          const parsed = parseDobOrDoi(detailsData.dobOrDoi);
+        const dobOrDoi = detailsData.dobOrDoi || detailsData.dateOfIncorporation || detailsData.doi;
+        if (dobOrDoi) {
+          const parsed = parseDobOrDoi(dobOrDoi);
           if (parsed) {
             setDateOfBirth(parsed.iso);
             setDisplayDob(parsed.display);
@@ -1554,21 +1574,21 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         }
 
         toast({
-          title: "PAN Verified & Auto-Populated",
-          description: `Verified for ${detailsData.fullName || trimmedPan}. Personal & address fields auto-populated across pages.`,
+          title: isEntity ? "Entity PAN Verified & Auto-Populated" : "PAN Verified & Auto-Populated",
+          description: `Verified for ${resolvedName || trimmedPan}. ${isEntity ? "Corporate entity" : "Personal"} & address fields auto-populated across pages.`,
           variant: "success",
         });
       } else {
         setPanVerified(false);
         toast({
-          title: "PAN Verification Failed",
+          title: isEntity ? "Entity PAN Verification Failed" : "PAN Verification Failed",
           description: res?.message || "Invalid PAN or record not found.",
           variant: "destructive",
         });
       }
     } catch (err: any) {
       setPanVerified(false);
-      const msg = err?.data?.message || err?.message || "Could not connect to ScoreMe verification gateway.";
+      const msg = err?.data?.message || err?.message || (isEntity ? "Could not connect to Karza verification gateway." : "Could not connect to ScoreMe verification gateway.");
       toast({
         title: "Verification Request Failed",
         description: msg,
@@ -2502,6 +2522,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         value={selfEmail}
                         onChange={(e) => {
                           setSelfEmail(e.target.value);
+                          setOtpSent(false);
+                          setOtpVerified(false);
+                          setOtpValue("");
+                          setOtpReferenceId("");
                           setEmailOtpSent(false);
                         }}
                         placeholder="applicant@example.com"
@@ -2516,7 +2540,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       <Button
                         type="button"
                         onClick={handleSendOtp}
-                        disabled={isSendingOtp || mobile.length !== 10}
+                        disabled={isSendingOtp || mobile.length !== 10 || !selfEmail.trim()}
                         className="text-xs bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm flex items-center gap-1.5"
                       >
                         {isSendingOtp ? (
@@ -2620,7 +2644,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                             <button
                               type="button"
                               onClick={handleSendOtp}
-                              disabled={isSendingOtp}
+                              disabled={isSendingOtp || mobile.length !== 10 || !selfEmail.trim()}
                               className="text-blue-600 hover:underline font-semibold disabled:opacity-50 inline-flex items-center gap-1"
                             >
                               {isSendingOtp ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
@@ -3227,7 +3251,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           id="entity_experience_details"
                           value={priorExperienceDetails}
                           onChange={(e) => setPriorExperienceDetails(e.target.value)}
-                          placeholder="Prior experience summary (e.g. 5 years in loan distribution with Axis Bank)"
+                          placeholder="Prior experience summary"
                           className="mt-2 text-xs"
                         />
                       )}
@@ -3554,7 +3578,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     id="bank_name"
                     value={bankName}
                     onChange={(e) => setBankName(e.target.value)}
-                    placeholder="e.g. The Cosmos Co-operative Bank Ltd."
+                    placeholder="e.g. Cosmos Co-operative Bank Ltd."
                     className="mt-1"
                   />
                 </div>
@@ -3603,7 +3627,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     className="mt-1"
                   >
                     <option value="">Select Account Type</option>
-                    <option value="Current">Current Account (Recommended for DSA)</option>
+                    <option value="Current">Current Account</option>
                     <option value="Savings">Savings Account</option>
                   </Select>
                 </div>
@@ -3690,11 +3714,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     <div>
                       <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                         <Briefcase className="h-4 w-4 text-blue-600" />
-                        Key Persons / Partners / Directors (At least 1 Mandatory)
+                        Key Persons / Partners / Directors
                       </h4>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        Enter stakeholder details. In Step 5, you must upload photograph, PAN and Aadhaar for at least one key person.
-                      </p>
                     </div>
                     <Button
                       type="button"
@@ -3829,9 +3850,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     <h3 className="text-lg font-bold text-slate-900">
                       {dsaType === "INDIVIDUAL" ? "Individual DSA" : "Entity DSA"} — Document Checklist
                     </h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Attach verified documents (Max 2MB per file, PDF/JPG/PNG). All mandatory documents marked below are required to submit.
-                    </p>
                   </div>
                   <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-blue-50 text-blue-800 border border-blue-200">
                     Attached: {currentDocList.filter((d) => Boolean(uploadedDocs[d.type])).length} / {currentDocList.length}
@@ -4021,9 +4039,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
             <div className="space-y-6">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Review Application & Declaration</h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Review and verify all application details and uploaded documents before submission.
-                </p>
               </div>
 
               {/* Dynamic 2-Column Review Grid */}
@@ -4211,7 +4226,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     </div>
                     <p className="text-slate-600">
                       I/We hereby declare that all information and documents furnished above are true, complete, and authentic.
-                      I/We grant express consent to The Cosmos Co-operative Bank Ltd. to verify details, conduct due diligence,
+                      I/We grant express consent to Cosmos Co-operative Bank Ltd. to verify details, conduct due diligence,
                       and process my personal and business data strictly for empanelment, origination, and regulatory compliance as formalized in the attached signed DSA consent document.
                     </p>
                   </div>

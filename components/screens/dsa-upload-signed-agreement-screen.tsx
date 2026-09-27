@@ -277,7 +277,7 @@ export function DsaUploadSignedAgreementScreen({ token }: DsaUploadSignedAgreeme
                     Signed Agreement Uploaded Successfully!
                   </h2>
                   <p className="text-xs text-slate-300 max-w-lg mx-auto leading-relaxed">
-                    Thank you! Your signed Master Partnership Agreement document has been securely stored and submitted to The Cosmos Co-Operative Bank Ltd.
+                    Thank you! Your signed Master Partnership Agreement document has been securely stored and submitted to Cosmos Co-Operative Bank Ltd.
                   </p>
                 </div>
 
@@ -486,7 +486,7 @@ export function DsaUploadSignedAgreementScreen({ token }: DsaUploadSignedAgreeme
                     className="mt-0.5 rounded border-slate-700 text-emerald-600 focus:ring-emerald-500/20 bg-slate-900 w-4 h-4"
                   />
                   <div className="text-xs text-slate-300 leading-relaxed">
-                    <span className="font-semibold text-white">Declaration of Physical Execution:</span> I hereby confirm that this document represents the genuine, complete, and physically signed and stamped Master Partnership Agreement executed with The Cosmos Co-Operative Bank Ltd.
+                    <span className="font-semibold text-white">Declaration of Physical Execution:</span> I hereby confirm that this document represents the genuine, complete, and physically signed and stamped Master Partnership Agreement executed with Cosmos Co-Operative Bank Ltd.
                   </div>
                 </label>
 
@@ -514,7 +514,7 @@ export function DsaUploadSignedAgreementScreen({ token }: DsaUploadSignedAgreeme
 
       {/* Footer */}
       <footer className="border-t border-slate-800/80 bg-slate-950/60 px-6 py-4 text-center text-[11px] text-slate-500">
-        &copy; {new Date().getFullYear()} The Cosmos Co-operative Bank Ltd. All rights reserved. | DSAMS Digital Onboarding
+        &copy; {new Date().getFullYear()} Cosmos Co-operative Bank Ltd. All rights reserved. | DSAMS Digital Onboarding
       </footer>
     </div>
   );

@@ -563,12 +563,6 @@ export const adminApi = {
     });
   },
 
-  getMakerDeviationReport: async (idOrCode: number | string): Promise<BackendResponse<any>> => {
-    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/maker/deviation-report`, {
-      method: "GET",
-    });
-  },
-
   getMakerBucket: async (params?: { page?: number; per_page?: number; search?: string; status?: string; dsa_type?: string }): Promise<BackendResponse<any>> => {
     const query = params ? `?${new URLSearchParams(params as any).toString()}` : "";
     return request<BackendResponse<any>>(`/v1/dsa/maker/bucket${query}`, { method: "GET" });
@@ -615,9 +609,40 @@ export const adminApi = {
     });
   },
 
+  generateCheckerDdReviewReport: async (
+    idOrCode: number | string,
+    payload?: {
+      observations?: string;
+      remarks?: string;
+      exception_remarks?: string;
+      recommendation?: string;
+      structured_data?: any;
+    }
+  ): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/checker/dd-review-report`, {
+      method: "POST",
+      body: JSON.stringify(payload ?? {}),
+    });
+  },
+
   getCheckerDdReviewReport: async (idOrCode: number | string, evaluationId?: string): Promise<BackendResponse<any>> => {
     const query = evaluationId ? `?evaluation_id=${evaluationId}` : "";
     return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/checker/dd-review-report${query}`, { method: "GET" });
+  },
+
+  getDdReviewReport: async (idOrCode: number | string): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/dd-review-report`, { method: "GET" });
+  },
+
+  getDdReviewReportPdf: async (idOrCode: number | string): Promise<BackendResponse<{
+    document_id: number;
+    document_type: string;
+    file_name: string;
+    file_path: string;
+    file_url: string;
+    size?: string;
+  }>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/dd-review-report/pdf`, { method: "GET" });
   },
 
   submitCheckerApplication: async (
@@ -1843,6 +1868,22 @@ export const adminApi = {
     dsa_id?: number;
   }): Promise<KycApiResponse<any>> => {
     return request<KycApiResponse<any>>("/v1/kyc/scoreme/pan-advance", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * POST /api/v1/kyc/karza/pan-entity
+   * Entity PAN verification with corporate legal name match and status
+   */
+  verifyPanEntity: async (payload: {
+    pan: string;
+    dsa_temp_id?: string;
+    dsa_id?: number;
+    entity_name?: string;
+  }): Promise<KycApiResponse<any>> => {
+    return request<KycApiResponse<any>>("/v1/kyc/karza/pan-entity", {
       method: "POST",
       body: JSON.stringify(payload),
     });

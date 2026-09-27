@@ -401,7 +401,7 @@ export function DsaEmailActionScreen({ token }: DsaEmailActionScreenProps) {
 
       {/* Footer */}
       <div className="w-full max-w-2xl mx-auto pb-4 text-center text-xs text-slate-400">
-        &copy; {new Date().getFullYear()} The Cosmos Co-Operative Bank Ltd. All Rights Reserved.
+        &copy; {new Date().getFullYear()} Cosmos Co-Operative Bank Ltd. All Rights Reserved.
       </div>
     </div>
   );

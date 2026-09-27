@@ -55,7 +55,7 @@ const CUSTOMER_DSA_DISPLAY_NAME = "Assigned DSA";
 
 export function DashboardPage() {
   const { store, currentUser, createItem } = useMockStore();
-  const { dsas: liveDsas, fetchDsas: fetchLiveDsas } = useDsa();
+  const { dsas: liveDsas, fetchDsas: fetchLiveDsas, listLoading } = useDsa();
 
   const [recentLogs, setRecentLogs] = useState<ActivityLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(true);
@@ -156,7 +156,17 @@ export function DashboardPage() {
   }, [currentUser, liveDsas]);
 
   const branchDsas = useMemo(() => {
-    if (currentUser?.role !== "Branch User" && currentUser?.role !== "Checker" && currentUser?.role !== "Branch Regional Head") return [];
+    const isWorkflowAuthority = [
+      "Branch User",
+      "Checker",
+      "Sub-Region Head",
+      "DGM",
+      "Region Head",
+      "Branch Regional Head",
+      "HO Credit Officer",
+      "HO Credit Head",
+    ].includes(currentUser?.role ?? "");
+    if (!isWorkflowAuthority) return [];
 
     const liveMapped: any[] = liveDsas.map((item: any) => {
       const applicantName = item.name || item.contact_person || item.entity_name || item.code;
@@ -685,7 +695,11 @@ export function DashboardPage() {
               </span>
             </CardHeader>
             <CardContent className="p-0">
-              {pendingDsas.length > 0 ? (
+              {listLoading ? (
+                <div className="flex items-center justify-center py-20">
+                  <span className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" />
+                </div>
+              ) : pendingDsas.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse text-sm">
                     <thead>
@@ -1267,26 +1281,43 @@ export function DashboardPage() {
         </div>
       </div>
     );
-  } else if (currentUser.role === "Branch User" || currentUser.role === "Checker") {
+  } else if (
+    currentUser.role === "Branch User" ||
+    currentUser.role === "Checker" ||
+    currentUser.role === "Sub-Region Head" ||
+    currentUser.role === "DGM" ||
+    currentUser.role === "Region Head" ||
+    currentUser.role === "Branch Regional Head" ||
+    currentUser.role === "HO Credit Officer" ||
+    currentUser.role === "HO Credit Head"
+  ) {
     const isChecker = currentUser.role === "Checker";
+    const isMaker = currentUser.role === "Branch User";
+    const roleTitle = isChecker
+      ? "Checker"
+      : isMaker
+        ? "Branch Maker"
+        : currentUser.role;
     return (
       <div>
         <PageHeader
           description={
             isChecker
               ? "Review and recommend branch DSA applications for Checker Due Diligence."
-              : "Onboard DSAs from the branch and track the internal approval handoff to Checker."
+              : isMaker
+                ? "Onboard DSAs from the branch and track the internal approval handoff to Checker."
+                : `Review and process DSA applications awaiting approval in your ${currentUser.role} queue.`
           }
-          eyebrow={isChecker ? "Branch Checker desk" : "Branch DSA desk"}
-          title={`${isChecker ? "Checker" : "Branch"} Dashboard: ${currentUser.name}`}
+          eyebrow={`${roleTitle} desk`}
+          title={`${roleTitle} Dashboard: ${currentUser.name}`}
         />
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <KpiCard change="Branch scope" icon={Building2} label="Branch DSAs" tone="blue" value={String(branchStats.total)} />
+          <KpiCard change="Scope" icon={Building2} label="Relevant DSAs" tone="blue" value={String(branchStats.total)} />
           <KpiCard
-            change={isChecker ? "Checker Review" : "Checker queue"}
+            change={isChecker ? "Checker Review" : "Queue Status"}
             icon={Clock}
-            label="Pending Checker"
+            label={isChecker ? "Pending Checker" : "Pending Queue"}
             tone="amber"
             value={String(isChecker ? branchStats.pendingChecker : branchStats.pendingCredit)}
           />
@@ -1300,17 +1331,27 @@ export function DashboardPage() {
             <CardHeader className="border-b border-slate-100 pb-4">
               <div>
                 <h2 className="text-base font-bold text-slate-900">
-                  {isChecker ? "Branch Checker Review Queue" : "Branch DSA onboarding tracker"}
+                  {isChecker
+                    ? "Branch Checker Review Queue"
+                    : isMaker
+                      ? "Branch DSA onboarding tracker"
+                      : `${currentUser.role} Review Queue`}
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
                   {isChecker
                     ? "Applications submitted by branch Makers pending Checker Due Diligence."
-                    : "Track DSA applications submitted from your branch through Maker & Checker stages."}
+                    : isMaker
+                      ? "Track DSA applications submitted from your branch through Maker & Checker stages."
+                      : `Applications awaiting appraisal and recommendation at ${currentUser.role} stage.`}
                 </p>
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              {branchDsas.length ? (
+              {listLoading ? (
+                <div className="flex items-center justify-center py-20">
+                  <span className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" />
+                </div>
+              ) : branchDsas.length ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse text-sm">
                     <thead>
@@ -1349,8 +1390,8 @@ export function DashboardPage() {
               ) : (
                 <div className="p-8 text-center text-slate-500">
                   <Users className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm font-semibold text-slate-700">No DSAs found for this branch.</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Only DSAs assigned to your branch will appear here.</p>
+                  <p className="text-sm font-semibold text-slate-700">No DSAs found in queue.</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Only DSAs assigned to your scope will appear here.</p>
                 </div>
               )}
             </CardContent>

@@ -176,7 +176,7 @@ export function useDsa() {
   const [dsas, setDsas] = useState<Dsa[]>([]);
   const [currentDsa, setCurrentDsa] = useState<Dsa | null>(null);
   const [loading, setLoading] = useState(false);
-  const [listLoading, setListLoading] = useState(false);
+  const [listLoading, setListLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [dsaListError, setDsaListError] = useState("");
   const [userBranchScope, setUserBranchScope] = useState<UserBranchScope | null>(null);
@@ -450,11 +450,11 @@ export function useDsa() {
   const fetchDeviationReport = useCallback(
     async (idOrCode: number | string) => {
       try {
-        const response = await adminApi.getCheckerDdReviewReport(idOrCode);
+        const response = await adminApi.getDdReviewReport(idOrCode);
         return response.data;
       } catch {
         try {
-          const fallback = await adminApi.getMakerDeviationReport(idOrCode);
+          const fallback = await adminApi.getCheckerDdReviewReport(idOrCode);
           return fallback.data;
         } catch {
           return null;
@@ -516,6 +516,40 @@ export function useDsa() {
         toast({
           title: "Failed to save DD Note",
           description: errorMessage(error, "Could not save Due Diligence Note."),
+          variant: "warning",
+        });
+        return null;
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [toast]
+  );
+
+  const generateCheckerDdReviewReport = useCallback(
+    async (
+      idOrCode: number | string,
+      payload?: {
+        observations?: string;
+        remarks?: string;
+        exception_remarks?: string;
+        recommendation?: string;
+        structured_data?: any;
+      }
+    ) => {
+      setActionLoading(true);
+      try {
+        const response = await adminApi.generateCheckerDdReviewReport(idOrCode, payload);
+        toast({
+          title: "Due Diligence Report Generated",
+          description: response.message || "Due Diligence and Deviation Report generated successfully.",
+          variant: "success",
+        });
+        return response.data;
+      } catch (error: unknown) {
+        toast({
+          title: "Report Generation Notice",
+          description: errorMessage(error, "Failed to generate Due Diligence Review Report."),
           variant: "warning",
         });
         return null;
@@ -754,7 +788,7 @@ export function useDsa() {
   );
 
   const uploadDsaDocument = useCallback(
-    async (idOrCode: number | string, payload: { file: File; document_type: string; owner_name?: string }) => {
+    async (idOrCode: number | string, payload: { file: File; document_type: string; owner_name?: string; remarks?: string }) => {
       setActionLoading(true);
       try {
         const response = await adminApi.uploadDsaDocument(idOrCode, payload);
@@ -913,6 +947,7 @@ export function useDsa() {
     submitCheckerApplication,
     updateWorkflowAction,
     fetchDeviationReport,
+    generateCheckerDdReviewReport,
     triggerCheckerVerification,
     fetchCheckerDdNote,
     saveCheckerDdNote,

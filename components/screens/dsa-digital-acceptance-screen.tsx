@@ -222,7 +222,7 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
                     Digital Acceptance Recorded Successfully!
                   </h2>
                   <p className="text-xs text-slate-300 max-w-md mx-auto leading-relaxed">
-                    Congratulations! Your Direct Selling Agent (DSA) empanelment with The Cosmos Co-Operative Bank Ltd. is now formally accepted.
+                    Congratulations! Your Direct Selling Agent (DSA) empanelment with Cosmos Co-Operative Bank Ltd. is now formally accepted.
                   </p>
                 </div>
 
@@ -367,7 +367,7 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
                     <div className="text-xs text-slate-300 space-y-1">
                       <span className="font-semibold text-white block">Declaration & Acceptance of Terms</span>
                       <p className="text-[11px] text-slate-400 leading-relaxed">
-                        I hereby acknowledge and agree to the terms and conditions set forth in the DSA Empanelment Letter issued by The Cosmos Co-Operative Bank Ltd. I confirm adherence to the code of conduct, compliance policies, and regulatory obligations applicable to Direct Selling Agents.
+                        I hereby acknowledge and agree to the terms and conditions set forth in the DSA Empanelment Letter issued by Cosmos Co-Operative Bank Ltd. I confirm adherence to the code of conduct, compliance policies, and regulatory obligations applicable to Direct Selling Agents.
                       </p>
                     </div>
                   </label>
@@ -397,7 +397,7 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
 
       {/* Footer */}
       <footer className="border-t border-slate-800/80 bg-slate-950/60 px-6 py-4 text-center text-[11px] text-slate-500">
-        &copy; {new Date().getFullYear()} The Cosmos Co-operative Bank Ltd. All rights reserved. | DSAMS Digital Onboarding
+        &copy; {new Date().getFullYear()} Cosmos Co-operative Bank Ltd. All rights reserved. | DSAMS Digital Onboarding
       </footer>
     </div>
   );
