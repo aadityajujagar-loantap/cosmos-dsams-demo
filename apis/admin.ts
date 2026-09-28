@@ -677,9 +677,11 @@ export const adminApi = {
   updateWorkflowAction: async (
     idOrCode: number | string,
     payload: {
-      action: "RECOMMEND" | "APPROVE" | "REJECT" | "REVERT" | "QUERY" | "RESUBMIT";
+      action: "RECOMMEND" | "APPROVE" | "REJECT" | "REVERT" | "CALL_BACK" | "RE_ALLOCATE" | "FORWARD" | "QUERY" | "RESUBMIT";
       remarks?: string;
       query?: string;
+      target_user_id?: number;
+      confirmed?: boolean;
     }
   ): Promise<BackendResponse<any>> => {
     return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/update-workflow-action`, {

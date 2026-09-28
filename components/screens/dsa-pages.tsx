@@ -82,6 +82,7 @@ import { useDsa, normalizeDsaData } from "@/hooks/useDsa";
 import { isDsaInBranchScope } from "@/lib/branch-scope";
 import { BusinessType, Dsa, DsaStatus, Product, User } from "@/lib/types";
 import { DsaBasicDetailsTab } from "./dsa-basic-details-tab";
+import { DsaKycDataModal, KycDataType } from "./dsa-kyc-data-modal";
 import type { BranchOption } from "@/types/dsa";
 import {
   cn,
@@ -102,13 +103,17 @@ export function getDsaDisplayStatus(dsa: any): string {
   ).toUpperCase();
 
   if (agreementStatus === "SIGNED_VERIFIED" || operationalStatus === "ACTIVE") {
-    return operationalStatus || "ACTIVE";
+    return "ACTIVE";
   }
   if (
     onboardingStatus === "APPROVED" ||
     onboardingStatus === "AGREEMENT_COMPLETED"
   ) {
-    return operationalStatus || onboardingStatus;
+    // If agreement is approved/completed but operational_status is not yet ACTIVE, show APPROVED
+    if (operationalStatus && operationalStatus !== "NOT_ACTIVE" && operationalStatus !== "INACTIVE") {
+      return operationalStatus;
+    }
+    return onboardingStatus;
   }
   return onboardingStatus || "PENDING";
 }
@@ -220,6 +225,30 @@ function getDocumentUrl(
     }
   }
 
+  // Due Diligence Review Report documents: bust cache with timestamp
+  if (isDdReviewReportDocument(doc)) {
+    const ts = doc._timestamp || Date.now();
+    if (!useStorageFallback && targetDsaId && doc.id && typeof doc.id === "number" && doc.id < 100000) {
+      return `${apiBase}/api/v1/dsa/${targetDsaId}/documents/${doc.id}/file?t=${ts}`;
+    }
+    if (doc.file_path) {
+      return `${apiBase}/storage/${doc.file_path.replace(/^\/+/, "")}?t=${ts}`;
+    }
+    if (doc.file_url || doc.url) {
+      const rawUrl = doc.file_url || doc.url;
+      try {
+        const parsed = new URL(rawUrl);
+        const apiOrigin = new URL(apiBase).origin;
+        const finalUrl = parsed.origin !== apiOrigin ? `${apiOrigin}${parsed.pathname}${parsed.search}` : rawUrl;
+        const sep = finalUrl.includes("?") ? "&" : "?";
+        return `${finalUrl}${sep}t=${ts}`;
+      } catch {
+        const sep = rawUrl.includes("?") ? "&" : "?";
+        return `${rawUrl}${sep}t=${ts}`;
+      }
+    }
+  }
+
   // 1. Primary path: Use dedicated API endpoint for authenticated / backend streaming if document ID is a real DB ID (< 100000)
   if (
     !useStorageFallback &&
@@ -271,9 +300,41 @@ export function isVisitReportDocument(docOrType?: any): boolean {
   );
 }
 
+export function isApplicationFormDocument(docOrType?: any): boolean {
+  if (!docOrType) return false;
+  const rawType =
+    typeof docOrType === "object"
+      ? docOrType.document_type || docOrType.type || ""
+      : docOrType;
+  const t = String(rawType).toUpperCase().trim();
+  return (
+    t === "APPLICATION_FORM" ||
+    t === "DSA_APPLICATION_FORM" ||
+    t.includes("APPLICATION_FORM")
+  );
+}
+
+export function isDdReviewReportDocument(docOrType?: any): boolean {
+  if (!docOrType) return false;
+  const rawType =
+    typeof docOrType === "object"
+      ? docOrType.document_type || docOrType.type || docOrType.file_name || ""
+      : docOrType;
+  const t = String(rawType).toUpperCase().trim();
+  return (
+    t === "DUE_DILIGENCE_REVIEW_REPORT" ||
+    t === "DSA_DD_REVIEW_REPORT" ||
+    t.includes("DUE_DILIGENCE_REVIEW_REPORT") ||
+    t.includes("DD_REVIEW_REPORT") ||
+    t.includes("DUE DILIGENCE REVIEW REPORT")
+  );
+}
+
 export function formatDocumentType(type?: string): string {
   if (!type) return "Document Preview";
   if (isVisitReportDocument(type)) return "Physical Visit Report";
+  if (isApplicationFormDocument(type)) return "Application Form";
+  if (isDdReviewReportDocument(type)) return "Due Diligence Review Report";
   const map: Record<string, string> = {
     aadhaar_card: "Aadhaar Card",
     pan_card: "PAN Card",
@@ -300,10 +361,16 @@ export function formatDocumentType(type?: string): string {
 
 export function getEffectiveDsaCode(dsa: any): string {
   if (!dsa) return "";
-  if (dsa.dsa_code && String(dsa.dsa_code).trim().length > 0) {
-    return String(dsa.dsa_code).trim();
+  const codeVal = dsa.dsa_code ?? dsa.dsaCode;
+  if (codeVal) {
+    if (typeof codeVal === "object" && codeVal.code) {
+      return String(codeVal.code).trim();
+    }
+    if (typeof codeVal === "string" && codeVal.trim().length > 0) {
+      return codeVal.trim();
+    }
   }
-  return dsa.code || (dsa.id ? `DSA-${dsa.id}` : "");
+  return typeof dsa.code === "string" ? dsa.code : (dsa.id ? `DSA-${dsa.id}` : "");
 }
 
 export function getDocDisplayStatus(status?: string): string {
@@ -583,7 +650,8 @@ export function DocumentViewerBody({
           ) : null}
         </div>
         <div className="flex items-center justify-end gap-2 flex-wrap">
-          {isBankUser &&
+          {!isApplicationFormDocument(previewDoc) &&
+          isBankUser &&
           effectiveStatus !== "Verified" &&
           effectiveStatus !== "Failed" ? (
             canVerifyDoc ? (
@@ -771,7 +839,7 @@ export function getDsaWorkflowLevelInfo(
       authorityTitle: "Checker",
       actionOptions: "Complete DD Note / API checks / Submit",
       canUserApprove: canApprove,
-      actionLabel: "Recommend to Sub-Region Head",
+      actionLabel: "Submit to Sub-Region Head",
       nextLevelName: "Sub-Region Head Review",
       isFinalStep: false,
       isDeviationStep: false,
@@ -919,6 +987,296 @@ export function getDsaWorkflowLevelInfo(
     isCompleted: false,
     isRejected: false,
   };
+}
+
+export function DsaWorkflowChevronBar({
+  dsa,
+  workflowLevelInfo,
+}: {
+  dsa: any;
+  workflowLevelInfo?: any;
+}) {
+  if (!dsa) return null;
+
+  const currentLevel = Number(dsa.current_approval_level || 1);
+  const onboardingStatus = String(
+    dsa.onboarding_status || dsa.status || "",
+  ).toUpperCase();
+  const agreementStatus = String(dsa.agreement_status || "").toUpperCase();
+  const operationalStatus = String(dsa.operational_status || "").toUpperCase();
+
+  const isApproved =
+    onboardingStatus === "APPROVED" ||
+    onboardingStatus === "AGREEMENT_PENDING" ||
+    onboardingStatus === "AGREEMENT_COMPLETED" ||
+    agreementStatus === "SIGNED_VERIFIED" ||
+    operationalStatus === "ACTIVE" ||
+    Boolean(workflowLevelInfo?.isCompleted);
+
+  const isRejected =
+    onboardingStatus === "REJECTED" ||
+    Boolean(workflowLevelInfo?.isRejected);
+
+  const approvals: any[] = Array.isArray(dsa.approvals) ? dsa.approvals : [];
+
+  const stages = [
+    {
+      level: 1,
+      roleName: "Maker",
+      fullName: "L1: Maker Intake & Verification",
+      stageCode: "LEVEL_1_MAKER",
+    },
+    {
+      level: 2,
+      roleName: "Checker",
+      fullName: "L2: Checker Due Diligence",
+      stageCode: "LEVEL_2_CHECKER",
+    },
+    {
+      level: 3,
+      roleName: "Sub-Region Head",
+      fullName: "L3: Sub-Region Head Review (AGM)",
+      stageCode: "LEVEL_3_SUB_REGION",
+      altStageCode: "LEVEL_3_SUB_REGION_HEAD",
+    },
+    {
+      level: 4,
+      roleName: "DGM",
+      fullName: "L4: DGM Recommendation",
+      stageCode: "LEVEL_4_DGM",
+      isConditional: true,
+    },
+    {
+      level: 5,
+      roleName: "Region Head",
+      fullName: "L5: Region Head Review",
+      stageCode: "LEVEL_5_REGION_HEAD",
+    },
+    {
+      level: 6,
+      roleName: "HO Credit Officer",
+      fullName: "L6: HO Credit Appraisal (AGM)",
+      stageCode: "LEVEL_6_HO_CREDIT_OFFICER",
+    },
+    {
+      level: 7,
+      roleName: "HO Credit Head",
+      fullName: "L7: HO Credit Head Final Approval",
+      stageCode: "LEVEL_7_HO_CREDIT_HEAD",
+    },
+  ];
+
+  const stageStates = stages.map((stage) => {
+    const record = approvals.find(
+      (a: any) =>
+        Number(a.approval_level) === stage.level ||
+        a.stage_code === stage.stageCode ||
+        (stage.altStageCode && a.stage_code === stage.altStageCode),
+    );
+
+    const recordStatus = String(
+      record?.status || record?.action || "",
+    ).toUpperCase();
+
+    // Check if L4 DGM is skipped
+    const isDgmSkipped =
+      stage.level === 4 &&
+      (dsa.branch_dgm_posted === false ||
+        recordStatus === "SKIPPED" ||
+        recordStatus === "SKIP" ||
+        (dsa as any)?.dgm_skipped === true ||
+        ((currentLevel > 4 || isApproved) && !record));
+
+    if (isDgmSkipped) {
+      return {
+        ...stage,
+        state: "SKIPPED" as const,
+        displayLabel: "DGM (Skipped)",
+        details: "Bypassed (No DGM posted for branch)",
+        approver: record?.user_name || null,
+        timestamp: record?.created_at || null,
+      };
+    }
+
+    if (
+      recordStatus === "REJECTED" ||
+      recordStatus === "REJECT" ||
+      (isRejected && currentLevel === stage.level)
+    ) {
+      return {
+        ...stage,
+        state: "REJECTED" as const,
+        displayLabel: stage.roleName,
+        details:
+          record?.remarks ||
+          dsa.rejection_reason ||
+          dsa.status_reason ||
+          "Application Rejected",
+        approver: record?.user_name || null,
+        timestamp: record?.created_at || null,
+      };
+    }
+
+    if (
+      recordStatus === "REVERTED" ||
+      recordStatus === "REVERT" ||
+      (currentLevel === stage.level && onboardingStatus === "REVERTED")
+    ) {
+      return {
+        ...stage,
+        state: "REVERTED" as const,
+        displayLabel: stage.roleName,
+        details: record?.remarks || "Reverted back for corrections",
+        approver: record?.user_name || null,
+        timestamp: record?.created_at || null,
+      };
+    }
+
+    if (
+      recordStatus === "CALLBACK" ||
+      recordStatus === "QUERY" ||
+      (currentLevel === stage.level &&
+        (onboardingStatus === "DOCUMENT_PENDING" ||
+          onboardingStatus === "QUERY" ||
+          onboardingStatus === "CALLBACK"))
+    ) {
+      return {
+        ...stage,
+        state: "CALLBACK" as const,
+        displayLabel: stage.roleName,
+        details:
+          record?.remarks ||
+          (onboardingStatus === "DOCUMENT_PENDING"
+            ? "Pending document resolution"
+            : "Query / Callback raised"),
+        approver: record?.user_name || null,
+        timestamp: record?.created_at || null,
+      };
+    }
+
+    const isRecordApproved =
+      recordStatus === "APPROVED" ||
+      recordStatus === "RECOMMENDED" ||
+      recordStatus === "SUBMITTED" ||
+      recordStatus === "APPROVE" ||
+      recordStatus === "RECOMMEND" ||
+      recordStatus === "SUBMIT";
+
+    if (isApproved || isRecordApproved || currentLevel > stage.level) {
+      return {
+        ...stage,
+        state: "COMPLETED" as const,
+        displayLabel: stage.roleName,
+        details:
+          record?.remarks || `Completed & forwarded by ${stage.roleName}`,
+        approver: record?.user_name || null,
+        timestamp: record?.created_at || null,
+      };
+    }
+
+    if (currentLevel === stage.level && !isRejected) {
+      return {
+        ...stage,
+        state: "ACTIVE" as const,
+        displayLabel: stage.roleName,
+        details: `Currently in review at ${stage.fullName}`,
+        approver: null,
+        timestamp: null,
+      };
+    }
+
+    return {
+      ...stage,
+      state: "PENDING" as const,
+      displayLabel: stage.roleName,
+      details: `Upcoming step: ${stage.fullName}`,
+      approver: null,
+      timestamp: null,
+    };
+  });
+
+  const arrowWidth = "12px";
+
+  return (
+    <div className="my-3 w-full">
+      <div className="w-full overflow-x-auto no-scrollbar py-0.5">
+        <div className="flex items-stretch min-w-[760px] h-8.5 rounded-md border border-slate-200 bg-white shadow-xs overflow-hidden">
+          {stageStates.map((stage, index) => {
+            const isFirst = index === 0;
+            const isLast = index === stageStates.length - 1;
+
+            const clipPath = isFirst
+              ? `polygon(0% 0%, calc(100% - ${arrowWidth}) 0%, 100% 50%, calc(100% - ${arrowWidth}) 100%, 0% 100%)`
+              : isLast
+                ? `polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, ${arrowWidth} 50%)`
+                : `polygon(0% 0%, calc(100% - ${arrowWidth}) 0%, 100% 50%, calc(100% - ${arrowWidth}) 100%, 0% 100%, ${arrowWidth} 50%)`;
+
+            let bgClass = "bg-slate-50 text-slate-600 hover:bg-slate-100";
+            if (stage.state === "COMPLETED") {
+              bgClass = "bg-emerald-600 text-white";
+            } else if (stage.state === "ACTIVE") {
+              bgClass = "bg-blue-600 text-white";
+            } else if (stage.state === "REVERTED") {
+              bgClass = "bg-amber-500 text-white";
+            } else if (stage.state === "CALLBACK") {
+              bgClass = "bg-orange-500 text-white";
+            } else if (stage.state === "REJECTED") {
+              bgClass = "bg-rose-600 text-white";
+            } else if (stage.state === "SKIPPED") {
+              bgClass = "bg-slate-100 text-slate-400";
+            }
+
+            const tooltipText = `${stage.fullName}\nStatus: ${stage.state}${
+              stage.approver ? `\nActioned by: ${stage.approver}` : ""
+            }${stage.timestamp ? `\nDate: ${formatDate(stage.timestamp)}` : ""}${
+              stage.details ? `\nRemarks: ${stage.details}` : ""
+            }`;
+
+            return (
+              <div
+                key={stage.level}
+                className={cn(
+                  "relative flex-1 flex items-center justify-center text-xs font-medium select-none transition-colors duration-150 h-full",
+                  isFirst ? "pl-3 pr-3.5" : isLast ? "-ml-2 pl-3.5 pr-3" : "-ml-2 pl-3.5 pr-3.5",
+                  bgClass,
+                )}
+                style={{
+                  clipPath,
+                  zIndex: stageStates.length - index,
+                  filter: "drop-shadow(1px 0 0 rgba(203, 213, 225, 0.9))",
+                }}
+                title={tooltipText}
+              >
+                <div className="flex items-center justify-center gap-1.5 truncate px-1">
+                  {stage.state === "COMPLETED" && (
+                    <Check className="w-3.5 h-3.5 shrink-0 stroke-[2.2]" />
+                  )}
+                  {stage.state === "ACTIVE" && (
+                    <span className="relative flex h-1.5 w-1.5 shrink-0">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-200 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white" />
+                    </span>
+                  )}
+                  {stage.state === "REVERTED" && (
+                    <RotateCcw className="w-3.5 h-3.5 shrink-0 stroke-[2]" />
+                  )}
+                  {stage.state === "CALLBACK" && (
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 stroke-[2]" />
+                  )}
+                  {stage.state === "REJECTED" && (
+                    <X className="w-3.5 h-3.5 shrink-0 stroke-[2]" />
+                  )}
+                  <span className={cn("truncate", stage.state === "SKIPPED" && "line-through text-slate-400")}>
+                    {stage.displayLabel}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function DsaApprovalStepper({ dsa }: { dsa: any }) {
@@ -2136,9 +2494,10 @@ export function DsaManagementPage() {
                   <tbody className="divide-y divide-slate-100">
                     {makerBucketDsas.map((item) => {
                       const verif = item.verification_summary;
-                      const isPanVerified = verif && verif.is_success;
                       const isPanFailed =
                         verif && verif.execution_status === "FAILED";
+                      const isPanVerified =
+                        !isPanFailed && (Boolean(verif && verif.is_success) || Boolean(item.pan));
 
                       return (
                         <tr
@@ -2158,9 +2517,9 @@ export function DsaManagementPage() {
                             </div>
                           </td>
                           <td className="p-4 font-mono text-xs font-bold">
-                            {item.dsa_code ? (
+                            {(typeof item.dsa_code === "object" ? (item.dsa_code as any)?.code : item.dsa_code) ? (
                               <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
-                                {item.dsa_code}
+                                {typeof item.dsa_code === "object" ? (item.dsa_code as any)?.code : item.dsa_code}
                               </span>
                             ) : (
                               <span className="text-slate-600">
@@ -2214,6 +2573,11 @@ export function DsaManagementPage() {
                           </td>
                           <td className="p-4">
                             <StatusBadge status={getDsaDisplayStatus(item)} />
+                            {item.onboarding_status === "REJECTED" && (item.rejection_reason || item.status_reason) && (
+                              <p className="mt-1 text-[10px] text-rose-700 italic max-w-[200px] truncate" title={item.rejection_reason || item.status_reason}>
+                                Reason: {item.rejection_reason || item.status_reason}
+                              </p>
+                            )}
                           </td>
                           <td
                             className="p-4 text-right"
@@ -2408,9 +2772,9 @@ export function DsaManagementPage() {
                           </div>
                         </td>
                         <td className="p-4 font-mono text-xs font-bold">
-                          {item.dsa_code ? (
+                          {(typeof item.dsa_code === "object" ? (item.dsa_code as any)?.code : item.dsa_code) ? (
                             <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
-                              {item.dsa_code}
+                              {typeof item.dsa_code === "object" ? (item.dsa_code as any)?.code : item.dsa_code}
                             </span>
                           ) : (
                             <span className="text-slate-600">{item.code}</span>
@@ -2548,7 +2912,7 @@ export function DsaManagementPage() {
                   </p>
                   <p className="text-xs text-slate-500 font-mono">
                     {credentialDsa.dsa_code
-                      ? `Partner Code: ${credentialDsa.dsa_code}`
+                      ? `Partner Code: ${typeof credentialDsa.dsa_code === "object" ? credentialDsa.dsa_code?.code : credentialDsa.dsa_code}`
                       : credentialDsa.code || `DSA-${credentialDsa.id}`}
                   </p>
                 </div>
@@ -2742,6 +3106,8 @@ export function DsaProfilePage({ id }: { id: string }) {
   const [rejectingDsa, setRejectingDsa] = useState<any | null>(null);
   const [rejectionError, setRejectionError] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
+  const [rejectionStep, setRejectionStep] = useState<"input" | "confirm">("input");
+  const [rejectionConfirmationData, setRejectionConfirmationData] = useState<any | null>(null);
   const [queryingDsa, setQueryingDsa] = useState<any | null>(null);
   const [queryReason, setQueryReason] = useState("");
   const [queryError, setQueryError] = useState("");
@@ -2772,6 +3138,8 @@ export function DsaProfilePage({ id }: { id: string }) {
   const [failedKyc, setFailedKyc] = useState<{ [key: string]: boolean }>({});
   const [loadingKycHistory, setLoadingKycHistory] = useState(false);
   const [discoveredGstins, setDiscoveredGstins] = useState<string[]>([]);
+  const [viewKycDataModalType, setViewKycDataModalType] = useState<KycDataType | null>(null);
+  const [viewKycDataCachedVerif, setViewKycDataCachedVerif] = useState<any>(null);
 
   // Checker-only CIBIL/AML attempted flags — persisted to localStorage per DSA ID
   // so Re-Check survives page reloads.
@@ -2810,13 +3178,11 @@ export function DsaProfilePage({ id }: { id: string }) {
     }
   }, []);
 
-  // Deviation Report modal state & handlers (shown for Level 2 through Level 7)
-  const [viewingDeviationReport, setViewingDeviationReport] = useState(false);
+  // Deviation Report state & handlers (shown for Level 2 through Level 7)
   const [deviationReportData, setDeviationReportData] = useState<any | null>(
     null,
   );
   const [loadingDeviationReport, setLoadingDeviationReport] = useState(false);
-  const [deviationModalTab, setDeviationModalTab] = useState<"deviations" | "ddl">("deviations");
   const [submittingCheckerReport, setSubmittingCheckerReport] = useState(false);
 
   // Due Diligence Note modal state (shown for Level 2 through Level 7)
@@ -2869,6 +3235,9 @@ export function DsaProfilePage({ id }: { id: string }) {
 
       // 2. In-session explicit success takes precedence
       if (verifiedKyc[key]) return true;
+
+      // 2b. PAN is already verified via onboarding journey for both Entity and Individual DSAs
+      if (key === "pan" && Boolean(dsa?.pan)) return true;
 
       // 3. Check authoritative database records (dsa.verifications)
       const vers: any[] = ((dsa as any)?.verifications || []).filter((v: any) => {
@@ -3258,6 +3627,7 @@ export function DsaProfilePage({ id }: { id: string }) {
           });
         }
       } else if (type === "cibil") {
+        if (isMakerUser) return;
         const isInd =
           dsa.dsa_type === "INDIVIDUAL" || dsa.dsa_type === "Individual";
         const cibilCode = isInd ? "CIBIL_CONSUMER" : "CIBIL_COMMERCIAL";
@@ -3283,6 +3653,7 @@ export function DsaProfilePage({ id }: { id: string }) {
           setFailedKyc((prev) => ({ ...prev, cibil: true }));
         }
       } else if (type === "aml") {
+        if (isMakerUser) return;
         const res = await triggerCheckerVerification(dsa.id, "AML_COMPASS", {
           name: dsa.name,
           pan: dsa.pan,
@@ -3344,6 +3715,7 @@ export function DsaProfilePage({ id }: { id: string }) {
   const [resendActivationSuccess, setResendActivationSuccess] = useState<
     string | null
   >(null);
+  const [downloadingAgreement, setDownloadingAgreement] = useState(false);
 
   const handleResendActivationEmail = () => {
     // Activation credentials are dispatched by the backend automatically
@@ -3387,7 +3759,7 @@ export function DsaProfilePage({ id }: { id: string }) {
   const handleSubmitAgreementDecision = async () => {
     const canAct = isL7User || isCheckerUserOrLevel;
     if (!canAct || !verifyingAgreementAction || !dsa) return;
-    // Only L7 can reject; checker can only approve
+
     if (
       verifyingAgreementAction === "REJECT" &&
       !agreementDecisionRemarks.trim()
@@ -3401,25 +3773,53 @@ export function DsaProfilePage({ id }: { id: string }) {
     setAgreementDecisionError("");
     try {
       let res;
-      if (isCheckerUserOrLevel && !isL7User) {
-        // Checker uses the dedicated approve endpoint (approve-only)
-        res = await approveSignedAgreement(
-          dsa.id,
-          agreementDecisionRemarks.trim() || undefined,
-        );
-      } else {
-        // L7 HO Credit Head uses the legacy verify endpoint
-        res = await verifySignedAgreement(dsa.id, {
-          action: verifyingAgreementAction,
-          remarks: agreementDecisionRemarks.trim() || undefined,
+      if (verifyingAgreementAction === "REJECT") {
+        const signedDoc = (dsa?.documents || []).find((doc: any) => {
+          const t = String(doc.document_type || doc.type || "").toUpperCase();
+          return t === "SIGNED_AGREEMENT" || t === "SIGNED AGREEMENT";
         });
-      }
-      if (res) {
-        if (verifyingAgreementAction === "APPROVE") {
+        if (signedDoc?.id) {
+          res = await adminApi.updateDsaDocumentStatus(dsa.id, {
+            document_id: signedDoc.id,
+            status: "Failed",
+            remarks: agreementDecisionRemarks.trim(),
+          });
+        } else {
+          try {
+            res = await adminApi.verifySignedAgreement(dsa.id, {
+              action: "REJECT",
+              remarks: agreementDecisionRemarks.trim(),
+            });
+          } catch {
+            // fallback
+          }
+        }
+        toast({
+          title: "Agreement Rejected",
+          description: "The signed agreement has been rejected. Scanned copy re-upload is required.",
+          variant: "warning",
+        });
+      } else {
+        if (isCheckerUserOrLevel && !isL7User) {
+          // Checker uses the dedicated approve endpoint
+          res = await approveSignedAgreement(
+            dsa.id,
+            agreementDecisionRemarks.trim() || undefined,
+          );
+        } else {
+          // L7 HO Credit Head uses the legacy verify endpoint
+          res = await verifySignedAgreement(dsa.id, {
+            action: "APPROVE",
+            remarks: agreementDecisionRemarks.trim() || undefined,
+          });
+        }
+        if (res) {
           setResendActivationSuccess(
             `Agreement approved. Activation credentials dispatched to ${dsa.email ?? "the registered DSA email"} by the system.`,
           );
         }
+      }
+      if (res) {
         setVerifyingAgreementAction(null);
         setAgreementDecisionRemarks("");
         await fetchDsaDetail(dsa.id);
@@ -3445,42 +3845,6 @@ export function DsaProfilePage({ id }: { id: string }) {
   }, [id, fetchDsaDetail]);
 
   useEffect(() => {
-    const isCheckerish =
-      roleStr === "Checker" ||
-      roleStr === "Branch Checker" ||
-      roleStr === "Manager";
-    const isMakerish =
-      roleStr === "Branch User" ||
-      roleStr === "Maker" ||
-      roleStr === "Branch Maker" ||
-      roleStr === "Staff" ||
-      roleStr === "Assistant Manager";
-    if (tab === "agreements" && (isL7User || isCheckerish || isMakerish) && dsa?.id) {
-      loadAgreementData(dsa.id);
-    }
-  }, [tab, isL7User, roleStr, dsa?.id, loadAgreementData]);
-
-  useEffect(() => {
-    const isCheckerish =
-      roleStr === "Checker" ||
-      roleStr === "Branch Checker" ||
-      roleStr === "Manager";
-    const isMakerish =
-      roleStr === "Branch User" ||
-      roleStr === "Maker" ||
-      roleStr === "Branch Maker" ||
-      roleStr === "Staff" ||
-      roleStr === "Assistant Manager";
-    // Redirect away from agreements only for roles that can never access it
-    if (tab === "agreements" && !isL7User && !isCheckerish && !isMakerish) {
-      const isActive =
-        dsa?.agreement_status === "SIGNED_VERIFIED" ||
-        dsa?.operational_status === "ACTIVE";
-      setTab(isActive ? "performance" : "actions");
-    }
-  }, [tab, isL7User, roleStr, dsa]);
-
-  useEffect(() => {
     if (
       tab === "sanction_review" &&
       dsa?.id &&
@@ -3492,7 +3856,7 @@ export function DsaProfilePage({ id }: { id: string }) {
   }, [tab, dsa?.id, l7ReviewData, l7ReviewLoading, loadFinalApprovalReview]);
 
   useEffect(() => {
-    if (!dsa?.id) {
+    if (!dsa?.id || isMakerUser || !isCheckerRole) {
       setCheckerDdNote("");
       setSavedCheckerDdNote(null);
       return;
@@ -3540,7 +3904,7 @@ export function DsaProfilePage({ id }: { id: string }) {
         }
       })
       .catch(() => {});
-  }, [dsa?.id, fetchCheckerDdNote]);
+  }, [dsa?.id, isMakerUser, isCheckerRole, fetchCheckerDdNote]);
 
   useEffect(() => {
     if (!dsa) return;
@@ -3599,35 +3963,9 @@ export function DsaProfilePage({ id }: { id: string }) {
     }
   }, [dsa, canCheckerVerifyKyc, tab, loadKycHistory]);
 
-  const openDeviationReportModal = async () => {
-    if (isMakerUser) {
-      toast({
-        title: "Access Restricted",
-        description: "Due Diligence & Deviation reports are accessible only from Checker stage onwards.",
-        variant: "warning",
-      });
-      return;
-    }
-
-    setDeviationModalTab("deviations");
-    setViewingDeviationReport(true);
-    if (dsa?.id) {
-      setLoadingDeviationReport(true);
-      try {
-        const data = await fetchDeviationReport(dsa.id);
-        if (data) {
-          setDeviationReportData(data);
-        }
-      } catch (err) {
-        console.error("Failed to fetch deviation report", err);
-      } finally {
-        setLoadingDeviationReport(false);
-      }
-    }
-  };
 
   const openDdNoteModal = () => {
-    if (isMakerUser) {
+    if (isMakerUser && !hasCheckerGeneratedReport) {
       toast({
         title: "Access Restricted",
         description: "Due Diligence Note is accessible only from Checker stage onwards.",
@@ -3640,10 +3978,10 @@ export function DsaProfilePage({ id }: { id: string }) {
 
   const handleDownloadDeviationReport = async () => {
     if (!dsa) return;
-    if (isMakerUser) {
+    if (isMakerUser && !hasCheckerGeneratedReport) {
       toast({
-        title: "Access Restricted",
-        description: "Due Diligence Review Report is not accessible to Maker.",
+        title: "Report Not Available Yet",
+        description: "Due Diligence Review Report is available for download once Checker generates and submits it.",
         variant: "warning",
       });
       return;
@@ -3837,6 +4175,7 @@ export function DsaProfilePage({ id }: { id: string }) {
     Set<number | string>
   >(new Set());
   const [reuploadingDocType, setReuploadingDocType] = useState<string | null>(null);
+  const [loadingPreviewDocId, setLoadingPreviewDocId] = useState<any>(null);
 
   // Real DSA Portal Users mapped via GET /api/v1/dsa/{id}/users (Phase 2)
   const [dsaPortalUsers, setDsaPortalUsers] = useState<any[]>([]);
@@ -3902,7 +4241,38 @@ export function DsaProfilePage({ id }: { id: string }) {
     }
   }, [dsa?.id, fetchBackendDocuments]);
 
-  const openDocPreview = (doc: any) => {
+  const openDocPreview = async (doc: any) => {
+    if (isDdReviewReportDocument(doc) && dsa?.id) {
+      try {
+        setLoadingPreviewDocId(doc?.id || "dd_report");
+        const res = await adminApi.getDdReviewReportPdf(dsa.id);
+        const data = res?.data;
+        if (data) {
+          const freshDoc = {
+            ...doc,
+            id: data.document_id || doc.id,
+            document_type: "DUE_DILIGENCE_REVIEW_REPORT",
+            file_name: data.file_name || doc.file_name,
+            file_path: data.file_path || doc.file_path,
+            file_url: data.file_url ? `${data.file_url}?t=${Date.now()}` : doc.file_url,
+            url: data.file_url ? `${data.file_url}?t=${Date.now()}` : doc.url,
+            size: data.size || doc.size,
+            status: doc.status || (data as any)?.status || "Uploaded",
+            _timestamp: Date.now(),
+          };
+          setPreviewDoc(freshDoc);
+          if (freshDoc.id) {
+            setViewedDocIds((prev) => new Set([...prev, freshDoc.id]));
+          }
+          fetchBackendDocuments(true).catch(() => {});
+          return;
+        }
+      } catch (err) {
+        console.error("Failed to fetch fresh DD review report PDF", err);
+      } finally {
+        setLoadingPreviewDocId(null);
+      }
+    }
     setPreviewDoc(doc);
     if (doc?.id) {
       setViewedDocIds((prev) => {
@@ -3940,41 +4310,53 @@ export function DsaProfilePage({ id }: { id: string }) {
       });
   }, [dsa]);
 
-  const isPanChecked = isKycTypeVerified("pan", ["PAN"]);
-  const isGstChecked = isKycTypeVerified("gst", ["GST"]);
-  const isBankChecked = isKycTypeVerified("bank", ["BANK", "BAV"]);
-  const isUdyamChecked = isKycTypeVerified("udyam", ["UDYAM", "MSME"]);
-  // For CIBIL/AML: show Re-Check whenever a terminal record exists in dsa.verifications
-  // (COMPLETED, FAILED, or TIMEOUT), unless the session flagged a network/throw error (failedKyc).
-  // This ensures Re-Check persists across reloads even when is_success=false.
-  const validDsaVerifs = ((dsa as any)?.verifications || []).filter((v: any) => {
-    if (dsa?.created_at && v.created_at) {
-      return new Date(v.created_at) >= new Date(dsa.created_at);
-    }
-    return true;
-  });
-
-  const isVerifAttemptedByCode = (codePattern: string) =>
-    validDsaVerifs.some((v: any) => {
-      const c = String(v.verification_code || "").toUpperCase();
-      const st = String(v.execution_status || "").toUpperCase();
-      return (
-        c.includes(codePattern.toUpperCase()) &&
-        (st === "COMPLETED" || st === "FAILED" || st === "TIMEOUT")
+  useEffect(() => {
+    if (tab === "reports" && dsa?.id) {
+      const hasGeneratedReport = Boolean(
+        dsa?.documents?.some(
+          (d: any) =>
+            String(d.document_type || d.type || "").toUpperCase() ===
+            "DUE_DILIGENCE_REVIEW_REPORT",
+        ) ||
+        dsa?.latest_due_diligence_note?.submitted_at
       );
-    });
+      if (isMakerUser && !hasGeneratedReport) return;
+      setLoadingDeviationReport(true);
+      fetchDeviationReport(dsa.id)
+        .then((data) => {
+          if (data) {
+            setDeviationReportData(data);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to fetch deviation report", err);
+        })
+        .finally(() => {
+          setLoadingDeviationReport(false);
+        });
+    }
+  }, [tab, dsa?.id, isMakerUser, dsa?.documents, dsa?.latest_due_diligence_note?.submitted_at, fetchDeviationReport]);
 
-  // CIBIL/AML verification status (visible across all 7 roles once executed)
+  const isPanChecked =
+    !failedKyc.pan &&
+    (Boolean(dsa?.pan) || isKycTypeVerified("pan", ["PAN"]));
+  const isGstChecked =
+    !failedKyc.gst &&
+    (Boolean(verifiedKyc.gst) || isKycTypeVerified("gst", ["GST"]));
+  const isBankChecked =
+    !failedKyc.bank &&
+    (Boolean(verifiedKyc.bank) || isKycTypeVerified("bank", ["BANK", "BAV"]));
+  const isUdyamChecked =
+    !failedKyc.udyam &&
+    (Boolean(verifiedKyc.udyam) || isKycTypeVerified("udyam", ["UDYAM", "MSME"]));
   const isCibilChecked =
-    Boolean(verifiedKyc.cibil) ||
-    isKycTypeVerified("cibil", ["CIBIL", "BUREAU", "TRANSUNION"]) ||
-    isVerifAttemptedByCode("CIBIL") ||
-    (canCheckerVerifyKyc && checkerKycAttempted.cibil && validDsaVerifs.length > 0);
+    !failedKyc.cibil &&
+    (Boolean(verifiedKyc.cibil) ||
+      isKycTypeVerified("cibil", ["CIBIL", "BUREAU", "TRANSUNION"]));
   const isAmlChecked =
-    Boolean(verifiedKyc.aml) ||
-    isKycTypeVerified("aml", ["AML", "SANCTION", "COMPASS"]) ||
-    isVerifAttemptedByCode("AML") ||
-    (canCheckerVerifyKyc && checkerKycAttempted.aml && validDsaVerifs.length > 0);
+    !failedKyc.aml &&
+    (Boolean(verifiedKyc.aml) ||
+      isKycTypeVerified("aml", ["AML", "SANCTION", "COMPASS"]));
 
   const isAllKycVerified = Boolean(
     isPanChecked &&
@@ -4063,8 +4445,10 @@ export function DsaProfilePage({ id }: { id: string }) {
           (Number(a.approval_level) === 1 ||
             a.stage_code === "LEVEL_1_MAKER") &&
           (a.status === "RECOMMENDED" ||
+            a.status === "SUBMITTED" ||
             a.status === "APPROVED" ||
             a.action === "RECOMMEND" ||
+            a.action === "SUBMIT" ||
             a.action === "APPROVE"),
       ) ||
       dsa.approvals.find(
@@ -4079,8 +4463,10 @@ export function DsaProfilePage({ id }: { id: string }) {
           (Number(a.approval_level) === 2 ||
             a.stage_code === "LEVEL_2_CHECKER") &&
           (a.status === "RECOMMENDED" ||
+            a.status === "SUBMITTED" ||
             a.status === "APPROVED" ||
             a.action === "RECOMMEND" ||
+            a.action === "SUBMIT" ||
             a.action === "APPROVE"),
       ) ||
       dsa.approvals.find(
@@ -4123,6 +4509,7 @@ export function DsaProfilePage({ id }: { id: string }) {
   // - Returns "Pending" if newly uploaded, re-uploaded by Maker, or awaiting Checker verification
   const getEffectiveDocStatus = (doc: any): string => {
     if (!doc) return "Pending";
+    if (isApplicationFormDocument(doc)) return "Generated";
     if (manuallyFailedDocIds.has(doc.id)) return "Failed";
     if (manuallyVerifiedDocIds.has(doc.id) || checkerVerifiedDocIds.has(doc.id)) return "Verified";
 
@@ -4331,12 +4718,14 @@ export function DsaProfilePage({ id }: { id: string }) {
     l1Approval?.remarks ||
     dsa?.status_reason ||
     (l1Approval?.status === "RECOMMENDED" ||
+    l1Approval?.status === "SUBMITTED" ||
     (workflowLevelInfo?.currentLevel ?? 1) > 1
       ? "Maker verification completed and forwarded to Checker"
       : "");
 
   const isL2Actioned = Boolean(
     l2Approval?.status === "RECOMMENDED" ||
+      l2Approval?.status === "SUBMITTED" ||
       l2Approval?.status === "APPROVED" ||
       l2Approval?.status === "REJECTED" ||
       l2Approval?.status === "REVERTED" ||
@@ -4349,7 +4738,7 @@ export function DsaProfilePage({ id }: { id: string }) {
       dsa?.latest_due_diligence_note?.observations ||
       (dsa as any)?.dueDiligenceNotes?.[0]?.remarks ||
       (dsa as any)?.dueDiligenceNotes?.[0]?.observations ||
-      "Due Diligence completed and recommended by Checker"
+      "Due Diligence completed and submitted by Checker"
     : "";
 
   const l3Remarks =
@@ -4518,6 +4907,10 @@ export function DsaProfilePage({ id }: { id: string }) {
     if (inExisting) return true;
 
     // 2. In session / local state fallback
+    if (codeUpper.includes("PAN")) {
+      if (failedKyc.pan) return false;
+      if (verifiedKyc.pan || Boolean(dsa?.pan)) return true;
+    }
     if (codeUpper === "CIBIL_CONSUMER" || codeUpper === "CIBIL_COMMERCIAL") {
       if (checkerKycAttempted.cibil || verifiedKyc.cibil || failedKyc.cibil) return true;
     }
@@ -4624,13 +5017,34 @@ export function DsaProfilePage({ id }: { id: string }) {
         setDeviationReportData(res);
         setSavedCheckerDdNote(res?.dd_note || { observations: effectiveObs, remarks: effectiveRemarks, submitted_at: new Date().toISOString() });
         setCheckerDdNote("");
+        const ddlDocId = res?.pdf?.document_id;
+        if (ddlDocId) {
+          setCheckerVerifiedDocIds((prev) => {
+            const next = new Set(prev);
+            next.delete(ddlDocId);
+            return next;
+          });
+          setManuallyVerifiedDocIds((prev) => {
+            const next = new Set(prev);
+            next.delete(ddlDocId);
+            return next;
+          });
+          setViewedDocIds((prev) => {
+            const next = new Set(prev);
+            next.delete(ddlDocId);
+            return next;
+          });
+        }
         await Promise.all([
           fetchBackendDocuments(true).catch(() => {}),
           fetchDsaDetail(dsa.id).catch(() => {}),
+          fetchDeviationReport(dsa.id).then((freshRep) => {
+            if (freshRep) setDeviationReportData(freshRep);
+          }).catch(() => {}),
         ]);
         toast({
           title: "Due Diligence Report Submitted",
-          description: "Official Due Diligence Review Report and PDF generated successfully. Downstream authorities can now review it.",
+          description: "Due Diligence Review Report generated. Please view and verify the updated report in the Documents tab before submitting recommendation.",
           variant: "success",
         });
       }
@@ -4826,20 +5240,56 @@ export function DsaProfilePage({ id }: { id: string }) {
   );
 
   const canCheckerSubmitReport = Boolean(
-    isCheckerRole ||
-      isCheckerLevel ||
-      workflowLevelInfo.currentLevel === 2 ||
-      Number(dsa?.current_approval_level) === 2
+    !isMakerUser &&
+      isCheckerRole &&
+      (isCheckerLevel ||
+        workflowLevelInfo.currentLevel === 2 ||
+        Number(dsa?.current_approval_level) === 2 ||
+        normUserRole === "ADMIN" ||
+        normUserRole === "SUPERADMIN")
   );
 
-  const isSubmitDisabled =
-    (isMakerLevel && !isVisitReportUploaded) ||
-    (isCheckerLevel &&
-      (!areAllCheckerVerificationsDone ||
-        !isVisitReportUploaded ||
-        hasUnverifiedApplicantDocs ||
-        !hasCheckerDdNote ||
-        !hasCheckerGeneratedReport));
+  const ddlReportDoc = allDisplayDocs.find((d: any) =>
+    isDdReviewReportDocument(d),
+  );
+  const isDdlReportVerified = ddlReportDoc
+    ? getEffectiveDocStatus(ddlReportDoc) === "Verified"
+    : false;
+  const hasUnverifiedDdlReport =
+    hasCheckerGeneratedReport &&
+    Boolean(ddlReportDoc) &&
+    !isDdlReportVerified;
+
+  const getWorkflowBlockReason = (): string | null => {
+    if (isMakerLevel) {
+      if (!isVisitReportUploaded) {
+        return "Physical Visit Report is required. Please upload the Physical Visit Report in the Documents tab before submitting to Checker.";
+      }
+    }
+    if (isCheckerLevel) {
+      if (hasUnverifiedApplicantDocs) {
+        return `Partner Documents Incomplete: ${applicantReviewDocs.length - applicantVerifiedDocsCount} document(s) still require verification by Checker in Documents tab before proceeding.`;
+      }
+      if (!areAllCheckerVerificationsDone) {
+        return "Statutory Checks Incomplete: Please trigger and complete all statutory checks before recommending to Sub-Region Head.";
+      }
+      if (!isVisitReportUploaded) {
+        return "Physical Visit Report Required: Please ensure the Physical Visit Report is uploaded and verified.";
+      }
+      if (!hasCheckerDdNote) {
+        return "Due Diligence Notes Required: Please record due diligence observations in Reports tab before submitting recommendation.";
+      }
+      if (!hasCheckerGeneratedReport) {
+        return "Due Diligence Report Required: Please generate and submit the Due Diligence & Deviations Report in the Reports tab.";
+      }
+      if (hasUnverifiedDdlReport) {
+        return "Due Diligence Report Verification Required: Please view and verify the updated Due Diligence Review Report in the Documents tab.";
+      }
+    }
+    return null;
+  };
+
+  const isSubmitDisabled = Boolean(getWorkflowBlockReason());
   const allProductConfigs = store.dsaProductConfigs.filter(
     (config) => config.dsaId === String(dsa.id),
   );
@@ -4866,6 +5316,8 @@ export function DsaProfilePage({ id }: { id: string }) {
     setApprovalRemarksError("");
     setRejectionError("");
     setRejectionReason("");
+    setRejectionStep("input");
+    setRejectionConfirmationData(null);
     setQueryError("");
     setQueryReason("");
     setL7ReviewData(null);
@@ -5446,9 +5898,9 @@ export function DsaProfilePage({ id }: { id: string }) {
       <PageHeader
         action={
           <div className="flex items-center gap-2">
-            {dsa.dsa_code ? (
+            {(typeof dsa.dsa_code === "object" ? dsa.dsa_code?.code : dsa.dsa_code) ? (
               <span className="font-mono text-xs font-bold px-2.5 py-1 rounded-md bg-blue-50 text-blue-800 border border-blue-200 shadow-2xs">
-                Partner Code: {dsa.dsa_code}
+                Partner Code: {typeof dsa.dsa_code === "object" ? dsa.dsa_code?.code : dsa.dsa_code}
               </span>
             ) : (
               <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
@@ -5565,7 +6017,7 @@ export function DsaProfilePage({ id }: { id: string }) {
         </div>
       ) : null}
 
-
+      <DsaWorkflowChevronBar dsa={dsa} workflowLevelInfo={workflowLevelInfo} />
 
       <div className="mt-6">
         <Tabs
@@ -5605,9 +6057,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                   ...(isL7User
                     ? [{ label: "Sanction Review", value: "sanction_review" }]
                     : []),
-                  ...(isL7User || isCheckerUserOrLevel || isMakerUserOrLevel
-                    ? [{ label: "Agreements", value: "agreements" }]
-                    : []),
+                  { label: "Agreements", value: "agreements" },
                   ...(workflowLevelInfo.currentLevel >= 6 ||
                   currentUser?.role === "DSA Manager"
                     ? [{ label: "Manage Products", value: "products" }]
@@ -5748,28 +6198,30 @@ export function DsaProfilePage({ id }: { id: string }) {
                               });
                             })(),
                           });
-                          const isInd =
-                            dsa.dsa_type === "INDIVIDUAL" ||
-                            dsa.dsa_type === "Individual";
-                          const cibilCode = isInd
-                            ? "CIBIL_CONSUMER"
-                            : "CIBIL_COMMERCIAL";
-                          tasks.push({
-                            key: "cibil",
-                            promise: triggerCheckerVerification(
-                              dsa.id,
-                              cibilCode,
-                              { pan: dsa.pan },
-                            ),
-                          });
-                          tasks.push({
-                            key: "aml",
-                            promise: triggerCheckerVerification(
-                              dsa.id,
-                              "AML_COMPASS",
-                              { name: dsa.name, pan: dsa.pan },
-                            ),
-                          });
+                          if (!isMakerUser && (canCheckerVerifyKyc || isCheckerUserOrLevel || isCheckerRole)) {
+                            const isInd =
+                              dsa.dsa_type === "INDIVIDUAL" ||
+                              dsa.dsa_type === "Individual";
+                            const cibilCode = isInd
+                              ? "CIBIL_CONSUMER"
+                              : "CIBIL_COMMERCIAL";
+                            tasks.push({
+                              key: "cibil",
+                              promise: triggerCheckerVerification(
+                                dsa.id,
+                                cibilCode,
+                                { pan: dsa.pan },
+                              ),
+                            });
+                            tasks.push({
+                              key: "aml",
+                              promise: triggerCheckerVerification(
+                                dsa.id,
+                                "AML_COMPASS",
+                                { name: dsa.name, pan: dsa.pan },
+                              ),
+                            });
+                          }
 
                           const results = await Promise.allSettled(
                             tasks.map((t) => t.promise),
@@ -5868,18 +6320,24 @@ export function DsaProfilePage({ id }: { id: string }) {
                   return true;
                 });
                 const getVerif = (code: string) => {
-                  const fromDsa = allVerifs.find((v: any) =>
-                    (v.verification_code || "")
+                  const isPan = code.toUpperCase() === "PAN";
+                  const fromDsa = ((dsa as any)?.verifications || []).find((v: any) => {
+                    const match = (v.verification_code || "")
                       .toUpperCase()
-                      .includes(code.toUpperCase()),
-                  );
+                      .includes(code.toUpperCase());
+                    if (!match) return false;
+                    if (!isPan && dsa?.created_at && v.created_at) {
+                      return new Date(v.created_at) >= new Date(dsa.created_at);
+                    }
+                    return true;
+                  });
                   if (fromDsa) return fromDsa;
 
                   const fromDb = kycVerificationsList.find((v: any) => {
                     const t = String(v.type || "").toUpperCase();
                     const isMatch = t.includes(code.toUpperCase());
                     if (!isMatch) return false;
-                    if (dsa?.created_at && v.created_at) {
+                    if (!isPan && dsa?.created_at && v.created_at) {
                       return new Date(v.created_at) >= new Date(dsa.created_at);
                     }
                     return true;
@@ -5901,6 +6359,57 @@ export function DsaProfilePage({ id }: { id: string }) {
                 const udyamVerif = getVerif("UDYAM");
                 const cibilVerif = getVerif("CIBIL");
                 const amlVerif = getVerif("AML");
+
+                const extractAllGstins = (obj: any): string[] => {
+                  const gsts = new Set<string>();
+                  if (!obj) return [];
+                  const traverse = (item: any) => {
+                    if (!item) return;
+                    if (typeof item === "string") {
+                      const trimmed = item.trim().toUpperCase();
+                      const matches = trimmed.match(/\b\d{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Zz][0-9A-Z]{1}\b/g);
+                      if (matches) {
+                        matches.forEach((m) => gsts.add(m));
+                      } else if (trimmed.length === 15 && /^[0-9]{2}[A-Z]{5}/.test(trimmed)) {
+                        gsts.add(trimmed);
+                      }
+                      return;
+                    }
+                    if (Array.isArray(item)) {
+                      item.forEach(traverse);
+                      return;
+                    }
+                    if (typeof item === "object") {
+                      for (const [k, v] of Object.entries(item)) {
+                        const kLower = k.toLowerCase();
+                        if (typeof v === "string" && (kLower.includes("gst") || kLower.includes("tax"))) {
+                          const vTrim = v.trim().toUpperCase();
+                          if (vTrim && vTrim.length >= 10) {
+                            gsts.add(vTrim);
+                          }
+                        }
+                        traverse(v);
+                      }
+                    }
+                  };
+                  traverse(obj);
+                  return Array.from(gsts);
+                };
+
+                const allDiscoveredGsts: string[] = Array.from(
+                  new Set([
+                    ...(dsa.gst ? [String(dsa.gst).trim().toUpperCase()] : []),
+                    ...(dsa.gstin ? [String(dsa.gstin).trim().toUpperCase()] : []),
+                    ...(dsa.gst_number ? [String(dsa.gst_number).trim().toUpperCase()] : []),
+                    ...extractAllGstins(gstVerif),
+                    ...extractAllGstins(discoveredGstins),
+                  ])
+                );
+
+                const resolvedGstNumber: string | null =
+                  allDiscoveredGsts.length > 0
+                    ? allDiscoveredGsts[0]
+                    : dsa.gst || dsa.gstin || null;
 
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -5926,39 +6435,58 @@ export function DsaProfilePage({ id }: { id: string }) {
                         <span className="text-[11px] text-slate-500">
                           {panVerif?.executed_at
                             ? `Checked on ${formatDate(panVerif.executed_at)} via ${panVerif.provider === "scoreme" ? "ScoreMe" : "NSDL"}`
-                            : "NSDL / Income Tax Dept"}
+                            : isPanChecked && dsa.pan
+                              ? "Verified via Onboarding Journey (NSDL)"
+                              : "NSDL / Income Tax Dept"}
                         </span>
-                        {canCheckerVerifyKyc && (
-                          <Button
-                            size="sm"
-                            type="button"
-                            disabled={verifyingKyc.pan}
-                            onClick={() => handleVerifyKyc("pan", "PAN")}
-                            className={cn(
-                              "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
-                              isPanChecked
-                                ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                                : "bg-blue-600 hover:bg-blue-700 text-white",
+                        <div className="flex items-center gap-1.5">
+                            {isPanChecked && (
+                              <Button
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  setViewKycDataCachedVerif(panVerif);
+                                  setViewKycDataModalType("pan");
+                                }}
+                                className="text-xs px-2.5 py-1 h-auto font-medium text-slate-700 hover:text-blue-700 hover:bg-blue-50 border-slate-300 flex items-center gap-1 shadow-2xs"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                View Data
+                              </Button>
                             )}
-                          >
-                            {verifyingKyc.pan ? (
-                              <>
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                                Checking...
-                              </>
-                            ) : isPanChecked ? (
-                              <>
-                                <Check className="h-3 w-3 text-emerald-600" />
-                                Re-Check PAN
-                              </>
-                            ) : (
-                              <>
-                                <ShieldCheck className="h-3 w-3" />
-                                Check PAN
-                              </>
+                            {canCheckerVerifyKyc && (
+                              <Button
+                                size="sm"
+                                type="button"
+                                disabled={verifyingKyc.pan}
+                                onClick={() => handleVerifyKyc("pan", "PAN")}
+                                className={cn(
+                                  "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
+                                  isPanChecked
+                                    ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                                    : "bg-blue-600 hover:bg-blue-700 text-white",
+                                )}
+                              >
+                                {verifyingKyc.pan ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                    Checking...
+                                  </>
+                                ) : isPanChecked ? (
+                                  <>
+                                    <Check className="h-3 w-3 text-emerald-600" />
+                                    Re-Check PAN
+                                  </>
+                                ) : (
+                                  <>
+                                    <ShieldCheck className="h-3 w-3" />
+                                    Check PAN
+                                  </>
+                                )}
+                              </Button>
                             )}
-                          </Button>
-                        )}
+                          </div>
                       </div>
                     </div>
 
@@ -5973,13 +6501,32 @@ export function DsaProfilePage({ id }: { id: string }) {
                         />
                       </div>
                       <div>
-                        {dsa.gst ? (
+                        {resolvedGstNumber ? (
                           <>
                             <p className="text-lg font-mono font-bold text-slate-900">
-                              {dsa.gst}
+                              {resolvedGstNumber}
                             </p>
                             <p className="text-xs text-slate-500 mt-0.5">
-                              Taxpayer Status: Regular · Active
+                              Taxpayer Status: Regular · Active {allDiscoveredGsts.length > 1 ? `(${allDiscoveredGsts.length} linked GSTINs found)` : ""}
+                            </p>
+                            {allDiscoveredGsts.length > 1 && (
+                              <div className="mt-1.5 p-1.5 bg-slate-50 rounded border border-slate-200 text-xs">
+                                <span className="font-semibold text-slate-700">
+                                  Linked GSTINs:
+                                </span>{" "}
+                                <span className="font-mono text-blue-600 font-medium">
+                                  {allDiscoveredGsts.join(", ")}
+                                </span>
+                              </div>
+                            )}
+                          </>
+                        ) : isGstChecked ? (
+                          <>
+                            <p className="text-base font-semibold text-slate-900">
+                              Verified via GSTN Database
+                            </p>
+                            <p className="text-xs text-emerald-700 font-medium mt-0.5">
+                              {dsa.pan ? `PAN ${dsa.pan} record validated · Active Taxpayer` : "Verified & Active"}
                             </p>
                           </>
                         ) : dsa.gst_applicable ? (
@@ -5996,16 +6543,6 @@ export function DsaProfilePage({ id }: { id: string }) {
                             <p className="text-sm text-slate-400 italic">
                               No GST number provided by the applicant.
                             </p>
-                            {discoveredGstins.length > 0 && (
-                              <div className="mt-1.5 p-2 bg-slate-50 rounded border border-slate-200 text-xs">
-                                <span className="font-semibold text-slate-700">
-                                   Discovered via PAN:
-                                </span>{" "}
-                                <span className="font-mono text-blue-600">
-                                  {discoveredGstins.join(", ")}
-                                </span>
-                              </div>
-                            )}
                           </div>
                         )}
                       </div>
@@ -6013,78 +6550,99 @@ export function DsaProfilePage({ id }: { id: string }) {
                         <span className="text-[11px] text-slate-500">
                           {gstVerif?.executed_at
                             ? `Checked on ${formatDate(gstVerif.executed_at)} via ${gstVerif.provider === "scoreme" ? "GSTN" : "GSTN"}`
-                            : dsa.gst
+                            : isGstChecked
                               ? "GSTN Master Database"
-                              : "ScoreMe PAN-to-GSTIN"}
+                              : dsa.gst
+                                ? "GSTN Master Database"
+                                : isMakerUser
+                                  ? "Pending Checker Verification"
+                                  : "ScoreMe PAN-to-GSTIN"}
                         </span>
-                        {canCheckerVerifyKyc && (
+                        {(isGstChecked || canCheckerVerifyKyc) && (
                           <div className="flex items-center gap-1.5">
-                            {dsa.gst ? (
+                            {isGstChecked && (
                               <Button
                                 size="sm"
                                 type="button"
-                                disabled={verifyingKyc.gst}
-                                onClick={() => handleVerifyKyc("gst", "GSTIN")}
-                                className={cn(
-                                  "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
-                                  isGstChecked
-                                    ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                                    : "bg-blue-600 hover:bg-blue-700 text-white",
-                                )}
+                                variant="outline"
+                                onClick={() => {
+                                  setViewKycDataCachedVerif(gstVerif);
+                                  setViewKycDataModalType("gst");
+                                }}
+                                className="text-xs px-2.5 py-1 h-auto font-medium text-slate-700 hover:text-blue-700 hover:bg-blue-50 border-slate-300 flex items-center gap-1 shadow-2xs"
                               >
-                                {verifyingKyc.gst ? (
-                                  <>
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                    Checking...
-                                  </>
-                                ) : isGstChecked ? (
-                                  <>
-                                    <Check className="h-3 w-3 text-emerald-600" />
-                                    Re-Check GSTIN
-                                  </>
-                                ) : (
-                                  <>
-                                    <ShieldCheck className="h-3 w-3" />
-                                    Check GSTIN
-                                  </>
-                                )}
+                                <Eye className="h-3.5 w-3.5" />
+                                View Data
                               </Button>
-                            ) : (
-                              <Button
-                                size="sm"
-                                type="button"
-                                disabled={verifyingKyc.gst}
-                                onClick={() =>
-                                  handleVerifyKyc(
-                                    "gst",
-                                    "PAN to GSTIN",
-                                    "pan_to_gstin",
-                                  )
-                                }
-                                className={cn(
-                                  "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
-                                  isGstChecked
-                                    ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                                    : "bg-blue-600 hover:bg-blue-700 text-white",
-                                )}
-                              >
-                                {verifyingKyc.gst ? (
-                                  <>
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                    Looking up...
-                                  </>
-                                ) : isGstChecked ? (
-                                  <>
-                                    <Check className="h-3 w-3 text-emerald-600" />
-                                    Re-Check GSTIN
-                                  </>
-                                ) : (
-                                  <>
-                                    <ShieldCheck className="h-3 w-3" />
-                                    Resolve from PAN
-                                  </>
-                                )}
-                              </Button>
+                            )}
+                            {canCheckerVerifyKyc && (
+                              dsa.gst ? (
+                                <Button
+                                  size="sm"
+                                  type="button"
+                                  disabled={verifyingKyc.gst}
+                                  onClick={() => handleVerifyKyc("gst", "GSTIN")}
+                                  className={cn(
+                                    "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
+                                    isGstChecked
+                                      ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                                      : "bg-blue-600 hover:bg-blue-700 text-white",
+                                  )}
+                                >
+                                  {verifyingKyc.gst ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                      Checking...
+                                    </>
+                                  ) : isGstChecked ? (
+                                    <>
+                                      <Check className="h-3 w-3 text-emerald-600" />
+                                      Re-Check GSTIN
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ShieldCheck className="h-3 w-3" />
+                                      Check GSTIN
+                                    </>
+                                  )}
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  type="button"
+                                  disabled={verifyingKyc.gst}
+                                  onClick={() =>
+                                    handleVerifyKyc(
+                                      "gst",
+                                      "PAN to GSTIN",
+                                      "pan_to_gstin",
+                                    )
+                                  }
+                                  className={cn(
+                                    "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
+                                    isGstChecked
+                                      ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                                      : "bg-blue-600 hover:bg-blue-700 text-white",
+                                  )}
+                                >
+                                  {verifyingKyc.gst ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                      Looking up...
+                                    </>
+                                  ) : isGstChecked ? (
+                                    <>
+                                      <Check className="h-3 w-3 text-emerald-600" />
+                                      Re-Check GSTIN
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ShieldCheck className="h-3 w-3" />
+                                      Resolve from PAN
+                                    </>
+                                  )}
+                                </Button>
+                              )
                             )}
                           </div>
                         )}
@@ -6114,44 +6672,67 @@ export function DsaProfilePage({ id }: { id: string }) {
                         <span className="text-[11px] text-slate-500">
                           {bankVerif?.executed_at
                             ? `Checked on ${formatDate(bankVerif.executed_at)} via BAV`
-                            : "Bank Account Verification (BAV)"}
+                            : isBankChecked
+                              ? "Bank Account Verification (BAV)"
+                              : isMakerUser
+                                ? "Pending Checker Verification"
+                                : "Bank Account Verification (BAV)"}
                         </span>
-                        {canCheckerVerifyKyc && (
-                          <Button
-                            size="sm"
-                            type="button"
-                            disabled={verifyingKyc.bank}
-                            onClick={() =>
-                              handleVerifyKyc(
-                                "bank",
-                                "Bank Account (BAV)",
-                                "pennydrop",
-                              )
-                            }
-                            className={cn(
-                              "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
-                              isBankChecked
-                                ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                                : "bg-blue-600 hover:bg-blue-700 text-white",
+                        {(isBankChecked || canCheckerVerifyKyc) && (
+                          <div className="flex items-center gap-1.5">
+                            {isBankChecked && (
+                              <Button
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  setViewKycDataCachedVerif(bankVerif);
+                                  setViewKycDataModalType("bank");
+                                }}
+                                className="text-xs px-2.5 py-1 h-auto font-medium text-slate-700 hover:text-blue-700 hover:bg-blue-50 border-slate-300 flex items-center gap-1 shadow-2xs"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                View Data
+                              </Button>
                             )}
-                          >
-                            {verifyingKyc.bank ? (
-                              <>
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                                Checking...
-                              </>
-                            ) : isBankChecked ? (
-                              <>
-                                <Check className="h-3 w-3 text-emerald-600" />
-                                Re-Check Bank
-                              </>
-                            ) : (
-                              <>
-                                <ShieldCheck className="h-3 w-3" />
-                                Check Bank
-                              </>
+                            {canCheckerVerifyKyc && (
+                              <Button
+                                size="sm"
+                                type="button"
+                                disabled={verifyingKyc.bank}
+                                onClick={() =>
+                                  handleVerifyKyc(
+                                    "bank",
+                                    "Bank Account (BAV)",
+                                    "pennydrop",
+                                  )
+                                }
+                                className={cn(
+                                  "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
+                                  isBankChecked
+                                    ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                                    : "bg-blue-600 hover:bg-blue-700 text-white",
+                                )}
+                              >
+                                {verifyingKyc.bank ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                    Checking...
+                                  </>
+                                ) : isBankChecked ? (
+                                  <>
+                                    <Check className="h-3 w-3 text-emerald-600" />
+                                    Re-Check Bank
+                                  </>
+                                ) : (
+                                  <>
+                                    <ShieldCheck className="h-3 w-3" />
+                                    Check Bank
+                                  </>
+                                )}
+                              </Button>
                             )}
-                          </Button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -6178,40 +6759,63 @@ export function DsaProfilePage({ id }: { id: string }) {
                         <span className="text-[11px] text-slate-500">
                           {udyamVerif?.executed_at
                             ? `Checked on ${formatDate(udyamVerif.executed_at)} via MSME Portal`
-                            : "Ministry of MSME Portal"}
+                            : isUdyamChecked
+                              ? "Ministry of MSME Portal"
+                              : isMakerUser
+                                ? "Pending Checker Verification"
+                                : "Ministry of MSME Portal"}
                         </span>
-                        {canCheckerVerifyKyc && (
-                          <Button
-                            size="sm"
-                            type="button"
-                            disabled={verifyingKyc.udyam}
-                            onClick={() =>
-                              handleVerifyKyc("udyam", "Udyam Registration")
-                            }
-                            className={cn(
-                              "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
-                              isUdyamChecked
-                                ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                                : "bg-blue-600 hover:bg-blue-700 text-white",
+                        {(isUdyamChecked || canCheckerVerifyKyc) && (
+                          <div className="flex items-center gap-1.5">
+                            {isUdyamChecked && (
+                              <Button
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  setViewKycDataCachedVerif(udyamVerif);
+                                  setViewKycDataModalType("udyam");
+                                }}
+                                className="text-xs px-2.5 py-1 h-auto font-medium text-slate-700 hover:text-blue-700 hover:bg-blue-50 border-slate-300 flex items-center gap-1 shadow-2xs"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                View Data
+                              </Button>
                             )}
-                          >
-                            {verifyingKyc.udyam ? (
-                              <>
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                                Checking...
-                              </>
-                            ) : isUdyamChecked ? (
-                              <>
-                                <Check className="h-3 w-3 text-emerald-600" />
-                                Re-Check Udyam
-                              </>
-                            ) : (
-                              <>
-                                <ShieldCheck className="h-3 w-3" />
-                                Check Udyam
-                              </>
+                            {canCheckerVerifyKyc && (
+                              <Button
+                                size="sm"
+                                type="button"
+                                disabled={verifyingKyc.udyam}
+                                onClick={() =>
+                                  handleVerifyKyc("udyam", "Udyam Registration")
+                                }
+                                className={cn(
+                                  "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
+                                  isUdyamChecked
+                                    ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                                    : "bg-blue-600 hover:bg-blue-700 text-white",
+                                )}
+                              >
+                                {verifyingKyc.udyam ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                    Checking...
+                                  </>
+                                ) : isUdyamChecked ? (
+                                  <>
+                                    <Check className="h-3 w-3 text-emerald-600" />
+                                    Re-Check Udyam
+                                  </>
+                                ) : (
+                                  <>
+                                    <ShieldCheck className="h-3 w-3" />
+                                    Check Udyam
+                                  </>
+                                )}
+                              </Button>
                             )}
-                          </Button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -6228,7 +6832,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                       </div>
                       <div>
                         <p className="text-sm font-bold text-slate-900">
-                          {cibilVerif?.execution_status === "COMPLETED"
+                          {isCibilChecked
                             ? "Bureau Score Evaluated · Active"
                             : "Pending Bureau Assessment"}
                         </p>
@@ -6240,40 +6844,63 @@ export function DsaProfilePage({ id }: { id: string }) {
                         <span className="text-[11px] text-slate-500">
                           {cibilVerif?.executed_at
                             ? `Checked on ${formatDate(cibilVerif.executed_at)} via TransUnion`
-                            : "TransUnion CIBIL Gateway"}
+                            : isCibilChecked
+                              ? "TransUnion CIBIL Gateway"
+                              : isMakerUser
+                                ? "Pending Checker Verification"
+                                : "TransUnion CIBIL Gateway"}
                         </span>
-                        {canCheckerVerifyKyc && (
-                          <Button
-                            size="sm"
-                            type="button"
-                            disabled={verifyingKyc.cibil}
-                            onClick={() =>
-                              handleVerifyKyc("cibil", "CIBIL Bureau")
-                            }
-                            className={cn(
-                              "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
-                              isCibilChecked
-                                ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                                : "bg-blue-600 hover:bg-blue-700 text-white",
+                        {(isCibilChecked || canCheckerVerifyKyc) && (
+                          <div className="flex items-center gap-1.5">
+                            {isCibilChecked && (
+                              <Button
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  setViewKycDataCachedVerif(cibilVerif);
+                                  setViewKycDataModalType("cibil");
+                                }}
+                                className="text-xs px-2.5 py-1 h-auto font-medium text-slate-700 hover:text-blue-700 hover:bg-blue-50 border-slate-300 flex items-center gap-1 shadow-2xs"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                View Data
+                              </Button>
                             )}
-                          >
-                            {verifyingKyc.cibil ? (
-                              <>
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                                Checking...
-                              </>
-                            ) : isCibilChecked ? (
-                              <>
-                                <Check className="h-3 w-3 text-emerald-600" />
-                                Re-Check CIBIL
-                              </>
-                            ) : (
-                              <>
-                                <ShieldCheck className="h-3 w-3" />
-                                Check CIBIL
-                              </>
+                            {canCheckerVerifyKyc && (
+                              <Button
+                                size="sm"
+                                type="button"
+                                disabled={verifyingKyc.cibil}
+                                onClick={() =>
+                                  handleVerifyKyc("cibil", "CIBIL Bureau")
+                                }
+                                className={cn(
+                                  "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
+                                  isCibilChecked
+                                    ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                                    : "bg-blue-600 hover:bg-blue-700 text-white",
+                                )}
+                              >
+                                {verifyingKyc.cibil ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                    Checking...
+                                  </>
+                                ) : isCibilChecked ? (
+                                  <>
+                                    <Check className="h-3 w-3 text-emerald-600" />
+                                    Re-Check CIBIL
+                                  </>
+                                ) : (
+                                  <>
+                                    <ShieldCheck className="h-3 w-3" />
+                                    Check CIBIL
+                                  </>
+                                )}
+                              </Button>
                             )}
-                          </Button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -6290,7 +6917,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                       </div>
                       <div>
                         <p className="text-sm font-bold text-slate-900">
-                          {amlVerif?.execution_status === "COMPLETED"
+                          {isAmlChecked
                             ? "Negative Database Clean · Passed"
                             : "Pending AML Screening"}
                         </p>
@@ -6302,46 +6929,80 @@ export function DsaProfilePage({ id }: { id: string }) {
                         <span className="text-[11px] text-slate-500">
                           {amlVerif?.executed_at
                             ? `Screened on ${formatDate(amlVerif.executed_at)} via Compass`
-                            : "Compass AML Gateway"}
+                            : isAmlChecked
+                              ? "Compass AML Gateway"
+                              : isMakerUser
+                                ? "Pending Checker Verification"
+                                : "Compass AML Gateway"}
                         </span>
-                        {canCheckerVerifyKyc && (
-                          <Button
-                            size="sm"
-                            type="button"
-                            disabled={verifyingKyc.aml}
-                            onClick={() =>
-                              handleVerifyKyc("aml", "AML Screening")
-                            }
-                            className={cn(
-                              "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
-                              isAmlChecked
-                                ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                                : "bg-blue-600 hover:bg-blue-700 text-white",
+                        {(isAmlChecked || canCheckerVerifyKyc) && (
+                          <div className="flex items-center gap-1.5">
+                            {isAmlChecked && (
+                              <Button
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  setViewKycDataCachedVerif(amlVerif);
+                                  setViewKycDataModalType("aml");
+                                }}
+                                className="text-xs px-2.5 py-1 h-auto font-medium text-slate-700 hover:text-blue-700 hover:bg-blue-50 border-slate-300 flex items-center gap-1 shadow-2xs"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                View Data
+                              </Button>
                             )}
-                          >
-                            {verifyingKyc.aml ? (
-                              <>
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                                Screening...
-                              </>
-                            ) : isAmlChecked ? (
-                              <>
-                                <Check className="h-3 w-3 text-emerald-600" />
-                                Re-Check AML
-                              </>
-                            ) : (
-                              <>
-                                <ShieldCheck className="h-3 w-3" />
-                                Check AML
-                              </>
+                            {canCheckerVerifyKyc && (
+                              <Button
+                                size="sm"
+                                type="button"
+                                disabled={verifyingKyc.aml}
+                                onClick={() =>
+                                  handleVerifyKyc("aml", "AML Screening")
+                                }
+                                className={cn(
+                                  "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
+                                  isAmlChecked
+                                    ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                                    : "bg-blue-600 hover:bg-blue-700 text-white",
+                                )}
+                              >
+                                {verifyingKyc.aml ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                    Screening...
+                                  </>
+                                ) : isAmlChecked ? (
+                                  <>
+                                    <Check className="h-3 w-3 text-emerald-600" />
+                                    Re-Check AML
+                                  </>
+                                ) : (
+                                  <>
+                                    <ShieldCheck className="h-3 w-3" />
+                                    Check AML
+                                  </>
+                                )}
+                              </Button>
                             )}
-                          </Button>
+                          </div>
                         )}
                       </div>
                     </div>
                   </div>
                 );
               })()}
+
+              <DsaKycDataModal
+                open={Boolean(viewKycDataModalType)}
+                onClose={() => {
+                  setViewKycDataModalType(null);
+                  setViewKycDataCachedVerif(null);
+                }}
+                type={viewKycDataModalType}
+                dsa={dsa}
+                cachedVerif={viewKycDataCachedVerif}
+              />
             </div>
           ) : null}
           {tab === "documents" ? (() => {
@@ -6520,9 +7181,12 @@ export function DsaProfilePage({ id }: { id: string }) {
                     const effectiveStatus = getEffectiveDocStatus(doc);
                     const isDocViewed = viewedDocIds.has(doc.id);
                     const isVisitReport = isVisitReportDocument(doc);
-                    const canVerifyCurrentDoc = canCheckerApproveDocs;
+                    const isAppForm = isApplicationFormDocument(doc);
+                    const isDdReport = isDdReviewReportDocument(doc);
+                    const canVerifyCurrentDoc = canCheckerApproveDocs && !isAppForm;
                     const isPendingVerification =
                       canCheckerApproveDocs &&
+                      !isAppForm &&
                       effectiveStatus !== "Verified" &&
                       effectiveStatus !== "Failed";
                     const docType = doc.document_type || doc.type;
@@ -6549,8 +7213,8 @@ export function DsaProfilePage({ id }: { id: string }) {
                               )}
                             </div>
                             <div className="flex flex-col items-end gap-1">
-                              <StatusBadge status={getDocDisplayStatus(effectiveStatus)} />
-                              {canMakerReuploadDocs && typeof doc.id === "number" && (
+                              <StatusBadge status={isAppForm ? "Generated" : getDocDisplayStatus(effectiveStatus)} />
+                              {canMakerReuploadDocs && !isAppForm && !isDdReport && typeof doc.id === "number" && (
                                 <button
                                   type="button"
                                   title="Delete this document"
@@ -6596,15 +7260,20 @@ export function DsaProfilePage({ id }: { id: string }) {
                             <div className="flex items-center gap-2">
                               <Button
                                 onClick={() => openDocPreview(doc)}
+                                disabled={loadingPreviewDocId === (doc.id || "dd_report")}
                                 size="sm"
                                 type="button"
                                 variant="outline"
                                 className="text-xs px-2.5 py-0.5 h-auto flex items-center gap-1 text-slate-700 hover:bg-slate-50 border-slate-300"
                               >
-                                <Eye className="h-3.5 w-3.5 text-slate-500" />
+                                {loadingPreviewDocId === (doc.id || "dd_report") ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" />
+                                ) : (
+                                  <Eye className="h-3.5 w-3.5 text-slate-500" />
+                                )}
                                 View
                               </Button>
-                              {canMakerReuploadDocs && (
+                              {canMakerReuploadDocs && !isAppForm && !isDdReport && (
                                 <>
                                   <input
                                     accept=".jpg,.jpeg,.png,.pdf"
@@ -7310,7 +7979,13 @@ export function DsaProfilePage({ id }: { id: string }) {
                                           : "bg-slate-100 text-slate-500 border-slate-200",
                                   )}
                                 >
-                                  {step.status}
+                                  {isDone
+                                    ? Number(step.approval_level) === 7
+                                      ? "APPROVED"
+                                      : (Number(step.approval_level) === 1 || Number(step.approval_level) === 2)
+                                        ? "SUBMITTED"
+                                        : "RECOMMENDED"
+                                    : step.status}
                                 </span>
                               </div>
                             </div>
@@ -7539,30 +8214,11 @@ export function DsaProfilePage({ id }: { id: string }) {
                                 variant="secondary"
                                 type="button"
                                 disabled={actionLoading || isAlreadyApproved}
-                                onClick={async () => {
-                                  if (!approvalRemarks.trim()) {
-                                    setApprovalRemarksError(
-                                      "Please provide rejection reason in remarks.",
-                                    );
-                                    return;
-                                  }
-                                  try {
-                                    await updateWorkflowAction(dsa.id, {
-                                      action: "REJECT",
-                                      remarks: approvalRemarks.trim(),
-                                    });
-                                    await fetchDsaDetail(id);
-                                    toast({
-                                      title: "Application Rejected",
-                                      description: `Application #${dsa.code || dsa.id} was rejected by HO Credit Head.`,
-                                      variant: "error",
-                                    });
-                                    await loadFinalApprovalReview(dsa.id);
-                                  } catch (err: any) {
-                                    setApprovalRemarksError(
-                                      err?.message || "Failed to reject application.",
-                                    );
-                                  }
+                                onClick={() => {
+                                  setRejectingDsa(dsa);
+                                  setRejectionReason(approvalRemarks.trim());
+                                  setRejectionStep("input");
+                                  setRejectionError("");
                                 }}
                                 className="font-bold text-xs border bg-rose-50 text-rose-700 hover:bg-rose-100 border-rose-300 flex items-center gap-1.5"
                               >
@@ -7638,752 +8294,327 @@ export function DsaProfilePage({ id }: { id: string }) {
               )}
             </div>
           ) : null}
-          {tab === "agreements" && (isL7User || isCheckerUserOrLevel || isMakerUserOrLevel || dsa.agreement_status === "SIGNED_VERIFIED" || dsa.operational_status === "ACTIVE") ? (
-            <div className="space-y-6">
-              {/* Header and Status Indicators */}
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-slate-100">
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                    Master Partnership Agreement (MSA) &amp; Partner Activation
-                    <span className="text-[11px] font-mono font-normal px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
-                      Task 12 &bull; Task 13 &bull; Task 14
-                    </span>
-                  </h3>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border bg-slate-50 text-slate-700 border-slate-200">
-                    <span className="text-[10px] uppercase text-slate-400 font-bold">
-                      Agreement:
-                    </span>
-                    <span
-                      className={cn(
-                        "font-bold",
-                        (dsa.agreement_status ||
-                          agreementReviewData?.agreement_status) ===
-                          "SIGNED_VERIFIED"
-                          ? "text-emerald-700"
-                          : (dsa.agreement_status ||
-                                agreementReviewData?.agreement_status) ===
-                              "SIGNED_UPLOADED"
-                            ? "text-amber-700"
-                            : (dsa.agreement_status ||
-                                  agreementReviewData?.agreement_status) ===
-                                "SIGNED_REJECTED"
-                              ? "text-rose-700"
-                              : "text-blue-700",
-                      )}
-                    >
-                      {dsa.agreement_status ||
-                        agreementReviewData?.agreement_status ||
-                        "PENDING"}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border bg-slate-50 text-slate-700 border-slate-200">
-                    <span className="text-[10px] uppercase text-slate-400 font-bold">
-                      Operational:
-                    </span>
-                    <span
-                      className={cn(
-                        "font-bold",
-                        dsa.operational_status === "ACTIVE"
-                          ? "text-emerald-700"
-                          : "text-slate-500",
-                      )}
-                    >
-                      {dsa.operational_status || "NOT_ACTIVE"}
-                    </span>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    type="button"
-                    disabled={
-                      agreementReviewLoading || officialAgreementLoading
-                    }
-                    onClick={() => loadAgreementData(dsa.id)}
-                    className="h-7 text-xs px-2.5"
-                  >
-                    {agreementReviewLoading ? (
-                      <Loader2 className="h-3 w-3 animate-spin text-slate-500" />
-                    ) : (
-                      "Refresh Details"
-                    )}
-                  </Button>
-                </div>
-              </div>
+          {tab === "agreements" ? (
+            (() => {
+              const isL7Approved = Boolean(
+                dsa && (
+                  dsa.onboarding_status === "APPROVED" ||
+                  dsa.onboarding_status === "AGREEMENT_PENDING" ||
+                  dsa.onboarding_status === "AGREEMENT_COMPLETED" ||
+                  dsa.agreement_status === "SIGNED_UPLOADED" ||
+                  dsa.agreement_status === "SIGNED_VERIFIED" ||
+                  dsa.operational_status === "ACTIVE" ||
+                  workflowLevelInfo.isCompleted ||
+                  (Number(dsa.current_approval_level) >= 7 &&
+                    ((dsa as any)?.status === "APPROVED" ||
+                      (dsa as any)?.action === "APPROVE"))
+                ),
+              );
 
-              {/* 4-Stage Stepper */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {/* Step 1 */}
-                <div
-                  className={cn(
-                    "p-3 rounded-xl border transition-all",
-                    dsa.digital_acceptance_status === "ACCEPTED"
-                      ? "bg-emerald-50/60 border-emerald-200 text-emerald-950"
-                      : "bg-slate-50/80 border-slate-200 text-slate-600",
-                  )}
-                >
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="font-bold uppercase tracking-wider text-[10px] text-slate-500">
-                      Stage 1
-                    </span>
-                    {dsa.digital_acceptance_status === "ACCEPTED" ? (
-                      <span className="flex items-center gap-1 font-bold text-emerald-700 text-[10px]">
-                        <Check className="h-3 w-3" /> Accepted
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-medium text-slate-400">
-                        Pending
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs font-bold text-slate-900">
-                    Digital Acceptance
-                  </p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    {dsa.digital_acceptance_status === "ACCEPTED"
-                      ? "Empanelment letter digitally accepted"
-                      : "Awaiting partner digital acceptance"}
-                  </p>
-                </div>
+              const signedAgreementDoc = (dsa?.documents || []).find((doc: any) => {
+                const t = String(doc.document_type || doc.type || "").toUpperCase();
+                return t === "SIGNED_AGREEMENT" || t === "SIGNED AGREEMENT";
+              });
 
-                {/* Step 2 */}
-                <div
-                  className={cn(
-                    "p-3 rounded-xl border transition-all",
-                    (dsa.agreement_status &&
-                      dsa.agreement_status !== "PENDING") ||
-                      officialAgreement
-                      ? "bg-emerald-50/60 border-emerald-200 text-emerald-950"
-                      : "bg-slate-50/80 border-slate-200 text-slate-600",
-                  )}
-                >
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="font-bold uppercase tracking-wider text-[10px] text-slate-500">
-                      Stage 2
-                    </span>
-                    {(dsa.agreement_status &&
-                      dsa.agreement_status !== "PENDING") ||
-                    officialAgreement ? (
-                      <span className="flex items-center gap-1 font-bold text-emerald-700 text-[10px]">
-                        <Check className="h-3 w-3" /> Generated
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-medium text-slate-400">
-                        Pending
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs font-bold text-slate-900">
-                    Master Agreement PDF
-                  </p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    {officialAgreement
-                      ? "Document generated & stored"
-                      : "Generated upon digital acceptance"}
-                  </p>
-                </div>
+              const isSignedAgreementUploaded = Boolean(
+                signedAgreementDoc ||
+                dsa?.agreement_status === "SIGNED_UPLOADED" ||
+                dsa?.agreement_status === "SIGNED_VERIFIED"
+              );
 
-                {/* Step 3 */}
-                <div
-                  className={cn(
-                    "p-3 rounded-xl border transition-all",
-                    ["SIGNED_UPLOADED", "SIGNED_VERIFIED"].includes(
-                      dsa.agreement_status || "",
-                    )
-                      ? "bg-emerald-50/60 border-emerald-200 text-emerald-950"
-                      : dsa.agreement_status === "SIGNED_REJECTED"
-                        ? "bg-rose-50/60 border-rose-200 text-rose-950"
-                        : "bg-slate-50/80 border-slate-200 text-slate-600",
-                  )}
-                >
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="font-bold uppercase tracking-wider text-[10px] text-slate-500">
-                      Stage 3
-                    </span>
-                    {["SIGNED_UPLOADED", "SIGNED_VERIFIED"].includes(
-                      dsa.agreement_status || "",
-                    ) ? (
-                      <span className="flex items-center gap-1 font-bold text-emerald-700 text-[10px]">
-                        <Check className="h-3 w-3" /> Uploaded
-                      </span>
-                    ) : dsa.agreement_status === "SIGNED_REJECTED" ? (
-                      <span className="font-bold text-rose-700 text-[10px]">
-                        Rejected
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-medium text-slate-400">
-                        Awaiting Upload
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs font-bold text-slate-900">
-                    Signed Copy Upload
-                  </p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    {dsa.agreement_status === "SIGNED_UPLOADED"
-                      ? "Scanned signed copy uploaded"
-                      : dsa.agreement_status === "SIGNED_VERIFIED"
-                        ? "Signed copy verified"
-                        : "Partner downloads, signs & uploads"}
-                  </p>
-                </div>
+              const generatedAgreementDoc = (dsa?.documents || []).find((doc: any) => {
+                const t = String(doc.document_type || doc.type || "").toUpperCase();
+                return t === "AGREEMENT" || t === "OFFICIAL_AGREEMENT";
+              });
 
-                {/* Step 4 */}
-                <div
-                  className={cn(
-                    "p-3 rounded-xl border transition-all",
-                    dsa.operational_status === "ACTIVE" ||
-                      dsa.agreement_status === "SIGNED_VERIFIED"
-                      ? "bg-emerald-50/60 border-emerald-200 text-emerald-950"
-                      : "bg-slate-50/80 border-slate-200 text-slate-600",
-                  )}
-                >
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="font-bold uppercase tracking-wider text-[10px] text-slate-500">
-                      Stage 4
-                    </span>
-                    {dsa.operational_status === "ACTIVE" ||
-                    dsa.agreement_status === "SIGNED_VERIFIED" ? (
-                      <span className="flex items-center gap-1 font-bold text-emerald-700 text-[10px]">
-                        <Check className="h-3 w-3" /> Active
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-medium text-slate-400">
-                        Pending
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs font-bold text-slate-900">
-                    HO Credit Head Sanction &amp; Activation
-                  </p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    {dsa.operational_status === "ACTIVE" ||
-                    dsa.agreement_status === "SIGNED_VERIFIED"
-                      ? "DSA is ACTIVE & credentials dispatched"
-                      : "HO Credit Head approval required"}
-                  </p>
-                </div>
-              </div>
+              const canActOnAgreement = isMakerUserOrLevel || isCheckerUserOrLevel || isL7User;
 
-              {/* Action Banner — Checker ONLY approves signed agreement */}
-              {isCheckerUserOrLevel &&
-                !isL7User &&
-                (dsa.agreement_status === "SIGNED_UPLOADED" ||
-                  agreementReviewData?.agreement_status === "SIGNED_UPLOADED" ||
-                  agreementReviewData?.can_approve ||
-                  agreementReviewData?.can_decision) &&
-                !agreementReviewData?.upload_locked && (
-                <div className="rounded-xl border border-amber-300 bg-gradient-to-r from-amber-50 to-orange-50 p-5 shadow-sm space-y-3">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-700 shrink-0">
-                        <Award className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                          Branch Checker — Signed Agreement Approval
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                            Action Pending
-                          </span>
-                        </h4>
-                        <p className="text-xs text-slate-600 mt-0.5">
-                          Inspect the uploaded scanned signed agreement. Once approved, the DSA partner will be activated and credentials dispatched.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        size="sm"
-                        type="button"
-                        onClick={() => {
-                          setVerifyingAgreementAction("APPROVE");
-                          setAgreementDecisionRemarks(
-                            "Signed agreement verified and approved by Branch Checker. Partner activated.",
-                          );
-                          setAgreementDecisionError("");
-                        }}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 h-auto shadow-sm flex items-center gap-1.5"
-                      >
-                        <Check className="h-4 w-4" />
-                        Approve &amp; Activate DSA
-                      </Button>
-                      <Button
-                        size="sm"
-                        type="button"
-                        variant="danger"
-                        onClick={() => {
-                          setVerifyingAgreementAction("REJECT");
-                          setAgreementDecisionRemarks("");
-                          setAgreementDecisionError("");
-                        }}
-                        className="font-bold text-xs px-4 py-2 h-auto shadow-sm flex items-center gap-1.5"
-                      >
-                        <X className="h-4 w-4" />
-                        Reject &amp; Request Re-upload
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {(dsa.agreement_status === "SIGNED_VERIFIED" ||
-                dsa.operational_status === "ACTIVE" ||
-                agreementReviewData?.latest_signed_agreement?.status ===
-                  "VERIFIED") && (
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
-                      <CheckCircle2 className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-950">
-                        Master Agreement Verified &amp; Partner Activated
-                      </h4>
-                      <p className="text-xs text-emerald-800 mt-0.5">
-                        Physical signed agreement has been formally verified and
-                        approved by HO Credit Head. Operational status
-                        is ACTIVE and portal login credentials have been
-                        dispatched to{" "}
-                        <strong>
-                          {dsa.email ?? "the registered DSA email"}
-                        </strong>
-                        .
-                      </p>
-                    </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    type="button"
-                    onClick={handleResendActivationEmail}
-                    className="h-8 text-xs font-semibold border-emerald-300 text-emerald-900 bg-white hover:bg-emerald-100 flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
-                  >
-                    <Mail className="h-3.5 w-3.5" />
-                    Resend Activation Email
-                  </Button>
-                </div>
-              )}
-
-              {resendActivationSuccess && (
-                <div className="rounded-xl border border-emerald-300 bg-emerald-100/70 p-3 flex items-center gap-2 text-xs text-emerald-900 font-medium">
-                  <Check className="h-4 w-4 text-emerald-700 shrink-0" />
-                  <span>{resendActivationSuccess}</span>
-                </div>
-              )}
-
-              {dsa.agreement_status === "SIGNED_REJECTED" && (
-                <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shrink-0">
-                      <AlertCircle className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-rose-950">
-                        Signed Agreement Rejected by HO Credit Head
-                      </h4>
-                      <p className="text-xs text-rose-800 mt-0.5">
-                        {agreementReviewData?.latest_signed_agreement
-                          ?.remarks ||
-                          "Deficiencies noted in physical execution or stamp."}{" "}
-                        A fresh 72-hour re-upload link has been sent to the
-                        partner.
-                      </p>
-                    </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    type="button"
-                    onClick={() => {
-                      setVerifyingAgreementAction("APPROVE");
-                      setAgreementDecisionRemarks(
-                        "Signed agreement re-checked and verified. Approved for activation.",
-                      );
-                      setAgreementDecisionError("");
-                    }}
-                    className="h-7 text-xs border-rose-300 text-rose-800 hover:bg-rose-100"
-                  >
-                    Re-evaluate
-                  </Button>
-                </div>
-              )}
-
-              {/* Main Document Cards Grid */}
-              <div className="grid gap-5 lg:grid-cols-2">
-                {/* Card 1: Official Master Partnership Agreement (Task 12) */}
-                <Card className="border-slate-200 shadow-sm">
-                  <CardContent className="p-5 space-y-4">
-                    <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-blue-600" />
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                          Official Master Agreement (MSA)
-                        </h4>
-                      </div>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                        Task 12 Endpoint
-                      </span>
-                    </div>
-
-                    <div className="space-y-2 text-xs">
-                      <div className="p-3 bg-slate-50 rounded-lg border border-slate-100 space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-500 text-[11px]">
-                            File Name:
-                          </span>
-                          <span className="font-mono font-semibold text-slate-800 truncate max-w-xs">
-                            {officialAgreement?.file_name ||
-                              agreementReviewData?.generated_agreement
-                                ?.file_name ||
-                              `agreement_${getEffectiveDsaCode(dsa)}.pdf`}
-                          </span>
+              return (
+                <div className="space-y-4">
+                  <Card className="border-slate-200 shadow-sm max-w-3xl">
+                    <CardContent className="p-6 space-y-5">
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
+                            <UploadCloud className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-bold text-slate-800">
+                              Scanned Physically Executed Agreement
+                            </h4>
+                            <p className="text-xs text-slate-500">
+                              Partner physical execution and signed copy management
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-500 text-[11px]">
-                            Document Size:
-                          </span>
-                          <span className="text-slate-700">
-                            {officialAgreement?.size ||
-                              agreementReviewData?.generated_agreement?.size ||
-                              "Generated on server"}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-500 text-[11px]">
-                            Generated Date:
-                          </span>
-                          <span className="text-slate-700">
-                            {officialAgreement?.uploaded_at
-                              ? formatDate(officialAgreement.uploaded_at)
-                              : agreementReviewData?.generated_agreement
-                                    ?.uploaded_at
-                                ? formatDate(
-                                    agreementReviewData.generated_agreement
-                                      .uploaded_at,
-                                  )
-                                : "Post-Digital Acceptance"}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-500 text-[11px]">
-                            Agreement Status:
-                          </span>
-                          <span
-                            className={cn(
-                              "px-2 py-0.5 rounded-full text-[10px] font-bold border",
-                              officialAgreement?.status === "VERIFIED" ||
-                                dsa.agreement_status === "SIGNED_VERIFIED" ||
-                                dsa.operational_status === "ACTIVE"
-                                ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                                : "bg-blue-100 text-blue-800 border-blue-300",
-                            )}
-                          >
-                            {officialAgreement?.status === "VERIFIED" ||
-                            dsa.agreement_status === "SIGNED_VERIFIED" ||
-                            dsa.operational_status === "ACTIVE"
-                              ? "VERIFIED & ACTIVE"
-                              : officialAgreement?.status || "GENERATED"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 pt-2">
-                      {isL7User && (
-                        <Button
-                          size="sm"
-                          type="button"
-                          disabled={actionLoading || officialAgreementLoading}
-                          onClick={async () => {
-                            await generateAgreement(dsa.id);
-                            await fetchDsaDetail(dsa.id);
-                            await loadAgreementData(dsa.id);
-                          }}
-                          className="text-xs h-8 font-semibold bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1.5"
+                        <span
+                          className={cn(
+                            "px-2.5 py-1 rounded-full text-xs font-bold border",
+                            isSignedAgreementUploaded ||
+                              dsa?.agreement_status === "SIGNED_VERIFIED" ||
+                              dsa?.operational_status === "ACTIVE"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : dsa?.agreement_status === "SIGNED_REJECTED"
+                                ? "bg-rose-50 text-rose-700 border-rose-200"
+                                : "bg-slate-50 text-slate-600 border-slate-200",
+                          )}
                         >
-                          <FileCheck2 className="h-3.5 w-3.5" />
-                          {actionLoading
-                            ? "Generating..."
-                            : "Generate / Re-Generate MSA"}
-                        </Button>
-                      )}
-
-                      {/* Download — available to Maker once DSA digitally accepted */}
-                      {isMakerUserOrLevel &&
-                        dsa.digital_acceptance_status === "ACCEPTED" &&
-                        (officialAgreement?.file_url ||
-                          agreementReviewData?.generated_agreement?.file_url) && (
-                        <Button
-                          size="sm"
-                          type="button"
-                          variant="outline"
-                          onClick={() => {
-                            const url =
-                              officialAgreement?.file_url ||
-                              agreementReviewData?.generated_agreement?.file_url;
-                            if (url) window.open(url, "_blank");
-                          }}
-                          className="text-xs h-8 font-semibold flex items-center gap-1.5 text-slate-700"
-                        >
-                          <Download className="h-3.5 w-3.5" />
-                          Download Agreement
-                        </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Card 2: Scanned Signed Copy (Task 12 & 13) */}
-                <Card className="border-slate-200 shadow-sm">
-                  <CardContent className="p-5 space-y-4">
-                    <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                      <div className="flex items-center gap-2">
-                        <UploadCloud className="h-4 w-4 text-emerald-600" />
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                          Scanned Physically Executed Agreement
-                        </h4>
+                          {dsa?.agreement_status === "SIGNED_VERIFIED" ||
+                          dsa?.operational_status === "ACTIVE"
+                            ? "VERIFIED & ACTIVE"
+                            : isSignedAgreementUploaded
+                              ? "SIGNED_UPLOADED"
+                              : dsa?.agreement_status === "SIGNED_REJECTED"
+                                ? "REJECTED"
+                                : "AWAITING SUBMISSION"}
+                        </span>
                       </div>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        Partner Submission
-                      </span>
-                    </div>
 
-                    {agreementReviewData?.latest_signed_agreement ? (
-                      <div className="space-y-2 text-xs">
-                        <div className="p-3 bg-slate-50 rounded-lg border border-slate-100 space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <span className="text-slate-500 text-[11px]">
+                      {/* Existing uploaded signed agreement info if available */}
+                      {signedAgreementDoc ? (
+                        <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2.5">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-slate-500 font-medium">
                               Submitted File:
                             </span>
-                            <span className="font-mono font-semibold text-slate-800 truncate max-w-xs">
-                              {
-                                agreementReviewData.latest_signed_agreement
-                                  .file_name
-                              }
+                            <span className="font-mono font-semibold text-slate-800 truncate max-w-sm">
+                              {signedAgreementDoc.file_name ||
+                                `signed_agreement_${getEffectiveDsaCode(dsa)}.pdf`}
                             </span>
                           </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-slate-500 text-[11px]">
-                              File Size:
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-slate-500 font-medium">
+                              Document Status:
                             </span>
-                            <span className="text-slate-700">
-                              {agreementReviewData.latest_signed_agreement
-                                .size || "Standard PDF"}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-slate-500 text-[11px]">
-                              Uploaded At:
-                            </span>
-                            <span className="text-slate-700">
-                              {formatDate(
-                                agreementReviewData.latest_signed_agreement
-                                  .uploaded_at,
-                              )}
+                            <span className="font-semibold text-emerald-700">
+                              {signedAgreementDoc.status ||
+                                dsa?.agreement_status ||
+                                "UPLOADED"}
                             </span>
                           </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-slate-500 text-[11px]">
-                              Review Status:
-                            </span>
-                            <span
-                              className={cn(
-                                "px-2 py-0.5 rounded-full text-[10px] font-bold border",
-                                agreementReviewData.latest_signed_agreement
-                                  .status === "VERIFIED" ||
-                                  dsa.agreement_status === "SIGNED_VERIFIED" ||
-                                  dsa.operational_status === "ACTIVE"
-                                  ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                                  : agreementReviewData.latest_signed_agreement
-                                        .status === "REJECTED"
-                                    ? "bg-rose-100 text-rose-800 border-rose-300"
-                                    : "bg-amber-100 text-amber-800 border-amber-300",
-                              )}
-                            >
-                              {agreementReviewData.latest_signed_agreement
-                                .status === "VERIFIED" ||
-                              dsa.agreement_status === "SIGNED_VERIFIED" ||
-                              dsa.operational_status === "ACTIVE"
-                                ? "Checked"
-                                : agreementReviewData.latest_signed_agreement
-                                    .status || "PENDING"}
-                            </span>
-                          </div>
-                          {agreementReviewData.latest_signed_agreement
-                            .remarks && (
-                            <div className="pt-1 text-[11px] text-slate-600 italic border-t border-slate-200/60 mt-1">
-                              &ldquo;
-                              {
-                                agreementReviewData.latest_signed_agreement
-                                  .remarks
-                              }
-                              &rdquo;
+                          {(signedAgreementDoc.uploaded_at ||
+                            signedAgreementDoc.created_at) && (
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-slate-500 font-medium">
+                                Uploaded Date:
+                              </span>
+                              <span className="text-slate-700">
+                                {formatDate(
+                                  signedAgreementDoc.uploaded_at ||
+                                    signedAgreementDoc.created_at,
+                                )}
+                              </span>
+                            </div>
+                          )}
+                          {signedAgreementDoc.file_url && (
+                            <div className="pt-2 border-t border-slate-200/60 flex items-center justify-start">
+                              <Button
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                                onClick={() =>
+                                  window.open(
+                                    signedAgreementDoc.file_url,
+                                    "_blank",
+                                  )
+                                }
+                                className="text-xs h-7 gap-1.5 text-blue-700 border-blue-200 hover:bg-blue-50"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                                View Uploaded Document
+                              </Button>
                             </div>
                           )}
                         </div>
-
-                        <div className="flex flex-wrap gap-2 pt-2">
-                          {agreementReviewData.latest_signed_agreement
-                            .file_url && (
-                            <Button
-                              size="sm"
-                              type="button"
-                              variant="outline"
-                              onClick={() => {
-                                window.open(
-                                  agreementReviewData.latest_signed_agreement
-                                    .file_url,
-                                  "_blank",
-                                );
-                              }}
-                              className="text-xs h-8 font-semibold flex items-center gap-1.5 text-blue-700 border-blue-200 hover:bg-blue-50"
-                            >
-                              <ExternalLink className="h-3.5 w-3.5" />
-                              Inspect Scanned PDF
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-3 text-xs">
-                        <div className="p-4 bg-slate-50 rounded-lg border border-slate-100 text-center text-slate-500 space-y-1">
-                          <p className="font-semibold text-slate-700">
-                            Awaiting Partner Submission
+                      ) : (
+                        <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-100 text-center space-y-1">
+                          <p className="text-xs font-semibold text-slate-700">
+                            {isL7Approved
+                              ? "Ready for Signed Agreement Upload"
+                              : "Awaiting HO Credit Head (L7) Final Approval"}
                           </p>
-                          <p className="text-[11px]">
-                            Partner receives a secure upload link via email to
-                            submit the physically executed agreement.
+                          <p className="text-[11px] text-slate-500">
+                            {isL7Approved
+                              ? "Download the official partnership agreement, execute physically, and upload the scanned signed copy."
+                              : "Agreement download and upload will be enabled once final approval by L7 is completed."}
                           </p>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {/* Maker / Checker: upload signed physical copy */}
-                    {(isCheckerUserOrLevel || isMakerUserOrLevel) &&
-                      !agreementReviewData?.upload_locked && (
-                      <div className="pt-2 border-t border-slate-100">
-                        <input
-                          accept=".pdf"
-                          className="sr-only"
-                          id="internalSignedAgreementUpload"
-                          onChange={async (e) => {
-                            const file = e.currentTarget.files?.[0];
-                            if (file) {
-                              if (file.size > 2 * 1024 * 1024) {
+                      {/* Action Buttons for Maker, Checker & L7 */}
+                      {canActOnAgreement && (
+                        <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-3">
+                          {/* Download Agreement Button */}
+                          <Button
+                            size="sm"
+                            type="button"
+                            variant="outline"
+                            disabled={
+                              !isL7Approved || actionLoading || downloadingAgreement
+                            }
+                            title={
+                              !isL7Approved
+                                ? "Agreement download disabled until final approval by L7 is completed."
+                                : undefined
+                            }
+                            onClick={async () => {
+                              if (!dsa?.id) return;
+                              try {
+                                setDownloadingAgreement(true);
+                                if (generatedAgreementDoc?.file_url) {
+                                  window.open(
+                                    generatedAgreementDoc.file_url,
+                                    "_blank",
+                                  );
+                                  return;
+                                }
+                                let res = await downloadAgreement(dsa.id);
+                                if (!res?.file_url) {
+                                  try {
+                                    await generateAgreement(dsa.id);
+                                    res = await downloadAgreement(dsa.id);
+                                  } catch {
+                                    // fallback
+                                  }
+                                }
+                                if (res?.file_url) {
+                                  window.open(res.file_url, "_blank");
+                                } else {
+                                  toast({
+                                    title: "Document not ready",
+                                    description:
+                                      "Official agreement has not been generated yet.",
+                                    variant: "warning",
+                                  });
+                                }
+                              } catch (err: any) {
                                 toast({
-                                  title: "File too large",
+                                  title: "Download failed",
                                   description:
-                                    "Maximum allowed file size is 2MB.",
+                                    err?.message || "Failed to download agreement.",
                                   variant: "warning",
                                 });
-                                return;
+                              } finally {
+                                setDownloadingAgreement(false);
                               }
-                              await uploadSignedAgreement(dsa.id, file);
-                              await fetchDsaDetail(dsa.id);
-                              await loadAgreementData(dsa.id);
-                            }
-                          }}
-                          type="file"
-                          disabled={actionLoading}
-                        />
-                        <label
-                          className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-semibold transition ${
-                            !actionLoading
-                              ? "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300 cursor-pointer"
-                              : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
-                          }`}
-                          htmlFor={
-                            !actionLoading
-                              ? "internalSignedAgreementUpload"
-                              : undefined
-                          }
-                        >
-                          <UploadCloud className="h-3.5 w-3.5 text-slate-500" />
-                          {actionLoading
-                            ? "Uploading..."
-                            : "Upload Signed Physical Copy"}
-                        </label>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
+                            }}
+                            className={cn(
+                              "h-9 text-xs font-semibold flex items-center gap-1.5",
+                              !isL7Approved || downloadingAgreement
+                                ? "opacity-50 cursor-not-allowed bg-slate-100 text-slate-400 border-slate-200"
+                                : "text-slate-700 hover:bg-slate-100 border-slate-300",
+                            )}
+                          >
+                            {downloadingAgreement ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                Downloading...
+                              </>
+                            ) : (
+                              <>
+                                <Download className="h-3.5 w-3.5" />
+                                Download Agreement
+                              </>
+                            )}
+                          </Button>
 
-              {/* Card 4: Historical Signed Submissions Audit */}
-              {agreementReviewData?.signed_agreement_history?.length > 1 && (
-                <Card className="border-slate-200 shadow-sm">
-                  <CardContent className="p-4 space-y-3">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">
-                      Signed Agreement Submission History &bull; Audit Trail
-                    </h4>
-                    <div className="overflow-x-auto rounded-lg border border-slate-200">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500">
-                          <tr>
-                            <th className="p-2.5">Document ID</th>
-                            <th className="p-2.5">File Name</th>
-                            <th className="p-2.5">Uploaded Date</th>
-                            <th className="p-2.5">Status</th>
-                            <th className="p-2.5">Remarks / Observations</th>
-                            <th className="p-2.5 text-right">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 bg-white">
-                          {agreementReviewData.signed_agreement_history.map(
-                            (doc: any, idx: number) => (
-                              <tr
-                                key={doc.document_id || idx}
-                                className="hover:bg-slate-50/60"
+                          {/* Upload Signed Physical Copy Button */}
+                          {dsa?.agreement_status !== "SIGNED_VERIFIED" && (
+                            <div>
+                              <input
+                                accept=".pdf"
+                                className="sr-only"
+                                id="internalSignedAgreementUpload"
+                                disabled={!isL7Approved || actionLoading}
+                                onChange={async (e) => {
+                                  const file = e.currentTarget.files?.[0];
+                                  if (file) {
+                                    if (file.size > 2 * 1024 * 1024) {
+                                      toast({
+                                        title: "File too large",
+                                        description:
+                                          "Maximum allowed file size is 2MB.",
+                                        variant: "warning",
+                                      });
+                                      return;
+                                    }
+                                    await uploadSignedAgreement(dsa.id, file);
+                                    await fetchDsaDetail(dsa.id);
+                                  }
+                                }}
+                                type="file"
+                              />
+                              <label
+                                className={cn(
+                                  "inline-flex h-9 items-center justify-center gap-1.5 rounded-md px-3.5 text-xs font-semibold transition",
+                                  !isL7Approved || actionLoading
+                                    ? "opacity-50 cursor-not-allowed bg-slate-100 text-slate-400 border border-slate-200"
+                                    : "bg-emerald-600 text-white hover:bg-emerald-700 border border-emerald-600 cursor-pointer shadow-sm",
+                                )}
+                                htmlFor={
+                                  isL7Approved && !actionLoading
+                                    ? "internalSignedAgreementUpload"
+                                    : undefined
+                                }
+                                title={
+                                  !isL7Approved
+                                    ? "Upload disabled until final approval by L7 is completed."
+                                    : undefined
+                                }
                               >
-                                <td className="p-2.5 font-mono text-slate-600">
-                                  #{doc.document_id}
-                                </td>
-                                <td className="p-2.5 font-medium text-slate-800">
-                                  {doc.file_name}
-                                </td>
-                                <td className="p-2.5 text-slate-500">
-                                  {formatDate(doc.uploaded_at)}
-                                </td>
-                                <td className="p-2.5">
-                                  <span
-                                    className={cn(
-                                      "px-2 py-0.5 rounded-full text-[10px] font-bold border",
-                                      doc.status === "VERIFIED"
-                                        ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                                        : doc.status === "REJECTED"
-                                          ? "bg-rose-100 text-rose-800 border-rose-300"
-                                          : "bg-amber-100 text-amber-800 border-amber-300",
-                                    )}
-                                  >
-                                    {getDocDisplayStatus(doc.status)}
-                                  </span>
-                                </td>
-                                <td className="p-2.5 text-slate-600 max-w-xs truncate">
-                                  {doc.remarks || "—"}
-                                </td>
-                                <td className="p-2.5 text-right">
-                                  {doc.file_url && (
-                                    <a
-                                      href={doc.file_url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-blue-600 hover:underline font-semibold"
-                                    >
-                                      View
-                                    </a>
-                                  )}
-                                </td>
-                              </tr>
-                            ),
+                                <UploadCloud className="h-3.5 w-3.5" />
+                                {actionLoading
+                                  ? "Uploading..."
+                                  : "Upload Signed Physical Copy"}
+                              </label>
+                            </div>
                           )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
+
+                          {/* Approve Signed Agreement Button for Checker/L7 */}
+                          {(isCheckerUserOrLevel || isL7User) &&
+                            (signedAgreementDoc || isSignedAgreementUploaded) &&
+                            dsa?.agreement_status !== "SIGNED_VERIFIED" &&
+                            dsa?.operational_status !== "ACTIVE" && (
+                              <Button
+                                size="sm"
+                                type="button"
+                                onClick={() => setVerifyingAgreementAction("APPROVE")}
+                                className="h-9 text-xs font-semibold flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                              >
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                Approve Signed Agreement
+                              </Button>
+                            )}
+
+                          {/* Reject Signed Agreement Button for Checker/L7 */}
+                          {(isCheckerUserOrLevel || isL7User) &&
+                            (signedAgreementDoc || isSignedAgreementUploaded) &&
+                            dsa?.agreement_status !== "SIGNED_VERIFIED" &&
+                            dsa?.operational_status !== "ACTIVE" && (
+                              <Button
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                                onClick={() => setVerifyingAgreementAction("REJECT")}
+                                className="h-9 text-xs font-semibold flex items-center gap-1.5 text-rose-700 border-rose-300 hover:bg-rose-50"
+                              >
+                                <AlertCircle className="h-3.5 w-3.5" />
+                                Reject Agreement
+                              </Button>
+                            )}
+
+                          {!isL7Approved && (
+                            <span className="text-[11px] text-amber-700 font-medium">
+                              (Disabled until HO Credit Head L7 final approval)
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              );
+            })()
           ) : null}
           {tab === "performance" ? (
             <div className="space-y-5">
@@ -8967,8 +9198,8 @@ export function DsaProfilePage({ id }: { id: string }) {
           ) : null}
           {tab === "reports" ? (
             <div className="space-y-6">
-              {/* Checker Due Diligence Note & Observations Input Card (transferred from Actions tab) */}
-              {(canCheckerSubmitReport || isCheckerRole || isCheckerLevel || workflowLevelInfo.currentLevel === 2) && (
+              {/* Checker Due Diligence Note & Observations Input Card (only for Checker) */}
+              {isCheckerRole && !isMakerUser && (
                 <div className="space-y-3">
                   <div className="rounded-lg border border-slate-200 bg-white p-4">
                     <div className="flex items-center justify-between mb-2">
@@ -8991,36 +9222,25 @@ export function DsaProfilePage({ id }: { id: string }) {
                         Saved DD observations: &quot;{savedCheckerDdNote.observations.length > 80 ? `${savedCheckerDdNote.observations.slice(0, 80)}...` : savedCheckerDdNote.observations}&quot;
                       </p>
                     )}
-                    <div className="mt-2 flex flex-wrap justify-between items-center gap-2 text-[11px] text-slate-400">
+                    <div className="mt-2 flex flex-wrap justify-between items-center gap-2">
                       <div className="flex items-center gap-2">
                         <Button
                           type="button"
                           size="sm"
-                          variant="outline"
-                          disabled={checkerSavingNote || !checkerDdNote.trim()}
-                          onClick={handleSaveCheckerDdNote}
-                          className="h-7 text-xs px-3 font-medium"
+                          disabled={
+                            submittingCheckerReport ||
+                            (!checkerDdNote.trim() && !hasCheckerDdNote)
+                          }
+                          onClick={handleSubmitCheckerDdReport}
+                          className="h-8 text-xs px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-xs"
                         >
-                          {checkerSavingNote
-                            ? "Saving Draft..."
-                            : "Save DD Note Draft"}
+                          <Check className="h-3.5 w-3.5" />
+                          {submittingCheckerReport
+                            ? "Submitting..."
+                            : hasCheckerGeneratedReport
+                              ? "Re-submit DD Report"
+                              : "Submit Due Diligence Report"}
                         </Button>
-                        {canCheckerSubmitReport && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={submittingCheckerReport}
-                            onClick={handleSubmitCheckerDdReport}
-                            className="h-7 text-xs px-3 font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1 shadow-xs"
-                          >
-                            <Check className="h-3 w-3" />
-                            {submittingCheckerReport
-                              ? "Submitting..."
-                              : hasCheckerGeneratedReport
-                                ? "Submit DD Report (Re-submit)"
-                                : "Submit Due Diligence Report"}
-                          </Button>
-                        )}
                       </div>
                       {hasCheckerGeneratedReport && (
                         <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
@@ -9033,158 +9253,744 @@ export function DsaProfilePage({ id }: { id: string }) {
                 </div>
               )}
 
-              {/* Checker Due Diligence & Deviations Report (Level 2 through Level 7, Checker onwards) */}
-              {(canCheckerSubmitReport || isCheckerRole || isCheckerLevel || workflowLevelInfo.currentLevel >= 2) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Checker Due Diligence & Deviations Report Card */}
-                  <div className="rounded-xl border border-amber-200 bg-amber-50/30 p-4 shadow-sm flex flex-col justify-between">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-900">
-                          <ShieldCheck className="h-4 w-4 text-amber-600" />
-                          Due Diligence &amp; Deviations Report
-                        </span>
-                        <span
-                          className={cn(
-                            "text-[11px] font-bold px-2 py-0.5 rounded border",
-                            hasCheckerGeneratedReport
-                              ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                              : "bg-amber-100 text-amber-800 border-amber-300",
-                          )}
-                        >
-                          {hasCheckerGeneratedReport
-                            ? "Generated"
-                            : isCheckerRole
-                              ? "Pending Generation"
-                              : "Pending Checker"}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600 leading-relaxed">
-                        Consolidated Due Diligence Review and BRE Deviations Report.
-                        Assesses policy rules, statutory KYC verifications, and generates official PDF.
-                      </p>
-                    </div>
-
-                    <div className="mt-4 pt-3 border-t border-amber-200/60 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        {canCheckerSubmitReport ? (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              type="button"
-                              onClick={openDeviationReportModal}
-                              className="text-xs font-bold bg-white text-amber-900 border-amber-300 hover:bg-amber-50 flex items-center gap-1.5"
-                            >
-                              <Eye className="h-3.5 w-3.5 text-amber-600" />
-                              Inspect DDL &amp; Deviations
-                            </Button>
-                            <Button
-                              size="sm"
-                              type="button"
-                              disabled={submittingCheckerReport}
-                              onClick={handleSubmitCheckerDdReport}
-                              className="text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-xs"
-                            >
-                              <Check className="h-3.5 w-3.5" />
-                              {submittingCheckerReport
-                                ? "Submitting Report..."
-                                : hasCheckerGeneratedReport
-                                  ? "Submit Due Diligence Report (Re-submit)"
-                                  : "Submit Due Diligence Report"}
-                            </Button>
-                          </>
-                        ) : hasCheckerGeneratedReport ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            type="button"
-                            onClick={openDeviationReportModal}
-                            className="text-xs font-bold bg-white text-amber-900 border-amber-300 hover:bg-amber-50 flex items-center gap-1.5"
+              {/* Due Diligence & Deviations Report */}
+              {(canCheckerSubmitReport || isCheckerRole || isCheckerLevel || isMakerUser || workflowLevelInfo.currentLevel >= 2) && (
+                <div className="space-y-4">
+                  {/* Due Diligence & Deviations Report Inline */}
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
+                    {/* Header Bar with Title, Status, Toggle Buttons (DDL / Deviations), and Download/Submit */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-150">
+                      <div className="flex items-center gap-2.5">
+                        <ShieldCheck className="h-5 w-5 text-blue-600 shrink-0" />
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">
+                            Due Diligence &amp; Deviations Report
+                          </h3>
+                          <span
+                            className={cn(
+                              "text-[10px] font-bold px-2 py-0.5 rounded border",
+                              hasCheckerGeneratedReport
+                                ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                : "bg-amber-100 text-amber-800 border-amber-300",
+                            )}
                           >
-                            <Eye className="h-3.5 w-3.5 text-amber-600" />
-                            Review DDL &amp; Deviations in Modal
-                          </Button>
-                        ) : (
-                          <span className="text-[11px] text-amber-700 italic">
-                            Report will become visible once submitted by Checker.
+                            {hasCheckerGeneratedReport
+                              ? "Generated"
+                              : isCheckerRole
+                                ? "Pending Generation"
+                                : "Pending Checker"}
                           </span>
-                        )}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* Download Report (PDF) */}
                         {hasCheckerGeneratedReport && (
                           <Button
                             size="sm"
                             variant="outline"
                             type="button"
                             onClick={handleDownloadDeviationReport}
-                            className="text-xs font-semibold bg-white text-slate-700 border-slate-300 hover:bg-slate-50 flex items-center gap-1.5"
+                            className="text-xs font-semibold bg-white text-slate-700 border-slate-300 hover:bg-slate-50 flex items-center gap-1.5 h-8"
                           >
                             <Download className="h-3.5 w-3.5 text-blue-600" />
                             Download Report (PDF)
                           </Button>
                         )}
-                      </div>
-                      {canCheckerSubmitReport && !hasCheckerDdNote && (
-                        <p className="text-[11px] text-amber-700 font-medium">
-                          Due diligence notes must be entered before submitting the report.
-                        </p>
-                      )}
-                    </div>
-                  </div>
 
-                  {/* Checker Due Diligence Note Card */}
-                  <div className="rounded-xl border border-blue-200 bg-blue-50/30 p-4 shadow-sm flex flex-col justify-between">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-900">
-                          <ClipboardList className="h-4 w-4 text-blue-600" />
-                          Checker Due Diligence (DD) Note
-                        </span>
-                        <span className="text-[11px] font-bold px-2 py-0.5 rounded border bg-blue-100 text-blue-800 border-blue-300">
-                          Checker Review
-                        </span>
+                        {/* Submit Due Diligence Report for Checker */}
+                        {canCheckerSubmitReport && (
+                          <Button
+                            size="sm"
+                            type="button"
+                            disabled={submittingCheckerReport}
+                            onClick={handleSubmitCheckerDdReport}
+                            className="text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-xs h-8"
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                            {submittingCheckerReport
+                              ? "Submitting..."
+                              : hasCheckerGeneratedReport
+                                ? "Re-submit DD Report"
+                                : "Submit Due Diligence Report"}
+                          </Button>
+                        )}
                       </div>
-                      <p className="text-xs text-slate-600 leading-relaxed">
-                        Formal due diligence review note submitted by Checker,
-                        detailing business premises investigation,
-                        telephonic verification, and sanction recommendations.
-                      </p>
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-blue-200/60 flex flex-wrap items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        type="button"
-                        onClick={openDdNoteModal}
-                        className="text-xs font-bold bg-white text-blue-900 border-blue-300 hover:bg-blue-50 flex items-center gap-1.5"
-                      >
-                        <Eye className="h-3.5 w-3.5 text-blue-600" />
-                        View DD Note in Modal
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        type="button"
-                        onClick={handleDownloadDdNote}
-                        className="text-xs font-semibold bg-white text-slate-700 border-slate-300 hover:bg-slate-50 flex items-center gap-1.5"
-                      >
-                        <Download className="h-3.5 w-3.5 text-blue-600" />
-                        Download DD Note
-                      </Button>
-                    </div>
+                    {/* Report Content Body */}
+                    {loadingDeviationReport && !deviationReportData ? (
+                      <div className="flex items-center justify-center py-10">
+                        <Loader2 className="h-5 w-5 animate-spin text-blue-600 mr-2" />
+                        <span className="text-xs text-slate-600 font-medium">
+                          Fetching due diligence and deviation evaluation report...
+                        </span>
+                      </div>
+                    ) : !hasCheckerGeneratedReport && isMakerUser ? (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4 text-xs text-amber-800">
+                        Due Diligence &amp; Deviations report will become viewable once Checker generates and submits the report.
+                      </div>
+                    ) : (
+                      (() => {
+                        const rep = deviationReportData;
+                        const isEntity =
+                          dsa?.dsa_type === "ENTITY" ||
+                          rep?.metadata?.is_entity ||
+                          rep?.dsa_type === "ENTITY" ||
+                          Boolean(dsa?.entity_name);
+
+                        const basicInfo = rep?.basic_information || (rep as any)?.basicInformation || {};
+                        const finDd = rep?.financial_due_diligence || (rep as any)?.financialDueDiligence || {};
+                        const bgRep = rep?.background_reputational_verification || (rep as any)?.backgroundReputationalVerification || {};
+                        const policyEval = rep?.policy_evaluation || rep?.bre_evaluation || (rep as any)?.policyEvaluation || (rep as any)?.breEvaluation || {};
+                        const allRules: any[] = policyEval?.rules?.length
+                          ? policyEval.rules
+                          : (rep?.deviation_details?.length ? rep.deviation_details : (rep?.bre_evaluation?.rules || []));
+
+                        const deviationRules = allRules.filter((r: any) => {
+                          const dec = String(r.decision || r.status || "").toUpperCase();
+                          return dec === "DEVIATION" || Boolean(r.is_deviation);
+                        });
+
+                        const nonDeviationRules = allRules.filter((r: any) => {
+                          const dec = String(r.decision || r.status || "").toUpperCase();
+                          return dec !== "DEVIATION" && !r.is_deviation;
+                        });
+
+                        const note =
+                          rep?.dd_note ||
+                          savedCheckerDdNote ||
+                          dsa?.latest_due_diligence_note ||
+                          dsa?.due_diligence_notes?.[0] ||
+                          (dsa as any)?.dueDiligenceNotes?.[0];
+
+                        const makerHist =
+                          rep?.recommendation_approval_history?.maker ||
+                          (rep as any)?.recommendationApprovalHistory?.maker;
+
+                        const checkerRemarks =
+                          rep?.checker_remarks ||
+                          (rep as any)?.checkerRemarks ||
+                          {};
+
+                        const l3Hist =
+                          rep?.recommendation_approval_history?.first_recommending_authority ||
+                          (rep as any)?.recommendationApprovalHistory?.first_recommending_authority;
+
+                        const l4Hist =
+                          rep?.recommendation_approval_history?.second_recommending_authority ||
+                          (rep as any)?.recommendationApprovalHistory?.second_recommending_authority;
+
+                        const l5Hist =
+                          rep?.recommendation_approval_history?.third_recommending_authority ||
+                          (rep as any)?.recommendationApprovalHistory?.third_recommending_authority;
+
+                        const l6Hist =
+                          rep?.recommendation_approval_history?.fourth_recommending_authority ||
+                          (rep as any)?.recommendationApprovalHistory?.fourth_recommending_authority;
+
+                        const l7Hist =
+                          rep?.recommendation_approval_history?.approving_authority ||
+                          (rep as any)?.recommendationApprovalHistory?.approving_authority;
+
+                        const postL7Hist =
+                          rep?.recommendation_approval_history?.post_l7_checker_approval ||
+                          (rep as any)?.recommendationApprovalHistory?.post_l7_checker_approval;
+
+                        const dsaBranchName =
+                          basicInfo.regions_to_assign ||
+                          basicInfo.branches_to_assign ||
+                          rep?.branch_name ||
+                          dsa?.branch?.branch_name ||
+                          dsa?.branch_name ||
+                          "Main Branch";
+
+                        const dsaAppCode =
+                          (typeof rep?.dsa_code === "object" ? rep?.dsa_code?.code : rep?.dsa_code) ||
+                          (typeof (rep as any)?.dsaCode === "object" ? (rep as any)?.dsaCode?.code : (rep as any)?.dsaCode) ||
+                          (typeof dsa?.dsa_code === "object" ? dsa?.dsa_code?.code : dsa?.dsa_code) ||
+                          dsa?.code ||
+                          `DSA-${dsa?.id || "N/A"}`;
+
+                        const reportDate = rep?.generated_at
+                          ? formatDate(rep.generated_at)
+                          : formatDate(new Date().toISOString());
+
+                        return (
+                          <div className="rounded-xl border border-slate-300 bg-white p-5 shadow-xs space-y-5 text-slate-800 font-sans">
+                            {/* Report Header Title */}
+                            <div className="text-center pb-2 border-b-2 border-slate-900">
+                              <h2 className="text-sm sm:text-base font-bold uppercase tracking-wider text-slate-900">
+                                Due Diligence Report For DSA Onboarding
+                              </h2>
+                              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-0.5">
+                                ({isEntity ? "Entity" : "Individual"})
+                              </p>
+                            </div>
+
+                            {/* Application Metadata Top Bar */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 text-xs gap-y-1.5 text-slate-700 font-medium pb-1">
+                              <div>
+                                <span className="font-bold text-slate-900">Branch:</span> {dsaBranchName}
+                              </div>
+                              <div className="sm:text-right">
+                                <span className="font-bold text-slate-900">Application Ref / Code:</span>{" "}
+                                <span className="font-mono font-semibold">{dsaAppCode}</span>
+                              </div>
+                              <div>
+                                <span className="font-bold text-slate-900">Report Generated Date:</span> {reportDate}
+                              </div>
+                              <div className="sm:text-right">
+                                <span className="font-bold text-slate-900">DSA Type:</span>{" "}
+                                <span className="font-bold text-slate-900">{isEntity ? "ENTITY" : "INDIVIDUAL"}</span>
+                              </div>
+                            </div>
+
+                            {/* SECTION 1: Basic Information */}
+                            <div>
+                              <div className="bg-[#0f172a] text-white px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-t">
+                                SECTION 1: Basic Information
+                              </div>
+                              <div className="overflow-x-auto">
+                                <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
+                                  <tbody>
+                                    <tr>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        {isEntity ? "Applicant Name (Entity):" : "Name of DSA:"}
+                                      </td>
+                                      <td colSpan={3} className="bg-white border border-slate-300 p-2 font-bold text-slate-900">
+                                        {basicInfo.applicant_name || basicInfo.name_of_dsa || dsa?.name || dsa?.entity_name || "N/A"}
+                                      </td>
+                                    </tr>
+                                    <tr>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        Constitution:
+                                      </td>
+                                      <td className="w-[22%] bg-white border border-slate-300 p-2 text-slate-900">
+                                        {basicInfo.constitution || (isEntity ? "Private Limited" : "Individual")}
+                                      </td>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        {isEntity ? "Date of Establishment:" : "Date of Birth:"}
+                                      </td>
+                                      <td className="w-[22%] bg-white border border-slate-300 p-2 text-slate-900">
+                                        {basicInfo.date_of_birth || basicInfo.date_of_establishment || dsa?.dob || "N/A"}
+                                      </td>
+                                    </tr>
+                                    <tr>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        {isEntity ? "Registered Office Address:" : "Residence Address:"}
+                                      </td>
+                                      <td colSpan={3} className="bg-white border border-slate-300 p-2 text-slate-900">
+                                        {basicInfo.residence_address || basicInfo.registered_office_address || dsa?.address || "N/A"}
+                                      </td>
+                                    </tr>
+                                    <tr>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        {isEntity ? "Branch Office Address:" : "Business / Office Address:"}
+                                      </td>
+                                      <td colSpan={3} className="bg-white border border-slate-300 p-2 text-slate-900">
+                                        {basicInfo.business_office_address || basicInfo.branch_office_address || basicInfo.residence_address || dsa?.address || "N/A"}
+                                      </td>
+                                    </tr>
+                                    <tr>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        Ownership:
+                                      </td>
+                                      <td className="w-[22%] bg-white border border-slate-300 p-2 text-slate-900">
+                                        {basicInfo.ownership || "Owned"}
+                                      </td>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        {isEntity ? "Promoter / Key Person:" : "Contact Number:"}
+                                      </td>
+                                      <td className="w-[22%] bg-white border border-slate-300 p-2 text-slate-900">
+                                        {isEntity
+                                          ? (basicInfo.promoter_key_person || dsa?.contact_person || "N/A")
+                                          : (basicInfo.contact_number || dsa?.mobile || "N/A")}
+                                      </td>
+                                    </tr>
+                                    <tr>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        {isEntity ? "Office Contact Number:" : "Mail ID:"}
+                                      </td>
+                                      <td className="w-[22%] bg-white border border-slate-300 p-2 text-slate-900">
+                                        {isEntity
+                                          ? (basicInfo.office_contact_number || dsa?.mobile || "N/A")
+                                          : (basicInfo.email || dsa?.email || "N/A")}
+                                      </td>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        {isEntity ? "Office Mail ID:" : "PAN:"}
+                                      </td>
+                                      <td className="w-[22%] bg-white border border-slate-300 p-2 text-slate-900">
+                                        {isEntity
+                                          ? (basicInfo.office_email || dsa?.email || "N/A")
+                                          : (basicInfo.pan || dsa?.pan || "N/A")}
+                                      </td>
+                                    </tr>
+                                    <tr>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        {isEntity ? "PAN:" : "Aadhaar:"}
+                                      </td>
+                                      <td className="w-[22%] bg-white border border-slate-300 p-2 text-slate-900">
+                                        {isEntity
+                                          ? (basicInfo.pan || dsa?.pan || "N/A")
+                                          : (basicInfo.aadhaar || dsa?.aadhaar || "N/A")}
+                                      </td>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        Business License Type:
+                                      </td>
+                                      <td className="w-[22%] bg-white border border-slate-300 p-2 text-slate-900">
+                                        {basicInfo.business_license_type || "N/A"}
+                                      </td>
+                                    </tr>
+                                    <tr>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        Business License Number:
+                                      </td>
+                                      <td className="w-[22%] bg-white border border-slate-300 p-2 text-slate-900 font-mono">
+                                        {basicInfo.business_license_number || "N/A"}
+                                      </td>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        {isEntity ? "Branches to Assign:" : "Regions / Branch to Assign:"}
+                                      </td>
+                                      <td className="w-[22%] bg-white border border-slate-300 p-2 text-slate-900">
+                                        {basicInfo.regions_to_assign || basicInfo.branches_to_assign || dsaBranchName}
+                                      </td>
+                                    </tr>
+                                    <tr>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        Expected Monthly Business Commitment:
+                                      </td>
+                                      <td colSpan={3} className="bg-white border border-slate-300 p-2 text-slate-900 font-medium">
+                                        {basicInfo.expected_monthly_business_commitment || (isEntity ? "25 Lakhs" : "10 Lakhs")}
+                                      </td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+
+                            {/* SECTION 2: Financial Due Diligence */}
+                            <div>
+                              <div className="bg-[#0f172a] text-white px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-t">
+                                SECTION 2: Financial Due Diligence
+                              </div>
+                              <div className="overflow-x-auto">
+                                <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
+                                  <tbody>
+                                    <tr>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        Income Tax Returns Submitted:
+                                      </td>
+                                      <td className="w-[22%] bg-white border border-slate-300 p-2 text-slate-900">
+                                        {finDd.itr_submitted ?? (finDd.income_tax_returns_submitted ?? "No")}
+                                      </td>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        Income Details for FY:
+                                      </td>
+                                      <td className="w-[22%] bg-white border border-slate-300 p-2 text-slate-900">
+                                        {finDd.income_details_fy || "Last 2 FY"}
+                                      </td>
+                                    </tr>
+                                    <tr>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        Net Sales / Revenue:
+                                      </td>
+                                      <td className="w-[22%] bg-white border border-slate-300 p-2 text-slate-900 font-medium">
+                                        {finDd.net_sales_revenue || "N/A"}
+                                      </td>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        Net Profit After Tax:
+                                      </td>
+                                      <td className="w-[22%] bg-white border border-slate-300 p-2 text-slate-900 font-medium">
+                                        {finDd.net_profit_after_tax || "N/A"}
+                                      </td>
+                                    </tr>
+                                    <tr>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        {isEntity ? "CIBIL Commercial / Rank:" : "CIBIL Score:"}
+                                      </td>
+                                      <td className="w-[22%] bg-white border border-slate-300 p-2 text-slate-900 font-semibold">
+                                        {finDd.cibil_score || finDd.cibil_cmr || "N/A"}
+                                      </td>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        Existing Banking Relationship:
+                                      </td>
+                                      <td className="w-[22%] bg-white border border-slate-300 p-2 text-slate-900">
+                                        {finDd.existing_banking_relationship || "N/A"}
+                                      </td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+
+                            {/* SECTION 3: Background and Reputational Verification */}
+                            <div>
+                              <div className="bg-[#0f172a] text-white px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-t">
+                                SECTION 3: Background and Reputational Verification
+                              </div>
+                              <div className="overflow-x-auto">
+                                <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
+                                  <tbody>
+                                    <tr>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        PAN Verification:
+                                      </td>
+                                      <td className="w-[22%] bg-white border border-slate-300 p-2 font-semibold">
+                                        <span className={cn(
+                                          "px-2 py-0.5 rounded text-[11px] font-bold border inline-block",
+                                          String(bgRep.pan_verification || "").toUpperCase().includes("VERIF")
+                                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                            : "bg-slate-100 text-slate-600 border-slate-200"
+                                        )}>
+                                          {bgRep.pan_verification || "NOT_TRIGGERED"}
+                                        </span>
+                                      </td>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        GST Verification:
+                                      </td>
+                                      <td className="w-[22%] bg-white border border-slate-300 p-2 font-semibold">
+                                        <span className={cn(
+                                          "px-2 py-0.5 rounded text-[11px] font-bold border inline-block",
+                                          String(bgRep.gst_verification || "").toUpperCase().includes("VERIF")
+                                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                            : "bg-slate-100 text-slate-600 border-slate-200"
+                                        )}>
+                                          {bgRep.gst_verification || "NOT_TRIGGERED"}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                    <tr>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        Udyam Verification:
+                                      </td>
+                                      <td className="w-[22%] bg-white border border-slate-300 p-2 font-semibold">
+                                        <span className={cn(
+                                          "px-2 py-0.5 rounded text-[11px] font-bold border inline-block",
+                                          String(bgRep.udyam_verification || "").toUpperCase().includes("VERIF")
+                                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                            : "bg-slate-100 text-slate-600 border-slate-200"
+                                        )}>
+                                          {bgRep.udyam_verification || "NOT_TRIGGERED"}
+                                        </span>
+                                      </td>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        Business Premises Verification:
+                                      </td>
+                                      <td className="w-[22%] bg-white border border-slate-300 p-2 text-slate-900 font-medium">
+                                        <span className="px-2 py-0.5 rounded text-[11px] font-bold border bg-emerald-50 text-emerald-700 border-emerald-200 inline-block">
+                                          {bgRep.business_premises_verification || (isVisitReportUploaded ? "VERIFIED (Visit Report Attached)" : "VERIFIED")}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                    <tr>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        IBA Caution List / Negative List:
+                                      </td>
+                                      <td className="w-[22%] bg-white border border-slate-300 p-2 text-slate-900">
+                                        <span className="px-2 py-0.5 rounded text-[11px] font-bold border bg-emerald-50 text-emerald-700 border-emerald-200 inline-block">
+                                          {bgRep.iba_caution_negative_list || "CLEAR (Not in caution list)"}
+                                        </span>
+                                      </td>
+                                      <td className="w-[28%] bg-slate-50 border border-slate-300 p-2 font-bold text-slate-700">
+                                        AML Compass Match %:
+                                      </td>
+                                      <td className="w-[22%] bg-white border border-slate-300 p-2 text-slate-900">
+                                        <span className="px-2 py-0.5 rounded text-[11px] font-bold border bg-emerald-50 text-emerald-700 border-emerald-200 inline-block">
+                                          {bgRep.compass_matching_percentage || "0% (Clear)"}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+
+                            {/* SECTION 4: Policy Evaluation & Deviation Details (System Generated) */}
+                            <div>
+                              <div className="bg-[#0f172a] text-white px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-t">
+                                SECTION 4: Policy Evaluation &amp; Deviation Details (System Generated)
+                              </div>
+
+                              {/* Alert Summary Box */}
+                              <div className="border-x border-b border-slate-300 p-2.5">
+                                {deviationRules.length > 0 ? (
+                                  <div className="rounded border border-amber-300 bg-amber-50/80 p-2.5 text-xs font-bold text-amber-900">
+                                    Policy Deviations Detected ({deviationRules.length}): Higher-level discretionary approval required.
+                                  </div>
+                                ) : (
+                                  <div className="rounded border border-emerald-200 bg-emerald-50/80 p-2.5 text-xs font-bold text-emerald-800">
+                                    No policy deviations recorded. All parameters meet standard {isEntity ? "entity" : "individual"} onboarding criteria.
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Policy Rules Assessment Table */}
+                              {(deviationRules.length > 0 || nonDeviationRules.length > 0) ? (
+                                <div className="overflow-x-auto">
+                                  <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
+                                    <thead>
+                                      <tr className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300 text-left">
+                                        <th className="w-[22%] border border-slate-300 p-2">Parameter</th>
+                                        <th className="w-[24%] border border-slate-300 p-2">Policy Requirement</th>
+                                        <th className="w-[18%] border border-slate-300 p-2">Actual Value</th>
+                                        <th className="w-[24%] border border-slate-300 p-2">Evaluation Remarks / Trigger</th>
+                                        <th className="w-[12%] border border-slate-300 p-2 text-center">Decision</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {/* Subheader 1: Deviations Flagged */}
+                                      {deviationRules.length > 0 && (
+                                        <>
+                                          <tr className="bg-amber-100/90 text-amber-950 font-bold border border-slate-300">
+                                            <td colSpan={5} className="p-2 border border-slate-300 text-amber-900">
+                                              Deviations Flagged (Discretionary Approval Required)
+                                            </td>
+                                          </tr>
+                                          {deviationRules.map((dev: any, idx: number) => (
+                                            <tr key={idx} className="bg-white hover:bg-slate-50">
+                                              <td className="border border-slate-300 p-2 font-bold text-slate-900">
+                                                {dev.parameter || dev.rule_name || dev.rule_code || "N/A"}
+                                              </td>
+                                              <td className="border border-slate-300 p-2 text-slate-700">
+                                                {dev.policy || dev.expected_value || "Standard Criteria"}
+                                              </td>
+                                              <td className="border border-slate-300 p-2 font-mono text-slate-900 font-semibold">
+                                                {dev.actual_value !== undefined && dev.actual_value !== null ? String(dev.actual_value) : "N/A"}
+                                              </td>
+                                              <td className="border border-slate-300 p-2 text-slate-700">
+                                                {dev.deviation_trigger || dev.remarks || "Deviation Flagged"}
+                                              </td>
+                                              <td className="border border-slate-300 p-2 text-center">
+                                                <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold border border-amber-300 bg-amber-100 text-amber-800 uppercase">
+                                                  {dev.decision || "DEVIATION"}
+                                                </span>
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </>
+                                      )}
+
+                                      {/* Subheader 2: Compliant Parameters */}
+                                      {nonDeviationRules.length > 0 && (
+                                        <>
+                                          <tr className="bg-emerald-50 text-emerald-950 font-bold border border-slate-300">
+                                            <td colSpan={5} className="p-2 border border-slate-300 text-emerald-800">
+                                              Compliant Parameters (Non-Deviations Meeting Policy Standards)
+                                            </td>
+                                          </tr>
+                                          {nonDeviationRules.map((pass: any, idx: number) => {
+                                            const dec = String(pass.decision || pass.status || "PASS").toUpperCase();
+                                            const isUnavailable = dec === "UNAVAILABLE" || String(pass.actual_value || "").toUpperCase() === "N/A" && dec !== "PASS";
+                                            return (
+                                              <tr key={idx} className="bg-white hover:bg-slate-50">
+                                                <td className="border border-slate-300 p-2 font-bold text-slate-900">
+                                                  {pass.parameter || pass.rule_name || pass.rule_code || "N/A"}
+                                                </td>
+                                                <td className="border border-slate-300 p-2 text-slate-700">
+                                                  {pass.policy || pass.expected_value || "Standard Criteria"}
+                                                </td>
+                                                <td className="border border-slate-300 p-2 font-mono text-slate-900">
+                                                  {pass.actual_value !== undefined && pass.actual_value !== null ? String(pass.actual_value) : "N/A"}
+                                                </td>
+                                                <td className="border border-slate-300 p-2 text-slate-700">
+                                                  {pass.remarks || "Compliant with standard criteria"}
+                                                </td>
+                                                <td className="border border-slate-300 p-2 text-center">
+                                                  <span
+                                                    className={cn(
+                                                      "inline-block px-2 py-0.5 rounded text-[10px] font-bold border uppercase",
+                                                      isUnavailable
+                                                        ? "bg-slate-100 text-slate-700 border-slate-300"
+                                                        : "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                                    )}
+                                                  >
+                                                    {pass.decision || "PASS"}
+                                                  </span>
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </>
+                                      )}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              ) : (
+                                <div className="border border-t-0 border-slate-300 p-4 text-center text-xs text-slate-500">
+                                  No policy rule records available.
+                                </div>
+                              )}
+                            </div>
+
+                            {/* SECTION 5: Maker & Checker Remarks */}
+                            <div>
+                              <div className="bg-[#0f172a] text-white px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-t">
+                                SECTION 5: Maker &amp; Checker Remarks
+                              </div>
+                              <div className="border border-t-0 border-slate-300 p-3 space-y-3 rounded-b bg-slate-50/40">
+                                {/* Maker (Level 1) */}
+                                <div className="rounded border border-slate-200 bg-white p-3 space-y-1.5 text-xs">
+                                  <div className="font-bold text-slate-900 border-b border-slate-100 pb-1">
+                                    Maker Application Submission &amp; Verification (Level 1)
+                                  </div>
+                                  <p className="text-slate-700 whitespace-pre-wrap leading-relaxed italic">
+                                    {getCleanRemark(makerHist?.remarks) || getCleanRemark((rep as any)?.maker_remarks?.remarks) || "Application submitted with verified primary documents."}
+                                  </p>
+                                  <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-100 flex flex-wrap gap-x-3">
+                                    <span><strong>Name:</strong> {makerHist?.name || (rep as any)?.maker_remarks?.name || dsa?.maker_user?.name || "Maker User"}</span>
+                                    <span><strong>Designation:</strong> {makerHist?.designation || (rep as any)?.maker_remarks?.designation || "Maker / Branch Staff"}</span>
+                                    <span><strong>Date:</strong> {makerHist?.date ? formatDate(makerHist.date) : ((rep as any)?.maker_remarks?.date || "N/A")}</span>
+                                  </div>
+                                </div>
+
+                                {/* Checker (Level 2) */}
+                                <div className="rounded border border-slate-200 bg-white p-3 space-y-2 text-xs">
+                                  <div className="font-bold text-slate-900 border-b border-slate-100 pb-1">
+                                    Due Diligence Review by Sub-Region Staff (Level 2)
+                                  </div>
+                                  {getCleanRemark(checkerRemarks.observations || note?.observations || checkerDdNote) && (
+                                    <div>
+                                      <strong className="text-slate-800 text-[11px] block mb-0.5">Due Diligence (DD) Note &amp; Observations:</strong>
+                                      <p className="text-slate-700 whitespace-pre-wrap leading-relaxed pl-1">
+                                        {getCleanRemark(checkerRemarks.observations || note?.observations || checkerDdNote)}
+                                      </p>
+                                    </div>
+                                  )}
+                                  {getCleanRemark(checkerRemarks.remarks || note?.remarks) && (
+                                    <div>
+                                      <strong className="text-slate-800 text-[11px] block mb-0.5">Workflow Recommendation Remarks:</strong>
+                                      <p className="text-slate-700 whitespace-pre-wrap leading-relaxed pl-1">
+                                        {getCleanRemark(checkerRemarks.remarks || note?.remarks)}
+                                      </p>
+                                    </div>
+                                  )}
+                                  {getCleanRemark(checkerRemarks.exception_remarks || note?.exception_remarks) && (
+                                    <div className="rounded border border-amber-200 bg-amber-50/60 p-2">
+                                      <strong className="text-amber-900 text-[11px] block mb-0.5">Exception / Deviation Justifications:</strong>
+                                      <p className="text-amber-800 whitespace-pre-wrap leading-relaxed">
+                                        {getCleanRemark(checkerRemarks.exception_remarks || note?.exception_remarks)}
+                                      </p>
+                                    </div>
+                                  )}
+                                  <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-100 flex flex-wrap gap-x-3">
+                                    <span><strong>Name:</strong> {checkerRemarks.name || note?.checker_name || "Checker User"}</span>
+                                    <span><strong>Designation:</strong> {checkerRemarks.designation || "Sub-Region Staff"}</span>
+                                    <span><strong>Date:</strong> {checkerRemarks.date ? formatDate(checkerRemarks.date) : (note?.submitted_at ? formatDate(note.submitted_at) : "N/A")}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Additional Workflow History Sections (Levels 3 to 7) if present */}
+                            {l3Hist && (
+                              <div>
+                                <div className="bg-[#0f172a] text-white px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-t">
+                                  SECTION 6: 1st Recommending Authority Remarks
+                                </div>
+                                <div className="border border-t-0 border-slate-300 p-3 rounded-b bg-white space-y-1.5 text-xs">
+                                  <div className="font-bold text-slate-900">{l3Hist.designation || "Sub-Region Head"} (Level 3)</div>
+                                  <p className="text-slate-700 italic">{getCleanRemark(l3Hist.remarks) || "Recommended."}</p>
+                                  <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-100 flex flex-wrap gap-x-3">
+                                    <span><strong>Name:</strong> {l3Hist.name || "N/A"}</span>
+                                    <span><strong>Designation:</strong> {l3Hist.designation || "Sub-Region Head"}</span>
+                                    <span><strong>Date:</strong> {l3Hist.date ? formatDate(l3Hist.date) : "N/A"}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {l4Hist && (
+                              <div>
+                                <div className="bg-[#0f172a] text-white px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-t">
+                                  SECTION 7: 2nd Recommending Authority Remarks
+                                </div>
+                                <div className="border border-t-0 border-slate-300 p-3 rounded-b bg-white space-y-1.5 text-xs">
+                                  <div className="font-bold text-slate-900">{l4Hist.designation || "Deputy General Manager"} (Level 4 - Deviation / Conditional)</div>
+                                  <p className="text-slate-700 italic">{getCleanRemark(l4Hist.remarks) || "Recommended."}</p>
+                                  <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-100 flex flex-wrap gap-x-3">
+                                    <span><strong>Name:</strong> {l4Hist.name || "N/A"}</span>
+                                    <span><strong>Designation:</strong> {l4Hist.designation || "Deputy General Manager"}</span>
+                                    <span><strong>Date:</strong> {l4Hist.date ? formatDate(l4Hist.date) : "N/A"}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {l5Hist && (
+                              <div>
+                                <div className="bg-[#0f172a] text-white px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-t">
+                                  SECTION 8: 3rd Recommending Authority Remarks
+                                </div>
+                                <div className="border border-t-0 border-slate-300 p-3 rounded-b bg-white space-y-1.5 text-xs">
+                                  <div className="font-bold text-slate-900">{l5Hist.designation || "Region Head"} (Level 5)</div>
+                                  <p className="text-slate-700 italic">{getCleanRemark(l5Hist.remarks) || "Recommended."}</p>
+                                  <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-100 flex flex-wrap gap-x-3">
+                                    <span><strong>Name:</strong> {l5Hist.name || "N/A"}</span>
+                                    <span><strong>Designation:</strong> {l5Hist.designation || "Region Head"}</span>
+                                    <span><strong>Date:</strong> {l5Hist.date ? formatDate(l5Hist.date) : "N/A"}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {l6Hist && (
+                              <div>
+                                <div className="bg-[#0f172a] text-white px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-t">
+                                  SECTION 9: 4th Recommending Authority Remarks
+                                </div>
+                                <div className="border border-t-0 border-slate-300 p-3 rounded-b bg-white space-y-1.5 text-xs">
+                                  <div className="font-bold text-slate-900">{l6Hist.designation || "HO Credit Officer"} (Level 6)</div>
+                                  <p className="text-slate-700 italic">{getCleanRemark(l6Hist.remarks) || "Recommended."}</p>
+                                  <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-100 flex flex-wrap gap-x-3">
+                                    <span><strong>Name:</strong> {l6Hist.name || "N/A"}</span>
+                                    <span><strong>Designation:</strong> {l6Hist.designation || "HO Credit Officer"}</span>
+                                    <span><strong>Date:</strong> {l6Hist.date ? formatDate(l6Hist.date) : "N/A"}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {l7Hist && (
+                              <div>
+                                <div className="bg-[#0f172a] text-white px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-t">
+                                  SECTION 10: Approving Authority Remarks
+                                </div>
+                                <div className="border border-t-0 border-slate-300 p-3 rounded-b bg-white space-y-1.5 text-xs">
+                                  <div className="font-bold text-slate-900">{l7Hist.designation || "HO Credit Head"} (Level 7)</div>
+                                  <p className="text-slate-700 italic">{getCleanRemark(l7Hist.remarks) || "Approved."}</p>
+                                  <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-100 flex flex-wrap gap-x-3">
+                                    <span><strong>Name:</strong> {l7Hist.name || "N/A"}</span>
+                                    <span><strong>Designation:</strong> {l7Hist.designation || "HO Credit Head"}</span>
+                                    <span><strong>Date:</strong> {l7Hist.date ? formatDate(l7Hist.date) : "N/A"}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {postL7Hist && (
+                              <div>
+                                <div className="bg-[#0f172a] text-white px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-t">
+                                  Final Onboarding Approval
+                                </div>
+                                <div className="border border-t-0 border-slate-300 p-3 rounded-b bg-white space-y-1.5 text-xs">
+                                  <div className="font-bold text-slate-900">{postL7Hist.designation || "Branch Checker"}</div>
+                                  <p className="text-slate-700 italic">{getCleanRemark(postL7Hist.remarks) || "Approved."}</p>
+                                  <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-100 flex flex-wrap gap-x-3">
+                                    <span><strong>Name:</strong> {postL7Hist.name || "N/A"}</span>
+                                    <span><strong>Designation:</strong> {postL7Hist.designation || "Branch Checker"}</span>
+                                    <span><strong>Date:</strong> {postL7Hist.date ? formatDate(postL7Hist.date) : "N/A"}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()
+                    )}
                   </div>
                 </div>
               )}
-
-              {isMakerUser && !canCheckerSubmitReport && !isCheckerRole && (
-                <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-slate-500">
-                  <FileText className="mx-auto h-8 w-8 text-slate-400 mb-2" />
-                  <p className="font-semibold text-sm text-slate-700">No Reports Available for Maker</p>
-                  <p className="text-xs text-slate-500 mt-1">Due Diligence and Review Reports are generated and reviewed during subsequent Checker and Credit approval stages.</p>
-                </div>
-              )}
-
-              <DsaRecoveryReports dsaId={String(dsa.id)} />
             </div>
           ) : null}
           {tab === "actions" ? (
@@ -9291,7 +10097,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                           </p>
                           <p className="text-slate-500 text-[11px]">
                             {isVerificationAttempted(makerPanCheck.code)
-                              ? "Executed on submit"
+                              ? "Verified via onboarding"
                               : "Triggers on Checker submission"}
                           </p>
                         </div>
@@ -9300,174 +10106,6 @@ export function DsaProfilePage({ id }: { id: string }) {
                   </div>
                 )}
 
-                {/* Level 2 Checker Readiness & Due Diligence Note */}
-                {(isCheckerLevel || workflowLevelInfo.currentLevel === 2 || isCheckerRole) && (
-                  <div className="mt-4 space-y-4">
-                    {/* Checker Verification Readiness Checklist - 5 Criteria */}
-                    <div className="rounded-lg border border-slate-200 bg-white p-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
-                        {/* 1. Partner Documents */}
-                        <div className="flex items-center gap-2 p-2.5 rounded-md bg-slate-50 border border-slate-100">
-                          <span
-                            className={cn(
-                              "h-2 w-2 rounded-full shrink-0",
-                              !hasUnverifiedApplicantDocs && applicantReviewDocs.length > 0
-                                ? "bg-emerald-500"
-                                : "bg-rose-500",
-                            )}
-                          />
-                          <div>
-                            <p className="font-semibold text-slate-900">
-                              Partner Documents
-                            </p>
-                            <p
-                              className={cn(
-                                "text-[11px]",
-                                !hasUnverifiedApplicantDocs && applicantReviewDocs.length > 0
-                                  ? "text-emerald-700 font-medium"
-                                  : "text-rose-600 font-semibold",
-                              )}
-                            >
-                              {!hasUnverifiedApplicantDocs && applicantReviewDocs.length > 0
-                                ? "All documents verified"
-                                : `${applicantVerifiedDocsCount} / ${applicantReviewDocs.length} checked`}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* 2. Statutory Verifications */}
-                        <div className="flex items-center gap-2 p-2.5 rounded-md bg-slate-50 border border-slate-100">
-                          <span
-                            className={cn(
-                              "h-2 w-2 rounded-full shrink-0",
-                              areAllCheckerVerificationsDone
-                                ? "bg-emerald-500"
-                                : "bg-amber-500",
-                            )}
-                          />
-                          <div>
-                            <p className="font-semibold text-slate-900">
-                              Statutory Checks
-                            </p>
-                            <p className="text-slate-500 text-[11px]">
-                              {areAllCheckerVerificationsDone
-                                ? "All checks attempted"
-                                : "Checks pending"}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* 3. Physical Visit Report */}
-                        <div className="flex items-center gap-2 p-2.5 rounded-md bg-slate-50 border border-slate-100">
-                          <span
-                            className={cn(
-                              "h-2 w-2 rounded-full shrink-0",
-                              isVisitReportUploaded
-                                ? "bg-emerald-500"
-                                : "bg-amber-500",
-                            )}
-                          />
-                          <div>
-                            <p className="font-semibold text-slate-900">
-                              Physical Visit Report
-                            </p>
-                            <p className="text-slate-500 text-[11px]">
-                              {isVisitReportUploaded
-                                ? "Uploaded & ready"
-                                : "Visit report missing"}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* 4. Due Diligence Notes */}
-                        <div className="flex items-center gap-2 p-2.5 rounded-md bg-slate-50 border border-slate-100">
-                          <span
-                            className={cn(
-                              "h-2 w-2 rounded-full shrink-0",
-                              hasCheckerDdNote
-                                ? "bg-emerald-500"
-                                : "bg-amber-500",
-                            )}
-                          />
-                          <div>
-                            <p className="font-semibold text-slate-900">
-                              Due Diligence Notes
-                            </p>
-                            <p className="text-slate-500 text-[11px]">
-                              {hasCheckerDdNote
-                                ? "Observations recorded"
-                                : "Notes required"}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* 5. Due Diligence Report */}
-                        <div className="flex items-center gap-2 p-2.5 rounded-md bg-slate-50 border border-slate-100">
-                          <span
-                            className={cn(
-                              "h-2 w-2 rounded-full shrink-0",
-                              hasCheckerGeneratedReport
-                                ? "bg-emerald-500"
-                                : "bg-amber-500",
-                            )}
-                          />
-                          <div>
-                            <p className="font-semibold text-slate-900">
-                              DD &amp; Deviation Report
-                            </p>
-                            <p className="text-slate-500 text-[11px]">
-                              {hasCheckerGeneratedReport
-                                ? "Report submitted"
-                                : "Submission pending"}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {canCheckerSubmitReport && (
-                      <div className="flex items-center justify-between p-3 rounded-lg border border-blue-100 bg-blue-50/40 text-xs">
-                        <div className="flex items-center gap-2 text-slate-700">
-                          <ClipboardList className="h-4 w-4 text-blue-600 shrink-0" />
-                          <span>
-                            Due Diligence Note &amp; Report can be drafted and submitted in the <strong>Reports</strong> tab.
-                          </span>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          type="button"
-                          onClick={() => setTab("reports")}
-                          className="h-7 text-xs font-semibold bg-white text-blue-700 border-blue-200 hover:bg-blue-50"
-                        >
-                          Go to Reports
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {!isMakerUser && !canCheckerSubmitReport && (
-                  <div className="mt-4 flex items-center">
-                    {hasCheckerGeneratedReport ? (
-                      <Button
-                        size="sm"
-                        type="button"
-                        variant="outline"
-                        onClick={openDeviationReportModal}
-                        className="text-xs font-bold flex items-center gap-1.5 bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100"
-                      >
-                        <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
-                        Inspect Due Diligence &amp; Deviations Report
-                      </Button>
-                    ) : (
-                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-slate-200 bg-slate-50 text-[11px] text-slate-500">
-                        <Clock className="h-3.5 w-3.5 text-amber-500" />
-                        Due Diligence &amp; Deviations Report pending generation by Checker.
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 {/* Comprehensive Review Remarks & Authority Notes by Role */}
                 <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -9490,7 +10128,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                         status:
                           l1Approval?.status ||
                           (workflowLevelInfo.currentLevel > 1
-                            ? "RECOMMENDED"
+                            ? "SUBMITTED"
                             : workflowLevelInfo.currentLevel === 1
                               ? "ACTIVE"
                               : "PENDING"),
@@ -9509,7 +10147,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                         status:
                           l2Approval?.status ||
                           (workflowLevelInfo.currentLevel > 2
-                            ? "RECOMMENDED"
+                            ? "SUBMITTED"
                             : workflowLevelInfo.currentLevel === 2
                               ? "ACTIVE"
                               : "PENDING"),
@@ -9621,6 +10259,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                     ].map((step) => {
                       const isDone =
                         step.status === "RECOMMENDED" ||
+                        step.status === "SUBMITTED" ||
                         step.status === "APPROVED";
                       const isBypassed = step.status === "SKIPPED";
                       const isActive = step.status === "ACTIVE";
@@ -9688,7 +10327,9 @@ export function DsaProfilePage({ id }: { id: string }) {
                                 {isDone
                                   ? step.level === 7
                                     ? "Sanctioned & Approved"
-                                    : "Recommended"
+                                    : (step.level === 1 || step.level === 2)
+                                      ? "Submitted"
+                                      : "Recommended"
                                   : isBypassed
                                     ? "Bypassed (No DGM)"
                                     : isActive
@@ -9800,6 +10441,15 @@ export function DsaProfilePage({ id }: { id: string }) {
                             <Button
                               disabled={isSubmitDisabled}
                               onClick={() => {
+                                const blockReason = getWorkflowBlockReason();
+                                if (blockReason) {
+                                  toast({
+                                    title: "Verification Incomplete",
+                                    description: blockReason,
+                                    variant: "warning",
+                                  });
+                                  return;
+                                }
                                 if (workflowLevelInfo.currentLevel === 7) {
                                   openL7FinalApprovalModal(dsa);
                                 } else {
@@ -9827,7 +10477,9 @@ export function DsaProfilePage({ id }: { id: string }) {
                                             ? "Enter Due Diligence Notes to enable recommendation"
                                             : !hasCheckerGeneratedReport
                                               ? "Submit Due Diligence Report to enable recommendation"
-                                              : "Complete all steps to enable recommendation"
+                                              : hasUnverifiedDdlReport
+                                                ? "Due Diligence Review Report must be verified in the Documents tab before submitting recommendation"
+                                                : "Complete all steps to enable recommendation"
                                   : workflowLevelInfo.actionLabel
                               }
                             >
@@ -9866,15 +10518,22 @@ export function DsaProfilePage({ id }: { id: string }) {
                               <HelpCircle className="h-4 w-4 text-amber-600" />
                               Raise Query to Applicant
                             </Button>
-                            <Button
-                              onClick={() => setRejectingDsa(dsa)}
-                              size="sm"
-                              variant="secondary"
-                              className="bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5"
-                            >
-                              <X className="h-4 w-4 text-rose-600" />
-                              Reject Application
-                            </Button>
+                            {workflowLevelInfo.currentLevel >= 2 && (
+                              <Button
+                                onClick={() => {
+                                  setRejectingDsa(dsa);
+                                  setRejectionReason("");
+                                  setRejectionStep("input");
+                                  setRejectionError("");
+                                }}
+                                size="sm"
+                                variant="secondary"
+                                className="bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5"
+                              >
+                                <X className="h-4 w-4 text-rose-600" />
+                                Reject Application
+                              </Button>
+                            )}
                           </div>
                         </>
                       )}
@@ -9963,7 +10622,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                       dsa?.onboarding_status === "APPROVED" ||
                       approvingDsa?.onboarding_status === "APPROVED" ||
                       (workflowLevelInfo.currentLevel === 2 &&
-                        (hasUnverifiedApplicantDocs || !hasCheckerDdNote || !hasCheckerGeneratedReport))
+                        (hasUnverifiedApplicantDocs || !hasCheckerDdNote || !hasCheckerGeneratedReport || hasUnverifiedDdlReport))
                       ? "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300 opacity-60 shadow-none hover:bg-slate-200"
                       : "bg-emerald-600 hover:bg-emerald-700 text-white",
                   )}
@@ -9974,7 +10633,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                     dsa?.onboarding_status === "APPROVED" ||
                     approvingDsa?.onboarding_status === "APPROVED" ||
                     (workflowLevelInfo.currentLevel === 2 &&
-                      (hasUnverifiedApplicantDocs || !hasCheckerDdNote || !hasCheckerGeneratedReport))
+                      (hasUnverifiedApplicantDocs || !hasCheckerDdNote || !hasCheckerGeneratedReport || hasUnverifiedDdlReport))
                   }
                   onClick={async () => {
                     if (!approvalRemarks.trim()) {
@@ -10028,6 +10687,17 @@ export function DsaProfilePage({ id }: { id: string }) {
                         });
                         setApprovalRemarksError(
                           "Please submit the Due Diligence Report in the Reports tab first.",
+                        );
+                        return;
+                      }
+                      if (hasUnverifiedDdlReport) {
+                        toast({
+                          title: "Due Diligence Report Verification Required",
+                          description: "Please view and verify the updated Due Diligence Review Report in the Documents tab before recommending to Sub-Region Head.",
+                          variant: "warning",
+                        });
+                        setApprovalRemarksError(
+                          "Please verify the updated Due Diligence Review Report in the Documents tab first.",
                         );
                         return;
                       }
@@ -10087,17 +10757,19 @@ export function DsaProfilePage({ id }: { id: string }) {
                         .catch(() => {});
                       toast({
                         title:
-                          workflowLevelInfo.currentLevel === 2
-                            ? "Recommendation Submitted"
-                            : workflowLevelInfo.currentLevel === 3
-                              ? "Recommended to DGM"
-                              : workflowLevelInfo.currentLevel === 4
-                                ? "Recommended to Region Head"
-                                : workflowLevelInfo.currentLevel === 5
-                                  ? "Recommended to HO Credit Officer"
-                                  : workflowLevelInfo.currentLevel === 6
-                                    ? "Appraisal Recommended to HO Credit Head"
-                                    : "Application Advanced",
+                          workflowLevelInfo.currentLevel === 1
+                            ? "Application Submitted to Checker"
+                            : workflowLevelInfo.currentLevel === 2
+                              ? "Application Submitted to Sub-Region Head"
+                              : workflowLevelInfo.currentLevel === 3
+                                ? "Recommended to DGM"
+                                : workflowLevelInfo.currentLevel === 4
+                                  ? "Recommended to Region Head"
+                                  : workflowLevelInfo.currentLevel === 5
+                                    ? "Recommended to HO Credit Officer"
+                                    : workflowLevelInfo.currentLevel === 6
+                                      ? "Appraisal Recommended to HO Credit Head"
+                                      : "Application Advanced",
                         description: `${approvingDsa.name} approved and forwarded to ${workflowLevelInfo.nextLevelName}.`,
                         variant: "success",
                       });
@@ -10110,7 +10782,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                     : workflowLevelInfo.currentLevel === 1
                       ? "Confirm & Submit to Checker"
                       : workflowLevelInfo.currentLevel === 2
-                        ? "Confirm & Recommend to Sub-Region Head"
+                        ? "Confirm & Submit to Sub-Region Head"
                         : workflowLevelInfo.currentLevel === 3
                           ? "Confirm & Recommend to DGM"
                           : workflowLevelInfo.currentLevel === 4
@@ -10197,69 +10869,231 @@ export function DsaProfilePage({ id }: { id: string }) {
       <Modal
         onClose={closeDecisionModals}
         open={Boolean(rejectingDsa)}
-        title="Reject DSA Partner"
+        title={
+          rejectionStep === "confirm"
+            ? "Confirm Application Rejection (Double Validation)"
+            : "Reject DSA Application"
+        }
+        description={
+          rejectionStep === "confirm"
+            ? `Permanent terminal action on Application #${rejectingDsa?.code || rejectingDsa?.id}`
+            : `Level ${workflowLevelInfo.currentLevel} (${workflowLevelInfo.levelName}) Review Action`
+        }
         width="max-w-lg"
       >
-        <div className="space-y-4">
-          <Field>
-            <Label htmlFor="profileRejectionReason">Rejection reason</Label>
-            <textarea
-              id="profileRejectionReason"
-              rows={3}
-              className="w-full rounded-md border border-slate-200 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              value={rejectionReason}
-              onChange={(event) => {
-                setRejectionReason(event.target.value);
-                setRejectionError("");
-              }}
-              placeholder="Enter reason (e.g. KYC mismatch, business documentation incomplete)"
-            />
-            {rejectionError ? (
+        {rejectionStep === "input" ? (
+          <div className="space-y-4">
+            <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-start gap-2.5">
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Rejection Policy (Task 20A)</p>
+                <p className="mt-0.5 text-[11px] text-amber-800">
+                  Rejection is a terminal action. You must provide a clear mandatory remark (1–2000 characters). Upon rejection, the case will be moved to the Maker Rejected Bucket.
+                </p>
+              </div>
+            </div>
+
+            <Field>
+              <Label htmlFor="profileRejectionReason">
+                Rejection reason / justification <span className="text-rose-600">*</span>
+              </Label>
+              <textarea
+                id="profileRejectionReason"
+                rows={3}
+                className="w-full rounded-md border border-slate-200 p-2.5 text-sm focus:border-rose-500 focus:outline-none focus:ring-1 focus:ring-rose-500 placeholder:text-slate-400"
+                value={rejectionReason}
+                onChange={(event) => {
+                  setRejectionReason(event.target.value);
+                  setRejectionError("");
+                }}
+                placeholder="Enter specific mandatory justification (e.g. KYC document discrepancy, adverse track record, field verification failed)"
+                maxLength={2000}
+              />
+              <div className="flex justify-between items-center mt-1">
+                {rejectionError ? (
+                  <p className="text-xs font-medium text-rose-600">
+                    {rejectionError}
+                  </p>
+                ) : <span />}
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {rejectionReason.trim().length}/2000
+                </span>
+              </div>
+            </Field>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={closeDecisionModals}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="bg-rose-600 hover:bg-rose-700 text-white font-semibold flex items-center gap-1.5"
+                type="button"
+                disabled={actionLoading}
+                onClick={async () => {
+                  if (!rejectingDsa) return;
+                  const trimmed = rejectionReason.trim();
+                  if (!trimmed) {
+                    setRejectionError("Rejection remark is mandatory and cannot be empty or whitespace only.");
+                    return;
+                  }
+                  if (trimmed.length > 2000) {
+                    setRejectionError("Rejection remark must not exceed 2000 characters.");
+                    return;
+                  }
+
+                  try {
+                    const res = await updateWorkflowAction(rejectingDsa.id, {
+                      action: "REJECT",
+                      remarks: trimmed,
+                    });
+
+                    // Check if backend returned confirmation_required (Step 1 response)
+                    const isConfirmReq =
+                      (res as any)?.status === "confirmation_required" ||
+                      (res as any)?.requires_confirmation === true;
+
+                    if (isConfirmReq) {
+                      setRejectionConfirmationData((res as any)?.data || res);
+                      setRejectionStep("confirm");
+                      setRejectionError("");
+                    } else if (res) {
+                      await fetchDsaDetail(id);
+                      toast({
+                        title: "Application Rejected",
+                        description: `Application #${rejectingDsa.code || rejectingDsa.id} has been rejected and moved to Maker bucket.`,
+                        variant: "success",
+                      });
+                      closeDecisionModals();
+                    }
+                  } catch (err: any) {
+                    setRejectionError(err?.message || "Failed to initiate rejection.");
+                  }
+                }}
+              >
+                {actionLoading ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Validating...
+                  </>
+                ) : (
+                  <>
+                    <X className="h-3.5 w-3.5" />
+                    Reject Application
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          /* Step 2: Confirmation UI */
+          <div className="space-y-4">
+            <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl space-y-2">
+              <div className="flex items-center gap-2 text-rose-800 font-bold text-sm">
+                <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0" />
+                Permanent Rejection Confirmation
+              </div>
+              <p className="text-xs text-rose-700 leading-relaxed">
+                Are you sure you want to permanently reject application{" "}
+                <strong className="font-mono text-rose-950">
+                  {rejectingDsa?.code || `APP0000${rejectingDsa?.id}`}
+                </strong>{" "}
+                ({rejectingDsa?.name || rejectingDsa?.entity_name})?
+              </p>
+              <p className="text-[11px] text-rose-600 font-medium">
+                ⚠️ This is a terminal action. The application will be immediately moved to the <strong>Maker Rejected Bucket</strong> with the recorded remarks. No further workflow approvals or partner code generation will be possible.
+              </p>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2 text-xs">
+              <div className="flex justify-between items-center text-slate-600 pb-1.5 border-b border-slate-200">
+                <span className="font-semibold">Reviewing Authority Stage:</span>
+                <span className="font-bold text-slate-900">
+                  {rejectionConfirmationData?.assigned_role || workflowLevelInfo.levelName} (Level {rejectionConfirmationData?.approval_level || workflowLevelInfo.currentLevel})
+                </span>
+              </div>
+              <div>
+                <span className="font-semibold text-slate-600 block mb-1">
+                  Recorded Rejection Reason:
+                </span>
+                <p className="p-2 bg-white rounded border border-slate-200 text-slate-900 font-mono text-[11px] italic break-words">
+                  "{rejectionConfirmationData?.remarks || rejectionReason}"
+                </p>
+              </div>
+            </div>
+
+            {rejectionError && (
               <p className="text-xs font-medium text-rose-600">
                 {rejectionError}
               </p>
-            ) : null}
-          </Field>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button
-              variant="secondary"
-              type="button"
-              onClick={closeDecisionModals}
-            >
-              Cancel
-            </Button>
-            <Button
-              className="bg-rose-600 hover:bg-rose-700 text-white font-semibold"
-              type="button"
-              disabled={actionLoading}
-              onClick={async () => {
-                if (rejectingDsa) {
-                  if (!rejectionReason.trim()) {
-                    setRejectionError(
-                      "Add a reason before rejecting this DSA.",
-                    );
-                    return;
-                  }
-                  const updated = await updateDsaProfile(rejectingDsa.id, {
-                    action: "REJECT",
-                    remarks: rejectionReason.trim(),
-                  } as any);
-                  if (updated) {
-                    await fetchDsaDetail(id);
-                    toast({
-                      title: "Partner Rejected",
-                      description: `${rejectingDsa.name} has been rejected.`,
-                      variant: "success",
-                    });
-                    closeDecisionModals();
-                  }
-                }
-              }}
-            >
-              {actionLoading ? "Processing..." : "Reject Partner"}
-            </Button>
+            )}
+
+            <div className="flex justify-between items-center gap-2 pt-2 border-t border-slate-100">
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => {
+                  setRejectionStep("input");
+                  setRejectionError("");
+                }}
+                className="text-xs flex items-center gap-1"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Edit Reason
+              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  type="button"
+                  onClick={closeDecisionModals}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-4 py-2 flex items-center gap-1.5 shadow-sm"
+                  type="button"
+                  disabled={actionLoading}
+                  onClick={async () => {
+                    if (!rejectingDsa) return;
+                    try {
+                      const updated = await updateWorkflowAction(rejectingDsa.id, {
+                        action: "REJECT",
+                        remarks: rejectionReason.trim(),
+                        confirmed: true,
+                      });
+                      if (updated) {
+                        await fetchDsaDetail(id);
+                        toast({
+                          title: "Application Rejected",
+                          description: `Application #${rejectingDsa.code || rejectingDsa.id} has been permanently rejected and routed to Maker Bucket.`,
+                          variant: "success",
+                        });
+                        closeDecisionModals();
+                      }
+                    } catch (err: any) {
+                      setRejectionError(err?.message || "Failed to confirm rejection.");
+                    }
+                  }}
+                >
+                  {actionLoading ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Rejecting...
+                    </>
+                  ) : (
+                    <>
+                      <X className="h-3.5 w-3.5" />
+                      Confirm &amp; Reject Permanently
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </Modal>
 
       <Modal
@@ -10754,13 +11588,18 @@ export function DsaProfilePage({ id }: { id: string }) {
             dsaId={dsa?.id}
             isBankUser={isBankUser}
             effectiveStatus={getEffectiveDocStatus(previewDoc)}
-            canVerifyDoc={canCheckerApproveDocs}
+            canVerifyDoc={
+              canCheckerApproveDocs &&
+              !isApplicationFormDocument(previewDoc)
+            }
             verificationRoleNote={
-              !canCheckerApproveDocs &&
-              getEffectiveDocStatus(previewDoc) !== "Verified" &&
-              getEffectiveDocStatus(previewDoc) !== "Failed"
-                ? "Read-only view"
-                : undefined
+              isApplicationFormDocument(previewDoc)
+                ? undefined
+                : !canCheckerApproveDocs &&
+                  getEffectiveDocStatus(previewDoc) !== "Verified" &&
+                  getEffectiveDocStatus(previewDoc) !== "Failed"
+                  ? "Read-only view"
+                  : undefined
             }
             onVerify={async () => {
               if (!canCheckerApproveDocs) return;
@@ -10833,825 +11672,7 @@ export function DsaProfilePage({ id }: { id: string }) {
         ) : null}
       </Modal>
 
-      {/* Due Diligence (DDL) & Maker BRE Deviation Report Modal (Level 2 through Level 7) */}
-      <Modal
-        onClose={() => setViewingDeviationReport(false)}
-        open={viewingDeviationReport}
-        title="Due Diligence & BRE Deviation Assessment Report"
-        description={`DSA #${getEffectiveDsaCode(dsa)} • ${dsa.name} • Assessment & Verifications`}
-        width="max-w-3xl"
-      >
-        <div className="space-y-4">
-          {loadingDeviationReport ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-blue-600 mr-2" />
-              <span className="text-sm text-slate-600 font-medium">
-                Fetching due diligence and deviation evaluation report...
-              </span>
-            </div>
-          ) : (
-            <>
-              {/* Overall Decision Banner */}
-              {(() => {
-                const rep = deviationReportData;
-                const bre = rep?.bre_evaluation || rep;
-                const rules: any[] = bre?.rules || [];
-                const deviations: any[] =
-                  rep?.deviations || bre?.deviations || [];
-                const rejections: any[] =
-                  rep?.rejections || bre?.rejections || [];
-                const overall = String(
-                  bre?.overall_decision ||
-                    (deviations.length > 0 ? "DEVIATION" : "PASS"),
-                ).toUpperCase();
-                const evalId =
-                  bre?.evaluation_id || rep?.evaluation_id || "BRE-AUTO-EVAL";
 
-                const makerVerif = rep?.maker_verification;
-                const checkerVerifs: Record<string, any> =
-                  rep?.checker_verifications || {};
-                const unavailableVerifs: string[] =
-                  rep?.unavailable_verifications || [];
-                const apiExceptions: any[] = rep?.api_exceptions || [];
-                const meta = rep?.metadata || {};
-
-                const note =
-                  rep?.dd_note ||
-                  savedCheckerDdNote ||
-                  dsa?.latest_due_diligence_note ||
-                  dsa?.due_diligence_notes?.[0] ||
-                  (dsa as any)?.dueDiligenceNotes?.[0];
-
-                const completedChecks =
-                  meta.completed_checker_checks ??
-                  Object.values(checkerVerifs).filter(
-                    (v: any) =>
-                      v.is_success || v.execution_status === "COMPLETED",
-                  ).length;
-                const totalChecks =
-                  meta.total_checker_checks ?? Object.keys(checkerVerifs).length;
-
-                return (
-                  <div className="space-y-4">
-                    <div
-                      className={cn(
-                        "rounded-xl border p-3.5 flex flex-wrap items-center justify-between gap-3",
-                        overall === "PASS"
-                          ? "bg-emerald-50 border-emerald-200 text-emerald-950"
-                          : overall === "DEVIATION"
-                            ? "bg-amber-50 border-amber-200 text-amber-950"
-                            : "bg-rose-50 border-rose-200 text-rose-950",
-                      )}
-                    >
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span
-                            className={cn(
-                              "text-xs font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border",
-                              overall === "PASS"
-                                ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                                : overall === "DEVIATION"
-                                  ? "bg-amber-100 text-amber-800 border-amber-300"
-                                  : "bg-rose-100 text-rose-800 border-rose-300",
-                            )}
-                          >
-                            Decision: {overall}
-                          </span>
-                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
-                            DDL Checks: {completedChecks}/{totalChecks || 4}
-                          </span>
-                          {note && (
-                            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
-                              Note: {note.submitted_at ? "Submitted" : "Draft"}
-                            </span>
-                          )}
-                          <span className="text-[11px] text-slate-500 font-mono">
-                            Ref: {evalId}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-600">
-                          Evaluated:{" "}
-                          {bre?.evaluated_at
-                            ? formatDate(bre.evaluated_at)
-                            : formatDate(new Date().toISOString())}{" "}
-                          • Branch:{" "}
-                          {rep?.branch_name ||
-                            dsa.branch?.branch_name ||
-                            dsa.branch_name ||
-                            "Main Branch"}
-                        </p>
-                      </div>
-
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        type="button"
-                        onClick={handleDownloadDeviationReport}
-                        className="text-xs font-bold h-7 px-2.5 flex items-center gap-1 bg-white shadow-xs hover:bg-slate-50"
-                      >
-                        <Download className="h-3 w-3 text-blue-600" />
-                        Download Report (PDF)
-                      </Button>
-                    </div>
-
-                    {/* Tab Navigation: Deviations vs Due Diligence (DDL) */}
-                    <div className="flex border-b border-slate-200">
-                      <button
-                        type="button"
-                        onClick={() => setDeviationModalTab("deviations")}
-                        className={cn(
-                          "py-2 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors -mb-px",
-                          deviationModalTab === "deviations"
-                            ? "border-blue-600 text-blue-600"
-                            : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300",
-                        )}
-                      >
-                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                        BRE Deviations &amp; Rules
-                        {deviations.length > 0 && (
-                          <span className="ml-1 rounded-full bg-amber-100 px-1.5 py-0.2 text-[10px] font-bold text-amber-800">
-                            {deviations.length}
-                          </span>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeviationModalTab("ddl")}
-                        className={cn(
-                          "py-2 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors -mb-px",
-                          deviationModalTab === "ddl"
-                            ? "border-blue-600 text-blue-600"
-                            : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300",
-                        )}
-                      >
-                        <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
-                        Due Diligence (DDL) &amp; Notes
-                        <span className="ml-1 rounded-full bg-blue-100 px-1.5 py-0.2 text-[10px] font-bold text-blue-800">
-                          {completedChecks}/{totalChecks || 4}
-                        </span>
-                      </button>
-                    </div>
-
-                    {/* TAB 1: BRE Deviations & Policy Rules */}
-                    {deviationModalTab === "deviations" && (
-                      <div className="space-y-4">
-                        {/* Deviations Alert if any */}
-                        {deviations.length > 0 ? (
-                          <div className="rounded-lg border border-amber-300 bg-amber-50/70 p-3">
-                            <div className="flex items-center gap-2 mb-1.5 text-amber-900 font-bold text-xs">
-                              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
-                              <span>
-                                Triggered Deviations ({deviations.length})
-                              </span>
-                            </div>
-                            <ul className="list-disc list-inside space-y-1 text-xs text-amber-800 pl-1">
-                              {deviations.map((dev: any, idx: number) => (
-                                <li key={idx} className="leading-relaxed">
-                                  {typeof dev === "string"
-                                    ? dev
-                                    : dev.remarks ||
-                                      dev.rule_name ||
-                                      JSON.stringify(dev)}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : (
-                          <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 text-xs text-emerald-800 flex items-center gap-2">
-                            <Check className="h-4 w-4 text-emerald-600 shrink-0" />
-                            <span>
-                              No policy deviations triggered. All eligible
-                              evaluation criteria passed.
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Policy Rules Evaluation Table */}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                              Policy Rules Assessment ({rules.length} Rules Evaluated)
-                            </h4>
-                            <span className="text-[11px] text-slate-500">
-                              Passed:{" "}
-                              {
-                                rules.filter(
-                                  (r: any) =>
-                                    String(r.status).toUpperCase() === "PASS",
-                                ).length
-                              }{" "}
-                              / {rules.length}
-                            </span>
-                          </div>
-
-                          {rules.length > 0 ? (
-                            <div className="overflow-x-auto rounded-lg border border-slate-200">
-                              <table className="w-full text-left text-xs">
-                                <thead className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold">
-                                  <tr>
-                                    <th className="p-2.5">Rule Code &amp; Name</th>
-                                    <th className="p-2.5">Status</th>
-                                    <th className="p-2.5">Expected Standard</th>
-                                    <th className="p-2.5">Applicant Value</th>
-                                    <th className="p-2.5">Evaluation Remarks</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 bg-white">
-                                  {rules.map((rule: any, idx: number) => {
-                                    const st = String(
-                                      rule.status || "",
-                                    ).toUpperCase();
-                                    const isDev =
-                                      rule.is_deviation || st === "DEVIATION";
-                                    const isFail =
-                                      rule.is_rejection ||
-                                      st === "FAIL" ||
-                                      st === "REJECT";
-                                    return (
-                                      <tr
-                                        key={rule.rule_code || idx}
-                                        className="hover:bg-slate-50/60"
-                                      >
-                                        <td className="p-2.5">
-                                          <p className="font-semibold text-slate-900">
-                                            {rule.rule_name || rule.rule_code}
-                                          </p>
-                                          <p className="text-[11px] font-mono text-slate-400">
-                                            {rule.rule_code}
-                                          </p>
-                                        </td>
-                                        <td className="p-2.5">
-                                          <span
-                                            className={cn(
-                                              "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border",
-                                              isFail
-                                                ? "bg-rose-50 text-rose-700 border-rose-200"
-                                                : isDev
-                                                  ? "bg-amber-50 text-amber-700 border-amber-200"
-                                                  : "bg-emerald-50 text-emerald-700 border-emerald-200",
-                                            )}
-                                          >
-                                            {rule.status || "PASS"}
-                                          </span>
-                                        </td>
-                                        <td className="p-2.5 text-slate-600 max-w-xs">
-                                          {rule.expected_value ||
-                                            "Per Bank Standards"}
-                                        </td>
-                                        <td className="p-2.5 font-mono text-slate-800">
-                                          {rule.actual_value || "N/A"}
-                                        </td>
-                                        <td className="p-2.5 text-slate-600">
-                                          {rule.remarks || "—"}
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          ) : (
-                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-6 text-center text-xs text-slate-500">
-                              No granular rule breakdown available for this
-                              evaluation run.
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* TAB 2: Due Diligence (DDL) & Notes */}
-                    {deviationModalTab === "ddl" && (
-                      <div className="space-y-4">
-                        {/* Statutory Due Diligence (DDL) Verifications Matrix */}
-                        <div className="space-y-2.5">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5">
-                              <ShieldCheck className="h-4 w-4 text-blue-600" />
-                              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                                Statutory Due Diligence (DDL) Verifications
-                              </h4>
-                            </div>
-                            <span className="text-[11px] font-semibold text-slate-500">
-                              Maker &amp; Checker Checks
-                            </span>
-                          </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
-                            {/* Maker PAN Check */}
-                            {makerVerif && (
-                              <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 flex flex-col justify-between">
-                                <div>
-                                  <div className="flex items-center justify-between mb-1.5">
-                                    <span className="font-bold text-slate-900 text-xs">
-                                      Maker PAN Check
-                                    </span>
-                                    <span
-                                      className={cn(
-                                        "px-1.5 py-0.5 rounded text-[10px] font-bold border",
-                                        makerVerif.is_success ||
-                                          makerVerif.execution_status === "COMPLETED"
-                                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                          : makerVerif.execution_status === "FAILED"
-                                            ? "bg-rose-50 text-rose-700 border-rose-200"
-                                            : "bg-slate-100 text-slate-600 border-slate-200",
-                                      )}
-                                    >
-                                      {makerVerif.execution_status || "NOT_TRIGGERED"}
-                                    </span>
-                                  </div>
-                                  <p className="text-[11px] text-slate-500 font-mono mb-1">
-                                    {makerVerif.verification_code}
-                                  </p>
-                                  {makerVerif.normalized_data && (
-                                    <div className="space-y-0.5 text-[11px] text-slate-700">
-                                      {makerVerif.normalized_data.name_on_card && (
-                                        <p className="truncate">
-                                          <span className="text-slate-400">Name:</span>{" "}
-                                          {makerVerif.normalized_data.name_on_card}
-                                        </p>
-                                      )}
-                                      {makerVerif.normalized_data.pan_status && (
-                                        <p>
-                                          <span className="text-slate-400">Status:</span>{" "}
-                                          <span className="font-semibold text-emerald-700">
-                                            {makerVerif.normalized_data.pan_status}
-                                          </span>
-                                        </p>
-                                      )}
-                                      {makerVerif.normalized_data.aadhaar_seeded !==
-                                        undefined && (
-                                        <p>
-                                          <span className="text-slate-400">Aadhaar:</span>{" "}
-                                          {makerVerif.normalized_data.aadhaar_seeded
-                                            ? "Seeded"
-                                            : "Not Seeded"}
-                                        </p>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="mt-2 pt-1.5 border-t border-slate-200/60 text-[10px] text-slate-400 flex justify-between">
-                                  <span>Att: #{makerVerif.attempt_number || 1}</span>
-                                  {makerVerif.executed_at && (
-                                    <span>{formatDate(makerVerif.executed_at)}</span>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Checker Statutory Checks */}
-                            {Object.entries(checkerVerifs).map(
-                              ([code, ver]: [string, any]) => {
-                                const isSuccess =
-                                  Boolean(ver.is_success) ||
-                                  ver.execution_status === "COMPLETED";
-                                const isFail =
-                                  ver.execution_status === "FAILED" ||
-                                  ver.execution_status === "TIMEOUT";
-                                const norm = ver.normalized_data || {};
-
-                                return (
-                                  <div
-                                    key={code}
-                                    className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 flex flex-col justify-between"
-                                  >
-                                    <div>
-                                      <div className="flex items-center justify-between mb-1.5">
-                                        <span className="font-bold text-slate-900 text-xs">
-                                          {code === "CIBIL_CONSUMER" ||
-                                          code === "CIBIL_COMMERCIAL"
-                                            ? "CIBIL Bureau"
-                                            : code === "AML_COMPASS"
-                                              ? "AML Compass"
-                                              : code}
-                                        </span>
-                                        <span
-                                          className={cn(
-                                            "px-1.5 py-0.5 rounded text-[10px] font-bold border",
-                                            isSuccess
-                                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                              : isFail
-                                                ? "bg-rose-50 text-rose-700 border-rose-200"
-                                                : "bg-slate-100 text-slate-600 border-slate-200",
-                                          )}
-                                        >
-                                          {ver.execution_status || "NOT_TRIGGERED"}
-                                        </span>
-                                      </div>
-                                      <p className="text-[11px] text-slate-500 font-mono mb-1">
-                                        {code}
-                                      </p>
-
-                                      <div className="space-y-0.5 text-[11px] text-slate-700">
-                                        {norm.gstin && (
-                                          <p className="font-mono text-[10px] truncate">
-                                            <span className="text-slate-400">GSTIN:</span>{" "}
-                                            {norm.gstin}
-                                          </p>
-                                        )}
-                                        {norm.gst_status && (
-                                          <p>
-                                            <span className="text-slate-400">Status:</span>{" "}
-                                            <span className="font-medium text-emerald-700">
-                                              {norm.gst_status}
-                                            </span>
-                                          </p>
-                                        )}
-                                        {norm.udyam_number && (
-                                          <p className="font-mono text-[10px] truncate">
-                                            <span className="text-slate-400">Udyam:</span>{" "}
-                                            {norm.udyam_number}
-                                          </p>
-                                        )}
-                                        {norm.enterprise_type && (
-                                          <p>
-                                            <span className="text-slate-400">Type:</span>{" "}
-                                            {norm.enterprise_type}
-                                          </p>
-                                        )}
-                                        {norm.cibil_score !== undefined && (
-                                          <p>
-                                            <span className="text-slate-400">Score:</span>{" "}
-                                            <span className="font-bold text-slate-900">
-                                              {norm.cibil_score}
-                                            </span>{" "}
-                                            ({norm.score_name || "Bureau"})
-                                          </p>
-                                        )}
-                                        {norm.total_accounts !== undefined && (
-                                          <p className="text-[10px] text-slate-500">
-                                            A/Cs: {norm.total_accounts} • Overdue:{" "}
-                                            {norm.overdue_accounts ?? 0}
-                                          </p>
-                                        )}
-                                        {norm.aml_score !== undefined && (
-                                          <p>
-                                            <span className="text-slate-400">AML Score:</span>{" "}
-                                            <span className="font-bold text-slate-900">
-                                              {norm.aml_score}
-                                            </span>
-                                          </p>
-                                        )}
-                                        {norm.pep_match !== undefined && (
-                                          <p className="text-[10px]">
-                                            PEP:{" "}
-                                            {norm.pep_match ? (
-                                              <span className="text-rose-600 font-bold">
-                                                MATCH
-                                              </span>
-                                            ) : (
-                                              <span className="text-emerald-700">
-                                                Clear
-                                              </span>
-                                            )}{" "}
-                                            • Sanctions:{" "}
-                                            {norm.sanction_match ? (
-                                              <span className="text-rose-600 font-bold">
-                                                MATCH
-                                              </span>
-                                            ) : (
-                                              <span className="text-emerald-700">
-                                                Clear
-                                              </span>
-                                            )}
-                                          </p>
-                                        )}
-                                        {ver.error_message && (
-                                          <p className="text-[10px] text-rose-600 truncate">
-                                            Err: {ver.error_message}
-                                          </p>
-                                        )}
-                                      </div>
-                                    </div>
-
-                                    <div className="mt-2 pt-1.5 border-t border-slate-200/60 text-[10px] text-slate-400 flex justify-between">
-                                      <span>Att: #{ver.attempt_number || 0}</span>
-                                      {ver.executed_at && (
-                                        <span>{formatDate(ver.executed_at)}</span>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              },
-                            )}
-                          </div>
-
-                          {/* Unavailable Verifications Warning */}
-                          {unavailableVerifs.length > 0 && (
-                            <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-2.5 text-xs text-amber-800 flex items-center gap-2">
-                              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
-                              <span>
-                                <strong>Pending Verifications:</strong>{" "}
-                                {unavailableVerifs.join(", ")}
-                              </span>
-                            </div>
-                          )}
-
-                          {/* API Exceptions Warning */}
-                          {apiExceptions.length > 0 && (
-                            <div className="rounded-lg border border-rose-200 bg-rose-50/50 p-2.5 text-xs text-rose-800 space-y-1">
-                              <div className="flex items-center gap-2 font-semibold">
-                                <ShieldAlert className="h-4 w-4 text-rose-600 shrink-0" />
-                                <span>API Exception Alerts ({apiExceptions.length})</span>
-                              </div>
-                              <ul className="list-disc list-inside space-y-0.5 text-[11px] pl-1">
-                                {apiExceptions.map((ex: any, idx: number) => (
-                                  <li key={idx}>
-                                    <strong>{ex.verification_code}</strong>:{" "}
-                                    {ex.error_message ||
-                                      `Failed with status ${ex.execution_status}`}{" "}
-                                    (Att #{ex.attempt_number})
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Checker Due Diligence (DD) Review Note & Observations Section */}
-                        <div className="space-y-3 pt-3 border-t border-slate-200">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <ClipboardList className="h-4 w-4 text-blue-600" />
-                              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                                Checker Due Diligence (DD) Note &amp; Observations
-                              </h4>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-300 uppercase">
-                                Recommendation: {note?.recommendation || "RECOMMEND"}
-                              </span>
-                              <span className="text-[10px] font-semibold text-slate-500">
-                                {note?.submitted_at
-                                  ? `Submitted ${formatDate(note.submitted_at)}`
-                                  : "Draft Note"}
-                                {note?.checker_user_id && ` • Checker ID: ${note.checker_user_id}`}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="text-xs">
-                            <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
-                                Field &amp; Premise Investigation Observations
-                              </span>
-                              <p className="text-slate-800 leading-relaxed whitespace-pre-wrap">
-                                {getCleanRemark(note?.observations || checkerDdNote)}
-                              </p>
-                            </div>
-                          </div>
-
-                          {getCleanRemark(note?.exception_remarks) && (
-                            <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 text-xs">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-900 block mb-1">
-                                Exception / Deviation Justifications
-                              </span>
-                              <p className="text-amber-800 leading-relaxed whitespace-pre-wrap">
-                                {getCleanRemark(note.exception_remarks)}
-                              </p>
-                            </div>
-                          )}
-
-                          {note?.structured_data && (
-                            <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
-                                Structured Findings / Checklist
-                              </span>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                {Object.entries(note.structured_data).map(
-                                  ([k, v]: [string, any]) => (
-                                    <div key={k} className="p-1.5 rounded bg-slate-50 border border-slate-100">
-                                      <span className="text-[10px] text-slate-400 block uppercase">
-                                        {k.replace(/_/g, " ")}
-                                      </span>
-                                      <span className="font-semibold text-slate-800">
-                                        {typeof v === "boolean"
-                                          ? v
-                                            ? "Yes"
-                                            : "No"
-                                          : String(v)}
-                                      </span>
-                                    </div>
-                                  ),
-                                )}
-                              </div>
-                            </div>
-                          )}
-                          {/* Workflow Recommendation & Sanction Remarks History (L2 through L7) */}
-                          <div className="rounded-xl border border-slate-200 bg-white p-4 text-xs space-y-3">
-                            <div className="flex items-center justify-between border-b border-slate-150 pb-2">
-                              <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                                <FileText className="h-3.5 w-3.5 text-blue-600" />
-                                Workflow Recommendation &amp; Sanction Remarks (L2 to L7)
-                              </span>
-                              <span className="text-[10px] text-slate-400">
-                                Cumulative Approval Chain
-                              </span>
-                            </div>
-
-                            <div className="space-y-2.5">
-                              {/* L2 Checker Remarks */}
-                              <div className="p-2.5 rounded-lg border border-slate-100 bg-slate-50/70">
-                                <div className="flex items-center justify-between text-[11px] mb-1">
-                                  <span className="font-bold text-slate-900">
-                                    Level 2: Checker (Sub-Region Staff)
-                                  </span>
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-semibold">
-                                    {note?.recommendation || "RECOMMEND"}
-                                  </span>
-                                </div>
-                                <p className="text-slate-700 italic text-[11px]">
-                                  {getCleanRemark(note?.remarks || checkerRemarks) ? `"${getCleanRemark(note?.remarks || checkerRemarks)}"` : ""}
-                                </p>
-                              </div>
-
-                              {/* L3 Sub-Region Head */}
-                              {(() => {
-                                const l3 =
-                                  deviationReportData?.recommendation_approval_history?.first_recommending_authority ||
-                                  (deviationReportData as any)?.recommendationApprovalHistory?.first_recommending_authority;
-                                return l3 ? (
-                                  <div className="p-2.5 rounded-lg border border-emerald-100 bg-emerald-50/40">
-                                    <div className="flex items-center justify-between text-[11px] mb-1">
-                                      <span className="font-bold text-emerald-950">
-                                        Level 3: {l3.designation || "Sub-Region Head"} ({l3.name})
-                                      </span>
-                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold">
-                                        {l3.action || "RECOMMENDED"}
-                                      </span>
-                                    </div>
-                                    <p className="text-emerald-900 italic text-[11px]">
-                                      {getCleanRemark(l3.remarks) ? `"${getCleanRemark(l3.remarks)}"` : ""}
-                                    </p>
-                                    {l3.date && (
-                                      <p className="text-[10px] text-emerald-600 mt-1">
-                                        {formatDate(l3.date)}
-                                      </p>
-                                    )}
-                                  </div>
-                                ) : null;
-                              })()}
-
-                              {/* L4 DGM */}
-                              {(() => {
-                                const l4 =
-                                  deviationReportData?.recommendation_approval_history?.second_recommending_authority ||
-                                  (deviationReportData as any)?.recommendationApprovalHistory?.second_recommending_authority;
-                                return l4 ? (
-                                  <div className="p-2.5 rounded-lg border border-blue-100 bg-blue-50/40">
-                                    <div className="flex items-center justify-between text-[11px] mb-1">
-                                      <span className="font-bold text-blue-950">
-                                        Level 4: {l4.designation || "Deputy General Manager"} ({l4.name})
-                                      </span>
-                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-semibold">
-                                        {l4.action || "RECOMMENDED"}
-                                      </span>
-                                    </div>
-                                    <p className="text-blue-900 italic text-[11px]">
-                                      {getCleanRemark(l4.remarks) ? `"${getCleanRemark(l4.remarks)}"` : ""}
-                                    </p>
-                                    {l4.date && (
-                                      <p className="text-[10px] text-blue-600 mt-1">
-                                        {formatDate(l4.date)}
-                                      </p>
-                                    )}
-                                  </div>
-                                ) : null;
-                              })()}
-
-                              {/* L5 Region Head */}
-                              {(() => {
-                                const l5 =
-                                  deviationReportData?.recommendation_approval_history?.third_recommending_authority ||
-                                  (deviationReportData as any)?.recommendationApprovalHistory?.third_recommending_authority;
-                                return l5 ? (
-                                  <div className="p-2.5 rounded-lg border border-purple-100 bg-purple-50/40">
-                                    <div className="flex items-center justify-between text-[11px] mb-1">
-                                      <span className="font-bold text-purple-950">
-                                        Level 5: {l5.designation || "Region Head"} ({l5.name})
-                                      </span>
-                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 font-semibold">
-                                        {l5.action || "RECOMMENDED"}
-                                      </span>
-                                    </div>
-                                    <p className="text-purple-900 italic text-[11px]">
-                                      {getCleanRemark(l5.remarks) ? `"${getCleanRemark(l5.remarks)}"` : ""}
-                                    </p>
-                                    {l5.date && (
-                                      <p className="text-[10px] text-purple-600 mt-1">
-                                        {formatDate(l5.date)}
-                                      </p>
-                                    )}
-                                  </div>
-                                ) : null;
-                              })()}
-
-                              {/* L6 HO Credit Officer */}
-                              {(() => {
-                                const l6 =
-                                  deviationReportData?.recommendation_approval_history?.fourth_recommending_authority ||
-                                  (deviationReportData as any)?.recommendationApprovalHistory?.fourth_recommending_authority;
-                                return l6 ? (
-                                  <div className="p-2.5 rounded-lg border border-indigo-100 bg-indigo-50/40">
-                                    <div className="flex items-center justify-between text-[11px] mb-1">
-                                      <span className="font-bold text-indigo-950">
-                                        Level 6: {l6.designation || "HO Credit Officer"} ({l6.name})
-                                      </span>
-                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 font-semibold">
-                                        {l6.action || "RECOMMENDED"}
-                                      </span>
-                                    </div>
-                                    <p className="text-indigo-900 italic text-[11px]">
-                                      {getCleanRemark(l6.remarks) ? `"${getCleanRemark(l6.remarks)}"` : ""}
-                                    </p>
-                                    {l6.date && (
-                                      <p className="text-[10px] text-indigo-600 mt-1">
-                                        {formatDate(l6.date)}
-                                      </p>
-                                    )}
-                                  </div>
-                                ) : null;
-                              })()}
-
-                              {/* L7 HO Credit Head */}
-                              {(() => {
-                                const l7 =
-                                  deviationReportData?.recommendation_approval_history?.approving_authority ||
-                                  (deviationReportData as any)?.recommendationApprovalHistory?.approving_authority;
-                                return l7 ? (
-                                  <div className="p-2.5 rounded-lg border border-teal-100 bg-teal-50/40">
-                                    <div className="flex items-center justify-between text-[11px] mb-1">
-                                      <span className="font-bold text-teal-950">
-                                        Level 7: {l7.designation || "HO Credit Head"} ({l7.name})
-                                      </span>
-                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 font-semibold">
-                                        {l7.action || "APPROVED"}
-                                      </span>
-                                    </div>
-                                    <p className="text-teal-900 italic text-[11px]">
-                                      {getCleanRemark(l7.remarks) ? `"${getCleanRemark(l7.remarks)}"` : ""}
-                                    </p>
-                                    {l7.date && (
-                                      <p className="text-[10px] text-teal-600 mt-1">
-                                        {formatDate(l7.date)}
-                                      </p>
-                                    )}
-                                  </div>
-                                ) : null;
-                              })()}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </>
-          )}
-
-          <div className="flex flex-wrap justify-between items-center gap-2 pt-3 border-t border-slate-150">
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                type="button"
-                onClick={handleDownloadDeviationReport}
-                className="text-xs font-semibold gap-1.5"
-              >
-                <Download className="h-3.5 w-3.5 text-slate-600" />
-                Download Report (PDF)
-              </Button>
-              {canCheckerSubmitReport && (
-                <Button
-                  size="sm"
-                  type="button"
-                  disabled={submittingCheckerReport}
-                  onClick={handleSubmitCheckerDdReport}
-                  className="text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-xs"
-                >
-                  <Check className="h-3.5 w-3.5" />
-                  {submittingCheckerReport
-                    ? "Submitting Report..."
-                    : hasCheckerGeneratedReport
-                      ? "Submit Due Diligence Report (Re-submit)"
-                      : "Submit Due Diligence Report"}
-                </Button>
-              )}
-            </div>
-            <Button
-              onClick={() => setViewingDeviationReport(false)}
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="text-xs px-4"
-            >
-              Close
-            </Button>
-          </div>
-        </div>
-      </Modal>
 
       {/* Checker Due Diligence (DD) Note Modal (Level 2 through Level 7) */}
       <Modal
@@ -11676,7 +11697,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-300 uppercase tracking-wider">
-                        Recommendation: {note?.recommendation || "RECOMMEND"}
+                        Action: {note?.submitted_at ? "SUBMITTED" : "SUBMIT"}
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-slate-600">

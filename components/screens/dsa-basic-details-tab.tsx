@@ -484,9 +484,9 @@ export function DsaBasicDetailsTab({
             <DetailItem
               label="Official Partner Code"
               value={
-                dsa.dsa_code ? (
+                (typeof dsa.dsa_code === "object" ? dsa.dsa_code?.code : dsa.dsa_code) ? (
                   <span className="font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                    {dsa.dsa_code}
+                    {typeof dsa.dsa_code === "object" ? dsa.dsa_code?.code : dsa.dsa_code}
                   </span>
                 ) : (
                   <span className="text-slate-400 italic text-xs">

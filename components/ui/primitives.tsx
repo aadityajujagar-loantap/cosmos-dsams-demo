@@ -344,6 +344,19 @@ export function Field({ children, className }: { children: ReactNode; className?
   return <div className={cn("space-y-1.5", className)}>{children}</div>;
 }
 
+const MODAL_WIDTH_FALLBACKS: Record<string, string> = {
+  "max-w-xs": "20rem",
+  "max-w-sm": "24rem",
+  "max-w-md": "28rem",
+  "max-w-lg": "32rem",
+  "max-w-xl": "36rem",
+  "max-w-2xl": "42rem",
+  "max-w-3xl": "48rem",
+  "max-w-4xl": "56rem",
+  "max-w-5xl": "64rem",
+  "max-w-6xl": "72rem",
+};
+
 export function Modal({
   children,
   open,
@@ -353,6 +366,7 @@ export function Modal({
   width = "max-w-2xl",
   className,
   bodyClassName,
+  style,
 }: {
   children: ReactNode;
   open: boolean;
@@ -362,6 +376,7 @@ export function Modal({
   width?: string;
   className?: string;
   bodyClassName?: string;
+  style?: React.CSSProperties;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -378,6 +393,11 @@ export function Modal({
   }, [onClose, open]);
 
   if (!open) return null;
+
+  const resolvedMaxWidth =
+    style?.maxWidth ||
+    (MODAL_WIDTH_FALLBACKS[width] ? MODAL_WIDTH_FALLBACKS[width] : undefined);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6" style={{ outline: 'none' }}>
       <button
@@ -395,7 +415,11 @@ export function Modal({
         )}
         role="dialog"
         aria-modal="true"
-        style={{ outline: 'none' }}
+        style={{
+          outline: "none",
+          maxWidth: resolvedMaxWidth,
+          ...style,
+        }}
       >
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 px-6 py-4">
           <div>

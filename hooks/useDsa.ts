@@ -149,8 +149,22 @@ export function normalizeDsaData(dsa: any): any {
       ? String(dsa.experience_years)
       : null;
 
+  const rawDsaCode = dsa.dsa_code;
+  const normalizedDsaCode =
+    typeof rawDsaCode === "object" && rawDsaCode !== null
+      ? (rawDsaCode.code || "")
+      : rawDsaCode;
+
+  const rawCode = dsa.code;
+  const normalizedCode =
+    typeof rawCode === "object" && rawCode !== null
+      ? (rawCode.code || "")
+      : rawCode;
+
   return {
     ...dsa,
+    dsa_code: normalizedDsaCode,
+    code: normalizedCode,
     name: fullName,
     contact_person: contactPerson,
     gst_applicable: isGstApplicable,
@@ -416,14 +430,24 @@ export function useDsa() {
     async (
       idOrCode: number | string,
       payload: {
-        action: "RECOMMEND" | "APPROVE" | "REJECT" | "REVERT" | "QUERY" | "RESUBMIT";
+        action: "RECOMMEND" | "APPROVE" | "REJECT" | "REVERT" | "CALL_BACK" | "RE_ALLOCATE" | "FORWARD" | "QUERY" | "RESUBMIT";
         remarks?: string;
         query?: string;
+        target_user_id?: number;
+        confirmed?: boolean;
       }
     ) => {
       setActionLoading(true);
       try {
         const response = await adminApi.updateWorkflowAction(idOrCode, payload);
+        const isConfirmReq =
+          (response as any)?.status === "confirmation_required" ||
+          (response as any)?.requires_confirmation === true;
+
+        if (isConfirmReq) {
+          return response;
+        }
+
         toast({
           title: `Action [${payload.action}] processed`,
           description: response.message || "Workflow updated successfully.",
@@ -432,7 +456,7 @@ export function useDsa() {
         if (response.data) {
           setCurrentDsa(normalizeDsaData(response.data));
         }
-        return response.data;
+        return response.data || response;
       } catch (error: unknown) {
         toast({
           title: `Action failed`,
@@ -476,11 +500,21 @@ export function useDsa() {
         });
         return response.data;
       } catch (error: unknown) {
-        toast({
-          title: `Verification [${code}] failed`,
-          description: errorMessage(error, `Failed to execute verification [${code}].`),
-          variant: "destructive",
-        });
+        const msg = errorMessage(error, `Failed to execute verification [${code}].`);
+        const isUnauthorized =
+          msg.toLowerCase().includes("unauthorized") ||
+          msg.toLowerCase().includes("only checker") ||
+          (error as any)?.response?.status === 400 ||
+          (error as any)?.response?.status === 401 ||
+          (error as any)?.response?.status === 403;
+
+        if (!isUnauthorized) {
+          toast({
+            title: `Verification [${code}] failed`,
+            description: msg,
+            variant: "destructive",
+          });
+        }
         return null;
       } finally {
         setActionLoading(false);
