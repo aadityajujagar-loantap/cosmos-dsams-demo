@@ -19,10 +19,78 @@ import {
   Trash2,
 } from "lucide-react";
 import { Button, Input, Label, Select, StatusBadge } from "@/components/ui/primitives";
-import { DetailGrid, DetailItem } from "@/components/module";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
+
+function DetailGrid({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <div className={cn("grid gap-3.5 sm:grid-cols-2", className)}>{children}</div>;
+}
+
+function DetailItem({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-lg bg-slate-50/60 border border-slate-200/70 px-4 py-3 hover:bg-slate-50/90 hover:border-slate-300/80 transition-all",
+        className,
+      )}
+    >
+      <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+        {label}
+      </p>
+      <div className="mt-1 text-xs sm:text-sm font-semibold text-slate-800 break-words leading-relaxed">
+        {value || "—"}
+      </div>
+    </div>
+  );
+}
+
+function SectionBlock({
+  icon: Icon,
+  iconColor = "text-blue-600",
+  title,
+  action,
+  children,
+}: {
+  icon?: any;
+  iconColor?: string;
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-2xs space-y-4 hover:border-slate-300 transition-colors">
+      <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-200">
+        <div className="flex items-center gap-2">
+          {Icon && <Icon className={cn("h-4 w-4 shrink-0", iconColor)} />}
+          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+            {title}
+          </h4>
+        </div>
+        {action}
+      </div>
+      {children}
+    </div>
+  );
+}
 import { getDsaDisplayStatus } from "./dsa-pages";
 import type { BranchOption } from "@/types/dsa";
+
+function formatAadhaarNumber(val?: string): string {
+  if (!val) return "";
+  const cleaned = String(val).trim();
+  const digits = cleaned.replace(/\D/g, "");
+  if (digits.length === 12) {
+    return `${digits.slice(0, 4)}-${digits.slice(4, 8)}-${digits.slice(8)}`;
+  }
+  return cleaned;
+}
 
 export type DetailBlockKey =
   | "sourcing"
@@ -92,7 +160,7 @@ export function DsaBasicDetailsTab({
           date_of_birth: dsa.date_of_birth ? dsa.date_of_birth.substring(0, 10) : "",
           age: dsa.age || "",
           education_qualification: dsa.education_qualification || "Graduate",
-          aadhaar_no: dsa.aadhaar_no || "",
+          aadhaar_no: dsa.aadhaar_no || dsa.aadhaar || "",
         });
         break;
 
@@ -413,21 +481,16 @@ export function DsaBasicDetailsTab({
   const currentBranchOption = branches.find((b) => String(b.id) === String(selectedBranchId));
 
   return (
-    <div className="space-y-8 pt-2">
+    <div className="space-y-6 sm:space-y-7 pt-1">
       {/* ─────────────────────────────────────────────────────────────
           Section 1: Application & Sourcing Journey Overview
          ───────────────────────────────────────────────────────────── */}
-      <div>
-        <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-150">
-          <div className="flex items-center gap-2">
-            <FileText className="h-4 w-4 text-blue-600" />
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-              Application &amp; Sourcing Journey Overview
-            </h4>
-          </div>
-          {renderHeaderAction("sourcing")}
-        </div>
-
+      <SectionBlock
+        icon={FileText}
+        iconColor="text-blue-600"
+        title="Application Overview"
+        action={renderHeaderAction("sourcing")}
+      >
         {activeEditBlock === "sourcing" ? (
           <div className="bg-slate-50/70 p-4 rounded-lg border border-slate-200">
             <div className="grid gap-4 sm:grid-cols-2">
@@ -529,21 +592,17 @@ export function DsaBasicDetailsTab({
             />
           </DetailGrid>
         )}
-      </div>
+      </SectionBlock>
 
       {/* ─────────────────────────────────────────────────────────────
           Section 2: Applicant & Business Profile
          ───────────────────────────────────────────────────────────── */}
-      <div>
-        <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-150">
-          <div className="flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-indigo-600" />
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-              Applicant &amp; Business Profile
-            </h4>
-          </div>
-          {renderHeaderAction("applicant")}
-        </div>
+      <SectionBlock
+        icon={Building2}
+        iconColor="text-indigo-600"
+        title="Business Details"
+        action={renderHeaderAction("applicant")}
+      >
 
         {activeEditBlock === "applicant" ? (
           <div className="bg-slate-50/70 p-4 rounded-lg border border-slate-200 space-y-4">
@@ -770,42 +829,34 @@ export function DsaBasicDetailsTab({
               value={
                 dsa.registration_no_llpin_cin ? (
                   <span className="font-mono">{dsa.registration_no_llpin_cin}</span>
-                ) : dsa.aadhaar_no ? (
-                  dsa.aadhaar_no.length >= 4
-                    ? `•••• •••• ${dsa.aadhaar_no.slice(-4)}`
-                    : dsa.aadhaar_no
+                ) : (dsa.aadhaar_no || dsa.aadhaar) ? (
+                  <span className="font-mono">{formatAadhaarNumber(dsa.aadhaar_no || dsa.aadhaar)}</span>
                 ) : (
                   "Verified via Identity Document"
                 )
               }
             />
-            {dsa.registration_no_llpin_cin && dsa.aadhaar_no ? (
+            {dsa.registration_no_llpin_cin && (dsa.aadhaar_no || dsa.aadhaar) ? (
               <DetailItem
                 label="Aadhaar Number"
                 value={
-                  dsa.aadhaar_no.length >= 4
-                    ? `•••• •••• ${dsa.aadhaar_no.slice(-4)}`
-                    : dsa.aadhaar_no
+                  <span className="font-mono">{formatAadhaarNumber(dsa.aadhaar_no || dsa.aadhaar)}</span>
                 }
               />
             ) : null}
           </DetailGrid>
         )}
-      </div>
+      </SectionBlock>
 
       {/* ─────────────────────────────────────────────────────────────
           Section 3: Contact & Communication Channels
          ───────────────────────────────────────────────────────────── */}
-      <div>
-        <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-150">
-          <div className="flex items-center gap-2">
-            <Phone className="h-4 w-4 text-emerald-600" />
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-              Contact &amp; Communication Channels
-            </h4>
-          </div>
-          {renderHeaderAction("contact")}
-        </div>
+      <SectionBlock
+        icon={Phone}
+        iconColor="text-emerald-600"
+        title="Contacts"
+        action={renderHeaderAction("contact")}
+      >
 
         {activeEditBlock === "contact" ? (
           <div className="bg-slate-50/70 p-4 rounded-lg border border-slate-200">
@@ -934,21 +985,17 @@ export function DsaBasicDetailsTab({
             ) : null}
           </DetailGrid>
         )}
-      </div>
+      </SectionBlock>
 
       {/* ─────────────────────────────────────────────────────────────
           Section 4: Statutory, Tax & Licensing Details
          ───────────────────────────────────────────────────────────── */}
-      <div>
-        <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-150">
-          <div className="flex items-center gap-2">
-            <CreditCard className="h-4 w-4 text-amber-600" />
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-              Statutory, Tax &amp; Licensing Details
-            </h4>
-          </div>
-          {renderHeaderAction("statutory")}
-        </div>
+      <SectionBlock
+        icon={CreditCard}
+        iconColor="text-amber-600"
+        title="License Details"
+        action={renderHeaderAction("statutory")}
+      >
 
         {activeEditBlock === "statutory" ? (
           <div className="bg-slate-50/70 p-4 rounded-lg border border-slate-200">
@@ -1165,21 +1212,17 @@ export function DsaBasicDetailsTab({
             ) : null}
           </DetailGrid>
         )}
-      </div>
+      </SectionBlock>
 
       {/* ─────────────────────────────────────────────────────────────
           Section 5: Branch & Operating Territory
          ───────────────────────────────────────────────────────────── */}
-      <div>
-        <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-150">
-          <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-rose-600" />
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-              Branch &amp; Territory Mapping
-            </h4>
-          </div>
-          {renderHeaderAction("branch")}
-        </div>
+      <SectionBlock
+        icon={MapPin}
+        iconColor="text-rose-600"
+        title="Branch Details"
+        action={renderHeaderAction("branch")}
+      >
 
         {activeEditBlock === "branch" ? (
           <div className="bg-slate-50/70 p-4 rounded-lg border border-slate-200">
@@ -1253,21 +1296,17 @@ export function DsaBasicDetailsTab({
             />
           </DetailGrid>
         )}
-      </div>
+      </SectionBlock>
 
       {/* ─────────────────────────────────────────────────────────────
           Section 6: Address & Operating Premises
          ───────────────────────────────────────────────────────────── */}
-      <div>
-        <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-150">
-          <div className="flex items-center gap-2">
-            <Briefcase className="h-4 w-4 text-purple-600" />
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-              Address &amp; Operating Premises
-            </h4>
-          </div>
-          {renderHeaderAction("address")}
-        </div>
+      <SectionBlock
+        icon={Briefcase}
+        iconColor="text-purple-600"
+        title="Address Details"
+        action={renderHeaderAction("address")}
+      >
 
         {activeEditBlock === "address" ? (
           <div className="bg-slate-50/70 p-4 rounded-lg border border-slate-200 space-y-4">
@@ -1432,21 +1471,17 @@ export function DsaBasicDetailsTab({
             />
           </DetailGrid>
         )}
-      </div>
+      </SectionBlock>
 
       {/* ─────────────────────────────────────────────────────────────
           Section 7: Settlement & Bank Account Details
          ───────────────────────────────────────────────────────────── */}
-      <div>
-        <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-150">
-          <div className="flex items-center gap-2">
-            <BadgeIndianRupee className="h-4 w-4 text-emerald-600" />
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-              Settlement &amp; Bank Account Details
-            </h4>
-          </div>
-          {renderHeaderAction("bank")}
-        </div>
+      <SectionBlock
+        icon={BadgeIndianRupee}
+        iconColor="text-emerald-600"
+        title="Bank Account Details"
+        action={renderHeaderAction("bank")}
+      >
 
         {activeEditBlock === "bank" ? (
           <div className="bg-slate-50/70 p-4 rounded-lg border border-slate-200">
@@ -1574,22 +1609,18 @@ export function DsaBasicDetailsTab({
             ) : null}
           </DetailGrid>
         )}
-      </div>
+      </SectionBlock>
 
       {/* ─────────────────────────────────────────────────────────────
           Section 8: Professional References
          ───────────────────────────────────────────────────────────── */}
       {(dsa.reference_1_name || dsa.reference_2_name || canEdit) && (
-        <div>
-          <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-150">
-            <div className="flex items-center gap-2">
-              <Users className="h-4 w-4 text-cyan-600" />
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                Professional References
-              </h4>
-            </div>
-            {renderHeaderAction("references")}
-          </div>
+        <SectionBlock
+          icon={Users}
+          iconColor="text-cyan-600"
+          title="References"
+          action={renderHeaderAction("references")}
+        >
 
           {activeEditBlock === "references" ? (
             <div className="bg-slate-50/70 p-4 rounded-lg border border-slate-200">
@@ -1669,23 +1700,19 @@ export function DsaBasicDetailsTab({
               />
             </DetailGrid>
           )}
-        </div>
+        </SectionBlock>
       )}
 
       {/* ─────────────────────────────────────────────────────────────
           Section 9: Entity Stakeholders / Partners
          ───────────────────────────────────────────────────────────── */}
       {(isEntity || (Array.isArray(dsa.stakeholders) && dsa.stakeholders.length > 0) || canEdit) && (
-        <div>
-          <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-150">
-            <div className="flex items-center gap-2">
-              <Users className="h-4 w-4 text-indigo-600" />
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                Entity Stakeholders, Partners &amp; Directors ({dsa.stakeholders?.length || 0})
-              </h4>
-            </div>
-            {renderHeaderAction("stakeholders")}
-          </div>
+        <SectionBlock
+          icon={Users}
+          iconColor="text-indigo-600"
+          title={`Entity Stakeholders (${dsa.stakeholders?.length || 0})`}
+          action={renderHeaderAction("stakeholders")}
+        >
 
           {activeEditBlock === "stakeholders" ? (
             <div className="bg-slate-50/70 p-4 rounded-lg border border-slate-200 space-y-3">
@@ -1693,7 +1720,7 @@ export function DsaBasicDetailsTab({
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-50 text-slate-600 uppercase font-semibold border-b border-slate-200">
                     <tr>
-                      <th className="p-2.5">Stakeholder Name *</th>
+                      <th className="p-2.5">Stakeholder Name <span className="text-red-500 font-bold ml-0.5">*</span></th>
                       <th className="p-2.5">Role / Designation</th>
                       <th className="p-2.5">Mobile</th>
                       <th className="p-2.5">PAN</th>
@@ -1848,23 +1875,19 @@ export function DsaBasicDetailsTab({
               </table>
             </div>
           )}
-        </div>
+        </SectionBlock>
       )}
 
       {/* ─────────────────────────────────────────────────────────────
           Section 10: Associate Concerns & Sister Entities
          ───────────────────────────────────────────────────────────── */}
       {(isEntity || (Array.isArray(dsa.associate_concerns) && dsa.associate_concerns.length > 0) || canEdit) && (
-        <div>
-          <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-150">
-            <div className="flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-slate-600" />
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                Associate Concerns &amp; Sister Entities ({dsa.associate_concerns?.length || 0})
-              </h4>
-            </div>
-            {renderHeaderAction("associate_concerns")}
-          </div>
+        <SectionBlock
+          icon={Building2}
+          iconColor="text-slate-600"
+          title={`Associate Entities (${dsa.associate_concerns?.length || 0})`}
+          action={renderHeaderAction("associate_concerns")}
+        >
 
           {activeEditBlock === "associate_concerns" ? (
             <div className="bg-slate-50/70 p-4 rounded-lg border border-slate-200 space-y-3">
@@ -2003,20 +2026,18 @@ export function DsaBasicDetailsTab({
               </table>
             </div>
           )}
-        </div>
+        </SectionBlock>
       )}
 
       {/* ─────────────────────────────────────────────────────────────
           Section 11: Field Verification & Physical Visit Summary
          ───────────────────────────────────────────────────────────── */}
       {(dsa.visit_conducted_by || dsa.visit_conducted_at || dsa.visit_report_remarks) && (
-        <div>
-          <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-150">
-            <ShieldCheck className="h-4 w-4 text-emerald-600" />
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-              Field Verification &amp; Physical Visit Summary
-            </h4>
-          </div>
+        <SectionBlock
+          icon={ShieldCheck}
+          iconColor="text-emerald-600"
+          title="Physical Visit"
+        >
           <DetailGrid>
             <DetailItem
               label="Inspecting Officer"
@@ -2042,7 +2063,7 @@ export function DsaBasicDetailsTab({
               }
             />
           </DetailGrid>
-        </div>
+        </SectionBlock>
       )}
     </div>
   );

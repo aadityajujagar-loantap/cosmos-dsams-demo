@@ -410,25 +410,25 @@ export function DsaDetailEditModal({
   const getTitleAndIcon = () => {
     switch (block) {
       case "sourcing":
-        return { title: "Edit Sourcing & Application Journey", icon: <FileText className="h-5 w-5 text-blue-600" /> };
+        return { title: "Application Journey", icon: <FileText className="h-5 w-5 text-blue-600" /> };
       case "applicant":
-        return { title: "Edit Applicant & Business Profile", icon: <Building2 className="h-5 w-5 text-indigo-600" /> };
+        return { title: "Applicant & Business Details", icon: <Building2 className="h-5 w-5 text-indigo-600" /> };
       case "contact":
-        return { title: "Edit Contact & Communication Channels", icon: <Phone className="h-5 w-5 text-emerald-600" /> };
+        return { title: "Contact", icon: <Phone className="h-5 w-5 text-emerald-600" /> };
       case "statutory":
-        return { title: "Edit Statutory, Tax & Licensing Details", icon: <CreditCard className="h-5 w-5 text-amber-600" /> };
+        return { title: "Licensing Details", icon: <CreditCard className="h-5 w-5 text-amber-600" /> };
       case "branch":
-        return { title: "Edit Branch & Territory Mapping", icon: <MapPin className="h-5 w-5 text-rose-600" /> };
+        return { title: "Branch", icon: <MapPin className="h-5 w-5 text-rose-600" /> };
       case "address":
-        return { title: "Edit Address & Operating Premises", icon: <Briefcase className="h-5 w-5 text-purple-600" /> };
+        return { title: "Address Details", icon: <Briefcase className="h-5 w-5 text-purple-600" /> };
       case "bank":
-        return { title: "Edit Settlement & Bank Account Details", icon: <BadgeIndianRupee className="h-5 w-5 text-emerald-600" /> };
+        return { title: "Bank Account Details", icon: <BadgeIndianRupee className="h-5 w-5 text-emerald-600" /> };
       case "references":
-        return { title: "Edit Professional References", icon: <Users className="h-5 w-5 text-cyan-600" /> };
+        return { title: "References", icon: <Users className="h-5 w-5 text-cyan-600" /> };
       case "stakeholders":
-        return { title: "Edit Entity Stakeholders, Partners & Directors", icon: <Users className="h-5 w-5 text-indigo-600" /> };
+        return { title: "Entity Stakeholders", icon: <Users className="h-5 w-5 text-indigo-600" /> };
       case "associate_concerns":
-        return { title: "Edit Associate Concerns & Sister Entities", icon: <Building2 className="h-5 w-5 text-slate-600" /> };
+        return { title: "Associate Entities", icon: <Building2 className="h-5 w-5 text-slate-600" /> };
     }
   };
 

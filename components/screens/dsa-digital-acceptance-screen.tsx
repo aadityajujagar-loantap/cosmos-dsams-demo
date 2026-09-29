@@ -147,7 +147,7 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
           </div>
           <div>
             <h1 className="text-sm font-semibold tracking-tight text-white flex items-center gap-1.5">
-              THE COSMOS CO-OP. BANK LTD.
+              COSMOS CO-OP. BANK LTD.
               <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
                 DSA Portal
               </span>

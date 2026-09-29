@@ -328,14 +328,59 @@ export function Select({
   );
 }
 
+function renderWithRedAsterisks(node: ReactNode): ReactNode {
+  if (node === null || node === undefined || typeof node === "boolean" || typeof node === "number") {
+    return node;
+  }
+  if (typeof node === "string") {
+    if (!node.includes("*")) return node;
+    const parts = node.split("*");
+    return parts.map((part, i) => (
+      <React.Fragment key={i}>
+        {part}
+        {i < parts.length - 1 && (
+          <span
+            className="text-red-500 font-bold ml-0.5"
+            style={{ color: "#ef4444", fontWeight: "bold" }}
+            aria-hidden="true"
+          >
+            *
+          </span>
+        )}
+      </React.Fragment>
+    ));
+  }
+  if (Array.isArray(node)) {
+    return Children.map(node, (child) => renderWithRedAsterisks(child));
+  }
+  if (isValidElement(node) && (node.props as any)?.children) {
+    return React.cloneElement(node as React.ReactElement<any>, {
+      children: renderWithRedAsterisks((node.props as any).children),
+    });
+  }
+  return node;
+}
+
+export function MandatoryAsterisk({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn("text-red-500 font-bold ml-0.5", className)}
+      style={{ color: "#ef4444", fontWeight: "bold" }}
+      aria-hidden="true"
+    >
+      *
+    </span>
+  );
+}
+
 export function Label({
   children,
   className,
   ...props
 }: LabelHTMLAttributes<HTMLLabelElement> & { children: ReactNode }) {
   return (
-    <label className={cn("text-xs font-semibold uppercase tracking-wide text-slate-500", className)} {...props}>
-      {children}
+    <label className={cn("text-sm font-bold uppercase tracking-wide text-slate-700", className)} {...props}>
+      {renderWithRedAsterisks(children)}
     </label>
   );
 }

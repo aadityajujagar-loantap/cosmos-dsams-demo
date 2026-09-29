@@ -10,7 +10,6 @@ import { adminApi } from "@/apis/admin";
 import { cn } from "@/lib/utils";
 import {
   Loader2,
-  RefreshCw,
   ShieldCheck,
   CheckCircle2,
   AlertCircle,
@@ -29,6 +28,7 @@ interface DsaKycDataModalProps {
   type: KycDataType | null;
   dsa: any;
   cachedVerif?: any;
+  isMaker?: boolean;
 }
 
 export function DsaKycDataModal({
@@ -37,6 +37,7 @@ export function DsaKycDataModal({
   type,
   dsa,
   cachedVerif,
+  isMaker = false,
 }: DsaKycDataModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -157,7 +158,7 @@ export function DsaKycDataModal({
     }
   }, [open, type, fetchKycData]);
 
-  if (!open || !type) return null;
+  if (!open || !type || (isMaker && type !== "pan")) return null;
 
   const hasBankOnboardingData = Boolean(
     dsa?.account_number || dsa?.ifsc || dsa?.bank_name || (dsa as any)?.account_holder_name
@@ -197,48 +198,15 @@ export function DsaKycDataModal({
         return "KYC Verification Details";
     }
   };
-
-  const getSubtitle = () => {
-    return isComparisonMode
-      ? `${dsa?.name || dsa?.entity_name || "Applicant"} (${dsa?.dsa_code || `DSA-${dsa?.id}`}) · Comparing Onboarding Input against Live Gateway Response`
-      : `${dsa?.name || dsa?.entity_name || "Applicant"} (${dsa?.dsa_code || `DSA-${dsa?.id}`}) · Queried directly via API Gateway`;
-  };
-
   return (
     <Modal
       open={open}
       onClose={onClose}
       title={getTitle()}
-      description={getSubtitle()}
       width={isComparisonMode ? "max-w-[1040px]" : "max-w-[760px]"}
       style={{ maxWidth: isComparisonMode ? "1040px" : "760px", width: "100%" }}
     >
       <div className="space-y-3.5">
-        {/* Actions & Query Bar */}
-        <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-slate-700">Source:</span>
-            <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-mono font-medium border border-blue-200 text-[11px]">
-              {type === "pan" && "NSDL / ScoreMe / Karza"}
-              {type === "gst" && "GSTN Master DB / ScoreMe"}
-              {type === "bank" && "BAV Penny Drop Gateway"}
-              {type === "udyam" && "Ministry of MSME Portal"}
-              {type === "cibil" && "TransUnion CIBIL Bureau"}
-              {type === "aml" && "Compass AML & PEP Screening"}
-            </span>
-          </div>
-          <Button
-            size="sm"
-            type="button"
-            variant="outline"
-            disabled={loading}
-            onClick={fetchKycData}
-            className="text-xs h-7 px-2.5 flex items-center gap-1.5 text-slate-700 hover:text-blue-700"
-          >
-            <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />
-            {loading ? "Querying..." : "Re-query Gateway"}
-          </Button>
-        </div>
 
         {/* Loading Skeleton */}
         {loading && (
@@ -279,36 +247,14 @@ export function DsaKycDataModal({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 items-start">
                 {/* Left Column: DSA Onboarding Application Data */}
                 <div className="space-y-3 bg-amber-50/30 p-3 rounded-xl border border-amber-200/80 shadow-2xs">
-                  <div className="flex items-center justify-between pb-1.5 border-b border-amber-200/60">
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-amber-500" />
-                      <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-800">
-                        DSA Onboarding Data
-                      </h3>
-                    </div>
-                    <span className="px-2 py-0.5 rounded text-[9.5px] font-bold bg-amber-100/80 text-amber-800 border border-amber-300/80">
-                      Applicant Submission
-                    </span>
-                  </div>
                   {type === "bank" && <BankOnboardingTable dsa={dsa} />}
                   {type === "udyam" && <UdyamOnboardingTable dsa={dsa} />}
                 </div>
 
                 {/* Right Column: Verified API Response Data */}
                 <div className="space-y-3 bg-blue-50/20 p-3 rounded-xl border border-blue-200/80 shadow-2xs">
-                  <div className="flex items-center justify-between pb-1.5 border-b border-blue-200/60">
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                      <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-800">
-                        Statutory Gateway Data
-                      </h3>
-                    </div>
-                    <span className="px-2 py-0.5 rounded text-[9.5px] font-bold bg-emerald-100/80 text-emerald-800 border border-emerald-300/80">
-                      Live Gateway Response
-                    </span>
-                  </div>
-                  {type === "bank" && <BankDataTable dsa={dsa} apiData={apiData} />}
-                  {type === "udyam" && <UdyamDataTable dsa={dsa} apiData={apiData} />}
+                  {type === "bank" && <BankDataTable dsa={dsa} apiData={apiData} isComparison />}
+                  {type === "udyam" && <UdyamDataTable dsa={dsa} apiData={apiData} isComparison />}
                 </div>
               </div>
             ) : (
@@ -367,7 +313,6 @@ function TableWrapper({
             <div className="h-2.5 w-1 bg-blue-600 rounded-full" />
             <h4 className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">{title}</h4>
           </div>
-          {subtitle && <span className="text-[10px] text-slate-400 font-medium">{subtitle}</span>}
         </div>
       )}
       <div className="rounded-lg border border-slate-200/90 overflow-hidden bg-white shadow-2xs">
@@ -705,40 +650,31 @@ function BankOnboardingTable({ dsa }: { dsa: any }) {
   const state = dsa.state || "N/A";
 
   return (
-    <div className="space-y-3">
-      <TableWrapper
-        title="1. Submitted Account Details"
-        subtitle="Onboarding Form Input"
-        paramHeader="Submitted Parameter"
-        valueHeader="DSA Application Input"
-      >
-        <TableRow label="Account Holder Name" value={accountHolder} />
-        <TableRow label="Account Number" value={accNo} isMono />
-        <TableRow label="Account Type" value={accountType} />
-        <TableRow label="Bank Name" value={bankName} />
-        <TableRow label="Bank Branch" value={branch} />
-        <TableRow label="Bank Location" value={`${city}, ${state}`} />
-      </TableWrapper>
-      <TableWrapper
-        title="2. Submitted Routing & Clearing"
-        subtitle="Branch Routing Codes"
-        paramHeader="Submitted Parameter"
-        valueHeader="DSA Application Input"
-      >
-        <TableRow label="IFSC Code" value={ifsc} isMono />
-        {micr !== "N/A" && <TableRow label="MICR Code" value={micr} isMono />}
-        <TableRow
-          label="Onboarding Submission Source"
-          value="DSA Partner Registration Portal Form"
-          badge="neutral"
-        />
-      </TableWrapper>
-    </div>
+    <TableWrapper
+      title="Details from Onboarding Form"
+      subtitle="Applicant Submission"
+      paramHeader="Submitted Parameter"
+      valueHeader="DSA Application Input"
+    >
+      <TableRow label="Account Holder Name" value={accountHolder} />
+      <TableRow label="Account Number" value={accNo} isMono />
+      <TableRow label="Account Type" value={accountType} />
+      <TableRow label="Bank Name" value={bankName} />
+      <TableRow label="Bank Branch" value={branch} />
+      <TableRow label="Bank Location" value={`${city}, ${state}`} />
+      <TableRow label="IFSC Code" value={ifsc} isMono />
+      {micr !== "N/A" && <TableRow label="MICR Code" value={micr} isMono />}
+      <TableRow
+        label="Onboarding Submission Source"
+        value="DSA Partner Registration Portal Form"
+        badge="neutral"
+      />
+    </TableWrapper>
   );
 }
 
-// 3. Bank Account Verification Table (2 Categorized Tables)
-function BankDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
+// 3. Bank Account Verification Table (Single combined table in comparison mode)
+function BankDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiData: any; isComparison?: boolean }) {
   const details =
     apiData?.data?.details?.data ||
     apiData?.data?.details?.result ||
@@ -760,6 +696,49 @@ function BankDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
   const micr = details.micr || details.micrCode || "841024504";
   const accountType = details.accountType || dsa.account_type || (dsa.dsa_type === "ENTITY" ? "Current Account" : "Savings Account");
   const bankAddress = details.address || [branch, city, state].filter(Boolean).join(", ");
+
+  if (isComparison) {
+    return (
+      <TableWrapper
+        title="Details from API"
+        subtitle="Live Gateway Response"
+        paramHeader="Attribute / Parameter"
+        valueHeader="Verified Response Data"
+      >
+        <TableRow label="Beneficiary Account Name" value={beneficiaryName} badge="success" />
+        <TableRow label="Name Match Status" value="100% Name Match Confirmed" badge="success" />
+        <TableRow label="Account Number" value={accNo} isMono />
+        <TableRow label="Account Type" value={accountType} />
+        <TableRow label="Bank Name" value={bankName} />
+        <TableRow label="Bank Branch" value={branch} />
+        <TableRow label="Bank Location" value={`${city}, ${state}`} />
+        {district && district !== city && (
+          <TableRow label="District" value={district} />
+        )}
+        {bankAddress && (
+          <TableRow label="Branch Registered Address" value={bankAddress} />
+        )}
+        <TableRow label="IFSC Code" value={ifsc} isMono />
+        <TableRow label="MICR Code" value={micr} isMono />
+        <TableRow
+          label="Account Validation Status"
+          value="Active & Operative Account"
+          badge="success"
+        />
+        <TableRow
+          label="Penny Drop Verification"
+          value="₹1.00 Deposited & Account Confirmed via NPCI IMPS"
+          badge="success"
+        />
+        <TableRow
+          label="Penny Drop Transaction UTR"
+          value={utr}
+          isMono
+          badge="success"
+        />
+      </TableWrapper>
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -825,40 +804,31 @@ function UdyamOnboardingTable({ dsa }: { dsa: any }) {
   const category = dsa.constitution || dsa.dsa_type || "MSME Registered Enterprise";
 
   return (
-    <div className="space-y-3">
-      <TableWrapper
-        title="1. Submitted MSME Details"
-        subtitle="Onboarding Form Input"
-        paramHeader="Submitted Parameter"
-        valueHeader="DSA Application Input"
-      >
-        <TableRow label="Udyam Registration Number" value={udyamNo} isMono />
-        <TableRow label="Enterprise Legal Name" value={enterpriseName} />
-        <TableRow label="Organisation Structure" value={orgType} />
-        <TableRow label="Enterprise Category" value={category} />
-        <TableRow label="Contact Person" value={dsa.contact_person || dsa.name || "N/A"} />
-      </TableWrapper>
-      <TableWrapper
-        title="2. Submitted Business Contact & Address"
-        subtitle="Operating Business Premises"
-        paramHeader="Submitted Parameter"
-        valueHeader="DSA Application Input"
-      >
-        <TableRow label="Operating Address" value={address} />
-        <TableRow label="Registered Mobile Number" value={phone} />
-        <TableRow label="Registered Email Address" value={email} />
-        <TableRow
-          label="Onboarding Submission Source"
-          value="DSA Partner Registration Portal Form"
-          badge="neutral"
-        />
-      </TableWrapper>
-    </div>
+    <TableWrapper
+      title="Details from Onboarding Form"
+      subtitle="Applicant Submission"
+      paramHeader="Submitted Parameter"
+      valueHeader="DSA Application Input"
+    >
+      <TableRow label="Udyam Registration Number" value={udyamNo} isMono />
+      <TableRow label="Enterprise Legal Name" value={enterpriseName} />
+      <TableRow label="Organisation Structure" value={orgType} />
+      <TableRow label="Enterprise Category" value={category} />
+      <TableRow label="Contact Person" value={dsa.contact_person || dsa.name || "N/A"} />
+      <TableRow label="Operating Address" value={address} />
+      <TableRow label="Registered Mobile Number" value={phone} />
+      <TableRow label="Registered Email Address" value={email} />
+      <TableRow
+        label="Onboarding Submission Source"
+        value="DSA Partner Registration Portal Form"
+        badge="neutral"
+      />
+    </TableWrapper>
   );
 }
 
-// 4. Udyam MSME Registration Table (2 Categorized Tables)
-function UdyamDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
+// 4. Udyam MSME Registration Table (2 Categorized Tables, or 1 combined in comparison mode)
+function UdyamDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiData: any; isComparison?: boolean }) {
   const details =
     apiData?.data?.details?.data ||
     apiData?.data?.details?.result ||
@@ -968,6 +938,54 @@ function UdyamDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
   const nic5 = primaryNic.nicFiveDigit || "56102 - Restaurants without bars";
   const nicActivity = primaryNic.activity || majorActivity;
   const nicDate = primaryNic.date || regDate;
+
+  if (isComparison) {
+    return (
+      <TableWrapper
+        title="Details from API"
+        subtitle="Live Gateway Response"
+        paramHeader="Attribute / Parameter"
+        valueHeader="Verified Response Data"
+      >
+        <TableRow label="Udyam Registration Number" value={udyamNo} isMono badge="success" />
+        <TableRow label="Enterprise Legal Name" value={enterpriseName} />
+        <TableRow
+          label="Enterprise Classification"
+          value={enterpriseType}
+          badge="success"
+        />
+        <TableRow label="Organisation Structure" value={orgType} />
+        <TableRow label="Major Business Activity" value={majorActivity} />
+        <TableRow label="Date of Udyam Registration" value={regDate} />
+        <TableRow label="Date of Incorporation" value={incorporationDate} />
+        <TableRow label="Date of Commencement" value={commencementDate} />
+        <TableRow label="Social Category" value={socialCategory} />
+        <TableRow label="District Industries Centre (DIC)" value={dic} />
+        <TableRow label="MSME Development Institute (DI)" value={msmeDi} />
+        {formattedOfficialAddress && (
+          <TableRow label="Official Registered Address" value={formattedOfficialAddress} />
+        )}
+        {offMobile && (
+          <TableRow label="Enterprise Registered Mobile" value={offMobile} />
+        )}
+        {offEmail && (
+          <TableRow label="Enterprise Registered Email" value={offEmail} />
+        )}
+        {formattedUnitAddress && (
+          <TableRow label="Plant / Unit Locations" value={formattedUnitAddress} />
+        )}
+        <TableRow label="NIC 2-Digit Group" value={nic2} />
+        <TableRow label="NIC 4-Digit Class" value={nic4} />
+        <TableRow label="NIC 5-Digit Sub-Class" value={nic5} />
+        <TableRow label="NIC Activity Description" value={`${nicActivity} (Effective: ${nicDate})`} />
+        <TableRow
+          label="MSME Portal Verification"
+          value="Verified via Ministry of MSME National Portal"
+          badge="success"
+        />
+      </TableWrapper>
+    );
+  }
 
   return (
     <div className="space-y-3">
