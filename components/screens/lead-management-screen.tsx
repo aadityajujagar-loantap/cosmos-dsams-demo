@@ -22,6 +22,7 @@ import {
   Edit3,
   ChevronDown,
   X,
+  AlertTriangle,
 } from "lucide-react";
 import {
   fetchLeads,
@@ -245,6 +246,33 @@ export function LeadManagementScreen() {
   const [cancellationReason, setCancellationReason] = useState("");
   const [targetStatus, setTargetStatus] = useState("IN_PROCESS");
   const [updateRemarks, setUpdateRemarks] = useState("");
+
+  // Confirmation Modal state for branch user status actions
+  const [confirmActionModal, setConfirmActionModal] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    variant?: "blue" | "emerald" | "red" | "amber";
+    onConfirm: () => void;
+  } | null>(null);
+
+  const confirmAction = (
+    title: string,
+    message: string,
+    onConfirm: () => void,
+    confirmLabel = "Yes, Proceed",
+    variant: "blue" | "emerald" | "red" | "amber" = "blue"
+  ) => {
+    setConfirmActionModal({
+      open: true,
+      title,
+      message,
+      confirmLabel,
+      variant,
+      onConfirm,
+    });
+  };
 
   const [showRawJson, setShowRawJson] = useState(false);
 
@@ -628,7 +656,7 @@ export function LeadManagementScreen() {
     }
   };
 
-  const handleForwardToChecker = async (leadId: number | string) => {
+  const executeForwardToChecker = async (leadId: number | string) => {
     try {
       const res = await forwardToChecker(leadId, "Maker verified details");
       if (res?.status === "success") {
@@ -640,20 +668,38 @@ export function LeadManagementScreen() {
     }
   };
 
+  const handleForwardToChecker = (leadId: number | string) => {
+    confirmAction(
+      "Forward Lead to Checker",
+      "Do you want to perform this action? Forward this lead to Bank Checker for approval?",
+      () => executeForwardToChecker(leadId),
+      "Yes, Forward Lead",
+      "blue"
+    );
+  };
+
   const handleRaiseQuerySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedLead || !queryText) return;
-    try {
-      const res = await raiseLeadQuery(selectedLead.id!, { query_text: queryText, query_type: queryType });
-      if (res?.status === "success") {
-        toast({ title: "Success", description: "Query raised successfully", variant: "success" });
-        setIsQueryModalOpen(false);
-        setQueryText("");
-        handleViewDetail(selectedLead.id!);
-      }
-    } catch (err: any) {
-      toast({ title: "Error", description: err?.message, variant: "error" });
-    }
+    confirmAction(
+      "Raise Query on Lead",
+      `Do you want to perform this action? Raise ${queryType} query on application ${selectedLead.application_id || selectedLead.lead_uuid}?`,
+      async () => {
+        try {
+          const res = await raiseLeadQuery(selectedLead.id!, { query_text: queryText, query_type: queryType });
+          if (res?.status === "success") {
+            toast({ title: "Success", description: "Query raised successfully", variant: "success" });
+            setIsQueryModalOpen(false);
+            setQueryText("");
+            handleViewDetail(selectedLead.id!);
+          }
+        } catch (err: any) {
+          toast({ title: "Error", description: err?.message, variant: "error" });
+        }
+      },
+      "Yes, Submit Query",
+      "amber"
+    );
   };
 
   const handleRespondQuerySubmit = async (e: React.FormEvent) => {
@@ -672,8 +718,7 @@ export function LeadManagementScreen() {
     }
   };
 
-  const handleSanctionSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const executeSanctionSubmit = async () => {
     if (!selectedLead) return;
     try {
       const res = await sanctionLead(selectedLead.id!, {
@@ -692,8 +737,19 @@ export function LeadManagementScreen() {
     }
   };
 
-  const handleRejectSubmit = async (e: React.FormEvent) => {
+  const handleSanctionSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedLead) return;
+    confirmAction(
+      "Sanction Lead Application",
+      `Do you want to perform this action? Sanction loan amount of ₹${sanctionAmount.toLocaleString("en-IN")} for lead ${selectedLead.application_id || selectedLead.lead_uuid}?`,
+      executeSanctionSubmit,
+      "Yes, Sanction Lead",
+      "emerald"
+    );
+  };
+
+  const executeRejectSubmit = async () => {
     if (!selectedLead || !rejectionReason) return;
     try {
       const res = await rejectLead(selectedLead.id!, rejectionReason);
@@ -709,6 +765,18 @@ export function LeadManagementScreen() {
     }
   };
 
+  const handleRejectSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLead || !rejectionReason) return;
+    confirmAction(
+      "Reject Lead Application",
+      `Do you want to perform this action? Reject lead ${selectedLead.application_id || selectedLead.lead_uuid}?`,
+      executeRejectSubmit,
+      "Yes, Reject Lead",
+      "red"
+    );
+  };
+
   const openDisbursementModal = (lead: LeadData) => {
     setSelectedLead(lead);
     const sancAmt = lead.sanction_amount || lead.loan_amount_required || 0;
@@ -721,7 +789,28 @@ export function LeadManagementScreen() {
     setIsDisburseModalOpen(true);
   };
 
-  const handleDisburseSubmit = async (e: React.FormEvent) => {
+  const executeDisburseSubmit = async () => {
+    if (!selectedLead) return;
+    try {
+      const res = await disburseLead(selectedLead.id!, {
+        disbursed_amount: Number(disbursedAmount),
+        disbursement_date: disbursementDate,
+        loan_account_no: loanAccountNo.trim(),
+        has_deviation: hasDeviation === "Yes",
+        deviation_type: hasDeviation === "Yes" ? deviationType : null,
+      });
+      if (res?.status === "success") {
+        toast({ title: "Success", description: "Loan disbursed successfully", variant: "success" });
+        setIsDisburseModalOpen(false);
+        handleViewDetail(selectedLead.id!);
+        loadLeadDataOnly();
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message, variant: "error" });
+    }
+  };
+
+  const handleDisburseSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedLead) return;
 
@@ -745,26 +834,16 @@ export function LeadManagementScreen() {
       return;
     }
 
-    try {
-      const res = await disburseLead(selectedLead.id!, {
-        disbursed_amount: Number(disbursedAmount),
-        disbursement_date: disbursementDate,
-        loan_account_no: acct,
-        has_deviation: hasDeviation === "Yes",
-        deviation_type: hasDeviation === "Yes" ? deviationType : null,
-      });
-      if (res?.status === "success") {
-        toast({ title: "Success", description: "Loan disbursed successfully", variant: "success" });
-        setIsDisburseModalOpen(false);
-        handleViewDetail(selectedLead.id!);
-        loadLeadDataOnly();
-      }
-    } catch (err: any) {
-      toast({ title: "Error", description: err?.message, variant: "error" });
-    }
+    confirmAction(
+      "Confirm Loan Disbursement",
+      `Do you want to perform this action? Mark lead as Disbursed with Loan Account No. ${acct}?`,
+      executeDisburseSubmit,
+      "Yes, Confirm Disbursement",
+      "emerald"
+    );
   };
 
-  const handleProcessLead = async (leadId: number) => {
+  const executeProcessLead = async (leadId: number) => {
     try {
       const res = await forwardToChecker(leadId, "Processed by Bank Maker");
       if (res?.status === "success") {
@@ -777,8 +856,17 @@ export function LeadManagementScreen() {
     }
   };
 
-  const handleCancelSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleProcessLead = (leadId: number) => {
+    confirmAction(
+      "Process Lead Application",
+      "Do you want to perform this action? Transition lead status to IN_PROCESS?",
+      () => executeProcessLead(leadId),
+      "Yes, Process Lead",
+      "blue"
+    );
+  };
+
+  const executeCancelSubmit = async () => {
     if (!selectedLead || !cancellationReason) return;
     try {
       const res = await cancelLead(selectedLead.id!, cancellationReason);
@@ -794,8 +882,19 @@ export function LeadManagementScreen() {
     }
   };
 
-  const handleUpdateStatusSubmit = async (e: React.FormEvent) => {
+  const handleCancelSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedLead || !cancellationReason) return;
+    confirmAction(
+      "Cancel Lead Application",
+      `Do you want to perform this action? Cancel lead ${selectedLead.application_id || selectedLead.lead_uuid}?`,
+      executeCancelSubmit,
+      "Yes, Cancel Lead",
+      "red"
+    );
+  };
+
+  const executeUpdateStatusSubmit = async () => {
     if (!selectedLead || !targetStatus) return;
     try {
       const res = await updateLeadStatus(selectedLead.id!, {
@@ -812,6 +911,18 @@ export function LeadManagementScreen() {
     } catch (err: any) {
       toast({ title: "Error", description: err?.message, variant: "error" });
     }
+  };
+
+  const handleUpdateStatusSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLead || !targetStatus) return;
+    confirmAction(
+      "Update Lead Status",
+      `Do you want to perform this action? Update status of lead ${selectedLead.application_id || selectedLead.lead_uuid} to ${targetStatus}?`,
+      executeUpdateStatusSubmit,
+      "Yes, Update Status",
+      "blue"
+    );
   };
 
   const handleOpenEditModal = (lead: LeadData) => {
@@ -2883,6 +2994,69 @@ export function LeadManagementScreen() {
           </div>
         </form>
       </Modal>
+
+      {/* Confirmation Modal for Branch/Bank User Status Actions */}
+      {confirmActionModal && (
+        <Modal
+          open={confirmActionModal.open}
+          onClose={() => setConfirmActionModal(null)}
+          title={confirmActionModal.title || "Confirm Action"}
+        >
+          <div className="space-y-5 text-slate-800 text-xs py-2">
+            <div className="flex items-center gap-3.5 bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <div
+                className={`p-3 rounded-xl text-white font-bold shrink-0 ${
+                  confirmActionModal.variant === "emerald"
+                    ? "bg-emerald-600 shadow-md shadow-emerald-600/20"
+                    : confirmActionModal.variant === "red"
+                    ? "bg-red-600 shadow-md shadow-red-600/20"
+                    : confirmActionModal.variant === "amber"
+                    ? "bg-amber-600 shadow-md shadow-amber-600/20"
+                    : "bg-blue-600 shadow-md shadow-blue-600/20"
+                }`}
+              >
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm">Action Confirmation</h4>
+                <p className="text-slate-600 mt-0.5 font-medium leading-relaxed text-xs">
+                  {confirmActionModal.message || "Do you want to perform this action?"}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-200">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setConfirmActionModal(null)}
+                className="rounded-xl px-4 py-2 text-xs font-bold"
+              >
+                No, Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  const action = confirmActionModal.onConfirm;
+                  setConfirmActionModal(null);
+                  action();
+                }}
+                className={`rounded-xl px-5 py-2 text-xs font-bold text-white shadow-md transition-all ${
+                  confirmActionModal.variant === "emerald"
+                    ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20"
+                    : confirmActionModal.variant === "red"
+                    ? "bg-red-600 hover:bg-red-700 shadow-red-600/20"
+                    : confirmActionModal.variant === "amber"
+                    ? "bg-amber-600 hover:bg-amber-700 shadow-amber-600/20"
+                    : "bg-blue-600 hover:bg-blue-700 shadow-blue-600/20"
+                }`}
+              >
+                {confirmActionModal.confirmLabel || "Yes, Proceed"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
