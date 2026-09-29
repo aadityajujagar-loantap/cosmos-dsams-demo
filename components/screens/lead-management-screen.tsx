@@ -279,6 +279,8 @@ export function LeadManagementScreen() {
   // Form states
   const [shareableUrl, setShareableUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [selectedShareDsaCode, setSelectedShareDsaCode] = useState<string>("");
+  const [generatingLink, setGeneratingLink] = useState(false);
 
   // Master Data
   const [products, setProducts] = useState<any[]>([]);
@@ -583,12 +585,12 @@ export function LeadManagementScreen() {
     }
   };
 
-  // Lazy load master dropdown data ONCE when Create, Edit, or Disburse modal opens
+  // Lazy load master dropdown data ONCE when Create, Edit, Disburse, or Share modal opens
   useEffect(() => {
-    if (isCreateModalOpen || isEditModalOpen || isDisburseModalOpen) {
+    if (isCreateModalOpen || isEditModalOpen || isDisburseModalOpen || isShareModalOpen) {
       loadStaticMasterData();
     }
-  }, [isCreateModalOpen, isEditModalOpen, isDisburseModalOpen]);
+  }, [isCreateModalOpen, isEditModalOpen, isDisburseModalOpen, isShareModalOpen]);
 
   // Load leads data on pagination, filter, or tab change
   useEffect(() => {
@@ -632,15 +634,36 @@ export function LeadManagementScreen() {
     }
   };
 
-  const handleGenerateLink = async () => {
+  const handleOpenShareModal = () => {
+    setShareableUrl(null);
+    setSelectedShareDsaCode("");
+    setIsShareModalOpen(true);
+    loadStaticMasterData();
+    if (isDsa) {
+      handleGenerateLink();
+    }
+  };
+
+  const handleGenerateLink = async (dsaCodeToUse?: string) => {
+    const code = dsaCodeToUse || selectedShareDsaCode;
+    if (isBankUser && !code) {
+      toast({ title: "Validation Error", description: "Please select a DSA Partner / DSA Code", variant: "error" });
+      return;
+    }
+
     try {
-      const res = await generateShareableToken();
+      setGeneratingLink(true);
+      const res = await generateShareableToken(code ? { dsa_code: code } : undefined);
       if (res?.status === "success") {
         setShareableUrl(res.data.shareable_url);
         setIsShareModalOpen(true);
+      } else {
+        toast({ title: "Error", description: res?.message || "Failed to generate link", variant: "error" });
       }
     } catch (err: any) {
-      toast({ title: "Error", description: "Failed to generate link", variant: "error" });
+      toast({ title: "Error", description: err?.response?.data?.message || err?.message || "Failed to generate link", variant: "error" });
+    } finally {
+      setGeneratingLink(false);
     }
   };
 
@@ -982,7 +1005,7 @@ export function LeadManagementScreen() {
       <PageHeader
         action={
           <div className="flex gap-2">
-            <Button onClick={handleGenerateLink} variant="outline" type="button">
+            <Button onClick={handleOpenShareModal} variant="outline" type="button">
               <Share2 className="h-4 w-4 mr-2 text-emerald-600" />
               Customer Link
             </Button>
@@ -1311,31 +1334,90 @@ export function LeadManagementScreen() {
         </CardContent>
       </Card>
 
-      {/* Share Link Modal */}
-      <Modal open={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} title="Customer Self-Fill Shareable Link">
-        <div className="space-y-4">
-          <p className="text-sm text-slate-600">
-            Share this link with your customer to let them complete their loan details directly online.
+      {/* Share Link Modal (With DSA Partner Selector for Branch Users) */}
+      <Modal open={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} title="Customer Self-Fill Application Link" width="max-w-md">
+        <div className="space-y-4 text-xs">
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Generate a secure 256-bit encrypted link to share with your customer. All leads submitted through this link will be automatically tagged with the selected DSA partner code.
           </p>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              readOnly
-              value={shareableUrl || ""}
-              className="flex-1 bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono text-slate-800"
-            />
+
+          {/* DSA Selector for Branch User */}
+          {isBankUser && (
+            <div className="space-y-1.5 bg-blue-50/50 p-3.5 rounded-2xl border border-blue-100">
+              <label className="block text-slate-800 font-bold uppercase tracking-wider text-[11px]">
+                Select DSA Partner / DSA Code *
+              </label>
+              <SearchableDsaSelect
+                dsaList={dsaList}
+                selectedCode={selectedShareDsaCode}
+                onSelect={(code) => {
+                  setSelectedShareDsaCode(code);
+                  setShareableUrl(null);
+                }}
+              />
+              <p className="text-[10px] text-blue-700 font-medium">
+                Mandatory parameter: Lead submissions require a valid empanelled DSA code.
+              </p>
+            </div>
+          )}
+
+          {isBankUser && !shareableUrl && (
             <Button
-              onClick={() => {
-                if (shareableUrl) {
-                  navigator.clipboard.writeText(shareableUrl);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2000);
-                }
-              }}
+              type="button"
+              disabled={generatingLink || !selectedShareDsaCode}
+              onClick={() => handleGenerateLink(selectedShareDsaCode)}
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl py-2.5 text-xs shadow-md shadow-blue-600/20 disabled:opacity-50"
             >
-              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              {generatingLink ? (
+                <>
+                  <RefreshCw className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Generating Link...
+                </>
+              ) : (
+                <>
+                  <Share2 className="h-3.5 w-3.5 mr-1.5" /> Generate Link for Selected DSA
+                </>
+              )}
             </Button>
-          </div>
+          )}
+
+          {shareableUrl && (
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between text-[11px] font-bold text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
+                <span>✓ Shareable Link Ready</span>
+                <span className="font-mono text-[10px] bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded">
+                  DSA: {selectedShareDsaCode || "DSA_PARTNER"}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={shareableUrl || ""}
+                  className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 font-medium select-all focus:outline-none"
+                />
+                <Button
+                  onClick={() => {
+                    if (shareableUrl) {
+                      navigator.clipboard.writeText(shareableUrl);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    }
+                  }}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-4 font-bold"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="h-4 w-4 mr-1 text-emerald-300" /> Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4 mr-1" /> Copy Link
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </Modal>
 
