@@ -3374,7 +3374,6 @@ export function DsaProfilePage({ id }: { id: string }) {
     uploadSignedAgreement,
     fetchDsaAgreement,
     fetchSignedAgreementReview,
-    verifySignedAgreement,
     approveSignedAgreement,
   } = useDsa();
 
@@ -3932,7 +3931,8 @@ export function DsaProfilePage({ id }: { id: string }) {
 
   const handleResendActivationEmail = () => {
     // Activation credentials are dispatched by the backend automatically
-    // when L7 verifies the signed agreement (verifySignedAgreement endpoint).
+    // when the Branch Checker approves the signed agreement
+    // (agreement/approve endpoint).
     // There is no separate resend endpoint — surfacing an info note is correct.
     setResendActivationSuccess(
       `Activation credentials were dispatched to ${dsa?.email ?? "the registered DSA email"} when the agreement was approved. To re-send, contact the backend admin or re-verify the agreement.`,
@@ -3970,7 +3970,8 @@ export function DsaProfilePage({ id }: { id: string }) {
   }, []);
 
   const handleSubmitAgreementDecision = async () => {
-    const canAct = isL7User || isCheckerUserOrLevel;
+    // Only the Branch Checker can approve or reject the signed agreement.
+    const canAct = isCheckerUserOrLevel;
     if (!canAct || !verifyingAgreementAction || !dsa) return;
 
     if (
@@ -3991,42 +3992,28 @@ export function DsaProfilePage({ id }: { id: string }) {
           const t = String(doc.document_type || doc.type || "").toUpperCase();
           return t === "SIGNED_AGREEMENT" || t === "SIGNED AGREEMENT";
         });
-        if (signedDoc?.id) {
-          res = await adminApi.updateDsaDocumentStatus(dsa.id, {
-            document_id: signedDoc.id,
-            status: "Failed",
-            remarks: agreementDecisionRemarks.trim(),
-          });
-        } else {
-          try {
-            res = await adminApi.verifySignedAgreement(dsa.id, {
-              action: "REJECT",
-              remarks: agreementDecisionRemarks.trim(),
-            });
-          } catch {
-            // fallback
-          }
+        if (!signedDoc?.id) {
+          setAgreementDecisionError(
+            "No uploaded scanned copy found to reject. Refresh the case and try again.",
+          );
+          return;
         }
+        res = await adminApi.updateDsaDocumentStatus(dsa.id, {
+          document_id: signedDoc.id,
+          status: "Failed",
+          remarks: agreementDecisionRemarks.trim(),
+        });
         toast({
           title: "Agreement Rejected",
           description:
-            "The signed agreement has been rejected. Scanned copy re-upload is required.",
+            "The scanned copy was rejected. Branch Maker or Branch Checker must upload a corrected copy.",
           variant: "warning",
         });
       } else {
-        if (isCheckerUserOrLevel && !isL7User) {
-          // Checker uses the dedicated approve endpoint
-          res = await approveSignedAgreement(
-            dsa.id,
-            agreementDecisionRemarks.trim() || undefined,
-          );
-        } else {
-          // L7 HO Credit Head uses the legacy verify endpoint
-          res = await verifySignedAgreement(dsa.id, {
-            action: "APPROVE",
-            remarks: agreementDecisionRemarks.trim() || undefined,
-          });
-        }
+        res = await approveSignedAgreement(
+          dsa.id,
+          agreementDecisionRemarks.trim() || undefined,
+        );
         if (res) {
           setResendActivationSuccess(
             `Agreement approved. Activation credentials dispatched to ${dsa.email ?? "the registered DSA email"} by the system.`,
@@ -7458,7 +7445,11 @@ export function DsaProfilePage({ id }: { id: string }) {
             { label: "DSA Application Form", value: "overview" },
             { label: "Documents Checklist", value: "documents" },
             ...(Boolean(
-              isMakerUser || isMakerLevel || isCheckerRole || isCheckerLevel,
+              isMakerUser ||
+                isMakerLevel ||
+                isCheckerRole ||
+                isCheckerLevel ||
+                isL7User,
             )
               ? [{ label: "Agreements", value: "agreements" }]
               : []),
@@ -9282,8 +9273,15 @@ export function DsaProfilePage({ id }: { id: string }) {
                   },
                 );
 
-                const canActOnAgreement =
-                  isMakerUserOrLevel || isCheckerUserOrLevel || isL7User;
+                // Upload / download of the agreement copy is restricted to
+                // Branch Maker and Branch Checker. L7 (HO Credit Head) gets a
+                // read-only view of this tab.
+                const canManageAgreementFiles =
+                  isMakerUserOrLevel || isCheckerUserOrLevel;
+
+                // Only the Branch Checker can approve or reject the signed
+                // agreement uploaded by Maker/Checker.
+                const canDecideSignedAgreement = isCheckerUserOrLevel;
 
                 return (
                   <div className="py-6 flex justify-center">
@@ -9363,7 +9361,8 @@ export function DsaProfilePage({ id }: { id: string }) {
                                 </span>
                               </div>
                             )}
-                            {signedAgreementDoc.file_url && (
+                            {signedAgreementDoc.file_url &&
+                              canManageAgreementFiles && (
                               <div className="pt-2 border-t border-slate-200/60 flex items-center justify-start">
                                 <Button
                                   size="sm"
@@ -9392,14 +9391,16 @@ export function DsaProfilePage({ id }: { id: string }) {
                             </p>
                             <p className="text-[11px] text-slate-500">
                               {isL7Approved
-                                ? "Download official partnership agreement, execute physically, and upload scanned signed copy."
+                                ? canManageAgreementFiles
+                                  ? "Download official partnership agreement, execute physically, and upload scanned signed copy."
+                                  : "Awaiting Branch Maker / Branch Checker to download, execute physically and upload the scanned signed copy."
                                 : "Agreement download and upload will unlock once final approval is completed."}
                             </p>
                           </div>
                         )}
 
-                        {/* Action Buttons for Maker, Checker & L7 */}
-                        {canActOnAgreement && (
+                        {/* File Actions — Branch Maker & Branch Checker only */}
+                        {canManageAgreementFiles && (
                           <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-center gap-3">
                             {/* Download Agreement Button */}
                             <Button
@@ -9530,8 +9531,16 @@ export function DsaProfilePage({ id }: { id: string }) {
                               </div>
                             )}
 
-                            {/* Approve Signed Agreement Button for Checker/L7 */}
-                            {(isCheckerUserOrLevel || isL7User) &&
+                            {/* Branch Checker decision divider */}
+                            <div className="w-full flex items-center gap-2 pt-1">
+                              <span className="h-px flex-1 bg-slate-200" />
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                Branch Checker Decision
+                              </span>
+                              <span className="h-px flex-1 bg-slate-200" />
+                            </div>
+                            {/* Approve Signed Agreement — Branch Checker only */}
+                            {canDecideSignedAgreement &&
                               (signedAgreementDoc ||
                                 isSignedAgreementUploaded) &&
                               dsa?.agreement_status !== "SIGNED_VERIFIED" &&
@@ -9545,31 +9554,50 @@ export function DsaProfilePage({ id }: { id: string }) {
                                   className="h-9 text-xs font-semibold flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
                                 >
                                   <CheckCircle2 className="h-3.5 w-3.5" />
-                                  Approve Signed Agreement
+                                  Approve &amp; Activate DSA
                                 </Button>
                               )}
 
-                            {/* Reject Signed Agreement Button for Checker/L7 */}
-                            {(isCheckerUserOrLevel || isL7User) &&
+                            {/* Reject Signed Agreement — Branch Checker only */}
+                            {canDecideSignedAgreement &&
                               (signedAgreementDoc ||
                                 isSignedAgreementUploaded) &&
                               dsa?.agreement_status !== "SIGNED_VERIFIED" &&
                               dsa?.operational_status !== "ACTIVE" && (
-                                <Button
-                                  size="sm"
-                                  type="button"
-                                  variant="outline"
-                                  onClick={() =>
-                                    setVerifyingAgreementAction("REJECT")
-                                  }
-                                  className="h-9 text-xs font-semibold flex items-center gap-1.5 text-rose-700 border-rose-300 hover:bg-rose-50"
-                                >
-                                  <AlertCircle className="h-3.5 w-3.5" />
-                                  Reject Agreement
-                                </Button>
+                                <>
+                                  <Button
+                                    size="sm"
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() =>
+                                      setVerifyingAgreementAction("REJECT")
+                                    }
+                                    className="h-9 text-xs font-semibold flex items-center gap-1.5 text-rose-700 border-rose-300 hover:bg-rose-50"
+                                  >
+                                    <AlertCircle className="h-3.5 w-3.5" />
+                                    Reject &amp; Request Re-upload
+                                  </Button>
+                                  <p className="w-full text-center text-[11px] text-slate-500">
+                                    Only the Branch Checker can approve or
+                                    reject the scanned signed agreement.
+                                  </p>
+                                </>
                               )}
                           </div>
                         )}
+                        {!canManageAgreementFiles && isL7User && (
+                          <div className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-3 text-xs leading-relaxed text-slate-600">
+                            <Info className="h-4 w-4 shrink-0 text-slate-400 mt-0.5" />
+                            <p>
+                              Read-only view. Downloading the official agreement
+                              and uploading the scanned signed copy is performed
+                              by the Branch Maker or Branch Checker. The Branch
+                              Checker approves the agreement and activates the
+                              partner.
+                            </p>
+                          </div>
+                        )}
+
                       </CardContent>
                     </Card>
                   </div>
@@ -12683,19 +12711,16 @@ export function DsaProfilePage({ id }: { id: string }) {
           setAgreementDecisionRemarks("");
           setAgreementDecisionError("");
         }}
-        open={
-          Boolean(verifyingAgreementAction) &&
-          (isL7User || isCheckerUserOrLevel)
-        }
+        open={Boolean(verifyingAgreementAction) && isCheckerUserOrLevel}
         title={
           verifyingAgreementAction === "APPROVE"
-            ? "Approve Agreement & Activate DSA Partner"
-            : "Reject Scanned Agreement & Request Re-upload"
+            ? "Approve Signed Agreement & Activate DSA Partner"
+            : "Reject Scanned Signed Agreement Copy"
         }
         description={
           verifyingAgreementAction === "APPROVE"
-            ? "Check physical execution signatures and stamp. Approving will atomically activate the DSA partner and dispatch temporary portal login credentials."
-            : "Specify rejection remarks detailing why the physical signed agreement is rejected. A fresh 72-hour upload link will be emailed to the partner."
+            ? "Branch Checker verification of the scanned physical copy uploaded by the Maker or Checker. Approving activates the DSA partner atomically."
+            : "Branch Checker rejection of the scanned copy. The copy is marked failed and must be re-uploaded by the Branch Maker or Branch Checker."
         }
         width="max-w-lg"
       >
@@ -12712,20 +12737,39 @@ export function DsaProfilePage({ id }: { id: string }) {
               {verifyingAgreementAction === "APPROVE" ? (
                 <>
                   <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  <span>Atomic DSA Activation (Task 14)</span>
+                  <span>Approval &amp; Atomic Partner Activation</span>
                 </>
               ) : (
                 <>
                   <AlertCircle className="h-4 w-4 text-rose-600" />
-                  <span>Rejection &amp; Re-upload Token Issuance</span>
+                  <span>Rejection &amp; Correction Required</span>
                 </>
               )}
             </div>
-            <p>
-              {verifyingAgreementAction === "APPROVE"
-                ? `Partner ${dsa?.dsa_code || dsa?.name} will transition to operational_status = ACTIVE. A cryptographically secure temporary password will be generated and emailed to ${dsa?.applicant_email || dsa?.email}.`
-                : `Partner will be notified via email with your remarks. A new 72-hour upload token will be generated allowing them to re-upload the corrected agreement.`}
-            </p>
+            {verifyingAgreementAction === "APPROVE" ? (
+              <ul className="list-disc pl-4 space-y-0.5">
+                <li>
+                  Agreement status set to SIGNED_VERIFIED and scanned copy
+                  upload permanently locked.
+                </li>
+                <li>
+                  Partner {dsa?.dsa_code || dsa?.name} activated
+                  (operational_status = ACTIVE); temporary portal credentials
+                  emailed to{" "}
+                  {dsa?.applicant_email || dsa?.email || "the registered email"}.
+                </li>
+                <li>1-year agreement validity recorded from approval date.</li>
+              </ul>
+            ) : (
+              <ul className="list-disc pl-4 space-y-0.5">
+                <li>Scanned copy marked failed with your remarks recorded.</li>
+                <li>Partner stays NOT_ACTIVE until a valid copy is approved.</li>
+                <li>
+                  Branch Maker or Branch Checker must upload a corrected scanned
+                  copy before re-approval.
+                </li>
+              </ul>
+            )}
           </div>
 
           <Field>
@@ -12786,9 +12830,9 @@ export function DsaProfilePage({ id }: { id: string }) {
                   Processing...
                 </>
               ) : verifyingAgreementAction === "APPROVE" ? (
-                "Confirm & Activate DSA"
+                "Confirm & Activate Partner"
               ) : (
-                "Confirm & Reject Agreement"
+                "Confirm & Reject Copy"
               )}
             </Button>
           </div>
