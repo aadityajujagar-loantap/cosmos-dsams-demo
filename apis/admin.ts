@@ -533,8 +533,8 @@ export const adminApi = {
     file: File,
     remarks?: string
   ): Promise<BackendResponse<any>> => {
-    if (file && file.size > 2 * 1024 * 1024) {
-      throw new Error("File size exceeds maximum allowed limit of 2MB.");
+    if (file && file.size > 10 * 1024 * 1024) {
+      throw new Error("File size exceeds maximum allowed limit of 10MB.");
     }
     const formData = new FormData();
     formData.append("visit_report_file", file);
@@ -882,8 +882,8 @@ export const adminApi = {
       uploaded_at: string;
     };
   }>> => {
-    if (payload.file && payload.file.size > 2 * 1024 * 1024) {
-      throw new Error("File size exceeds maximum allowed limit of 2MB.");
+    if (payload.file && payload.file.size > 10 * 1024 * 1024) {
+      throw new Error("File size exceeds maximum allowed limit of 10MB.");
     }
     if (payload.file) {
       const formData = new FormData();
@@ -1033,8 +1033,8 @@ export const adminApi = {
     idOrCode: number | string,
     payload: { file?: File; document_base64?: string; file_name?: string; document_type: string; owner_name?: string; remarks?: string }
   ): Promise<BackendResponse<DsaDocument>> => {
-    if (payload.file && payload.file.size > 2 * 1024 * 1024) {
-      throw new Error("File size exceeds maximum allowed limit of 2MB.");
+    if (payload.file && payload.file.size > 10 * 1024 * 1024) {
+      throw new Error("File size exceeds maximum allowed limit of 10MB.");
     }
     let base64Data = payload.document_base64;
     let fileName = payload.file_name;

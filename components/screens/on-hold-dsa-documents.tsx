@@ -42,10 +42,10 @@ export function OnHoldDsaDocuments({
   function uploadMissingDocument(dsa: Dsa, documentId: string, file?: File) {
     if (!file || !canUpload) return;
 
-    if (file.size > 2 * 1024 * 1024) {
+    if (file.size > 10 * 1024 * 1024) {
       toast({
         title: "File too large",
-        description: "Maximum allowed file size is 2MB.",
+        description: "Maximum allowed file size is 10MB.",
         variant: "warning",
       });
       return;

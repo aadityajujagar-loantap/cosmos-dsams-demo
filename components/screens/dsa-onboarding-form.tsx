@@ -1339,10 +1339,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   };
 
   const handleFileUpload = (docType: string, file: File) => {
-    if (file.size > 2 * 1024 * 1024) {
+    if (file.size > 10 * 1024 * 1024) {
       toast({
         title: "File too large",
-        description: "Maximum allowed file size is 2MB.",
+        description: "Maximum allowed file size is 10MB.",
         variant: "warning",
       });
       return;
@@ -2488,7 +2488,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   if (isDone) setStep(s.id);
                 }}
                 disabled={!isDone && !isCurrent}
-                className={`flex flex-col text-left border-t-4 pt-2.5 transition-colors ${
+                className={`flex flex-col w-full text-left border-t-4 pt-2.5 transition-colors ${
                   isDone
                     ? "border-blue-600 text-blue-900 cursor-pointer"
                     : isCurrent

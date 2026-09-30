@@ -115,8 +115,8 @@ export function DsaUploadSignedAgreementScreen({ token }: DsaUploadSignedAgreeme
       alert("Please select a valid PDF document.");
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      alert("File size exceeds maximum limit of 2MB.");
+    if (file.size > 10 * 1024 * 1024) {
+      alert("File size exceeds maximum limit of 10MB.");
       return;
     }
     setSelectedFile(file);
