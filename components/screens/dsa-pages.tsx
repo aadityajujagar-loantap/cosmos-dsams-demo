@@ -3306,8 +3306,11 @@ export function DsaProfilePage({ id }: { id: string }) {
     });
   }, [allDeviationRules]);
 
+  // `includeKycTable` must be false for PAN: the applicant's onboarding PAN row in
+  // kyc_verifications must never count as approval. PAN is approved only when the
+  // Maker runs it from the button, which writes a dsa_verifications row.
   const isKycTypeVerified = useCallback(
-    (key: string, codePatterns: string[]) => {
+    (key: string, codePatterns: string[], includeKycTable = true) => {
       // 1. In-session explicit failure takes absolute precedence
       if (failedKyc[key]) return false;
 
@@ -3347,6 +3350,8 @@ export function DsaProfilePage({ id }: { id: string }) {
       if (inDsaVerifs) return true;
 
       // 4. Also check KycVerification records for this specific DSA
+      if (!includeKycTable) return false;
+
       const inDbList = kycVerificationsList.some((v: any) => {
         const t = String(v.type || v.verification_type || "").toUpperCase();
         const st = String(v.status || v.execution_status || "").toUpperCase();
@@ -3490,6 +3495,15 @@ export function DsaProfilePage({ id }: { id: string }) {
     dsa?.onboarding_status !== "REJECTED",
   );
 
+  // PAN is never auto-approved: it only turns Verified once someone explicitly
+  // runs the PAN check via its button. The Maker runs it as the approving
+  // authority; the Checker keeps a Re-Check button for a second opinion.
+  const canVerifyPanKyc = Boolean(
+    (isMakerUser || isCheckerRole) &&
+    dsa?.operational_status !== "ACTIVE" &&
+    dsa?.onboarding_status !== "REJECTED",
+  );
+
   // View Data button access:
   // PAN  → Maker + Checker only
   // All others (GST/Bank/Udyam/CIBIL/AML) → Checker only
@@ -3503,11 +3517,13 @@ export function DsaProfilePage({ id }: { id: string }) {
     variant?: "pennydrop" | "pennyless" | "pan_to_gstin",
   ) => {
     if (!dsa) return;
-    if (!canCheckerVerifyKyc) {
+    if (!canCheckerVerifyKyc && !(type === "pan" && canVerifyPanKyc)) {
       toast({
         title: "Access Restricted",
         description:
-          "Only Checker authority can perform or re-check KYC verifications.",
+          type === "pan"
+            ? "Only Maker or Checker authority can run PAN verification."
+            : "Only Checker authority can perform or re-check KYC verifications.",
         variant: "warning",
       });
       return;
@@ -4173,7 +4189,8 @@ export function DsaProfilePage({ id }: { id: string }) {
       );
 
     setVerifiedKyc((prev) => ({
-      pan:   prev.pan   || has(["PAN"]),
+      // PAN is intentionally NOT seeded here: onboarding PAN verification is not
+      // approval. Only the Maker's PAN button sets verifiedKyc.pan.
       gst:   prev.gst   || has(["GST"]),
       bank:  prev.bank  || has(["BANK", "BAV"]),
       udyam: prev.udyam || has(["UDYAM", "MSME"]),
@@ -4607,7 +4624,9 @@ export function DsaProfilePage({ id }: { id: string }) {
   }, [tab, appFormSubTab, dsa?.id, fetchDeviationReport]);
 
   const isPanChecked =
-    !failedKyc.pan && (Boolean(verifiedKyc.pan) || isKycTypeVerified("pan", ["PAN"]));
+    !failedKyc.pan &&
+    (Boolean(verifiedKyc.pan) ||
+      isKycTypeVerified("pan", ["PAN"], false));
   const isGstChecked =
     !failedKyc.gst &&
     (Boolean(verifiedKyc.gst) || isKycTypeVerified("gst", ["GST"]));
@@ -7631,26 +7650,6 @@ export function DsaProfilePage({ id }: { id: string }) {
                                 key: string;
                                 promise: Promise<any>;
                               }[] = [];
-                              if (dsa.pan) {
-                                const isEntity =
-                                  dsa.dsa_type === "ENTITY" ||
-                                  dsa.dsa_type === "Entity" ||
-                                  dsa.entity_type === "ENTITY";
-                                tasks.push({
-                                  key: "pan",
-                                  promise: isEntity
-                                    ? adminApi.verifyPanEntity({
-                                        pan: dsa.pan,
-                                        dsa_id: dsaIdNum,
-                                        entity_name:
-                                          dsa.entity_name || dsa.name,
-                                      })
-                                    : adminApi.verifyPanAdvance({
-                                        pan: dsa.pan,
-                                        dsa_id: dsaIdNum,
-                                      }),
-                                });
-                              }
                               if (dsa.gst) {
                                 tasks.push({
                                   key: "gst",
@@ -7844,7 +7843,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                       }
                       return true;
                     });
-                    const getVerif = (code: string) => {
+                    const getVerif = (code: string, includeKycTable = true) => {
                       const fromDsa = ((dsa as any)?.verifications || []).find(
                         (v: any) => {
                           const match = (v.verification_code || "")
@@ -7860,6 +7859,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                         },
                       );
                       if (fromDsa) return fromDsa;
+                      if (!includeKycTable) return undefined;
 
                       const fromDb = kycVerificationsList.find((v: any) => {
                         const t = String(v.type || "").toUpperCase();
@@ -7883,7 +7883,8 @@ export function DsaProfilePage({ id }: { id: string }) {
                       return undefined;
                     };
 
-                    const panVerif = getVerif("PAN");
+                    // PAN reads dsa_verifications only — onboarding KYC rows are not approval.
+                    const panVerif = getVerif("PAN", false);
                     const gstVerif = getVerif("GST");
                     const bankVerif = getVerif("BANK") || getVerif("BAV");
                     const udyamVerif = getVerif("UDYAM");
@@ -7999,7 +8000,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                                   View Data
                                 </Button>
                               )}
-                              {canCheckerVerifyKyc && (
+                              {canVerifyPanKyc && (
                                 <Button
                                   size="sm"
                                   type="button"
@@ -11672,7 +11673,7 @@ export function DsaProfilePage({ id }: { id: string }) {
       </Modal>
 
       <Modal
-        description="Query is routed back to the Branch Maker (L1). The Maker resolves it and re-submits; the workflow then continues L1 → L2 Checker and onwards."
+        description=""
         onClose={closeDecisionModals}
         open={Boolean(queryingDsa)}
         title="Raise Query to Maker (Checker → L1)"
