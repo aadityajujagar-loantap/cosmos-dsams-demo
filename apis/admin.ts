@@ -4,6 +4,8 @@ import type { Permission, Role, User, BranchRole } from "@/types/auth";
 import type { ActivityLog } from "@/types/activityLog";
 import type {
   Dsa,
+  DsaActivityHistory,
+  DsaCaseLockResult,
   DsaDocument,
   StateOption,
   DistrictOption,
@@ -430,6 +432,8 @@ export const adminApi = {
     page?: number;
     sort_by?: string;
     sort_order?: string;
+    /** Task 22 — role-scoped work bucket. */
+    bucket?: "all" | "received" | "in_process" | "rejected" | "approved";
   }): Promise<BackendResponse<DsaListResponse>> => {
     return request<BackendResponse<DsaListResponse>>(`/v1/dsa${compactParams(params)}`, {
       method: "GET",
@@ -1091,6 +1095,37 @@ export const adminApi = {
     return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/documents/delete`, {
       method: "POST",
       body: JSON.stringify(payload),
+    });
+  },
+
+  // ── Task 22: Case Assignment, User-Level Locking & Activity History ────────
+  // `/assign` and `/release` are backend aliases; canonical routes are used here.
+
+  acquireCase: async (
+    idOrCode: number | string,
+    payload?: { remarks?: string }
+  ): Promise<BackendResponse<DsaCaseLockResult>> => {
+    return request<BackendResponse<DsaCaseLockResult>>(`/v1/dsa/${idOrCode}/acquire-case`, {
+      method: "POST",
+      body: JSON.stringify(payload ?? {}),
+    });
+  },
+
+  releaseCase: async (
+    idOrCode: number | string,
+    payload?: { remarks?: string }
+  ): Promise<BackendResponse<DsaCaseLockResult>> => {
+    return request<BackendResponse<DsaCaseLockResult>>(`/v1/dsa/${idOrCode}/release-case`, {
+      method: "POST",
+      body: JSON.stringify(payload ?? {}),
+    });
+  },
+
+  getApprovalHistory: async (
+    idOrCode: number | string
+  ): Promise<BackendResponse<DsaActivityHistory>> => {
+    return request<BackendResponse<DsaActivityHistory>>(`/v1/dsa/${idOrCode}/approval/history`, {
+      method: "GET",
     });
   },
 
@@ -1878,6 +1913,8 @@ export const adminApi = {
     pan: string;
     dsa_temp_id?: string;
     dsa_id?: number;
+    mobile?: string;
+    email?: string;
   }): Promise<KycApiResponse<any>> => {
     return request<KycApiResponse<any>>("/v1/kyc/scoreme/pan-advance", {
       method: "POST",
@@ -1894,8 +1931,28 @@ export const adminApi = {
     dsa_temp_id?: string;
     dsa_id?: number;
     entity_name?: string;
+    mobile?: string;
+    email?: string;
   }): Promise<KycApiResponse<any>> => {
     return request<KycApiResponse<any>>("/v1/kyc/karza/pan-entity", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * POST /api/v1/dsa/check-duplicate
+   * Check if a DSA record already exists with PAN, email, mobile, or GST
+   */
+  checkDsaDuplicate: async (payload: {
+    pan?: string;
+    email?: string;
+    mobile?: string;
+    gst?: string;
+    exclude_id?: number | string;
+    dsa_id?: number | string;
+  }): Promise<BackendResponse<{ exists: boolean; field?: string; message?: string }>> => {
+    return request<BackendResponse<any>>("/v1/dsa/check-duplicate", {
       method: "POST",
       body: JSON.stringify(payload),
     });

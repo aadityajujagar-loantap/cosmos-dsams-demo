@@ -196,6 +196,137 @@ export interface Dsa {
   }>;
 }
 
+export type DsaWorkBucket = "all" | "received" | "in_process" | "rejected" | "approved";
+
+export const DSA_WORK_BUCKETS: {
+  value: DsaWorkBucket;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "all",
+    label: "All",
+    description:
+      "Every DSA visible to you. Open one to lock it and start processing.",
+  },
+  {
+    value: "received",
+    label: "Received",
+    description:
+      "Applications routed to your stage that still need your decision.",
+  },
+  {
+    value: "in_process",
+    label: "In Process",
+    description:
+      "Applications sitting at your stage awaiting your approve, recommend or query action.",
+  },
+  {
+    value: "rejected",
+    label: "Rejected",
+    description: "Applications rejected and returned to the Maker.",
+  },
+  {
+    value: "approved",
+    label: "Approved",
+    description: "Applications that completed sanction and approval.",
+  },
+];
+
+/** Task 22 — User-level case lock.
+ * Mirrors `Dsa::currentLockDetails()`.
+ */
+export interface DsaCaseLockAssignment {
+  assigned_user_id: number | null;
+  assigned_user_name: string | null;
+  assigned_user_role: string | null;
+  assigned_role: string | null;
+  assigned_branch: string | null;
+  assigned_workflow_level: number | null;
+  assigned_at: string | null;
+  lock_status: string;
+  is_locked: boolean;
+  is_locked_by_current_user: boolean;
+  is_locked_by_other_user: boolean;
+  released_at: string | null;
+}
+
+/**
+ * Task 22 — Single immutable row of `dsa_workflow_audit_logs`.
+ * Field aliases are emitted by `DsaCaseAssignmentService::getActivityHistory()`.
+ */
+export interface DsaWorkflowActivity {
+  id: number;
+  dsa_id: number;
+  user_id: number | null;
+  actor_id: number | null;
+  user_name: string | null;
+  actor_name: string | null;
+  role: string | null;
+  actor_role: string | null;
+  designation: string | null;
+  workflow_level: number | null;
+  approval_level: number | null;
+  stage: string | null;
+  stage_code: string | null;
+  stage_name: string | null;
+  branch_id: number | null;
+  branch: string | null;
+  branch_name: string | null;
+  action: string;
+  previous_user_id: number | null;
+  previous_user_name: string | null;
+  target_user_id: number | null;
+  target_user_name: string | null;
+  previous_status: string | null;
+  new_status: string | null;
+  previous_stage: string | null;
+  new_stage: string | null;
+  remarks: string | null;
+  comments: string | null;
+  context_data: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
+  activity_at: string | null;
+  created_at: string | null;
+  timestamp: string | null;
+}
+
+/** Workflow step snapshot from `dsa_approvals`. */
+export interface DsaWorkflowStepHistory {
+  id: number;
+  sequence: number | null;
+  level: number | null;
+  stage_code: string | null;
+  assigned_role: string | null;
+  action: string | null;
+  status: string | null;
+  remarks: string | null;
+  actioned_by: number | string | null;
+  assigned_user_id: number | null;
+  actioned_at: string | null;
+  created_at: string | null;
+}
+
+export interface DsaActivityHistory {
+  dsa_id: number;
+  dsa_code: string | null;
+  name: string | null;
+  onboarding_status: string | null;
+  current_approval_level: number | null;
+  current_stage: string | null;
+  current_assignment: DsaCaseLockAssignment | null;
+  activities: DsaWorkflowActivity[];
+  approvals: DsaWorkflowStepHistory[];
+}
+
+/** Payload of `POST /api/v1/dsa/{id}/acquire-case` and `/release-case`. */
+export interface DsaCaseLockResult {
+  dsa: Dsa;
+  lock_status: string;
+  current_assignment: DsaCaseLockAssignment | null;
+  message: string;
+}
+
 export interface StateOption {
   state_code: string;
   state_name: string;

@@ -5,6 +5,8 @@ import { getUserBranchScope, isDsaInBranchScope, type UserBranchScope } from "@/
 import type {
   Dsa,
   DsaDocument,
+  DsaActivityHistory,
+  DsaWorkBucket,
   StateOption,
   DistrictOption,
   BranchOption,
@@ -220,7 +222,8 @@ export function useDsa() {
       city?: string;
       state?: string;
       business_type?: string;
-      approval_bucket?: number;
+      /** Task 22 — role-scoped work bucket, filtered server-side. */
+      bucket?: DsaWorkBucket;
       per_page?: number;
       page?: number;
       sort_by?: string;
@@ -940,6 +943,94 @@ export function useDsa() {
     [toast]
   );
 
+  // ── Task 22: Case Assignment, User-Level Locking & Activity History ────────
+
+  const fetchApprovalHistory = useCallback(
+    async (idOrCode: number | string): Promise<DsaActivityHistory | null> => {
+      try {
+        const response = await adminApi.getApprovalHistory(idOrCode);
+        return response.data;
+      } catch (error: unknown) {
+        toast({
+          title: "Activity history unavailable",
+          description: errorMessage(
+            error,
+            "Could not load the case activity history.",
+          ),
+          variant: "warning",
+        });
+        return null;
+      }
+    },
+    [toast]
+  );
+
+  const acquireCase = useCallback(
+    async (idOrCode: number | string, remarks?: string) => {
+      setActionLoading(true);
+      try {
+        const response = await adminApi.acquireCase(
+          idOrCode,
+          remarks ? { remarks } : {},
+        );
+        toast({
+          title: "Case acquired",
+          description:
+            response.message ||
+            "You now hold an exclusive lock on this case.",
+          variant: "success",
+        });
+        return response.data;
+      } catch (error: unknown) {
+        toast({
+          title: "Case already locked",
+          description: errorMessage(
+            error,
+            "This case is currently being processed by another user.",
+          ),
+          variant: "warning",
+        });
+        return null;
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [toast]
+  );
+
+  const releaseCase = useCallback(
+    async (idOrCode: number | string, remarks?: string) => {
+      setActionLoading(true);
+      try {
+        const response = await adminApi.releaseCase(
+          idOrCode,
+          remarks ? { remarks } : {},
+        );
+        toast({
+          title: "Case released (un-acquired)",
+          description:
+            response.message ||
+            "You no longer hold this case. It is back in the eligible queue for your stage.",
+          variant: "success",
+        });
+        return response.data;
+      } catch (error: unknown) {
+        toast({
+          title: "Release failed",
+          description: errorMessage(
+            error,
+            "Failed to release the case lock.",
+          ),
+          variant: "warning",
+        });
+        return null;
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [toast]
+  );
+
   // ── Location Dropdowns ───────────────────────────────────────────────────
 
   const fetchStatesDropdown = useCallback(async () => {
@@ -1033,6 +1124,9 @@ export function useDsa() {
     uploadDsaDocument,
     updateDsaDocumentStatus,
     deleteDsaDocument,
+    fetchApprovalHistory,
+    acquireCase,
+    releaseCase,
     fetchStatesDropdown,
     fetchDistrictsDropdown,
     fetchBranchesDropdown,

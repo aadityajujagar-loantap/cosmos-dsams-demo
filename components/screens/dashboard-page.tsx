@@ -22,6 +22,7 @@ import {
   Info,
   ChevronDown,
   UserPlus,
+  Lock,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -44,7 +45,13 @@ import { useMockStore } from "@/lib/store";
 import { buildApplicationDeviation, evaluateBreDeviation } from "@/lib/bre";
 import { buildApplicationJourney } from "@/lib/product-journeys";
 import { getActiveProductConfigs, getUniqueProductConfigs, resolveProductConfig } from "@/lib/product-configs";
-import { compactNumber, formatCurrency, formatDate, makeId } from "@/lib/utils";
+import { compactNumber, formatCurrency, formatDate, makeId, cn } from "@/lib/utils";
+import {
+  resolveCaseAccess,
+  describeCaseLock,
+  CASE_VIEW_ONLY_BADGE_CLASS,
+  CASE_VIEW_ONLY_ROW_CLASS,
+} from "@/lib/dsa-case-access";
 import { Application, Product, Lead } from "@/lib/types";
 import { adminApi } from "@/apis/admin";
 import type { ActivityLog } from "@/types/activityLog";
@@ -185,6 +192,11 @@ export function DashboardPage() {
         branch_id: item.branch_id,
         branch_name: item.branch_name,
         current_approval_level: item.current_approval_level,
+        // Raw workflow fields kept alongside the display-mapped ones so the
+        // Task 22 access check can decide whether this row is openable.
+        onboarding_status: item.onboarding_status,
+        agreement_status: item.agreement_status,
+        operational_status: item.operational_status,
       };
     });
 
@@ -712,10 +724,31 @@ export function DashboardPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {pendingDsas.map((dsa) => (
-                        <tr key={dsa.id} className="hover:bg-slate-50/40 transition">
+                      {pendingDsas.map((dsa) => {
+                        const access = resolveCaseAccess(dsa, currentUser?.role);
+                        const locked = !access.allowed;
+                        const lockNote = describeCaseLock(
+                          access.reason,
+                          dsa.current_approval_level,
+                        );
+                        return (
+                        <tr
+                          className={cn(
+                            "transition",
+                            locked ? CASE_VIEW_ONLY_ROW_CLASS : "hover:bg-slate-50/40",
+                          )}
+                          key={dsa.id}
+                        >
                           <td className="p-4 pl-6">
-                            <div className="font-semibold text-slate-800">{dsa.name}</div>
+                            <div className="flex items-center gap-2">
+                              <div className="font-semibold text-slate-800">{dsa.name}</div>
+                              {locked ? (
+                                <span className={CASE_VIEW_ONLY_BADGE_CLASS}>
+                                  <Lock className="h-3 w-3" />
+                                  View only
+                                </span>
+                              ) : null}
+                            </div>
                             <div className="text-xs text-slate-500">{dsa.business_type}</div>
                           </td>
                           <td className="p-4 font-mono text-xs text-slate-600">{dsa.code}</td>
@@ -728,14 +761,21 @@ export function DashboardPage() {
                             <StatusBadge status={dsa.onboarding_status} />
                           </td>
                           <td className="p-4 text-right pr-6">
-                            <Link href={`/dsa/${dsa.id}`}>
-                              <Button size="sm" type="button" variant="outline">
-                                View full profile
+                            {locked ? (
+                              <Button disabled size="sm" title={lockNote} type="button" variant="outline">
+                                View only
                               </Button>
-                            </Link>
+                            ) : (
+                              <Link href={`/dsa/${dsa.id}`}>
+                                <Button size="sm" type="button" variant="outline">
+                                  View full profile
+                                </Button>
+                              </Link>
+                            )}
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -806,10 +846,31 @@ export function DashboardPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {onHoldDsas.map((dsa) => (
-                        <tr key={dsa.id} className="hover:bg-slate-50/40 transition">
+                      {onHoldDsas.map((dsa) => {
+                        const access = resolveCaseAccess(dsa, currentUser?.role);
+                        const locked = !access.allowed;
+                        const lockNote = describeCaseLock(
+                          access.reason,
+                          dsa.current_approval_level,
+                        );
+                        return (
+                        <tr
+                          className={cn(
+                            "transition",
+                            locked ? CASE_VIEW_ONLY_ROW_CLASS : "hover:bg-slate-50/40",
+                          )}
+                          key={dsa.id}
+                        >
                           <td className="p-4 pl-6">
-                            <div className="font-semibold text-slate-800">{dsa.name}</div>
+                            <div className="flex items-center gap-2">
+                              <div className="font-semibold text-slate-800">{dsa.name}</div>
+                              {locked ? (
+                                <span className={CASE_VIEW_ONLY_BADGE_CLASS}>
+                                  <Lock className="h-3 w-3" />
+                                  View only
+                                </span>
+                              ) : null}
+                            </div>
                             <div className="text-xs text-slate-500">{dsa.business_type}</div>
                           </td>
                           <td className="p-4 font-mono text-xs text-slate-600">{dsa.code}</td>
@@ -822,14 +883,21 @@ export function DashboardPage() {
                             <StatusBadge status={dsa.onboarding_status} />
                           </td>
                           <td className="p-4 text-right pr-6">
-                            <Link href={`/dsa/${dsa.id}`}>
-                              <Button size="sm" type="button" variant="outline">
-                                Upload docs
+                            {locked ? (
+                              <Button disabled size="sm" title={lockNote} type="button" variant="outline">
+                                View only
                               </Button>
-                            </Link>
+                            ) : (
+                              <Link href={`/dsa/${dsa.id}`}>
+                                <Button size="sm" type="button" variant="outline">
+                                  Upload docs
+                                </Button>
+                              </Link>
+                            )}
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1364,10 +1432,40 @@ export function DashboardPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {branchDsas.slice(0, 8).map((dsa) => (
-                        <tr key={dsa.id} className="hover:bg-slate-50/40 transition">
+                      {branchDsas.slice(0, 8).map((dsa) => {
+                        // Task 22 — same gate as the DSA management list: a case
+                        // that is not at this role's stage (or is rejected) stays
+                        // listed but cannot be opened, so the dashboard cannot
+                        // be used to bypass the stage rule.
+                        const access = resolveCaseAccess(dsa, currentUser?.role);
+                        const locked = !access.allowed;
+                        const lockNote = describeCaseLock(
+                          access.reason,
+                          (dsa as any).current_approval_level,
+                        );
+                        const isReviewable =
+                          isChecker && Number(dsa.current_approval_level) === 2;
+
+                        return (
+                        <tr
+                          className={cn(
+                            "transition",
+                            locked ? "bg-slate-50/60 opacity-70" : "hover:bg-slate-50/40",
+                          )}
+                          key={dsa.id}
+                        >
                           <td className="p-4 pl-6">
-                            <div className="font-semibold text-slate-800">{dsa.name}</div>
+                            <div className="flex items-center gap-2">
+                              <div className="font-semibold text-slate-800">
+                                {dsa.name}
+                              </div>
+                              {locked ? (
+                                <span className="inline-flex items-center gap-1 rounded border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                                  <Lock className="h-3 w-3" />
+                                  View only
+                                </span>
+                              ) : null}
+                            </div>
                             <div className="text-xs text-slate-500">{dsa.businessType}</div>
                           </td>
                           <td className="p-4 font-mono text-xs text-slate-600">{dsa.code}</td>
@@ -1376,14 +1474,31 @@ export function DashboardPage() {
                             <StatusBadge status={dsa.status} />
                           </td>
                           <td className="p-4 text-right pr-6">
-                            <Link href={`/dsa/${dsa.id}`}>
-                              <Button size="sm" type="button" variant={isChecker && Number(dsa.current_approval_level) === 2 ? "primary" : "outline"}>
-                                {isChecker && Number(dsa.current_approval_level) === 2 ? "Review" : "Open"}
+                            {locked ? (
+                              <Button
+                                disabled
+                                size="sm"
+                                title={lockNote}
+                                type="button"
+                                variant="outline"
+                              >
+                                View only
                               </Button>
-                            </Link>
+                            ) : (
+                              <Link href={`/dsa/${dsa.id}`}>
+                                <Button
+                                  size="sm"
+                                  type="button"
+                                  variant={isReviewable ? "primary" : "outline"}
+                                >
+                                  {isReviewable ? "Review" : "Open"}
+                                </Button>
+                              </Link>
+                            )}
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1454,10 +1569,31 @@ export function DashboardPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {onHoldDsas.map((dsa) => (
-                        <tr key={dsa.id} className="hover:bg-slate-50/40 transition">
+                      {onHoldDsas.map((dsa) => {
+                        const access = resolveCaseAccess(dsa, currentUser?.role);
+                        const locked = !access.allowed;
+                        const lockNote = describeCaseLock(
+                          access.reason,
+                          dsa.current_approval_level,
+                        );
+                        return (
+                        <tr
+                          className={cn(
+                            "transition",
+                            locked ? CASE_VIEW_ONLY_ROW_CLASS : "hover:bg-slate-50/40",
+                          )}
+                          key={dsa.id}
+                        >
                           <td className="p-4 pl-6">
-                            <div className="font-semibold text-slate-800">{dsa.name}</div>
+                            <div className="flex items-center gap-2">
+                              <div className="font-semibold text-slate-800">{dsa.name}</div>
+                              {locked ? (
+                                <span className={CASE_VIEW_ONLY_BADGE_CLASS}>
+                                  <Lock className="h-3 w-3" />
+                                  View only
+                                </span>
+                              ) : null}
+                            </div>
                             <div className="text-xs text-slate-500">{dsa.business_type}</div>
                           </td>
                           <td className="p-4 font-mono text-xs text-slate-600">{dsa.code}</td>
@@ -1470,14 +1606,21 @@ export function DashboardPage() {
                             <StatusBadge status={dsa.onboarding_status} />
                           </td>
                           <td className="p-4 text-right pr-6">
-                            <Link href={`/dsa/${dsa.id}`}>
-                              <Button size="sm" type="button" variant="outline">
-                                Upload docs
+                            {locked ? (
+                              <Button disabled size="sm" title={lockNote} type="button" variant="outline">
+                                View only
                               </Button>
-                            </Link>
+                            ) : (
+                              <Link href={`/dsa/${dsa.id}`}>
+                                <Button size="sm" type="button" variant="outline">
+                                  Upload docs
+                                </Button>
+                              </Link>
+                            )}
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

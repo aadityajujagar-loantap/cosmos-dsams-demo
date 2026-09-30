@@ -1532,16 +1532,59 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
     setIsVerifyingPan(true);
     const isEntity = dsaType === "ENTITY";
+    const resolvedContactMobile = mobile.trim() || undefined;
+    const resolvedContactEmail = (selfEmail.trim() || email.trim()) || undefined;
+
     try {
+      // Duplicate pre-check on PAN / Mobile / Email
+      try {
+        const dupCheck: any = await adminApi.checkDsaDuplicate({
+          pan: trimmedPan,
+          mobile: resolvedContactMobile,
+          email: resolvedContactEmail,
+          exclude_id: createdDsaId || undefined,
+        }).catch((e: any) => e?.data ?? e);
+
+        if (
+          dupCheck?.status === false ||
+          dupCheck?.exists === true ||
+          dupCheck?.message?.includes("already exists") ||
+          dupCheck?.error?.includes("already exists")
+        ) {
+          setPanVerified(false);
+          toast({
+            title: "Submission Failed",
+            description: "A DSA record with this PAN, Email, or Mobile already exists.",
+            variant: "destructive",
+          });
+          return;
+        }
+      } catch (dupErr: any) {
+        const dupMsg = String(dupErr?.data?.message || dupErr?.message || "");
+        if (dupMsg.toLowerCase().includes("already exists")) {
+          setPanVerified(false);
+          toast({
+            title: "Submission Failed",
+            description: "A DSA record with this PAN, Email, or Mobile already exists.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
       const res: any = isEntity
         ? await adminApi.verifyPanEntity({
             pan: trimmedPan,
             dsa_temp_id: otpReferenceId || undefined,
             entity_name: entityName || undefined,
+            mobile: resolvedContactMobile,
+            email: resolvedContactEmail,
           })
         : await adminApi.verifyPanAdvance({
             pan: trimmedPan,
             dsa_temp_id: otpReferenceId || undefined,
+            mobile: resolvedContactMobile,
+            email: resolvedContactEmail,
           });
 
       const resData = res?.data ?? res;
@@ -1712,18 +1755,21 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         });
       } else {
         setPanVerified(false);
+        const errMsg = String(res?.message || resData?.message || "");
+        const isDuplicate = errMsg.toLowerCase().includes("already exists");
         toast({
-          title: isEntity ? "Entity PAN Verification Failed" : "PAN Verification Failed",
-          description: res?.message || "Invalid PAN or record not found.",
+          title: isDuplicate ? "Submission Failed" : isEntity ? "Entity PAN Verification Failed" : "PAN Verification Failed",
+          description: isDuplicate ? "A DSA record with this PAN, Email, or Mobile already exists." : (res?.message || "Invalid PAN or record not found."),
           variant: "destructive",
         });
       }
     } catch (err: any) {
       setPanVerified(false);
-      const msg = err?.data?.message || err?.message || (isEntity ? "Could not connect to Karza verification gateway." : "Could not connect to ScoreMe verification gateway.");
+      const msg = String(err?.data?.message || err?.message || (isEntity ? "Could not connect to Karza verification gateway." : "Could not connect to ScoreMe verification gateway."));
+      const isDuplicate = msg.toLowerCase().includes("already exists");
       toast({
-        title: "Verification Request Failed",
-        description: msg,
+        title: isDuplicate ? "Submission Failed" : "Verification Request Failed",
+        description: isDuplicate ? "A DSA record with this PAN, Email, or Mobile already exists." : msg,
         variant: "destructive",
       });
     } finally {
@@ -1746,7 +1792,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
     setVerifyingStakeholderIdx(index);
     try {
-      const res: any = await adminApi.verifyPanAdvance({ pan: trimmedPan });
+      const res: any = await adminApi.verifyPanAdvance({ pan: trimmedPan, is_stakeholder: true } as any);
       const resData = res?.data ?? res;
       const isSuccess = Boolean(res?.success || resData?.status === "SUCCESS");
       const detailsData = resData?.details?.data || resData?.data || resData;
@@ -2024,11 +2070,47 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     return true;
   };
 
-  const handleNext = () => {
-    if (validateStep(step)) {
-      setStep((prev) => Math.min(prev + 1, 6));
-      window.scrollTo({ top: 0, behavior: "smooth" });
+  const handleNext = async () => {
+    if (!validateStep(step)) {
+      return;
     }
+    if (step === 1) {
+      try {
+        const dupCheck: any = await adminApi.checkDsaDuplicate({
+          pan: pan.trim().toUpperCase(),
+          mobile: mobile.trim() || undefined,
+          email: (selfEmail.trim() || email.trim()) || undefined,
+          gst: gstApplicable && gstNumber.trim() ? gstNumber.trim().toUpperCase() : undefined,
+          exclude_id: createdDsaId || undefined,
+        }).catch((e: any) => e?.data ?? e);
+
+        if (
+          dupCheck?.status === false ||
+          dupCheck?.exists === true ||
+          dupCheck?.message?.includes("already exists") ||
+          dupCheck?.error?.includes("already exists")
+        ) {
+          toast({
+            title: "Submission Failed",
+            description: "A DSA record with this PAN, Email, or Mobile already exists.",
+            variant: "destructive",
+          });
+          return;
+        }
+      } catch (dupErr: any) {
+        const dupMsg = String(dupErr?.data?.message || dupErr?.message || "");
+        if (dupMsg.toLowerCase().includes("already exists")) {
+          toast({
+            title: "Submission Failed",
+            description: "A DSA record with this PAN, Email, or Mobile already exists.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+    }
+    setStep((prev) => Math.min(prev + 1, 6));
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleBack = () => {

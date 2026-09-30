@@ -12,6 +12,7 @@ import {
   FileText,
   KeyRound,
   LogIn,
+  Lock,
   Plus,
   ShieldCheck,
   TrendingUp,
@@ -62,7 +63,6 @@ import {
   DetailItem,
   PageHeader,
 } from "@/components/module";
-import { OnHoldDsaDocuments } from "@/components/screens/on-hold-dsa-documents";
 import { Column, DataTable } from "@/components/ui/data-table";
 import {
   Button,
@@ -89,10 +89,13 @@ import { authService } from "@/services/authService";
 import { useMockStore } from "@/lib/store";
 import { useDsa, normalizeDsaData } from "@/hooks/useDsa";
 import { isDsaInBranchScope } from "@/lib/branch-scope";
+import { resolveCaseAccess, describeCaseLock } from "@/lib/dsa-case-access";
 import { BusinessType, Dsa, DsaStatus, Product, User } from "@/lib/types";
 import { DsaBasicDetailsTab } from "./dsa-basic-details-tab";
+import { DsaCaseActivityTab } from "./dsa-case-activity-tab";
 import { DsaKycDataModal, KycDataType } from "./dsa-kyc-data-modal";
-import type { BranchOption } from "@/types/dsa";
+import type { BranchOption, DsaWorkBucket } from "@/types/dsa";
+import { DSA_WORK_BUCKETS } from "@/types/dsa";
 import {
   cn,
   formatCommissionDisplay,
@@ -1976,7 +1979,6 @@ export function DsaManagementPage() {
     pagination,
     dsaListError,
     fetchDsas,
-    fetchMakerBucket,
     updateDsaProfile,
     actionLoading,
     userBranchScope,
@@ -1993,7 +1995,7 @@ export function DsaManagementPage() {
   const [credentialUsername, setCredentialUsername] = useState("");
   const [credentialPassword, setCredentialPassword] = useState("");
   const [credentialError, setCredentialError] = useState("");
-  const [managementTab, setManagementTab] = useState("all");
+  const [managementTab, setManagementTab] = useState<DsaWorkBucket>("all");
   const router = useRouter();
   const isNetworkPage = currentUser?.role === "DSA Partner";
   const canManageDsaCredentials = currentUser?.role === "DSA Manager";
@@ -2003,53 +2005,17 @@ export function DsaManagementPage() {
     : null;
   const agentOwnerDsaId = agentOwnerDsa?.id ?? "";
 
-  const roleStr = String(currentUser?.role || "");
-  const canAccessMakerQueue =
-    roleStr === "Branch User" ||
-    roleStr === "Maker" ||
-    roleStr === "Branch Maker" ||
-    roleStr === "Staff" ||
-    roleStr === "Assistant Manager" ||
-    roleStr === "DSA Manager";
-
-  const [onHoldDsas, setOnHoldDsas] = useState<any[]>([]);
-  const [makerBucketDsas, setMakerBucketDsas] = useState<any[]>([]);
-  const [makerBucketLoading, setMakerBucketLoading] = useState(false);
-  const [makerBucketTotal, setMakerBucketTotal] = useState(0);
-  const [makerPage, setMakerPage] = useState(1);
-
-  const defaultBucketForRole = useMemo(() => {
-    if (!currentUser?.role) return "";
-    const norm = currentUser.role.toUpperCase().replace(/[\s_-]+/g, "");
-    if (norm === "HOCREDITHEAD" || norm === "CREDITHEAD") return "7";
-    if (
-      norm === "HOCREDITOFFICER" ||
-      norm === "CREDITOFFICER" ||
-      norm === "HOCREDIT"
-    )
-      return "6";
-    if (
-      norm === "REGIONHEAD" ||
-      norm === "REGIONALHEAD" ||
-      norm === "BRANCHREGIONALHEAD"
-    )
-      return "5";
-    if (norm === "DGM" || norm === "DEPUTYGENERALMANAGER") return "4";
-    if (norm === "SUBREGIONHEAD" || norm === "SUBREGIONSTAFF") return "3";
-    if (norm === "CHECKER" || norm === "BRANCHCHECKER") return "2";
-    if (norm === "BRANCHUSER" || norm === "MAKER") return "1";
-    return "";
-  }, [currentUser?.role]);
-
-  const [approvalBucket, setApprovalBucket] = useState(
-    () => defaultBucketForRole,
+  // Task 22 — role drives both bucket scoping and per-row access on this
+  // page, so fall back to the persisted auth session exactly like
+  // DsaProfilePage does. A blank role must never be treated as "no
+  // restriction" downstream.
+  const roleStr = String(
+    currentUser?.role ||
+      (typeof window !== "undefined"
+        ? (authService.getUser() as { role?: string } | null)?.role
+        : "") ||
+      "",
   );
-
-  useEffect(() => {
-    if (defaultBucketForRole && approvalBucket !== defaultBucketForRole) {
-      setApprovalBucket(defaultBucketForRole);
-    }
-  }, [defaultBucketForRole, approvalBucket]);
 
   const getBackendStatusParams = (statusVal: string) => {
     if (!statusVal) return {};
@@ -2075,95 +2041,18 @@ export function DsaManagementPage() {
     return {
       search: search.trim() || undefined,
       ...statusParams,
-      approval_bucket: approvalBucket ? Number(approvalBucket) : undefined,
+      // Task 22: the backend scopes each bucket to the viewer's workflow level.
+      bucket: managementTab,
       page,
       per_page: 10,
     };
-  }, [search, status, approvalBucket, page]);
+  }, [search, status, managementTab, page]);
 
   useEffect(() => {
     if (isNetworkPage) return;
     fetchDsas(fetchParams);
   }, [fetchDsas, fetchParams, isNetworkPage]);
 
-  useEffect(() => {
-    if (isNetworkPage) return;
-    if (dsaListError) {
-      setOnHoldDsas([]);
-      return;
-    }
-    if (pagination.total === 0) {
-      setOnHoldDsas([]);
-      return;
-    }
-    async function loadOnHold() {
-      try {
-        const response = await adminApi.getDsas({
-          onboarding_status: "ON_HOLD",
-          per_page: 50,
-        });
-        const items = response?.data?.items || [];
-        setOnHoldDsas(
-          userBranchScope?.isBranchRestricted
-            ? items.filter((item: any) =>
-                isDsaInBranchScope(item, userBranchScope),
-              )
-            : items,
-        );
-      } catch {
-        setOnHoldDsas([]);
-      }
-    }
-    loadOnHold();
-  }, [dsas, dsaListError, isNetworkPage, pagination.total, userBranchScope]);
-
-  useEffect(() => {
-    if (isNetworkPage || !canAccessMakerQueue) return;
-    async function checkMakerCount() {
-      try {
-        const res = await fetchMakerBucket({ per_page: 1 });
-        if (res?.pagination?.total !== undefined) {
-          setMakerBucketTotal(res.pagination.total);
-        }
-      } catch {
-        // ignore
-      }
-    }
-    checkMakerCount();
-  }, [fetchMakerBucket, isNetworkPage, canAccessMakerQueue]);
-
-  useEffect(() => {
-    if (isNetworkPage || !canAccessMakerQueue || managementTab !== "maker")
-      return;
-    async function loadMakerQueue() {
-      setMakerBucketLoading(true);
-      try {
-        const res = await fetchMakerBucket({
-          search: search.trim() || undefined,
-          page: makerPage,
-          per_page: 10,
-        });
-        if (res?.items) {
-          setMakerBucketDsas(res.items);
-          setMakerBucketTotal(res.pagination?.total ?? res.items.length);
-        } else {
-          setMakerBucketDsas([]);
-        }
-      } catch {
-        setMakerBucketDsas([]);
-      } finally {
-        setMakerBucketLoading(false);
-      }
-    }
-    loadMakerQueue();
-  }, [
-    fetchMakerBucket,
-    isNetworkPage,
-    managementTab,
-    makerPage,
-    search,
-    canAccessMakerQueue,
-  ]);
 
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(event.target.value);
@@ -2172,13 +2061,6 @@ export function DsaManagementPage() {
 
   const handleStatusChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setStatus(event.target.value);
-    setPage(1);
-  };
-
-  const handleApprovalBucketChange = (
-    event: React.ChangeEvent<HTMLSelectElement>,
-  ) => {
-    setApprovalBucket(event.target.value);
     setPage(1);
   };
 
@@ -2553,257 +2435,26 @@ export function DsaManagementPage() {
         )}
       </div>
 
-      <div>
+      <div className="space-y-2">
         <Tabs
           onChange={(tab) => {
-            setManagementTab(tab);
+            setManagementTab(tab as DsaWorkBucket);
             setPage(1);
-            setMakerPage(1);
           }}
-          tabs={[
-            { label: "All DSAs", value: "all" },
-            ...(canAccessMakerQueue
-              ? [
-                  {
-                    label: `Maker Queue${makerBucketTotal > 0 ? ` (${makerBucketTotal})` : ""}`,
-                    value: "maker",
-                  },
-                ]
-              : []),
-            { label: `On Hold (${onHoldDsas.length})`, value: "onHold" },
-          ]}
-          value={
-            !canAccessMakerQueue && managementTab === "maker"
-              ? "all"
-              : managementTab
-          }
+          tabs={DSA_WORK_BUCKETS.map((bucket) => ({
+            label: bucket.label,
+            value: bucket.value,
+          }))}
+          value={managementTab}
         />
+        <p className="text-xs text-slate-500">
+          {DSA_WORK_BUCKETS.find((b) => b.value === managementTab)
+            ?.description}
+        </p>
       </div>
 
-      {managementTab === "maker" ? (
-        <Card className="min-h-[500px]">
-          <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-blue-100 bg-blue-50/50">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-blue-600 text-white">
-                  Maker
-                </span>
-                <h3 className="text-sm font-bold text-slate-900">
-                  Maker Review &amp; Intake Queue
-                </h3>
-              </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Applications awaiting Maker verification and submission to
-                Checker. Scoped to your assigned branch.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-blue-700 bg-blue-100/70 border border-blue-200 px-2.5 py-1 rounded-full">
-                {makerBucketTotal}{" "}
-                {makerBucketTotal === 1 ? "application" : "applications"}{" "}
-                waiting
-              </span>
-            </div>
-          </div>
-
-          <CardContent className="p-0">
-            {makerBucketLoading ? (
-              <div className="flex items-center justify-center py-20">
-                <span className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" />
-              </div>
-            ) : makerBucketDsas.length === 0 ? (
-              <div className="px-6 py-16 text-center">
-                <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-500 mb-3" />
-                <p className="text-sm font-bold text-slate-800">
-                  No Pending Applications in Maker Queue
-                </p>
-                <p className="mt-1 text-xs text-slate-500 max-w-sm mx-auto">
-                  All DSA onboarding applications assigned to your branch have
-                  been processed or forwarded to Checker.
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-bold uppercase tracking-wider text-slate-500">
-                      <th className="p-4">Applicant / Partner</th>
-                      <th className="p-4">DSA Code</th>
-                      <th className="p-4">Type &amp; PAN</th>
-                      <th className="p-4">Assigned Branch</th>
-                      <th className="p-4">GST Applicable</th>
-                      <th className="p-4">PAN Verification</th>
-                      <th className="p-4">Status</th>
-                      <th className="p-4 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {makerBucketDsas.map((item) => {
-                      const verif = item.verification_summary;
-                      const isPanFailed =
-                        verif && verif.execution_status === "FAILED";
-                      const isPanVerified =
-                        !isPanFailed &&
-                        (Boolean(verif && verif.is_success) ||
-                          Boolean(item.pan));
-
-                      return (
-                        <tr
-                          key={item.id}
-                          className="hover:bg-slate-50/50 transition cursor-pointer"
-                          onClick={() => router.push(`/dsa/${item.id}`)}
-                        >
-                          <td className="p-4">
-                            <div>
-                              <p className="font-semibold text-blue-700 hover:underline">
-                                {item.applicant_name || item.name}
-                              </p>
-                              <p className="text-[10px] text-slate-500">
-                                {item.contact_person} &bull;{" "}
-                                {item.email || item.mobile}
-                              </p>
-                            </div>
-                          </td>
-                          <td className="p-4 font-mono text-xs font-bold">
-                            {(
-                              typeof item.dsa_code === "object"
-                                ? (item.dsa_code as any)?.code
-                                : item.dsa_code
-                            ) ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
-                                {typeof item.dsa_code === "object"
-                                  ? (item.dsa_code as any)?.code
-                                  : item.dsa_code}
-                              </span>
-                            ) : (
-                              <span className="text-slate-600">
-                                {item.code || `DSA-${item.id}`}
-                              </span>
-                            )}
-                          </td>
-                          <td className="p-4">
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 mr-1.5">
-                              {item.dsa_type || "INDIVIDUAL"}
-                            </span>
-                            <span className="font-mono text-xs text-slate-600">
-                              {item.pan || "N/A"}
-                            </span>
-                          </td>
-                          <td className="p-4 text-xs font-medium text-slate-700">
-                            <span className="inline-flex items-center gap-1">
-                              <Building2 className="h-3 w-3 text-slate-400" />
-                              {item.branch_name ||
-                                item.branch?.branch_name ||
-                                "Assigned Branch"}
-                            </span>
-                          </td>
-                          <td className="p-4">
-                            {item.gst_applicable ? (
-                              <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                <Check className="h-3 w-3" />
-                                Yes (Registered)
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-medium bg-slate-100 text-slate-600">
-                                Exempt / No
-                              </span>
-                            )}
-                          </td>
-                          <td className="p-4">
-                            {isPanVerified ? (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
-                                <CheckCircle2 className="h-3 w-3" />
-                                PAN Verified
-                              </span>
-                            ) : isPanFailed ? (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700 border border-rose-200">
-                                <AlertCircle className="h-3 w-3" />
-                                PAN Failed
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-700 border border-amber-200">
-                                <Clock className="h-3 w-3" />
-                                Pending Auto-Check
-                              </span>
-                            )}
-                          </td>
-                          <td className="p-4">
-                            <StatusBadge status={getDsaDisplayStatus(item)} />
-                            {item.onboarding_status === "REJECTED" &&
-                              (item.rejection_reason || item.status_reason) && (
-                                <p
-                                  className="mt-1 text-[10px] text-rose-700 italic max-w-[200px] truncate"
-                                  title={
-                                    item.rejection_reason || item.status_reason
-                                  }
-                                >
-                                  Reason:{" "}
-                                  {item.rejection_reason || item.status_reason}
-                                </p>
-                              )}
-                          </td>
-                          <td
-                            className="p-4 text-right"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Button
-                              size="sm"
-                              variant="primary"
-                              onClick={() => router.push(`/dsa/${item.id}`)}
-                              className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-1.5 h-auto"
-                            >
-                              Review as Maker
-                              <ArrowRight className="h-3.5 w-3.5 ml-1" />
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            {makerBucketTotal > 10 && (
-              <div className="flex items-center justify-between p-4 border-t border-slate-100 bg-slate-50/40 text-xs">
-                <span className="text-slate-500">
-                  Page {makerPage} of{" "}
-                  {Math.max(1, Math.ceil(makerBucketTotal / 10))}
-                </span>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={makerPage <= 1 || makerBucketLoading}
-                    onClick={() => setMakerPage((p) => Math.max(1, p - 1))}
-                    className="text-xs h-7 px-2.5"
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={
-                      makerPage >= Math.ceil(makerBucketTotal / 10) ||
-                      makerBucketLoading
-                    }
-                    onClick={() => setMakerPage((p) => p + 1)}
-                    className="text-xs h-7 px-2.5"
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      ) : managementTab === "onHold" ? (
-        <OnHoldDsaDocuments
-          description="Upload remaining mandatory documents here. A DSA stays On Hold until every missing document is uploaded."
-          dsas={onHoldDsas as any[]}
-        />
-      ) : (
-        <Card className="min-h-[500px]">
-          <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-slate-100 bg-slate-50/50">
+      <Card className="min-h-[500px]">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-slate-100 bg-slate-50/50">
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
               <Input
                 aria-label="Search partners"
@@ -2824,33 +2475,6 @@ export function DsaManagementPage() {
                     {s}
                   </option>
                 ))}
-              </Select>
-              <Select
-                aria-label="Filter by approval queue"
-                onChange={handleApprovalBucketChange}
-                value={approvalBucket}
-                className="w-full sm:w-[220px]"
-              >
-                <option value="">All Approval Queues</option>
-                <option value="1">Stage 1: Maker (Initiator)</option>
-                <option value="2">
-                  Stage 2: Checker (Due Diligence cum Rec Note)
-                </option>
-                <option value="3">
-                  Stage 3: Sub-Region Head (1st Recommending Authority)
-                </option>
-                <option value="4">
-                  Stage 4: DGM (2nd Recommending Authority)
-                </option>
-                <option value="5">
-                  Stage 5: Region Head (3rd Recommending Authority)
-                </option>
-                <option value="6">
-                  Stage 6: HO Credit Officer (Credit AGM)
-                </option>
-                <option value="7">
-                  Stage 7: HO Credit Head (Approving Authority)
-                </option>
               </Select>
             </div>
             <span className="text-xs text-slate-500 font-medium">
@@ -2910,20 +2534,58 @@ export function DsaManagementPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {dsas.map((item) => (
+                    {dsas.map((item) => {
+                      // Task 22 — a row is only actionable when the case is at
+                      // this role's stage. Rows that are not are still listed
+                      // (you can see it exists) but cannot be opened, edited or
+                      // auto-acquired, so a stray click can never claim a case
+                      // that has moved on.
+                      const access = resolveCaseAccess(item, roleStr);
+                      const locked = !access.allowed;
+                      const lockNote = describeCaseLock(
+                        access.reason,
+                        item.current_approval_level,
+                      );
+
+                      return (
                       <tr
-                        className="hover:bg-slate-50/50 transition cursor-pointer"
+                        className={cn(
+                          "transition",
+                          locked
+                            ? "cursor-not-allowed bg-slate-50/60 opacity-70"
+                            : "cursor-pointer hover:bg-slate-50/50",
+                        )}
                         key={item.id}
-                        onClick={() => router.push(`/dsa/${item.id}`)}
+                        onClick={() => {
+                          if (locked) {
+                            toast({
+                              title: "Case not assigned to you",
+                              description: lockNote,
+                              variant: "warning",
+                            });
+                            return;
+                          }
+                          router.push(`/dsa/${item.id}`);
+                        }}
+                        title={locked ? lockNote : undefined}
                       >
                         <td className="p-4">
                           <div>
-                            <p className="font-semibold text-blue-700 hover:underline">
+                            <div className="flex items-center gap-2">
+                            <p
+                              className={cn(
+                                "font-semibold",
+                                locked
+                                  ? "text-slate-500"
+                                  : "text-blue-700 hover:underline",
+                              )}
+                            >
                               {item.name ||
                                 item.contact_person ||
                                 item.dsa_code ||
                                 item.code}
                             </p>
+                          </div>
                             <p className="text-[10px] text-slate-500">
                               {item.contact_person} · {item.email}
                               {(item.branch_name ||
@@ -3001,7 +2663,18 @@ export function DsaManagementPage() {
                               </Button>
                             ) : null}
                             <Button
-                              onClick={() => setEditing(item as any)}
+                              disabled={locked}
+                              onClick={() => {
+                                if (locked) {
+                                  toast({
+                                    title: "Editing unavailable",
+                                    description: lockNote,
+                                    variant: "warning",
+                                  });
+                                  return;
+                                }
+                                setEditing(item as any);
+                              }}
                               size="sm"
                               type="button"
                               variant="secondary"
@@ -3011,7 +2684,8 @@ export function DsaManagementPage() {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -3044,7 +2718,6 @@ export function DsaManagementPage() {
             </div>
           </div>
         </Card>
-      )}
 
       <Modal
         onClose={() => setEditing(null)}
@@ -3277,11 +2950,10 @@ export function DsaProfilePage({ id }: { id: string }) {
 
   const openL7FinalApprovalModal = useCallback(
     async (dsaRecord: any) => {
-      setApprovalRemarks(
-        "Case sanctioned by HO Credit Head on full review of due diligence, verification checks, and policy compliance.",
-      );
+      setApprovalRemarks("");
       setApprovalRemarksError("");
       setL7ModalSubTab("approvals");
+      setL7ActiveVerifTab("");
       setL7ReviewModalOpen(true);
       if (dsaRecord?.id) {
         await loadFinalApprovalReview(dsaRecord.id);
@@ -4093,6 +3765,73 @@ export function DsaProfilePage({ id }: { id: string }) {
     fetchDsaDetail(id);
   }, [id, fetchDsaDetail]);
 
+  // Task 22 — case access control. A role may only open a case that is
+  // currently at its own stage. Mirrors
+  // DsaCaseAssignmentService::validateUserEligibilityForDsa() so the detail
+  // UI is withheld entirely instead of letting a user claim (auto-acquire) a
+  // case that has moved past them.
+  const caseAccess = useMemo(
+    () => resolveCaseAccess(dsa, currentUser?.role),
+    [dsa, currentUser?.role],
+  );
+
+  // Task 22 — auto-acquire on open.
+  // Opening a case claims the user-level lock so concurrent users cannot work
+  // the same application. Fire-and-forget: a rejected acquire (locked by
+  // someone else, or not this user's stage) must never block the read view,
+  // so the detail is rendered regardless and the Audit Trails tab surfaces
+  // the lock state. Guarded per DSA id to avoid duplicate claims on re-render.
+  const autoAcquireRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!id || autoAcquireRef.current === String(id)) return;
+    // Never claim a case that is not at this user's stage — that is the
+    // loophole where a stray click would auto-acquire someone else's case.
+    if (!dsa || !caseAccess.allowed) return;
+    autoAcquireRef.current = String(id);
+    void adminApi
+      .acquireCase(id)
+      .then((res) => {
+        const data = res?.data as
+          | { lock_status?: string; message?: string }
+          | undefined;
+        const alreadyMine = data?.lock_status === "LOCKED";
+        toast({
+          title: alreadyMine
+            ? "Case already acquired by you"
+            : "Case auto-acquired",
+          description:
+            data?.message ||
+            "You now hold an exclusive lock on this case. Other users cannot process it until you release it or act on it.",
+          variant: "success",
+        });
+        return fetchDsaDetail(id);
+      })
+      .catch((err: unknown) => {
+        // 423 => someone else holds the lock. Surface it rather than silently
+        // swallowing, so the user knows why they cannot act on this case.
+        const status = (err as { status?: number })?.status;
+        if (status === 423) {
+          toast({
+            title: "Case locked by another user",
+            description:
+              err instanceof Error
+                ? err.message
+                : "This case is already being processed by another user.",
+            variant: "warning",
+          });
+        }
+      });
+  }, [id, dsa, caseAccess.allowed, fetchDsaDetail, toast]);
+
+  /**
+   * Task 22 — no client-side release is required after a workflow action.
+   * DsaApprovalEngine already clears the lock atomically for every forward,
+   * reject and revert transition (assigned_user_id = null, lock_status =
+   * UNLOCKED), so the acting user is un-acquired server-side. Calling
+   * releaseCase() here would only add a failure mode and a spurious
+   * CASE_RELEASED audit row.
+   */
+
   useEffect(() => {
     if (
       l7ReviewModalOpen &&
@@ -4796,23 +4535,33 @@ export function DsaProfilePage({ id }: { id: string }) {
   const canApproveDsa =
     canDecideDsa && (docChecklist ? docChecklist.is_complete : true);
 
+  // Newest-wins rule shared by the DSA Actions tab, the L7 review modal and the
+  // DD Review Report: prefer actioned rows, then the latest actioned_at, then the
+  // highest row id (same-second actions).
+  const isLaterApprovalRow = (a: any, b: any): boolean => {
+    const aActioned =
+      Boolean(a?.actioned_at) || (a?.status && a.status !== "PENDING");
+    const bActioned =
+      Boolean(b?.actioned_at) || (b?.status && b.status !== "PENDING");
+    if (aActioned !== bActioned) return aActioned;
+    const aT = a?.actioned_at ? new Date(a.actioned_at).getTime() : 0;
+    const bT = b?.actioned_at ? new Date(b.actioned_at).getTime() : 0;
+    if (aT !== bT) return aT > bT;
+    return Number(a?.id ?? 0) > Number(b?.id ?? 0);
+  };
+
   // Approvals are append-only: a stage accumulates rows over time
   // (RECOMMEND → REVERT/QUERY → RECOMMEND again). Always surface the NEWEST
   // actioned row per stage so re-approved remarks replace the stale ones.
   const pickLatestApproval = (matches: (a: any) => boolean): any => {
     if (!Array.isArray(dsa?.approvals)) return null;
-    const rows = dsa.approvals.filter(matches);
-    if (rows.length === 0) return null;
-    const actioned = rows.filter(
-      (r: any) => Boolean(r.actioned_at) || (r.status && r.status !== "PENDING"),
-    );
-    const pool = actioned.length > 0 ? actioned : rows;
-    return [...pool].sort((a: any, b: any) => {
-      const aT = a.actioned_at ? new Date(a.actioned_at).getTime() : 0;
-      const bT = b.actioned_at ? new Date(b.actioned_at).getTime() : 0;
-      if (aT !== bT) return bT - aT;
-      return Number(b.id ?? 0) - Number(a.id ?? 0);
-    })[0];
+    return dsa.approvals
+      .filter(matches)
+      .reduce(
+        (latest: any, row: any) =>
+          !latest || isLaterApprovalRow(row, latest) ? row : latest,
+        null,
+      );
   };
 
   const l1Approval: any = pickLatestApproval(
@@ -4832,6 +4581,14 @@ export function DsaProfilePage({ id }: { id: string }) {
   const isCheckerUserOrLevel =
     isCheckerRole ||
     (!isMakerUser && (isCheckerLevel || workflowLevelInfo.currentLevel === 2));
+
+  // Task: L7 (HO Credit Head / DSA Manager / Admin) must NOT see the Agreements
+  // tab. `isCheckerRole` and `isL7User` both match Admin/Super Admin, so the
+  // exclusion has to be explicit rather than relying on the OR below.
+  const canViewAgreementsTab = Boolean(
+    !isL7User &&
+      (isMakerUserOrLevel || isCheckerUserOrLevel || isMakerLevel || isCheckerLevel),
+  );
 
   const canEditBasicDetails = Boolean(
     (isMakerLevel ||
@@ -7081,6 +6838,12 @@ export function DsaProfilePage({ id }: { id: string }) {
                       item.status === "APPROVED";
                     const isBypassed = item.status === "SKIPPED";
                     const isRejected = item.status === "REJECTED";
+                    const isQuery = item.status === "QUERY" || item.status === "QUERY_RAISED";
+                    const isReturned =
+                      item.status === "REVERTED" ||
+                      item.status === "CALLED_BACK" ||
+                      item.status === "REALLOCATED" ||
+                      item.status === "FORWARDED";
 
                     return (
                       <div key={item.level} className="p-4 space-y-3 bg-white">
@@ -7117,9 +6880,11 @@ export function DsaProfilePage({ id }: { id: string }) {
                                   ? "bg-emerald-100 text-emerald-800 border-emerald-300"
                                   : isBypassed
                                     ? "bg-slate-100 text-slate-600 border-slate-300"
-                                    : isRejected
-                                      ? "bg-rose-100 text-rose-800 border-rose-300"
-                                      : "bg-slate-100 text-slate-500 border-slate-200",
+                                    : isQuery || isReturned
+                                      ? "bg-amber-100 text-amber-800 border-amber-300"
+                                      : isRejected
+                                        ? "bg-rose-100 text-rose-800 border-rose-300"
+                                        : "bg-slate-100 text-slate-500 border-slate-200",
                               )}
                             >
                               {isDone
@@ -7128,9 +6893,19 @@ export function DsaProfilePage({ id }: { id: string }) {
                                   : "Recommended"
                                 : isBypassed
                                   ? "Bypassed"
-                                  : isRejected
-                                    ? "Rejected"
-                                    : "Pending Review"}
+                                  : isQuery
+                                    ? "Query Raised"
+                                    : isReturned
+                                      ? item.status === "REVERTED"
+                                        ? "Reverted"
+                                        : item.status === "CALLED_BACK"
+                                          ? "Called Back"
+                                          : item.status === "REALLOCATED"
+                                            ? "Reallocated"
+                                            : "Forwarded"
+                                      : isRejected
+                                        ? "Rejected"
+                                        : "Pending Review"}
                             </span>
                           </div>
                         </div>
@@ -7249,15 +7024,14 @@ export function DsaProfilePage({ id }: { id: string }) {
                       },
                     );
                     if (updated) {
-                      await fetchDsaDetail(id);
+                      // The engine already un-acquires the case on sanction.
                       toast({
                         title:
                           "Institutional Sanction Granted (Approved)",
                         description: `Application #${dsa.dsa_code || dsa.code || dsa.id} sanctioned. DSA Code allotted and Empanelment Letter generated.`,
                         variant: "success",
                       });
-                      await loadFinalApprovalReview(dsa.id);
-                      setTab("agreements");
+                      router.push("/dsa/management");
                     }
                   } catch (err: any) {
                     setApprovalRemarksError(
@@ -7290,6 +7064,39 @@ export function DsaProfilePage({ id }: { id: string }) {
       </div>
     );
   };
+
+  if (dsa && !caseAccess.allowed) {
+    const copy =
+      caseAccess.reason === "rejected"
+        ? `Application #${dsa.dsa_code || dsa.code || dsa.id} has been rejected. A rejected application is closed to every role and cannot be opened, regardless of who holds the lock. It remains visible in the All and Rejected lists for your records.`
+        : caseAccess.reason === "closed"
+          ? `Application #${dsa.dsa_code || dsa.code || dsa.id} has completed sanction. Post-sanction agreement work is handled by the Branch Maker and Branch Checker.`
+          : `Application #${dsa.dsa_code || dsa.code || dsa.id} is currently at Level ${
+              dsa.current_approval_level
+            }. It is not assigned to your stage, so the full case view is unavailable. It will open automatically once it is reverted or reassigned back to you.`;
+
+    return (
+      <div className="space-y-4">
+        <Link
+          className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-blue-700"
+          href="/dsa/management"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to DSA management
+        </Link>
+        <EmptyState
+          title={
+            caseAccess.reason === "rejected"
+              ? "This application has been rejected"
+              : caseAccess.reason === "closed"
+                ? "This application has been approved"
+                : "This application is not at your stage"
+          }
+          description={copy}
+        />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -7445,15 +7252,10 @@ export function DsaProfilePage({ id }: { id: string }) {
             { label: "DSA Approval", value: "actions" },
             { label: "DSA Application Form", value: "overview" },
             { label: "Documents Checklist", value: "documents" },
-            ...(Boolean(
-              isMakerUser ||
-                isMakerLevel ||
-                isCheckerRole ||
-                isCheckerLevel ||
-                isL7User,
-            )
+            ...(canViewAgreementsTab
               ? [{ label: "Agreements", value: "agreements" }]
               : []),
+            { label: "Audit Trails", value: "case-activity" },
           ]}
           value={tab}
         />
@@ -9231,6 +9033,10 @@ export function DsaProfilePage({ id }: { id: string }) {
               })()
             : null}
 
+          {tab === "case-activity" ? (
+            <DsaCaseActivityTab dsaId={id} />
+          ) : null}
+
           {tab === "agreements"
             ? (() => {
                 const isL7Approved = Boolean(
@@ -9570,18 +9376,6 @@ export function DsaProfilePage({ id }: { id: string }) {
                                   </p>
                                 </>
                               )}
-                          </div>
-                        )}
-                        {!canManageAgreementFiles && isL7User && (
-                          <div className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-3 text-xs leading-relaxed text-slate-600">
-                            <Info className="h-4 w-4 shrink-0 text-slate-400 mt-0.5" />
-                            <p>
-                              Read-only view. Downloading the official agreement
-                              and uploading the scanned signed copy is performed
-                              by the Branch Maker or Branch Checker. The Branch
-                              Checker approves the agreement and activates the
-                              partner.
-                            </p>
                           </div>
                         )}
 
@@ -10331,6 +10125,12 @@ export function DsaProfilePage({ id }: { id: string }) {
                       const isBypassed = step.status === "SKIPPED";
                       const isActive = step.status === "ACTIVE";
                       const isRejected = step.status === "REJECTED";
+                      const isQuery = step.status === "QUERY" || step.status === "QUERY_RAISED";
+                      const isReturned =
+                        step.status === "REVERTED" ||
+                        step.status === "CALLED_BACK" ||
+                        step.status === "REALLOCATED" ||
+                        step.status === "FORWARDED";
 
                       return (
                         <div
@@ -10388,9 +10188,11 @@ export function DsaProfilePage({ id }: { id: string }) {
                                       ? "bg-slate-100 text-slate-600 border-slate-300"
                                       : isActive
                                         ? "bg-blue-100 text-blue-800 border-blue-300"
-                                        : isRejected
-                                          ? "bg-rose-100 text-rose-800 border-rose-300"
-                                          : "bg-slate-100 text-slate-500 border-slate-200",
+                                        : isQuery || isReturned
+                                          ? "bg-amber-100 text-amber-800 border-amber-300"
+                                          : isRejected
+                                            ? "bg-rose-100 text-rose-800 border-rose-300"
+                                            : "bg-slate-100 text-slate-500 border-slate-200",
                                 )}
                               >
                                 {isDone
@@ -10403,9 +10205,19 @@ export function DsaProfilePage({ id }: { id: string }) {
                                     ? "Bypassed (No DGM)"
                                     : isActive
                                       ? "Active Review Queue"
-                                      : isRejected
-                                        ? "Rejected"
-                                        : "Pending Review"}
+                                      : isQuery
+                                        ? "Query Raised"
+                                        : isReturned
+                                          ? step.status === "REVERTED"
+                                            ? "Reverted"
+                                            : step.status === "CALLED_BACK"
+                                              ? "Called Back"
+                                              : step.status === "REALLOCATED"
+                                                ? "Reallocated"
+                                                : "Forwarded"
+                                          : isRejected
+                                            ? "Rejected"
+                                            : "Pending Review"}
                               </span>
                             </div>
                           </div>
@@ -10560,7 +10372,9 @@ export function DsaProfilePage({ id }: { id: string }) {
         open={Boolean(approvingDsa)}
         title={
           approvingDsa
-            ? `Approve DSA Application — ${workflowLevelInfo.levelName}`
+            ? workflowLevelInfo.currentLevel === 7
+              ? "Grant Final Approval & Sanction — HO Credit Head"
+              : `Approve DSA Application — ${workflowLevelInfo.levelName}`
             : ""
         }
         width="max-w-lg"
@@ -10569,7 +10383,9 @@ export function DsaProfilePage({ id }: { id: string }) {
           <div className="space-y-4">
             <Field>
               <Label htmlFor="approvalRemarks">
-                Approval Remarks / Justification{" "}
+                {workflowLevelInfo.currentLevel === 7
+                  ? "Sanction Remarks / Justification"
+                  : "Approval Remarks / Justification"}{" "}
                 <span className="text-rose-500">*</span>
               </Label>
               <textarea
@@ -10581,7 +10397,11 @@ export function DsaProfilePage({ id }: { id: string }) {
                   setApprovalRemarks(event.target.value);
                   setApprovalRemarksError("");
                 }}
-                placeholder="Enter approval remarks..."
+                placeholder={
+                  workflowLevelInfo.currentLevel === 7
+                    ? "Enter final sanction remarks..."
+                    : "Enter approval remarks..."
+                }
               />
               {approvalRemarksError ? (
                 <p className="text-xs font-medium text-rose-600 mt-1">
@@ -10591,13 +10411,28 @@ export function DsaProfilePage({ id }: { id: string }) {
             </Field>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-              <Button
-                variant="secondary"
-                type="button"
-                onClick={closeDecisionModals}
-              >
-                Cancel
-              </Button>
+              {workflowLevelInfo.currentLevel === 7 ? (
+                <Button
+                  variant="secondary"
+                  type="button"
+                  onClick={() => {
+                    setApprovingDsa(null);
+                    setL7ReviewModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back
+                </Button>
+              ) : (
+                <Button
+                  variant="secondary"
+                  type="button"
+                  onClick={closeDecisionModals}
+                >
+                  Cancel
+                </Button>
+              )}
               <Button
                 className={cn(
                   "font-semibold transition-all",
@@ -10741,10 +10576,6 @@ export function DsaProfilePage({ id }: { id: string }) {
                   }
 
                   if (updated) {
-                    await fetchDsaDetail(id);
-                    fetchDeviationReport(id)
-                      .then((fresh) => fresh && setDeviationReportData(fresh))
-                      .catch(() => {});
                     toast({
                       title:
                         workflowLevelInfo.currentLevel === 1
@@ -10760,10 +10591,18 @@ export function DsaProfilePage({ id }: { id: string }) {
                                   : workflowLevelInfo.currentLevel === 6
                                     ? "Appraisal Recommended to HO Credit Head"
                                     : "Application Advanced",
-                      description: `${approvingDsa.name} approved and forwarded to ${workflowLevelInfo.nextLevelName}.`,
+                      description:
+                        workflowLevelInfo.currentLevel === 7
+                          ? `Application #${approvingDsa.dsa_code || approvingDsa.code || approvingDsa.id} sanctioned. DSA Code allotted and Empanelment Letter generated.`
+                          : `${approvingDsa.name} approved and forwarded to ${workflowLevelInfo.nextLevelName}.`,
                       variant: "success",
                     });
+                    if (workflowLevelInfo.currentLevel === 7) {
+                      // L7 has no Agreements tab — route to the activity trail.
+                      setTab(canViewAgreementsTab ? "agreements" : "case-activity");
+                    }
                     closeDecisionModals();
+                    router.push("/dsa/management");
                   }
                 }}
               >
@@ -10781,7 +10620,9 @@ export function DsaProfilePage({ id }: { id: string }) {
                             ? "Confirm & Recommend to HO Credit Officer"
                             : workflowLevelInfo.currentLevel === 6
                               ? "Confirm & Recommend Appraisal to HO Credit Head"
-                              : workflowLevelInfo.actionLabel}
+                              : workflowLevelInfo.currentLevel === 7
+                                ? "Grant Final Approval & Sanction"
+                                : workflowLevelInfo.actionLabel}
               </Button>
             </div>
           </div>
@@ -10790,7 +10631,10 @@ export function DsaProfilePage({ id }: { id: string }) {
 
       {/* L7 Executive Sanction Case Review Modal */}
       <Modal
-        onClose={() => setL7ReviewModalOpen(false)}
+        onClose={() => {
+          setL7ReviewModalOpen(false);
+          setL7ActiveVerifTab("");
+        }}
         open={l7ReviewModalOpen}
         title="DSA Empanelment Sanction Report"
         width="max-w-5xl"
@@ -10838,12 +10682,27 @@ export function DsaProfilePage({ id }: { id: string }) {
           const makerDevRep = l7ReviewData?.maker_deviation_report || {};
           const ddNote = l7ReviewData?.due_diligence_note || {};
           const reviewMeta = l7ReviewData?.review_metadata || {};
-          const historyList: any[] =
+          const historySource: any[] =
             Array.isArray(l7ReviewData?.approval_history) && l7ReviewData.approval_history.length > 0
               ? l7ReviewData.approval_history
               : Array.isArray(dsa?.approvals)
                 ? dsa.approvals
                 : [];
+
+          // One row per level (newest actioned) so this table shows exactly the
+          // same state + remarks as the DSA Actions tab and the DD Review Report.
+          const historyList: any[] = Object.values(
+            historySource.reduce((acc: Record<string, any>, row: any) => {
+              const level = Number(row?.approval_level || 0);
+              if (!level) return acc;
+              const key = String(level);
+              if (!acc[key] || isLaterApprovalRow(row, acc[key])) acc[key] = row;
+              return acc;
+            }, {}),
+          ).sort(
+            (a: any, b: any) =>
+              Number(a.approval_level) - Number(b.approval_level),
+          );
 
           const deviationsList: any[] = Array.isArray(makerDevRep?.deviations)
             ? makerDevRep.deviations
@@ -10963,19 +10822,19 @@ export function DsaProfilePage({ id }: { id: string }) {
                     1. Prior Level Approvals (L1–L6)
                   </h4>
                   <span className="text-[11px] text-slate-500">
-                    {historyList.filter((h: any) => h.status === "RECOMMENDED" || h.status === "SUBMITTED" || h.status === "APPROVED").length} of {historyList.length} stages signed off
+                    {historyList.filter((h: any) => h.status === "RECOMMENDED" || h.status === "SUBMITTED" || h.status === "APPROVED").length} of {historyList.length} levels signed off
                   </span>
                 </div>
 
-                <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
-                  <table className="min-w-full divide-y divide-slate-200 text-xs">
-                    <thead className="bg-slate-50 text-slate-600 text-[10px] uppercase tracking-wider font-semibold">
+                <div className="rounded-xl border border-slate-200 bg-white">
+                  <table className="w-full text-xs">
+                    <thead className="border-b border-slate-200 text-slate-500">
                       <tr>
-                        <th className="py-2.5 px-3 text-left">Level / Role</th>
-                        <th className="py-2.5 px-3 text-left">Status</th>
-                        <th className="py-2.5 px-3 text-left">Actioned By</th>
-                        <th className="py-2.5 px-3 text-left">Date</th>
-                        <th className="py-2.5 px-3 text-left">Review Remarks</th>
+                        <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider">Level / Role</th>
+                        <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider">Status</th>
+                        <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider">Actioned By</th>
+                        <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider">Date</th>
+                        <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider">Review Remarks</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -10985,9 +10844,15 @@ export function DsaProfilePage({ id }: { id: string }) {
                         const isDone = status === "RECOMMENDED" || status === "SUBMITTED" || status === "APPROVED";
                         const isSkipped = status === "SKIPPED" || stepItem.is_skipped;
                         const isRejected = status === "REJECTED";
+                        const isQuery = status === "QUERY" || status === "QUERY_RAISED";
+                        const isReturned =
+                          status === "REVERTED" ||
+                          status === "CALLED_BACK" ||
+                          status === "REALLOCATED" ||
+                          status === "FORWARDED";
 
                         return (
-                          <tr key={stepItem.id || level} className="hover:bg-slate-50/80">
+                          <tr key={stepItem.id || level}>
                             <td className="py-2.5 px-3 font-semibold text-slate-900 whitespace-nowrap">
                               <span className="inline-block w-5 text-slate-400 font-mono text-[10px]">L{level}</span>
                               {stepItem.role_name || `Level ${level}`}
@@ -11005,12 +10870,34 @@ export function DsaProfilePage({ id }: { id: string }) {
                                     ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                                     : isSkipped
                                       ? "bg-slate-100 text-slate-500 border-slate-200"
-                                      : isRejected
-                                        ? "bg-rose-50 text-rose-700 border-rose-200"
-                                        : "bg-blue-50 text-blue-700 border-blue-200",
+                                      : isQuery || isReturned
+                                        ? "bg-amber-50 text-amber-800 border-amber-200"
+                                        : isRejected
+                                          ? "bg-rose-50 text-rose-700 border-rose-200"
+                                          : "bg-blue-50 text-blue-700 border-blue-200",
                                 )}
                               >
-                                {isDone ? (level === 7 ? "Approved" : level <= 2 ? "Submitted" : "Recommended") : isSkipped ? "Skipped" : isRejected ? "Rejected" : "Pending"}
+                                {isDone
+                                  ? level === 7
+                                    ? "Approved"
+                                    : level <= 2
+                                      ? "Submitted"
+                                      : "Recommended"
+                                  : isSkipped
+                                    ? "Skipped"
+                                    : isQuery
+                                      ? "Query Raised"
+                                      : isReturned
+                                        ? status === "REVERTED"
+                                          ? "Reverted"
+                                          : status === "CALLED_BACK"
+                                            ? "Called Back"
+                                            : status === "REALLOCATED"
+                                              ? "Reallocated"
+                                              : "Forwarded"
+                                        : isRejected
+                                          ? "Rejected"
+                                          : "Pending"}
                               </span>
                             </td>
                             <td className="py-2.5 px-3 whitespace-nowrap">
@@ -11067,26 +10954,26 @@ export function DsaProfilePage({ id }: { id: string }) {
 
                 {/* Deviations Table if any */}
                 {deviationsList.length > 0 && (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-3 space-y-2">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block">
+                  <div className="rounded-xl border border-amber-200/80 bg-amber-50/30 px-3 py-2.5 space-y-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 block">
                       Policy Deviations ({deviationsList.length})
                     </span>
-                    <table className="min-w-full divide-y divide-amber-200 text-xs">
-                      <thead className="text-[10px] uppercase font-semibold text-amber-800 text-left">
+                    <table className="w-full text-xs">
+                      <thead className="border-b border-amber-200/80 text-amber-700">
                         <tr>
-                          <th className="py-1 px-2">Rule</th>
-                          <th className="py-1 px-2">Actual Value</th>
-                          <th className="py-1 px-2">Policy Benchmark</th>
-                          <th className="py-1 px-2">Justification</th>
+                          <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider">Rule</th>
+                          <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider">Actual Value</th>
+                          <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider">Policy Benchmark</th>
+                          <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider">Justification</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-amber-100 text-slate-800">
                         {deviationsList.map((dev: any, i: number) => (
                           <tr key={i}>
-                            <td className="py-1.5 px-2 font-medium">{dev.rule_name || dev.rule_code}</td>
-                            <td className="py-1.5 px-2 font-mono text-amber-900">{String(dev.actual_value ?? dev.value ?? "—")}</td>
-                            <td className="py-1.5 px-2 font-mono text-slate-600">{String(dev.threshold ?? dev.policy_value ?? "—")}</td>
-                            <td className="py-1.5 px-2 text-slate-700">{dev.justification || "Reviewed"}</td>
+                            <td className="px-3 py-2.5 font-medium text-slate-900">{dev.rule_name || dev.rule_code}</td>
+                            <td className="px-3 py-2.5 font-mono text-amber-900">{String(dev.actual_value ?? dev.value ?? "—")}</td>
+                            <td className="px-3 py-2.5 font-mono text-slate-600">{String(dev.threshold ?? dev.policy_value ?? "—")}</td>
+                            <td className="px-3 py-2.5 text-slate-700">{dev.justification || "Reviewed"}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -11095,23 +10982,23 @@ export function DsaProfilePage({ id }: { id: string }) {
                 )}
 
                 {/* Evaluated Rules Table */}
-                <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
-                  <table className="min-w-full divide-y divide-slate-200 text-xs">
-                    <thead className="bg-slate-50 text-slate-600 text-[10px] uppercase tracking-wider font-semibold">
+                <div className="rounded-xl border border-slate-200 bg-white">
+                  <table className="w-full text-xs">
+                    <thead className="border-b border-slate-200 text-slate-500">
                       <tr>
-                        <th className="py-2 px-3 text-left">Policy Rule</th>
-                        <th className="py-2 px-3 text-left">Rule Code</th>
-                        <th className="py-2 px-3 text-left">Status</th>
+                        <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider">Policy Rule</th>
+                        <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider">Rule Code</th>
+                        <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
                       {breRulesList.map((rule: any, i: number) => {
                         const status = String(rule.rule_status || rule.status || "PASS").toUpperCase();
                         return (
-                          <tr key={i} className="hover:bg-slate-50/80">
-                            <td className="py-2 px-3 font-medium text-slate-900">{rule.rule_name || rule.rule_code}</td>
-                            <td className="py-2 px-3 font-mono text-slate-500 text-[11px]">{rule.rule_code}</td>
-                            <td className="py-2 px-3">
+                          <tr key={i}>
+                            <td className="px-3 py-2.5 font-medium text-slate-900">{rule.rule_name || rule.rule_code}</td>
+                            <td className="px-3 py-2.5 font-mono text-slate-500 text-[11px]">{rule.rule_code}</td>
+                            <td className="px-3 py-2.5">
                               <span
                                 className={cn(
                                   "px-2 py-0.5 rounded text-[10px] font-bold border",
@@ -11139,59 +11026,113 @@ export function DsaProfilePage({ id }: { id: string }) {
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
                     3. Statutory KYC Verifications ({verifsList.length})
                   </h4>
+                  {verifsList.length > 0 ? (
+                    <span
+                      className={cn(
+                        "px-2 py-0.5 rounded-full text-[10px] font-bold border",
+                        verifsList.filter(
+                          (v: any) =>
+                            v?.success === true ||
+                            v?.execution_status === "COMPLETED",
+                        ).length === verifsList.length
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          : "bg-amber-50 text-amber-800 border-amber-200",
+                      )}
+                    >
+                      {verifsList.filter(
+                        (v: any) =>
+                          v?.success === true ||
+                          v?.execution_status === "COMPLETED",
+                      ).length}
+                      /{verifsList.length} passed
+                    </span>
+                  ) : null}
                 </div>
 
                 {verifsList.length > 0 ? (() => {
-                  const activeTabKey = l7ActiveVerifTab || String(verifsList[0]?.verification_code || verifsList[0]?.id || 0);
-                  const activeItem = verifsList.find(
-                    (v: any, i: number) => String(v.verification_code || v.id || i) === activeTabKey
-                  ) || verifsList[0];
+                  const getTabKey = (vItem: any, idx: number) =>
+                    String(
+                      vItem?.id !== undefined && vItem?.id !== null
+                        ? `verif_${vItem.id}_${idx}`
+                        : `verif_${vItem?.verification_code || "check"}_${idx}`,
+                    );
+
+                  const codeCounts: Record<string, number> = {};
+                  verifsList.forEach((v: any) => {
+                    const c = v.verification_code || "CHECK";
+                    codeCounts[c] = (codeCounts[c] || 0) + 1;
+                  });
+
+                  const activeIndex = Math.max(
+                    0,
+                    verifsList.findIndex(
+                      (v: any, i: number) => getTabKey(v, i) === l7ActiveVerifTab,
+                    ),
+                  );
+                  const activeItem = verifsList[activeIndex] || verifsList[0];
 
                   const isSuccess = activeItem.success === true || activeItem.execution_status === "COMPLETED";
                   const summary = activeItem.normalized_summary || {};
                   const summaryEntries = Object.entries(summary);
 
+                  const seenCounts: Record<string, number> = {};
+
                   return (
                     <div className="space-y-2">
-                      {/* Tabs Navigation Strip */}
-                      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar border-b border-slate-200 pb-px">
+                      {/* Tabs — minimal underline style */}
+                      <div
+                        role="tablist"
+                        aria-label="Statutory verification checks"
+                        className="flex items-center gap-x-5 overflow-x-auto no-scrollbar border-b border-slate-200"
+                      >
                         {verifsList.map((vItem: any, i: number) => {
-                          const tabKey = String(vItem.verification_code || vItem.id || i);
-                          const isSelected = String(activeItem.verification_code || activeItem.id || verifsList.indexOf(activeItem)) === tabKey;
-                          const label = (vItem.verification_code || `Check ${i + 1}`).replace(/_/g, " ");
+                          const tabKey = getTabKey(vItem, i);
+                          const isSelected = i === activeIndex;
+                          const code = vItem.verification_code || "CHECK";
+                          seenCounts[code] = (seenCounts[code] || 0) + 1;
+                          const isDuplicate = (codeCounts[code] || 0) > 1;
+                          const countSuffix = isDuplicate
+                            ? ` (${vItem.trigger_role ? `${vItem.trigger_role} ` : ""}#${seenCounts[code]})`
+                            : "";
+                          const label = `${(vItem.verification_code || `Check ${i + 1}`).replace(/_/g, " ")}${countSuffix}`;
                           const itemSuccess = vItem.success === true || vItem.execution_status === "COMPLETED";
 
                           return (
                             <button
                               key={tabKey}
                               type="button"
+                              role="tab"
+                              aria-selected={isSelected}
                               onClick={() => setL7ActiveVerifTab(tabKey)}
                               className={cn(
-                                "px-3 py-1.5 text-xs font-semibold rounded-t-md transition-all flex items-center gap-1.5 whitespace-nowrap border-t border-l border-r",
+                                "-mb-px flex items-center gap-2 whitespace-nowrap border-b-2 px-0.5 pb-2.5 pt-1 text-xs font-semibold transition-colors duration-150",
                                 isSelected
-                                  ? "bg-white text-slate-900 border-slate-300 font-bold border-b-2 border-b-white -mb-px shadow-2xs"
-                                  : "bg-slate-100/80 text-slate-600 border-transparent hover:text-slate-900 hover:bg-slate-200/60",
+                                  ? "border-blue-600 text-slate-900"
+                                  : "border-transparent text-slate-500 hover:text-slate-800",
                               )}
                             >
                               <span
                                 className={cn(
-                                  "w-2 h-2 rounded-full shrink-0",
+                                  "h-1.5 w-1.5 shrink-0 rounded-full",
                                   itemSuccess ? "bg-emerald-500" : "bg-rose-500",
                                 )}
                               />
-                              <span className="uppercase text-[11px] tracking-wide">{label}</span>
+                              <span className="truncate">{label}</span>
                             </button>
                           );
                         })}
                       </div>
 
                       {/* Active Tab Panel */}
-                      <div className="rounded-lg border border-slate-200 bg-white overflow-hidden shadow-2xs">
+                      <div className="rounded-xl border border-slate-200 bg-white">
                         {/* Meta strip */}
-                        <div className="bg-slate-50/90 px-4 py-2.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+                        <div className="px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
                           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                             <span className="font-bold text-slate-900 text-xs sm:text-sm uppercase tracking-wide">
                               {(activeItem.verification_code || "Verification").replace(/_/g, " ")}
+                              {(codeCounts[activeItem.verification_code || "CHECK"] || 0) > 1
+                                ? ` (#${activeIndex + 1})`
+                                : ""}
                             </span>
                             <span className="text-slate-300">&bull;</span>
                             <span className="text-slate-600 text-[11px]">
@@ -11227,7 +11168,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                             Findings &amp; Summary
                           </span>
                           {summaryEntries.length > 0 ? (
-                            <div className="rounded border border-slate-200 overflow-hidden bg-white shadow-2xs">
+                            <div className="rounded-xl border border-slate-200 bg-white">
                               <table className="w-full text-xs">
                                 <tbody>
                                   {summaryEntries.reduce<any[][]>((rows, [k, val], idx) => {
@@ -11235,16 +11176,16 @@ export function DsaProfilePage({ id }: { id: string }) {
                                     else rows[rows.length - 1].push([k, val]);
                                     return rows;
                                   }, []).map((pairRow, rIdx) => (
-                                    <tr key={rIdx} className={cn("border-b border-slate-150 last:border-b-0", rIdx % 2 === 0 ? "bg-white" : "bg-slate-50/50")}>
+                                    <tr key={rIdx} className="border-b border-slate-100 last:border-b-0">
                                       {pairRow.map(([k, val]: [string, any]) => {
                                         const label = k.replace(/([A-Z])/g, " $1").replace(/_/g, " ").trim();
                                         const displayVal = typeof val === "boolean" ? (val ? "Yes" : "No") : String(val ?? "—");
                                         return (
                                           <React.Fragment key={k}>
-                                            <td className="py-1.5 px-3 font-medium text-slate-500 capitalize bg-slate-50/80 border-r border-slate-150 text-[11px] whitespace-nowrap w-[20%]">
+                                            <td className="px-3 py-2 text-[11px] font-medium capitalize text-slate-500 whitespace-nowrap w-[20%]">
                                               {label}
                                             </td>
-                                            <td className="py-1.5 px-3 font-semibold text-slate-900 text-xs border-r border-slate-150 last:border-r-0 break-words w-[30%]">
+                                            <td className="px-3 py-2 text-xs font-semibold text-slate-900 break-words w-[30%]">
                                               {displayVal}
                                             </td>
                                           </React.Fragment>
@@ -11252,8 +11193,8 @@ export function DsaProfilePage({ id }: { id: string }) {
                                       })}
                                       {pairRow.length === 1 && (
                                         <>
-                                          <td className="py-1.5 px-3 bg-slate-50/80 border-r border-slate-150 w-[20%]">&nbsp;</td>
-                                          <td className="py-1.5 px-3 w-[30%]">&nbsp;</td>
+                                          <td className="px-3 py-2 w-[20%]">&nbsp;</td>
+                                          <td className="px-3 py-2 w-[30%]">&nbsp;</td>
                                         </>
                                       )}
                                     </tr>
@@ -11331,8 +11272,8 @@ export function DsaProfilePage({ id }: { id: string }) {
                 </div>
 
                 {/* Document Checklist Table */}
-                <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
-                  <div className="bg-slate-50 px-3 py-2 border-b border-slate-200 text-xs font-semibold text-slate-800">
+                <div className="rounded-xl border border-slate-200 bg-white">
+                  <div className="px-3 py-2.5 border-b border-slate-200 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                     <span>Verified Documents ({docsList.length} files)</span>
                   </div>
                     {docsList.map((doc: any, i: number) => {
@@ -11386,8 +11327,8 @@ export function DsaProfilePage({ id }: { id: string }) {
 
                       return (
                         <div
-                          key={doc.id || docType || i}
-                          className="py-2 px-3 flex items-center justify-between gap-3 text-xs hover:bg-slate-50"
+                          key={doc.id ? `doc_${doc.id}` : `doc_${docType || "file"}_${i}`}
+                          className="py-2.5 px-3 flex items-center justify-between gap-3 text-xs border-b border-slate-100 last:border-b-0"
                         >
                           <div>
                             <span className="font-medium text-slate-900">
@@ -11422,152 +11363,68 @@ export function DsaProfilePage({ id }: { id: string }) {
                 </div>
               </div>
 
-              {/* 6. HO Credit Head Sanction Decision Console */}
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3 pt-3">
-                <div className="pb-1 border-b border-slate-200">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                    5. Sanction Decision
-                  </h4>
+              {/* Decision / Action Footer Strip */}
+              {isSanctionApproved ? (
+                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs flex items-center justify-between">
+                  <div>
+                    <strong className="font-bold block">Institutional Sanction Granted &bull; Case Concluded</strong>
+                    <span className="text-emerald-800 text-[11px]">
+                      DSA Code: <strong className="font-mono">{dsa?.dsa_code || dsa?.code}</strong> &bull; Empanelment letter generated.
+                    </span>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    type="button"
+                    onClick={() => setL7ReviewModalOpen(false)}
+                    className="text-xs bg-white"
+                  >
+                    Close
+                  </Button>
                 </div>
-                {isSanctionApproved ? (
-                  <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs flex items-center justify-between">
-                    <div>
-                      <strong className="font-bold block">Institutional Sanction Granted &bull; Case Concluded</strong>
-                      <span className="text-emerald-800 text-[11px]">
-                        DSA Code: <strong className="font-mono">{dsa?.dsa_code || dsa?.code}</strong> &bull; Empanelment letter generated.
-                      </span>
-                    </div>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      type="button"
-                      onClick={() => setL7ReviewModalOpen(false)}
-                      className="text-xs bg-white"
-                    >
-                      Close
-                    </Button>
+              ) : isSanctionRejected ? (
+                <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-950 text-xs flex items-center justify-between">
+                  <div>
+                    <strong className="font-bold block">Application Rejected</strong>
+                    <span className="text-rose-800 text-[11px]">This application was rejected by the HO Credit Head.</span>
                   </div>
-                ) : isSanctionRejected ? (
-                  <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-950 text-xs flex items-center justify-between">
-                    <div>
-                      <strong className="font-bold block">Application Rejected</strong>
-                      <span className="text-rose-800 text-[11px]">This application was rejected by the HO Credit Head.</span>
-                    </div>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      type="button"
-                      onClick={() => setL7ReviewModalOpen(false)}
-                      className="text-xs bg-white"
-                    >
-                      Close
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    <Field>
-                      <Label htmlFor="l7SanctionRemarks" className="text-xs font-bold text-slate-800">
-                        Sanction Remarks <span className="text-rose-500">*</span>
-                      </Label>
-                      <textarea
-                        id="l7SanctionRemarks"
-                        rows={2}
-                        className="w-full rounded border border-slate-300 bg-white p-2 text-xs text-slate-800 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600"
-                        value={approvalRemarks}
-                        onChange={(e) => {
-                          setApprovalRemarks(e.target.value);
-                          setApprovalRemarksError("");
-                        }}
-                        placeholder="Enter sanction remarks..."
-                      />
-                      {approvalRemarksError && (
-                        <p className="text-xs font-medium text-rose-600 mt-1">{approvalRemarksError}</p>
-                      )}
-                    </Field>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    type="button"
+                    onClick={() => setL7ReviewModalOpen(false)}
+                    className="text-xs bg-white"
+                  >
+                    Close
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-200">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    type="button"
+                    onClick={() => setL7ReviewModalOpen(false)}
+                    className="text-xs"
+                  >
+                    Close
+                  </Button>
 
-                    <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-200">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        type="button"
-                        onClick={() => setL7ReviewModalOpen(false)}
-                        className="text-xs"
-                      >
-                        Close
-                      </Button>
-
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          type="button"
-                          disabled={actionLoading}
-                          onClick={async () => {
-                            if (!approvalRemarks.trim()) {
-                              setApprovalRemarksError("Please provide rejection remarks.");
-                              return;
-                            }
-                            try {
-                              const updated = await updateWorkflowAction(dsa.id, {
-                                action: "REJECT",
-                                remarks: approvalRemarks.trim(),
-                              });
-                              if (updated) {
-                                await fetchDsaDetail(id);
-                                toast({
-                                  title: "Application Rejected",
-                                  description: `Application #${dsa.dsa_code || dsa.code || dsa.id} has been rejected by HO Credit Head.`,
-                                  variant: "error",
-                                });
-                                setL7ReviewModalOpen(false);
-                                setTab("actions");
-                              }
-                            } catch (err: any) {
-                              setApprovalRemarksError(err?.message || "Failed to reject application.");
-                            }
-                          }}
-                          className="font-bold text-xs bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-300"
-                        >
-                          Reject Application
-                        </Button>
-
-                        <Button
-                          size="sm"
-                          type="button"
-                          disabled={actionLoading}
-                          onClick={async () => {
-                            if (!approvalRemarks.trim()) {
-                              setApprovalRemarksError("Please provide sanction remarks.");
-                              return;
-                            }
-                            try {
-                              const updated = await updateWorkflowAction(dsa.id, {
-                                action: "APPROVE",
-                                remarks: approvalRemarks.trim(),
-                              });
-                              if (updated) {
-                                await fetchDsaDetail(id);
-                                toast({
-                                  title: "Institutional Sanction Granted",
-                                  description: `Application #${dsa.dsa_code || dsa.code || dsa.id} sanctioned. DSA Code allotted and Empanelment Letter generated.`,
-                                  variant: "success",
-                                });
-                                setL7ReviewModalOpen(false);
-                                setTab("agreements");
-                              }
-                            } catch (err: any) {
-                              setApprovalRemarksError(err?.message || "Failed to grant final sanction.");
-                            }
-                          }}
-                          className="font-bold text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-                        >
-                          {actionLoading ? "Sanctioning..." : "Grant Final Approval & Sanction"}
-                        </Button>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
+                  <Button
+                    size="sm"
+                    type="button"
+                    disabled={actionLoading}
+                    onClick={() => {
+                      setL7ReviewModalOpen(false);
+                      setApprovingDsa(dsa);
+                    }}
+                    className="font-bold text-xs bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-sm"
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    Proceed for Final Verification
+                  </Button>
+                </div>
+              )}
             </div>
           );
         })()}
@@ -11622,13 +11479,16 @@ export function DsaProfilePage({ id }: { id: string }) {
                     remarks: queryReason.trim(),
                   });
                   if (updated) {
-                    await fetchDsaDetail(id);
+                    // The case now belongs to the Maker, so this user no longer
+                    // has a viewable case. Return to the list instead of
+                    // landing on a "not at your stage" dead-end.
                     toast({
                       title: "Query Raised to Maker",
                       description: `Query submitted for ${queryingDsa.name}. Case returned to the Level 1 Maker for resolution.`,
                       variant: "success",
                     });
                     closeDecisionModals();
+                    router.push("/dsa/management");
                   }
                 }
               }}
@@ -11743,13 +11603,14 @@ export function DsaProfilePage({ id }: { id: string }) {
                       setRejectionStep("confirm");
                       setRejectionError("");
                     } else if (res) {
-                      await fetchDsaDetail(id);
                       toast({
                         title: "Application Rejected",
                         description: `Application #${rejectingDsa.code || rejectingDsa.id} has been rejected and moved to Maker bucket.`,
                         variant: "success",
                       });
                       closeDecisionModals();
+                      // Rejected is a dead-end for every role — return to the list.
+                      router.push("/dsa/management");
                     }
                   } catch (err: any) {
                     setRejectionError(
@@ -11862,13 +11723,14 @@ export function DsaProfilePage({ id }: { id: string }) {
                         },
                       );
                       if (updated) {
-                        await fetchDsaDetail(id);
                         toast({
                           title: "Application Rejected",
                           description: `Application #${rejectingDsa.code || rejectingDsa.id} has been permanently rejected and routed to Maker Bucket.`,
                           variant: "success",
                         });
                         closeDecisionModals();
+                        // Rejected is a dead-end for every role — return to the list.
+                        router.push("/dsa/management");
                       }
                     } catch (err: any) {
                       setRejectionError(
@@ -12644,10 +12506,6 @@ export function DsaProfilePage({ id }: { id: string }) {
                   remarks: revertReason.trim(),
                 });
                 if (res) {
-                  await fetchDsaDetail(id);
-                  fetchDeviationReport(id)
-                    .then((fresh) => fresh && setDeviationReportData(fresh))
-                    .catch(() => {});
                   const targetLabel =
                     currentRevertTarget?.targetRole || "Previous Reviewer";
                   toast({
@@ -12656,6 +12514,9 @@ export function DsaProfilePage({ id }: { id: string }) {
                     variant: "warning",
                   });
                   closeDecisionModals();
+                  // The case now sits at another authority's stage, so this
+                  // user has no viewable case — return to the list.
+                  router.push("/dsa/management");
                 }
               }}
             >
