@@ -849,23 +849,19 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="flex min-h-screen flex-col lg:pl-64">
-        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
-          <div className="flex h-16 items-center px-4 lg:px-5">
-            <Button
-              aria-label="Open navigation"
-              className="lg:hidden shrink-0 mr-3"
-              onClick={() => setMobileOpen(true)}
-              size="icon"
-              type="button"
-              variant="ghost"
-            >
-              <Menu className="h-5 w-5" />
-            </Button>
-            <div
-              id="app-header-slot"
-              className="flex-1 flex items-center w-full min-w-0 h-full overflow-x-auto no-scrollbar"
-            />
-          </div>
+        {/* Mobile Header only (drawer menu toggle) — desktop header removed as search bar is permanently removed */}
+        <header className="sticky top-0 z-20 flex h-14 items-center border-b border-slate-200 bg-white/95 px-4 backdrop-blur lg:hidden">
+          <Button
+            aria-label="Open navigation"
+            className="mr-3 shrink-0"
+            onClick={() => setMobileOpen(true)}
+            size="icon"
+            type="button"
+            variant="ghost"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+          <span className="text-sm font-bold text-slate-800">Cosmos Bank</span>
         </header>
         <main className="compact-dashboard flex flex-1 flex-col w-full px-3 py-3 sm:px-4 sm:py-3.5 lg:px-5 lg:py-4">{children}</main>
       </div>

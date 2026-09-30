@@ -998,6 +998,34 @@ export function useDsa() {
     [toast]
   );
 
+  // ── Task 20C: CALL_BACK & RE-allocate candidate picker ─────────────────────
+  // Deliberately surfaces the backend's own validation message (e.g. "Only
+  // Levels L3, L4, and L5 are allowed") instead of swallowing it, so the UI can
+  // explain why the list is unavailable instead of showing an empty picker.
+
+  const fetchEligibleUsers = useCallback(
+    async (
+      idOrCode: number | string,
+      action: "RE_ALLOCATE" | "FORWARD" = "RE_ALLOCATE"
+    ) => {
+      try {
+        const response = await adminApi.getEligibleUsers(idOrCode, action);
+        return response.data ?? null;
+      } catch (error: unknown) {
+        toast({
+          title: "Eligible users unavailable",
+          description: errorMessage(
+            error,
+            "Could not load the list of eligible users for this action."
+          ),
+          variant: "warning",
+        });
+        return null;
+      }
+    },
+    [toast]
+  );
+
   const releaseCase = useCallback(
     async (idOrCode: number | string, remarks?: string) => {
       setActionLoading(true);
@@ -1125,6 +1153,7 @@ export function useDsa() {
     updateDsaDocumentStatus,
     deleteDsaDocument,
     fetchApprovalHistory,
+    fetchEligibleUsers,
     acquireCase,
     releaseCase,
     fetchStatesDropdown,

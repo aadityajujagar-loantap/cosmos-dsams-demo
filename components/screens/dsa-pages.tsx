@@ -45,7 +45,6 @@ import {
   History,
   Info,
 } from "lucide-react";
-import { createPortal } from "react-dom";
 import React, {
   useEffect,
   useState,
@@ -89,7 +88,18 @@ import { authService } from "@/services/authService";
 import { useMockStore } from "@/lib/store";
 import { useDsa, normalizeDsaData } from "@/hooks/useDsa";
 import { isDsaInBranchScope } from "@/lib/branch-scope";
-import { resolveCaseAccess, describeCaseLock } from "@/lib/dsa-case-access";
+import {
+  resolveCaseAccess,
+  describeCaseLock,
+  resolveUserLevel,
+} from "@/lib/dsa-case-access";
+import {
+  canReAllocate,
+  canShowCallBackAction,
+  resolvePreviousActorLevel,
+  isCalledBackStep,
+} from "@/lib/dsa-workflow-actions";
+import type { DsaEligibleUser } from "@/types/dsa";
 import { BusinessType, Dsa, DsaStatus, Product, User } from "@/lib/types";
 import { DsaBasicDetailsTab } from "./dsa-basic-details-tab";
 import { DsaCaseActivityTab } from "./dsa-case-activity-tab";
@@ -1240,15 +1250,6 @@ export function DsaWorkflowChevronBar({
     };
   });
 
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const headerSlot = mounted
-    ? document.getElementById("app-header-slot")
-    : null;
 
   const STAGE_THEMES: Record<
     string,
@@ -1402,10 +1403,6 @@ export function DsaWorkflowChevronBar({
       </div>
     </div>
   );
-
-  if (headerSlot) {
-    return createPortal(barContent, headerSlot);
-  }
 
   return <div className="mb-4 w-full flex justify-center">{barContent}</div>;
 }
@@ -1996,6 +1993,15 @@ export function DsaManagementPage() {
   const [credentialPassword, setCredentialPassword] = useState("");
   const [credentialError, setCredentialError] = useState("");
   const [managementTab, setManagementTab] = useState<DsaWorkBucket>("all");
+
+  // ── Task 20C: CALL_BACK from the management list ─────────────────────────
+  // A previous authority can pull a case back from the list even though the
+  // row is view-only for them. Once called back the case returns to their own
+  // stage (assigned + locked) and the row becomes actionable again.
+  const [callBackTarget, setCallBackTarget] = useState<any | null>(null);
+  const [callBackReason, setCallBackReason] = useState("");
+  const [callBackError, setCallBackError] = useState("");
+  const [callBackBusy, setCallBackBusy] = useState(false);
   const router = useRouter();
   const isNetworkPage = currentUser?.role === "DSA Partner";
   const canManageDsaCredentials = currentUser?.role === "DSA Manager";
@@ -2069,6 +2075,49 @@ export function DsaManagementPage() {
     setCredentialUsername(dsa.login_username || "");
     setCredentialPassword("");
     setCredentialError("");
+  }
+
+  /**
+   * Task 20C — CALL_BACK issued from a view-only row.
+   *
+   * Only the exact authority who actioned the previous stage may pull the case
+   * back, and only while it sits at L4/L5/L6. Those two rules depend on
+   * dynamic step resolution (L4 is skipped when no DGM is posted), so the
+   * backend is the authority: we surface its exact rejection inline instead of
+   * re-implementing the resolver and guessing.
+   */
+  async function submitCallBackFromList() {
+    if (!callBackTarget) return;
+    if (!callBackReason.trim()) {
+      setCallBackError("A reason is mandatory to call the case back.");
+      return;
+    }
+    setCallBackBusy(true);
+    setCallBackError("");
+    try {
+      const res = await adminApi.updateWorkflowAction(callBackTarget.id, {
+        action: "CALL_BACK",
+        remarks: callBackReason.trim(),
+      });
+      toast({
+        title: "Case Called Back",
+        description:
+          res?.message ||
+          "The case has been returned to you and locked. It is now actionable on your desk.",
+        variant: "success",
+      });
+      setCallBackTarget(null);
+      setCallBackReason("");
+      await fetchDsas(fetchParams);
+    } catch (err: unknown) {
+      setCallBackError(
+        err instanceof Error
+          ? err.message
+          : "Only the previous authority who actioned this case can call it back.",
+      );
+    } finally {
+      setCallBackBusy(false);
+    }
   }
 
   function closeCredentialModal() {
@@ -2324,6 +2373,81 @@ export function DsaManagementPage() {
     },
   ];
 
+  const callBackModal = (
+    <Modal
+      description={
+        callBackTarget
+          ? `Pull application #${callBackTarget.dsa_code || callBackTarget.code || callBackTarget.id} back to your stage. It will be reassigned and locked to you.`
+          : "Pull this application back to your stage."
+      }
+      onClose={() => {
+        setCallBackTarget(null);
+        setCallBackReason("");
+        setCallBackError("");
+      }}
+      open={Boolean(callBackTarget)}
+      title="Call Back to Your Desk"
+    >
+      <div className="space-y-4">
+        <div className="flex items-start gap-2.5 rounded-lg border border-sky-200 bg-sky-50 px-3.5 py-3 text-xs leading-relaxed text-sky-900">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />
+          <p>
+            Only the exact authority who actioned this case at the previous
+            stage can call it back. Once returned, the case reappears on your
+            desk and becomes fully actionable again.
+          </p>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="listCallBackReason">Reason for Call Back *</Label>
+          <textarea
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+            id="listCallBackReason"
+            maxLength={2000}
+            onChange={(e) => setCallBackReason(e.target.value)}
+            placeholder="e.g. Calling back to re-evaluate branch documentation."
+            rows={4}
+            value={callBackReason}
+          />
+          <p className="text-[11px] text-slate-500">Maximum 2000 characters.</p>
+        </div>
+        {callBackError ? (
+          <p className="flex items-start gap-1.5 text-xs font-medium text-rose-600">
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            {callBackError}
+          </p>
+        ) : null}
+        <div className="flex justify-end gap-2 pt-1">
+          <Button
+            onClick={() => {
+              setCallBackTarget(null);
+              setCallBackReason("");
+              setCallBackError("");
+            }}
+            size="sm"
+            type="button"
+            variant="secondary"
+          >
+            Cancel
+          </Button>
+          <Button
+            className="bg-sky-600 hover:bg-sky-700 text-white font-bold"
+            disabled={callBackBusy}
+            onClick={submitCallBackFromList}
+            size="sm"
+            type="button"
+          >
+            {callBackBusy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RotateCcw className="h-4 w-4" />
+            )}
+            Confirm Call Back
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+
   const agentModals = (
     <>
       <Modal
@@ -2530,7 +2654,7 @@ export function DsaManagementPage() {
                       <th className="p-4">Location</th>
                       <th className="p-4">Approval Rate</th>
                       <th className="p-4">Commission</th>
-                      <th className="p-4 text-right">Actions</th>
+                      <th className="p-4 text-right whitespace-nowrap min-w-[170px]">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -2546,6 +2670,25 @@ export function DsaManagementPage() {
                         access.reason,
                         item.current_approval_level,
                       );
+                      // Task 20C — N -> N-1 rule. Only the authority at the
+                      // level BELOW where the case now sits may call it back:
+                      // if L3 approved to L4, only L3 can; if L4 approved to
+                      // L5, only L4 can (never L5). previousActorLevel comes
+                      // from the step history so a skipped DGM (L3 -> L5) is
+                      // still attributed to L3.
+                      const viewerLevel = resolveUserLevel(roleStr);
+                      const previousActorLevel = resolvePreviousActorLevel(
+                        item.approvals,
+                        item.current_approval_level,
+                      );
+                      const showCallBackAction = canShowCallBackAction({
+                        rowLocked: locked,
+                        assignedUserId: item.assigned_user_id,
+                        accessReason: access.reason,
+                        level: item.current_approval_level,
+                        viewerLevel,
+                        previousActorLevel,
+                      });
 
                       return (
                       <tr
@@ -2646,10 +2789,26 @@ export function DsaManagementPage() {
                           {formatCurrency(item.commission_earned || 0)}
                         </td>
                         <td
-                          className="p-4 text-right"
+                          className="p-4 text-right whitespace-nowrap"
                           onClick={(event) => event.stopPropagation()}
                         >
-                          <div className="flex justify-end gap-2">
+                          <div className="flex items-center justify-end gap-2 shrink-0 whitespace-nowrap">
+                            {showCallBackAction ? (
+                              <Button
+                                onClick={() => {
+                                  setCallBackTarget(item);
+                                  setCallBackReason("");
+                                  setCallBackError("");
+                                }}
+                                size="sm"
+                                title="Pull this case back to your stage for re-evaluation"
+                                type="button"
+                                className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 bg-sky-50 text-sky-800 hover:bg-sky-100 border border-sky-300 font-semibold text-xs h-7 px-2.5 shadow-2xs"
+                              >
+                                <RotateCcw className="h-3.5 w-3.5 shrink-0" />
+                                <span>Call Back</span>
+                              </Button>
+                            ) : null}
                             {canManageDsaCredentials ? (
                               <Button
                                 aria-label={`Manage credentials for ${item.name}`}
@@ -2740,6 +2899,7 @@ export function DsaManagementPage() {
           />
         ) : null}
       </Modal>
+      {callBackModal}
       {agentModals}
       <Modal
         onClose={closeCredentialModal}
@@ -3062,6 +3222,18 @@ export function DsaProfilePage({ id }: { id: string }) {
   const [revertReason, setRevertReason] = useState("");
   const [revertError, setRevertError] = useState("");
 
+  // ── Task 20C: RE-allocate ────────────────────────────────────────────────
+  const [reAllocatingDsa, setReAllocatingDsa] = useState<any | null>(null);
+  const [reAllocateTargetId, setReAllocateTargetId] = useState<number | null>(null);
+  const [reAllocateReason, setReAllocateReason] = useState("");
+  const [reAllocateError, setReAllocateError] = useState("");
+  const [eligibleUsers, setEligibleUsers] = useState<DsaEligibleUser[]>([]);
+  const [eligibleLoading, setEligibleLoading] = useState(false);
+  // NOTE: this must stay ABOVE the `if (loading || !dsa)` early return, or the
+  // hook order changes between the loading render and the loaded render and
+  // React throws "Rendered more hooks than during the previous render".
+  const [action20CBusy, setAction20CBusy] = useState(false);
+
   const [viewingInvoice, setViewingInvoice] = useState<any>(null);
   const [counterInvoice, setCounterInvoice] = useState<any>(null);
   const [counterAmount, setCounterAmount] = useState("");
@@ -3093,6 +3265,7 @@ export function DsaProfilePage({ id }: { id: string }) {
     fetchDsaAgreement,
     fetchSignedAgreementReview,
     approveSignedAgreement,
+    fetchEligibleUsers,
   } = useDsa();
 
   const dsa = useMemo(() => normalizeDsaData(rawDsa), [rawDsa]);
@@ -5406,6 +5579,11 @@ export function DsaProfilePage({ id }: { id: string }) {
     setRevertingDsa(null);
     setRevertReason("");
     setRevertError("");
+    setReAllocatingDsa(null);
+    setReAllocateTargetId(null);
+    setReAllocateReason("");
+    setReAllocateError("");
+    setEligibleUsers([]);
     setApprovalRemarks("");
     setApprovalRemarksError("");
     setRejectionError("");
@@ -5491,6 +5669,65 @@ export function DsaProfilePage({ id }: { id: string }) {
     ((!isCheckerRole && (isSubRegionRole || isDgmRole || isRegionHeadRole || isHoOfficerRole)) ||
       isAdminOrSuperAdmin),
   );
+
+  // ── Task 20C: RE-allocate ────────────────────────────────────────────────
+  // Gated on the CURRENTLY PENDING level, exactly as the backend matrix does.
+  const currentStepLevel = Number(dsa?.current_approval_level) || workflowLevelInfo.currentLevel;
+  const showReAllocate = canReAllocate(currentStepLevel);
+
+  // NOTE: this calls adminApi directly rather than the useDsa wrapper. The
+  // wrapper swallows errors into a generic toast, but 20C validation is
+  // deliberately strict (e.g. "Target user [X] does not have an eligible role
+  // for Level 3, 4, or 5."), and the user needs that exact reason inline in
+  // the modal rather than after it closes.
+  const openReAllocate = async () => {
+    setReAllocatingDsa(dsa);
+    setReAllocateTargetId(null);
+    setReAllocateReason("");
+    setReAllocateError("");
+    setEligibleLoading(true);
+    const data = await fetchEligibleUsers(dsa.id, "RE_ALLOCATE");
+    setEligibleUsers(data?.eligible_users ?? []);
+    setEligibleLoading(false);
+  };
+
+  const submitReAllocate = async () => {
+    if (!reAllocateTargetId) {
+      setReAllocateError("Select the authority to re-allocate this case to.");
+      return;
+    }
+    if (!reAllocateReason.trim()) {
+      setReAllocateError("A reason is mandatory for re-allocation.");
+      return;
+    }
+    setAction20CBusy(true);
+    setReAllocateError("");
+    try {
+      const target = eligibleUsers.find((u) => u.id === reAllocateTargetId);
+      const res = await adminApi.updateWorkflowAction(dsa.id, {
+        action: "RE_ALLOCATE",
+        target_user_id: reAllocateTargetId,
+        remarks: reAllocateReason.trim(),
+      });
+      toast({
+        title: "Case Re-allocated",
+        description:
+          res?.message ||
+          `Handed to ${target?.name ?? "the selected authority"} and locked for their review.`,
+        variant: "success",
+      });
+      closeDecisionModals();
+      router.push("/dsa/management");
+    } catch (err: unknown) {
+      setReAllocateError(
+        err instanceof Error
+          ? err.message
+          : "Failed to re-allocate this case.",
+      );
+    } finally {
+      setAction20CBusy(false);
+    }
+  };
 
   const applications = store.applications
     .filter((item) => item.dsaId === String(dsa.id))
@@ -6841,7 +7078,6 @@ export function DsaProfilePage({ id }: { id: string }) {
                     const isQuery = item.status === "QUERY" || item.status === "QUERY_RAISED";
                     const isReturned =
                       item.status === "REVERTED" ||
-                      item.status === "CALLED_BACK" ||
                       item.status === "REALLOCATED" ||
                       item.status === "FORWARDED";
 
@@ -6898,8 +7134,6 @@ export function DsaProfilePage({ id }: { id: string }) {
                                     : isReturned
                                       ? item.status === "REVERTED"
                                         ? "Reverted"
-                                        : item.status === "CALLED_BACK"
-                                          ? "Called Back"
                                           : item.status === "REALLOCATED"
                                             ? "Reallocated"
                                             : "Forwarded"
@@ -6910,7 +7144,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                           </div>
                         </div>
 
-                        {item.remarks ? (
+                        {!isCalledBackStep(item.status) && item.remarks ? (
                           <p className="text-base font-bold text-slate-900 whitespace-pre-wrap leading-relaxed py-0.5">
                             &ldquo;{item.remarks}&rdquo;
                           </p>
@@ -10128,7 +10362,6 @@ export function DsaProfilePage({ id }: { id: string }) {
                       const isQuery = step.status === "QUERY" || step.status === "QUERY_RAISED";
                       const isReturned =
                         step.status === "REVERTED" ||
-                        step.status === "CALLED_BACK" ||
                         step.status === "REALLOCATED" ||
                         step.status === "FORWARDED";
 
@@ -10209,9 +10442,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                                         ? "Query Raised"
                                         : isReturned
                                           ? step.status === "REVERTED"
-                                            ? "Reverted"
-                                            : step.status === "CALLED_BACK"
-                                              ? "Called Back"
+                                              ? "Reverted"
                                               : step.status === "REALLOCATED"
                                                 ? "Reallocated"
                                                 : "Forwarded"
@@ -10222,7 +10453,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                             </div>
                           </div>
 
-                          {step.remarks ? (
+                          {!isCalledBackStep(step.status) && step.remarks ? (
                             <p className="text-sm font-bold text-slate-900 whitespace-pre-wrap leading-relaxed py-0.5">
                               &ldquo;{step.remarks}&rdquo;
                             </p>
@@ -10295,6 +10526,18 @@ export function DsaProfilePage({ id }: { id: string }) {
                               <Check className="h-4 w-4" />
                               {workflowLevelInfo.actionLabel}
                             </Button>
+                            {showReAllocate && (
+                              <Button
+                                onClick={openReAllocate}
+                                size="sm"
+                                variant="secondary"
+                                title="Hand this case to another authority at Level 3, 4 or 5"
+                                className="bg-violet-50 text-violet-800 hover:bg-violet-100 border border-violet-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5"
+                              >
+                                <Users className="h-4 w-4 text-violet-600" />
+                                Re-allocate
+                              </Button>
+                            )}
                             {canRevert && (
                               <Button
                                 onClick={() => setRevertingDsa(dsa)}
@@ -10847,7 +11090,6 @@ export function DsaProfilePage({ id }: { id: string }) {
                         const isQuery = status === "QUERY" || status === "QUERY_RAISED";
                         const isReturned =
                           status === "REVERTED" ||
-                          status === "CALLED_BACK" ||
                           status === "REALLOCATED" ||
                           status === "FORWARDED";
 
@@ -10889,9 +11131,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                                       ? "Query Raised"
                                       : isReturned
                                         ? status === "REVERTED"
-                                          ? "Reverted"
-                                          : status === "CALLED_BACK"
-                                            ? "Called Back"
+                                            ? "Reverted"
                                             : status === "REALLOCATED"
                                               ? "Reallocated"
                                               : "Forwarded"
@@ -10912,7 +11152,8 @@ export function DsaProfilePage({ id }: { id: string }) {
                               {stepItem.actioned_at ? formatDate(stepItem.actioned_at) : "—"}
                             </td>
                             <td className="py-2.5 px-3 text-slate-900 max-w-[320px]">
-                              {stepItem.remarks ? (
+                              {!isCalledBackStep(stepItem.status) &&
+                              stepItem.remarks ? (
                                 <span className="font-bold text-slate-900 text-xs leading-relaxed block">
                                   &ldquo;{stepItem.remarks}&rdquo;
                                 </span>
@@ -11083,7 +11324,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                       <div
                         role="tablist"
                         aria-label="Statutory verification checks"
-                        className="flex items-center gap-x-5 overflow-x-auto no-scrollbar border-b border-slate-200"
+                        className="grid grid-cols-[repeat(auto-fit,minmax(0,1fr))] items-center gap-x-2 overflow-x-auto no-scrollbar border-b border-slate-200"
                       >
                         {verifsList.map((vItem: any, i: number) => {
                           const tabKey = getTabKey(vItem, i);
@@ -11105,7 +11346,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                               aria-selected={isSelected}
                               onClick={() => setL7ActiveVerifTab(tabKey)}
                               className={cn(
-                                "-mb-px flex items-center gap-2 whitespace-nowrap border-b-2 px-0.5 pb-2.5 pt-1 text-xs font-semibold transition-colors duration-150",
+                                "-mb-px flex items-center justify-center gap-2 whitespace-nowrap border-b-2 px-1 pb-2.5 pt-1 text-center text-xs font-semibold transition-colors duration-150",
                                 isSelected
                                   ? "border-blue-600 text-slate-900"
                                   : "border-transparent text-slate-500 hover:text-slate-800",
@@ -11117,7 +11358,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                                   itemSuccess ? "bg-emerald-500" : "bg-rose-500",
                                 )}
                               />
-                              <span className="truncate">{label}</span>
+                              <span className="min-w-0 truncate">{label}</span>
                             </button>
                           );
                         })}
@@ -12530,7 +12771,99 @@ export function DsaProfilePage({ id }: { id: string }) {
         </div>
       </Modal>
 
-      {/* Level 7 HO Credit Head Agreement Verification & Activation Modal */}
+      {/* ── Task 20C: RE_ALLOCATE modal ───────────────────────────────────── */}
+      <Modal
+        description={`Hand application #${getEffectiveDsaCode(dsa)} to another authority. Re-allocation is permitted between Levels 3, 4 and 5 only.`}
+        onClose={closeDecisionModals}
+        open={Boolean(reAllocatingDsa) && showReAllocate}
+        title="Re-allocate to Another Authority"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-2.5 rounded-lg border border-violet-200 bg-violet-50 px-3.5 py-3 text-xs leading-relaxed text-violet-900">
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-violet-500" />
+            <p>
+              The target must hold a Sub-Region Head, DGM or Region Head role.
+              The DGM option appears only when a DGM is posted for this branch.
+              The case moves to the target&rsquo;s level, assigned and locked to
+              them.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="reAllocateTarget">Re-allocate To *</Label>
+            {eligibleLoading ? (
+              <div className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-3 text-xs text-slate-500">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Loading eligible authorities...
+              </div>
+            ) : eligibleUsers.length === 0 ? (
+              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-500">
+                No other eligible authority is available for this case.
+              </div>
+            ) : (
+              <Select
+                className="w-full"
+                id="reAllocateTarget"
+                onChange={(e) =>
+                  setReAllocateTargetId(
+                    e.target.value ? Number(e.target.value) : null,
+                  )
+                }
+                value={reAllocateTargetId ? String(reAllocateTargetId) : ""}
+              >
+                <option value="">Select an authority...</option>
+                {eligibleUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} &mdash; {u.role} (Level {u.level})
+                  </option>
+                ))}
+              </Select>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="reAllocateReason">Reason for Re-allocation *</Label>
+            <textarea
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              id="reAllocateReason"
+              maxLength={2000}
+              onChange={(e) => setReAllocateReason(e.target.value)}
+              placeholder="e.g. Re-allocating to Region Head for expedited approval."
+              rows={4}
+              value={reAllocateReason}
+            />
+            <p className="text-[11px] text-slate-500">Maximum 2000 characters.</p>
+          </div>
+
+          {reAllocateError ? (
+            <p className="flex items-start gap-1.5 text-xs font-medium text-rose-600">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              {reAllocateError}
+            </p>
+          ) : null}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button onClick={closeDecisionModals} size="sm" type="button" variant="secondary">
+              Cancel
+            </Button>
+            <Button
+              disabled={action20CBusy || eligibleLoading || eligibleUsers.length === 0}
+              onClick={submitReAllocate}
+              size="sm"
+              type="button"
+              className="bg-violet-600 hover:bg-violet-700 text-white font-bold"
+            >
+              {action20CBusy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Users className="h-4 w-4" />
+              )}
+              Confirm Re-allocation
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       <Modal
         onClose={() => {
           setVerifyingAgreementAction(null);

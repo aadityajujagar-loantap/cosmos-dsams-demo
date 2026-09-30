@@ -83,6 +83,13 @@ export interface Dsa {
   bre_status: string;
   deviation: boolean;
   current_approval_level: number;
+  /** Task 22 — user-level case lock. Set once the case is claimed by a user. */
+  lock_status?: string;
+  assigned_user_id?: number | null;
+  assigned_role?: string | null;
+  assigned_workflow_level?: number | null;
+  assigned_at?: string | null;
+  released_at?: string | null;
   onboarding_date: string | null;
   manager: string | null;
   tier: string;
@@ -197,6 +204,24 @@ export interface Dsa {
 }
 
 export type DsaWorkBucket = "all" | "received" | "in_process" | "rejected" | "approved";
+
+/** Task 20C — candidate returned by GET /api/v1/dsa/{id}/eligible-users. */
+export interface DsaEligibleUser {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  level: number;
+  stage_code: string;
+}
+
+export interface DsaEligibleUsersResponse {
+  dsa_id: number;
+  workflow_level: number;
+  assigned_role: string | null;
+  current_user_id: number | null;
+  eligible_users: DsaEligibleUser[];
+}
 
 export const DSA_WORK_BUCKETS: {
   value: DsaWorkBucket;

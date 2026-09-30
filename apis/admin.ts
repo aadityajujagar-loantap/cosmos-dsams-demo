@@ -7,6 +7,7 @@ import type {
   DsaActivityHistory,
   DsaCaseLockResult,
   DsaDocument,
+  DsaEligibleUsersResponse,
   StateOption,
   DistrictOption,
   BranchOption,
@@ -1127,6 +1128,21 @@ export const adminApi = {
     return request<BackendResponse<DsaActivityHistory>>(`/v1/dsa/${idOrCode}/approval/history`, {
       method: "GET",
     });
+  },
+
+  /**
+   * Task 20C — candidates for RE_ALLOCATE / FORWARD.
+   * The backend throws (400) unless the current pending step is L3/L4/L5 for
+   * RE_ALLOCATE, so callers should only invoke it at those levels.
+   */
+  getEligibleUsers: async (
+    idOrCode: number | string,
+    action: "RE_ALLOCATE" | "FORWARD" = "RE_ALLOCATE"
+  ): Promise<BackendResponse<DsaEligibleUsersResponse>> => {
+    return request<BackendResponse<DsaEligibleUsersResponse>>(
+      `/v1/dsa/${idOrCode}/eligible-users?action=${action}`,
+      { method: "GET" }
+    );
   },
 
   // â”€â”€ Product Management â”€â”€
