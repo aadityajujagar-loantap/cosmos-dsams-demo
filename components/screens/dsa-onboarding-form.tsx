@@ -1929,10 +1929,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         toast({ title: "Bank Details Required", description: "All bank account details including account type are mandatory.", variant: "warning" });
         return false;
       }
-      if (accountNumber.trim().length < 9) {
-        toast({ title: "Invalid Account Number", description: "Bank account number must be at least 9 digits.", variant: "warning" });
-        return false;
-      }
       if (accountNumber !== confirmAccountNumber) {
         toast({ title: "Account Numbers Mismatch", description: "Account number and confirmation do not match.", variant: "warning" });
         return false;
@@ -2350,34 +2346,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                 <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-bold text-blue-800">
                   {dsaType}
                 </span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-600">Queue Status</span>
-                <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-800">
-                  Pending Maker Review
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-600">Documents Attached</span>
-                <span className="font-semibold text-emerald-700">{Object.keys(uploadedDocs).length} files</span>
-              </div>
-              <div className="border-t border-slate-200 pt-3 space-y-2 text-xs text-slate-700">
-                <div>
-                  <span className="font-semibold text-slate-500">Registered Address: </span>
-                  <span>{address ? `${address}, ${city}, ${stateName} - ${pincode}` : `${city}, ${stateName} - ${pincode}`}</span>
-                </div>
-                <div>
-                  <span className="font-semibold text-slate-500">Office Address: </span>
-                  <span>
-                    {isOfficeSameAsResidence
-                      ? `Same as Registered Address (${city})`
-                      : `${officeAddress}, ${officeCity}, ${officeStateName} - ${officePincode}`}
-                  </span>
-                </div>
-                <div>
-                  <span className="font-semibold text-slate-500">Premises Ownership: </span>
-                  <span className="font-medium text-slate-900">{businessPremisesOwnership === "Owned" ? "Self Owned" : businessPremisesOwnership === "Rented" ? "Rented / Leased Premises" : "N/A"}</span>
-                </div>
               </div>
             </div>
 
@@ -4280,10 +4248,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                 </div>
                 <div className="sm:text-right">
                   <span className="font-bold text-slate-900">Review Date:</span> {formatDate(new Date().toISOString())}
-                </div>
-                <div>
-                  <span className="font-bold text-slate-900">Onboarding Mode:</span>{" "}
-                  <span className="uppercase font-semibold text-slate-800">{mode === "branch" ? "Branch Sourced" : "Direct Online"}</span>
                 </div>
                 {mode === "branch" && branchId && (
                   <div className="sm:text-right">

@@ -690,6 +690,16 @@ export const adminApi = {
     });
   },
 
+  raiseDsaQuery: async (
+    idOrCode: number | string,
+    payload: { remarks: string; query?: string }
+  ): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/query`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
   getEmailActionDetails: async (token: string): Promise<BackendResponse<{
     dsa_id: number;
     dsa_code: string;

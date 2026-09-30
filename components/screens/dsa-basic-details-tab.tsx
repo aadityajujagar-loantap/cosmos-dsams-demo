@@ -820,30 +820,31 @@ export function DsaBasicDetailsTab({
                     : "—"
               }
             />
-            <DetailItem
-              label="Educational Qualification"
-              value={dsa.education_qualification || "Graduate"}
-            />
-            <DetailItem
-              label={dsa.registration_no_llpin_cin ? "CIN / LLPIN / Registration Number" : "Aadhaar Number"}
-              value={
-                dsa.registration_no_llpin_cin ? (
-                  <span className="font-mono">{dsa.registration_no_llpin_cin}</span>
-                ) : (dsa.aadhaar_no || dsa.aadhaar) ? (
-                  <span className="font-mono">{formatAadhaarNumber(dsa.aadhaar_no || dsa.aadhaar)}</span>
-                ) : (
-                  "Verified via Identity Document"
-                )
-              }
-            />
-            {dsa.registration_no_llpin_cin && (dsa.aadhaar_no || dsa.aadhaar) ? (
+            {!isEntity && (
+              <DetailItem
+                label="Educational Qualification"
+                value={dsa.education_qualification || "Graduate"}
+              />
+            )}
+            {isEntity ? (
+              dsa.registration_no_llpin_cin ? (
+                <DetailItem
+                  label="CIN / LLPIN / Registration Number"
+                  value={<span className="font-mono">{dsa.registration_no_llpin_cin}</span>}
+                />
+              ) : null
+            ) : (
               <DetailItem
                 label="Aadhaar Number"
                 value={
-                  <span className="font-mono">{formatAadhaarNumber(dsa.aadhaar_no || dsa.aadhaar)}</span>
+                  (dsa.aadhaar_no || dsa.aadhaar) ? (
+                    <span className="font-mono">{formatAadhaarNumber(dsa.aadhaar_no || dsa.aadhaar)}</span>
+                  ) : (
+                    "Verified via Identity Document"
+                  )
                 }
               />
-            ) : null}
+            )}
           </DetailGrid>
         )}
       </SectionBlock>
@@ -1614,7 +1615,7 @@ export function DsaBasicDetailsTab({
       {/* ─────────────────────────────────────────────────────────────
           Section 8: Professional References
          ───────────────────────────────────────────────────────────── */}
-      {(dsa.reference_1_name || dsa.reference_2_name || canEdit) && (
+      {!isEntity && (dsa.reference_1_name || dsa.reference_2_name || canEdit) && (
         <SectionBlock
           icon={Users}
           iconColor="text-cyan-600"
@@ -1706,7 +1707,7 @@ export function DsaBasicDetailsTab({
       {/* ─────────────────────────────────────────────────────────────
           Section 9: Entity Stakeholders / Partners
          ───────────────────────────────────────────────────────────── */}
-      {(isEntity || (Array.isArray(dsa.stakeholders) && dsa.stakeholders.length > 0) || canEdit) && (
+      {isEntity && (
         <SectionBlock
           icon={Users}
           iconColor="text-indigo-600"
@@ -1881,7 +1882,7 @@ export function DsaBasicDetailsTab({
       {/* ─────────────────────────────────────────────────────────────
           Section 10: Associate Concerns & Sister Entities
          ───────────────────────────────────────────────────────────── */}
-      {(isEntity || (Array.isArray(dsa.associate_concerns) && dsa.associate_concerns.length > 0) || canEdit) && (
+      {isEntity && (
         <SectionBlock
           icon={Building2}
           iconColor="text-slate-600"

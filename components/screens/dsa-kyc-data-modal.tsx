@@ -477,7 +477,7 @@ function PanDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
       </TableWrapper>
 
       {/* Table 2: Additional / Seeding Details */}
-      <TableWrapper title="2. Statutory Seeding, Contact & Verification Details" subtitle="ITD Database Linkages">
+      <TableWrapper title="2. Contact & Verification Details" subtitle="ITD Database Linkages">
         <TableRow
           label="Aadhaar Seeding Status"
           value={isAadhaarLinked ? "Linked & Seeded with ITD" : "Not Linked"}

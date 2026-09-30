@@ -2377,8 +2377,8 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
       toast({ title: "Email required", description: "Enter customer email address.", variant: "warning" });
       return;
     }
-    if (isExistingCustomer && (!accountNumber || accountNumber.length !== 12)) {
-      toast({ title: "Account number required", description: "Enter a valid 12-digit account number.", variant: "warning" });
+    if (isExistingCustomer && !accountNumber?.trim()) {
+      toast({ title: "Account number required", description: "Enter account number.", variant: "warning" });
       return;
     }
     if (!captchaValue.trim()) {

@@ -471,6 +471,39 @@ export function useDsa() {
     [toast]
   );
 
+  const raiseDsaQuery = useCallback(
+    async (
+      idOrCode: number | string,
+      payload: { remarks: string; query?: string }
+    ) => {
+      setActionLoading(true);
+      try {
+        const response = await adminApi.raiseDsaQuery(idOrCode, payload);
+        toast({
+          title: "Query raised to Maker",
+          description:
+            response.message ||
+            "Case returned to the Level 1 Maker for resolution.",
+          variant: "success",
+        });
+        if (response.data) {
+          setCurrentDsa(normalizeDsaData(response.data));
+        }
+        return response.data || response;
+      } catch (error: unknown) {
+        toast({
+          title: "Query failed",
+          description: errorMessage(error, "Failed to raise query to Maker."),
+          variant: "warning",
+        });
+        return null;
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [toast]
+  );
+
   const fetchDeviationReport = useCallback(
     async (idOrCode: number | string) => {
       try {
@@ -980,6 +1013,7 @@ export function useDsa() {
     submitMakerApplication,
     submitCheckerApplication,
     updateWorkflowAction,
+    raiseDsaQuery,
     fetchDeviationReport,
     generateCheckerDdReviewReport,
     triggerCheckerVerification,

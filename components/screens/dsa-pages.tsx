@@ -1081,13 +1081,35 @@ export function DsaWorkflowChevronBar({
     },
   ];
 
+  // A stage can hold several rows over time (e.g. an actioned QUERY row plus a
+  // re-armed PENDING placeholder after the Maker resolves the query). Pick the
+  // latest ACTIONED row (fallback: newest row) so resolved queries stop
+  // rendering orange on stages that already actioned.
+  const pickStageRecord = (stage: (typeof stages)[number]) => {
+    const rows = approvals
+      .filter(
+        (a: any) =>
+          Number(a.approval_level) === stage.level ||
+          a.stage_code === stage.stageCode ||
+          (stage.altStageCode && a.stage_code === stage.altStageCode),
+      )
+      .sort((a: any, b: any) => {
+        const aT = a.actioned_at ? new Date(a.actioned_at).getTime() : 0;
+        const bT = b.actioned_at ? new Date(b.actioned_at).getTime() : 0;
+        if (aT !== bT) return bT - aT;
+        return Number(b.id ?? 0) - Number(a.id ?? 0);
+      });
+    return rows[0];
+  };
+
+  // Query is "open" only while the Maker (L1) still has to resolve it.
+  const queryOpen =
+    onboardingStatus === "DOCUMENT_PENDING" ||
+    onboardingStatus === "QUERY" ||
+    onboardingStatus === "CALLBACK";
+
   const stageStates = stages.map((stage) => {
-    const record = approvals.find(
-      (a: any) =>
-        Number(a.approval_level) === stage.level ||
-        a.stage_code === stage.stageCode ||
-        (stage.altStageCode && a.stage_code === stage.altStageCode),
-    );
+    const record = pickStageRecord(stage);
 
     const recordStatus = String(
       record?.status || record?.action || "",
@@ -1147,13 +1169,18 @@ export function DsaWorkflowChevronBar({
       };
     }
 
+    // Orange (query/callback) only while the query is genuinely open:
+    //  - the stage itself last actioned QUERY/CALLED_BACK and the case is still
+    //    awaiting Maker resolution, or
+    //  - the open query target (L1 Maker) is the active stage.
+    // Once the Maker re-submits, DOCUMENT_PENDING is cleared and the stage
+    // renders COMPLETED (green) / ACTIVE (blue) like a normal flow.
     if (
       recordStatus === "CALLBACK" ||
-      recordStatus === "QUERY" ||
-      (currentLevel === stage.level &&
-        (onboardingStatus === "DOCUMENT_PENDING" ||
-          onboardingStatus === "QUERY" ||
-          onboardingStatus === "CALLBACK"))
+      recordStatus === "CALLED_BACK" ||
+      ((recordStatus === "QUERY" || recordStatus === "QUERY_RAISED") &&
+        queryOpen) ||
+      (queryOpen && currentLevel === stage.level && stage.level === 1)
     ) {
       return {
         ...stage,
@@ -1396,6 +1423,12 @@ export function DsaApprovalStepper({ dsa }: { dsa: any }) {
     operationalStatus === "ACTIVE";
   const isRejected = onboardingStatus === "REJECTED";
 
+  // Query state is only "open" while the Maker (L1) still has to resolve it.
+  const queryOpen =
+    onboardingStatus === "DOCUMENT_PENDING" ||
+    onboardingStatus === "QUERY" ||
+    onboardingStatus === "CALLBACK";
+
   const steps = [
     {
       level: 1,
@@ -1457,9 +1490,16 @@ export function DsaApprovalStepper({ dsa }: { dsa: any }) {
 
   const getStepRecord = (stepLevel: number) => {
     if (Array.isArray(dsa.approvals) && dsa.approvals.length > 0) {
-      const match = dsa.approvals.find(
-        (a: any) => Number(a.approval_level) === stepLevel,
-      );
+      // Prefer the latest ACTIONED row so a resolved QUERY row is not treated
+      // as the stage's current status (stale amber "Query" cards).
+      const match = dsa.approvals
+        .filter((a: any) => Number(a.approval_level) === stepLevel)
+        .sort((a: any, b: any) => {
+          const aT = a.actioned_at ? new Date(a.actioned_at).getTime() : 0;
+          const bT = b.actioned_at ? new Date(b.actioned_at).getTime() : 0;
+          if (aT !== bT) return bT - aT;
+          return Number(b.id ?? 0) - Number(a.id ?? 0);
+        })[0];
       if (match) return match;
     }
     if (isApproved) return { status: "APPROVED", remarks: "Approved" };
@@ -1472,7 +1512,10 @@ export function DsaApprovalStepper({ dsa }: { dsa: any }) {
       return { status: "APPROVED", remarks: "Completed" };
     if (currentLevel === stepLevel)
       return {
-        status: onboardingStatus === "DOCUMENT_PENDING" ? "QUERY" : "PENDING",
+        status:
+          onboardingStatus === "DOCUMENT_PENDING" && stepLevel === 1
+            ? "QUERY"
+            : "PENDING",
         remarks: "Pending Review",
       };
     return { status: "PENDING", remarks: "Upcoming" };
@@ -1522,7 +1565,9 @@ export function DsaApprovalStepper({ dsa }: { dsa: any }) {
           const isCurrent =
             currentLevel === step.level && !isApproved && !isRejected;
           const isFailed = statusStr === "REJECTED";
-          const isQuery = statusStr === "QUERY";
+          const isQuery =
+            (statusStr === "QUERY" || statusStr === "QUERY_RAISED") &&
+            queryOpen;
 
           return (
             <div
@@ -1532,10 +1577,10 @@ export function DsaApprovalStepper({ dsa }: { dsa: any }) {
                   ? "border-emerald-200 bg-emerald-50/70 text-emerald-900"
                   : isSkipped
                     ? "border-slate-200 bg-slate-100/70 text-slate-400 opacity-60"
-                    : isCurrent
-                      ? "border-blue-400 bg-blue-50 ring-2 ring-blue-400/20 text-blue-900 font-medium shadow-sm"
-                      : isQuery
-                        ? "border-amber-300 bg-amber-50 text-amber-900"
+                    : isQuery
+                      ? "border-amber-300 bg-amber-50 text-amber-900"
+                      : isCurrent
+                        ? "border-blue-400 bg-blue-50 ring-2 ring-blue-400/20 text-blue-900 font-medium shadow-sm"
                         : isFailed
                           ? "border-rose-300 bg-rose-50 text-rose-900"
                           : "border-slate-200 bg-white text-slate-500"
@@ -1563,7 +1608,7 @@ export function DsaApprovalStepper({ dsa }: { dsa: any }) {
                       Skipped
                     </span>
                   )}
-                  {isCurrent && (
+                  {isCurrent && !isQuery && (
                     <span className="inline-flex items-center rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] font-bold text-blue-800 animate-pulse">
                       Active
                     </span>
@@ -3359,6 +3404,7 @@ export function DsaProfilePage({ id }: { id: string }) {
     submitMakerApplication,
     submitCheckerApplication,
     updateWorkflowAction,
+    raiseDsaQuery,
     fetchDeviationReport,
     generateCheckerDdReviewReport,
     triggerCheckerVerification,
@@ -4750,41 +4796,34 @@ export function DsaProfilePage({ id }: { id: string }) {
   const canApproveDsa =
     canDecideDsa && (docChecklist ? docChecklist.is_complete : true);
 
-  const l1Approval: any = Array.isArray(dsa?.approvals)
-    ? dsa.approvals.find(
-        (a: any) =>
-          (Number(a.approval_level) === 1 ||
-            a.stage_code === "LEVEL_1_MAKER") &&
-          (a.status === "RECOMMENDED" ||
-            a.status === "SUBMITTED" ||
-            a.status === "APPROVED" ||
-            a.action === "RECOMMEND" ||
-            a.action === "SUBMIT" ||
-            a.action === "APPROVE"),
-      ) ||
-      dsa.approvals.find(
-        (a: any) =>
-          Number(a.approval_level) === 1 || a.stage_code === "LEVEL_1_MAKER",
-      )
-    : null;
+  // Approvals are append-only: a stage accumulates rows over time
+  // (RECOMMEND → REVERT/QUERY → RECOMMEND again). Always surface the NEWEST
+  // actioned row per stage so re-approved remarks replace the stale ones.
+  const pickLatestApproval = (matches: (a: any) => boolean): any => {
+    if (!Array.isArray(dsa?.approvals)) return null;
+    const rows = dsa.approvals.filter(matches);
+    if (rows.length === 0) return null;
+    const actioned = rows.filter(
+      (r: any) => Boolean(r.actioned_at) || (r.status && r.status !== "PENDING"),
+    );
+    const pool = actioned.length > 0 ? actioned : rows;
+    return [...pool].sort((a: any, b: any) => {
+      const aT = a.actioned_at ? new Date(a.actioned_at).getTime() : 0;
+      const bT = b.actioned_at ? new Date(b.actioned_at).getTime() : 0;
+      if (aT !== bT) return bT - aT;
+      return Number(b.id ?? 0) - Number(a.id ?? 0);
+    })[0];
+  };
 
-  const l2Approval: any = Array.isArray(dsa?.approvals)
-    ? dsa.approvals.find(
-        (a: any) =>
-          (Number(a.approval_level) === 2 ||
-            a.stage_code === "LEVEL_2_CHECKER") &&
-          (a.status === "RECOMMENDED" ||
-            a.status === "SUBMITTED" ||
-            a.status === "APPROVED" ||
-            a.action === "RECOMMEND" ||
-            a.action === "SUBMIT" ||
-            a.action === "APPROVE"),
-      ) ||
-      dsa.approvals.find(
-        (a: any) =>
-          Number(a.approval_level) === 2 || a.stage_code === "LEVEL_2_CHECKER",
-      )
-    : null;
+  const l1Approval: any = pickLatestApproval(
+    (a: any) =>
+      Number(a.approval_level) === 1 || a.stage_code === "LEVEL_1_MAKER",
+  );
+
+  const l2Approval: any = pickLatestApproval(
+    (a: any) =>
+      Number(a.approval_level) === 2 || a.stage_code === "LEVEL_2_CHECKER",
+  );
 
   const isMakerUserOrLevel =
     isMakerUser ||
@@ -4809,12 +4848,20 @@ export function DsaProfilePage({ id }: { id: string }) {
     dsa?.onboarding_status !== "REJECTED",
   );
 
-  // ONLY Checker can approve / check / reject documents
-  const canCheckerApproveDocs = Boolean(
-    (isCheckerRole || (isCheckerLevel && !isMakerUser)) &&
+  // Maker AND Checker can verify documents (Task 24).
+  const canApproveDocs = Boolean(
+    (isMakerUser || isCheckerRole || (isCheckerLevel && !isMakerUser)) &&
     dsa?.operational_status !== "ACTIVE" &&
     dsa?.onboarding_status !== "REJECTED",
   );
+
+  // DD Review Report verification stays Checker-only.
+  const canApproveDoc = (doc: any): boolean =>
+    canApproveDocs &&
+    !isApplicationFormDocument(doc) &&
+    (!isDdReviewReportDocument(doc) ||
+      isCheckerRole ||
+      (isCheckerLevel && !isMakerUser));
 
   // Document status resolution across all 7 roles:
   // - Returns "Verified" (badge displays "Checked") if verified in backend or during session by Checker
@@ -4943,91 +4990,35 @@ export function DsaProfilePage({ id }: { id: string }) {
     }) ?? []),
   ];
 
-  const l3Approval: any = Array.isArray(dsa?.approvals)
-    ? dsa.approvals.find(
-        (a: any) =>
-          (Number(a.approval_level) === 3 ||
-            a.stage_code === "LEVEL_3_SUB_REGION" ||
-            a.stage_code === "LEVEL_3_SUB_REGION_HEAD") &&
-          (a.status === "RECOMMENDED" ||
-            a.status === "APPROVED" ||
-            a.action === "RECOMMEND" ||
-            a.action === "APPROVE"),
-      ) ||
-      dsa.approvals.find(
-        (a: any) =>
-          Number(a.approval_level) === 3 ||
-          a.stage_code === "LEVEL_3_SUB_REGION" ||
-          a.stage_code === "LEVEL_3_SUB_REGION_HEAD",
-      )
-    : null;
+  const l3Approval: any = pickLatestApproval(
+    (a: any) =>
+      Number(a.approval_level) === 3 ||
+      a.stage_code === "LEVEL_3_SUB_REGION" ||
+      a.stage_code === "LEVEL_3_SUB_REGION_HEAD",
+  );
 
-  const l4Approval: any = Array.isArray(dsa?.approvals)
-    ? dsa.approvals.find(
-        (a: any) =>
-          (Number(a.approval_level) === 4 || a.stage_code === "LEVEL_4_DGM") &&
-          (a.status === "RECOMMENDED" ||
-            a.status === "APPROVED" ||
-            a.action === "RECOMMEND" ||
-            a.action === "APPROVE" ||
-            a.status === "SKIPPED"),
-      ) ||
-      dsa.approvals.find(
-        (a: any) =>
-          Number(a.approval_level) === 4 || a.stage_code === "LEVEL_4_DGM",
-      )
-    : null;
+  const l4Approval: any = pickLatestApproval(
+    (a: any) =>
+      Number(a.approval_level) === 4 || a.stage_code === "LEVEL_4_DGM",
+  );
 
-  const l5Approval: any = Array.isArray(dsa?.approvals)
-    ? dsa.approvals.find(
-        (a: any) =>
-          (Number(a.approval_level) === 5 ||
-            a.stage_code === "LEVEL_5_REGION_HEAD") &&
-          (a.status === "RECOMMENDED" ||
-            a.status === "APPROVED" ||
-            a.action === "RECOMMEND" ||
-            a.action === "APPROVE"),
-      ) ||
-      dsa.approvals.find(
-        (a: any) =>
-          Number(a.approval_level) === 5 ||
-          a.stage_code === "LEVEL_5_REGION_HEAD",
-      )
-    : null;
+  const l5Approval: any = pickLatestApproval(
+    (a: any) =>
+      Number(a.approval_level) === 5 ||
+      a.stage_code === "LEVEL_5_REGION_HEAD",
+  );
 
-  const l6Approval: any = Array.isArray(dsa?.approvals)
-    ? dsa.approvals.find(
-        (a: any) =>
-          (Number(a.approval_level) === 6 ||
-            a.stage_code === "LEVEL_6_HO_CREDIT_OFFICER") &&
-          (a.status === "RECOMMENDED" ||
-            a.status === "APPROVED" ||
-            a.action === "RECOMMEND" ||
-            a.action === "APPROVE"),
-      ) ||
-      dsa.approvals.find(
-        (a: any) =>
-          Number(a.approval_level) === 6 ||
-          a.stage_code === "LEVEL_6_HO_CREDIT_OFFICER",
-      )
-    : null;
+  const l6Approval: any = pickLatestApproval(
+    (a: any) =>
+      Number(a.approval_level) === 6 ||
+      a.stage_code === "LEVEL_6_HO_CREDIT_OFFICER",
+  );
 
-  const l7Approval: any = Array.isArray(dsa?.approvals)
-    ? dsa.approvals.find(
-        (a: any) =>
-          (Number(a.approval_level) === 7 ||
-            a.stage_code === "LEVEL_7_HO_CREDIT_HEAD") &&
-          (a.status === "APPROVED" ||
-            a.status === "REJECTED" ||
-            a.action === "APPROVE" ||
-            a.action === "REJECT"),
-      ) ||
-      dsa.approvals.find(
-        (a: any) =>
-          Number(a.approval_level) === 7 ||
-          a.stage_code === "LEVEL_7_HO_CREDIT_HEAD",
-      )
-    : null;
+  const l7Approval: any = pickLatestApproval(
+    (a: any) =>
+      Number(a.approval_level) === 7 ||
+      a.stage_code === "LEVEL_7_HO_CREDIT_HEAD",
+  );
 
   const makerRemarks =
     l1Approval?.remarks ||
@@ -6468,7 +6459,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                   Due Diligence Note <span className="text-red-400 ml-0.5">*</span>
                 </div>
                 <div className="border border-t-0 border-slate-300 rounded-b px-4 py-3 bg-white">
-                  <p className="text-base sm:text-lg font-bold text-slate-900 leading-relaxed whitespace-pre-wrap">{ddObs}</p>
+                  <p className="text-base font-medium text-slate-800 leading-relaxed whitespace-pre-wrap">{ddObs}</p>
                 </div>
               </div>
             );
@@ -7057,19 +7048,29 @@ export function DsaProfilePage({ id }: { id: string }) {
                           : "PENDING"),
                   },
                   postL7Hist
-                    ? {
-                        level: 8,
-                        roleBadge: "Checker Post-Sanction",
-                        authority:
-                          postL7Hist?.designation ||
-                          "Post-Sanction Checker Verification",
-                        name: postL7Hist?.name || "—",
-                        date: postL7Hist?.date,
-                        remarks:
-                          getCleanRemark(postL7Hist?.remarks) ||
-                          "Agreement verified and activated.",
-                        status: "APPROVED",
-                      }
+                    ? (() => {
+                        const isPostL7Approved = Boolean(
+                          postL7Hist?.is_approved ||
+                          postL7Hist?.action === "APPROVED" ||
+                          dsa?.agreement_status === "SIGNED_VERIFIED" ||
+                          dsa?.operational_status === "ACTIVE"
+                        );
+                        return {
+                          level: 8,
+                          roleBadge: "Checker Post-Sanction",
+                          authority:
+                            postL7Hist?.designation ||
+                            "Post-Sanction Checker Verification",
+                          name: isPostL7Approved && postL7Hist?.name !== "Pending"
+                            ? (postL7Hist?.name || "—")
+                            : "—",
+                          date: isPostL7Approved ? postL7Hist?.date : null,
+                          remarks: isPostL7Approved
+                            ? (getCleanRemark(postL7Hist?.remarks) || "Agreement verified and activated.")
+                            : "",
+                          status: isPostL7Approved ? "APPROVED" : "PENDING",
+                        };
+                      })()
                     : null,
                 ]
                   .filter(Boolean)
@@ -8796,7 +8797,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                         })}
                       </div>
 
-                      {canCheckerApproveDocs && hasUnverifiedApplicantDocs && (
+                      {canApproveDocs && hasUnverifiedApplicantDocs && (
                         <Button
                           size="sm"
                           type="button"
@@ -8812,7 +8813,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                                     await updateDsaDocumentStatus(dsa.id, {
                                       document_id: doc.id,
                                       status: "Verified",
-                                      remarks: `Bulk verified by Checker (${currentUser?.name || "Checker"})`,
+                                      remarks: `Bulk verified by ${currentUser?.name || "Reviewer"}`,
                                     });
                                   } catch (err) {}
                                 }
@@ -8854,11 +8855,9 @@ export function DsaProfilePage({ id }: { id: string }) {
                         const isVisitReport = isVisitReportDocument(doc);
                         const isAppForm = isApplicationFormDocument(doc);
                         const isDdReport = isDdReviewReportDocument(doc);
-                        const canVerifyCurrentDoc =
-                          canCheckerApproveDocs && !isAppForm;
+                        const canVerifyCurrentDoc = canApproveDoc(doc);
                         const isPendingVerification =
-                          canCheckerApproveDocs &&
-                          !isAppForm &&
+                          canVerifyCurrentDoc &&
                           effectiveStatus !== "Verified" &&
                           effectiveStatus !== "Failed";
                         const docType = doc.document_type || doc.type;
@@ -8924,8 +8923,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                               </div>
                               <div className="flex items-center justify-between pt-2 border-t border-slate-100 mt-2">
                                 <div>
-                                  {canCheckerApproveDocs &&
-                                  isPendingVerification ? (
+                                  {isPendingVerification ? (
                                     !isDocViewed ? (
                                       <span className="text-[11px] font-medium text-amber-600 flex items-center gap-1.5">
                                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
@@ -9027,7 +9025,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                                               {
                                                 document_id: doc.id,
                                                 status: "Verified",
-                                                remarks: `Verified by Checker (${currentUser?.name || "Checker"})`,
+                                                remarks: `Verified by ${currentUser?.name || "Reviewer"}`,
                                               },
                                             );
                                           } catch (err) {}
@@ -9296,10 +9294,6 @@ export function DsaProfilePage({ id }: { id: string }) {
                               <h4 className="text-sm font-bold text-slate-800">
                                 Scanned Physically Executed Agreement
                               </h4>
-                              <p className="text-xs text-slate-500">
-                                Partner physical execution and signed copy
-                                management
-                              </p>
                             </div>
                           </div>
                           <span
@@ -9531,14 +9525,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                               </div>
                             )}
 
-                            {/* Branch Checker decision divider */}
-                            <div className="w-full flex items-center gap-2 pt-1">
-                              <span className="h-px flex-1 bg-slate-200" />
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                                Branch Checker Decision
-                              </span>
-                              <span className="h-px flex-1 bg-slate-200" />
-                            </div>
+
                             {/* Approve Signed Agreement — Branch Checker only */}
                             {canDecideSignedAgreement &&
                               (signedAgreementDoc ||
@@ -10201,7 +10188,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                     </div>
                   </div>
 
-                  <div className="divide-y divide-slate-100">
+                  <div className="space-y-3">
                     {[
                       {
                         level: 1,
@@ -10349,8 +10336,16 @@ export function DsaProfilePage({ id }: { id: string }) {
                         <div
                           key={step.level}
                           className={cn(
-                            "py-3.5 first:pt-1 last:pb-1 space-y-1.5 transition-colors",
-                            isActive && "bg-blue-50/50 -mx-3 px-3 rounded-lg border-l-4 border-l-blue-600",
+                            "rounded-xl border p-4 transition-all shadow-2xs space-y-2.5",
+                            isDone
+                              ? "border-emerald-300/90 bg-emerald-50/30"
+                              : isBypassed
+                                ? "border-slate-200 bg-slate-50/70 opacity-80"
+                                : isActive
+                                  ? "border-blue-300 bg-blue-50/50 ring-2 ring-blue-400/20 shadow-xs"
+                                  : isRejected
+                                    ? "border-rose-300 bg-rose-50/40 ring-1 ring-rose-200/50"
+                                    : "border-slate-200 bg-slate-50/20",
                           )}
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -10434,37 +10429,12 @@ export function DsaProfilePage({ id }: { id: string }) {
                   </div>
                 </div>
 
-                {/* Decision Buttons: Rendered when user has approval authority or when workflow concluded */}
-                {(workflowLevelInfo.canUserApprove ||
-                  workflowLevelInfo.isCompleted ||
-                  dsa?.onboarding_status === "APPROVED") &&
+                {/* Decision Buttons: Rendered when user has approval authority */}
+                {workflowLevelInfo.canUserApprove &&
+                  !workflowLevelInfo.isCompleted &&
+                  dsa?.onboarding_status !== "APPROVED" &&
                   !workflowLevelInfo.isRejected && (
-                    <>
-                      {workflowLevelInfo.isCompleted ||
-                      dsa?.onboarding_status === "APPROVED" ? (
-                        <div className="mt-5 space-y-3 pt-4 border-t border-slate-200">
-                          <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50/80 p-3 text-emerald-900">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white shrink-0 shadow-xs">
-                              <Check className="h-4 w-4 stroke-[3]" />
-                            </div>
-                            <div>
-                              <p className="font-bold text-xs uppercase tracking-wider text-emerald-950">
-                                Institutional Sanction Granted &bull; Final
-                                Approval Complete
-                              </p>
-                              <p className="text-[11px] text-emerald-800 mt-0.5">
-                                This application has received final approval
-                                from the HO Credit Head. Official DSA Partner
-                                Code has been allotted and Empanelment Letter
-                                generated. All approval actions are now
-                                concluded and locked.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="mt-5 flex flex-wrap items-center gap-3 pt-4 border-t border-slate-200">
+                    <div className="mt-5 flex flex-wrap items-center gap-3 pt-4 border-t border-slate-200">
                             <Button
                               disabled={isSubmitDisabled}
                               onClick={() => {
@@ -10524,7 +10494,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                                 {currentRevertTarget?.label}
                               </Button>
                             )}
-                            {workflowLevelInfo.currentLevel <= 2 && (
+                            {workflowLevelInfo.currentLevel === 2 && (
                               <Button
                                 onClick={() => setQueryingDsa(dsa)}
                                 size="sm"
@@ -10532,7 +10502,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                                 className="bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5"
                               >
                                 <HelpCircle className="h-4 w-4 text-amber-600" />
-                                Raise Query to Applicant
+                                Raise Query to Maker
                               </Button>
                             )}
                             {workflowLevelInfo.currentLevel >= 2 && (
@@ -10552,9 +10522,6 @@ export function DsaProfilePage({ id }: { id: string }) {
                               </Button>
                             )}
                           </div>
-                        </>
-                      )}
-                    </>
                   )}
             </div>
           ) : null}
@@ -11607,15 +11574,15 @@ export function DsaProfilePage({ id }: { id: string }) {
       </Modal>
 
       <Modal
-        description="Specify the missing information or document query required from the applicant."
+        description="Query is routed back to the Branch Maker (L1). The Maker resolves it and re-submits; the workflow then continues L1 → L2 Checker and onwards."
         onClose={closeDecisionModals}
         open={Boolean(queryingDsa)}
-        title="Raise Onboarding Query"
+        title="Raise Query to Maker (Checker → L1)"
         width="max-w-lg"
       >
         <div className="space-y-4">
           <Field>
-            <Label htmlFor="queryReason">Query details</Label>
+            <Label htmlFor="queryReason">Query details (mandatory)</Label>
             <textarea
               id="queryReason"
               rows={3}
@@ -11651,16 +11618,14 @@ export function DsaProfilePage({ id }: { id: string }) {
                     );
                     return;
                   }
-                  const updated = await updateDsaProfile(queryingDsa.id, {
-                    action: "QUERY",
-                    query: queryReason.trim(),
+                  const updated = await raiseDsaQuery(queryingDsa.id, {
                     remarks: queryReason.trim(),
-                  } as any);
+                  });
                   if (updated) {
                     await fetchDsaDetail(id);
                     toast({
-                      title: "Query Raised",
-                      description: `Query submitted for ${queryingDsa.name}. Status updated to Document Pending.`,
+                      title: "Query Raised to Maker",
+                      description: `Query submitted for ${queryingDsa.name}. Case returned to the Level 1 Maker for resolution.`,
                       variant: "success",
                     });
                     closeDecisionModals();
@@ -12422,27 +12387,27 @@ export function DsaProfilePage({ id }: { id: string }) {
             dsaId={dsa?.id}
             isBankUser={isBankUser}
             effectiveStatus={getEffectiveDocStatus(previewDoc)}
-            canVerifyDoc={
-              canCheckerApproveDocs && !isApplicationFormDocument(previewDoc)
-            }
+            canVerifyDoc={canApproveDoc(previewDoc)}
             verificationRoleNote={
               isApplicationFormDocument(previewDoc)
                 ? undefined
-                : !canCheckerApproveDocs &&
+                : !canApproveDoc(previewDoc) &&
                     getEffectiveDocStatus(previewDoc) !== "Verified" &&
                     getEffectiveDocStatus(previewDoc) !== "Failed"
-                  ? "Read-only view"
+                  ? isDdReviewReportDocument(previewDoc)
+                    ? "Only the Checker can verify the DD Review Report"
+                    : "Read-only view"
                   : undefined
             }
             onVerify={async () => {
-              if (!canCheckerApproveDocs) return;
+              if (!canApproveDoc(previewDoc)) return;
               const targetDoc = previewDoc;
               if (typeof targetDoc.id === "number") {
                 try {
                   await updateDsaDocumentStatus(dsa.id, {
                     document_id: targetDoc.id,
                     status: "Verified",
-                    remarks: `Verified by Checker (${currentUser?.name || "Checker"}) in viewer modal`,
+                    remarks: `Verified by ${currentUser?.name || "Reviewer"} in viewer modal`,
                   });
                   await fetchBackendDocuments(true);
                   await fetchDsaDetail(dsa.id);
@@ -12467,14 +12432,14 @@ export function DsaProfilePage({ id }: { id: string }) {
               });
             }}
             onReject={async () => {
-              if (!canCheckerApproveDocs) return;
+              if (!canApproveDoc(previewDoc)) return;
               const targetDoc = previewDoc;
               if (typeof targetDoc.id === "number") {
                 try {
                   await updateDsaDocumentStatus(dsa.id, {
                     document_id: targetDoc.id,
                     status: "Failed",
-                    remarks: `Rejected by Checker (${currentUser?.name || "Checker"}) in viewer modal`,
+                    remarks: `Rejected by ${currentUser?.name || "Reviewer"} in viewer modal`,
                   });
                   await fetchBackendDocuments(true);
                   await fetchDsaDetail(dsa.id);
