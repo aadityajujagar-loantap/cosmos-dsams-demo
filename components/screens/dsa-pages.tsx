@@ -98,6 +98,8 @@ import {
   canShowCallBackAction,
   resolvePreviousActorLevel,
   isCalledBackStep,
+  resolveStageBypass as resolveStageBypassShared,
+  resolveStageRemarksForDisplay,
 } from "@/lib/dsa-workflow-actions";
 import type { DsaEligibleUser } from "@/types/dsa";
 import { BusinessType, Dsa, DsaStatus, Product, User } from "@/lib/types";
@@ -1128,21 +1130,58 @@ export function DsaWorkflowChevronBar({
       record?.status || record?.action || "",
     ).toUpperCase();
 
-    // Check if L4 DGM is skipped
-    const isDgmSkipped =
+    // RE_ALLOCATE / FORWARD hand the case to a named authority. Checked FIRST so
+    // a genuinely actioned stage can never be mislabelled "DGM (Skipped)" by
+    // the branch below — that is what made a level-jumping re-allocation read
+    // as a bypassed stage. If the case is still sitting at this same level
+    // (e.g. L3 -> L3 hand-off), it stays ACTIVE, just re-assigned.
+    if (recordStatus === "REALLOCATED" || recordStatus === "FORWARDED") {
+      const stillActiveHere = currentLevel === stage.level && !isRejected;
+      return {
+        ...stage,
+        state: stillActiveHere ? ("ACTIVE" as const) : ("COMPLETED" as const),
+        displayLabel: stage.roleName,
+        details:
+          record?.remarks ||
+          (recordStatus === "REALLOCATED"
+            ? `Re-allocated from ${stage.roleName} to another authority`
+            : `Forwarded from ${stage.roleName} to another authority`),
+        approver: record?.user_name || null,
+        timestamp: record?.created_at || null,
+      };
+    }
+
+    // Generalised bypass detection (any role / any conditional step).
+    //
+    // `dsa.branch_dgm_posted` / `dgm_skipped` flags are still honoured for L4
+    // because they are authoritative for the DGM_POSTING condition, but a stage
+    // that the case simply routed past is now detected for EVERY level from the
+    // approval rows: no actioned row of its own + the case is already beyond it.
+    const bypassedWording = resolveStageBypassShared({
+      approvals: dsa?.approvals,
+      level: stage.level,
+      stageCode: stage.stageCode,
+      currentLevel,
+    });
+
+    const dgmFlagSaysSkipped =
       stage.level === 4 &&
       (dsa.branch_dgm_posted === false ||
-        recordStatus === "SKIPPED" ||
-        recordStatus === "SKIP" ||
         (dsa as any)?.dgm_skipped === true ||
-        ((currentLevel > 4 || isApproved) && !record));
+        recordStatus === "SKIPPED" ||
+        recordStatus === "SKIP");
 
-    if (isDgmSkipped) {
+    const isStageSkipped = Boolean(bypassedWording) || dgmFlagSaysSkipped;
+
+    if (isStageSkipped) {
       return {
         ...stage,
         state: "SKIPPED" as const,
-        displayLabel: "DGM (Skipped)",
-        details: "Bypassed (No DGM posted for branch)",
+        displayLabel:
+          stage.level === 4 ? "DGM (Skipped)" : `${stage.roleName} (Skipped)`,
+        details:
+          bypassedWording ??
+          "Bypassed (No DGM posted for branch)",
         approver: record?.user_name || null,
         timestamp: record?.created_at || null,
       };
@@ -1201,6 +1240,13 @@ export function DsaWorkflowChevronBar({
         displayLabel: stage.roleName,
         details:
           record?.remarks ||
+          // CALL_BACK rows store remarks = null by design (the caller's message
+          // belongs to the audit trail), so fall back to the DSA status_reason
+          // when it describes this exact action.
+          (String(dsa?.status_reason_action ?? "").toUpperCase() ===
+          "CALLED_BACK"
+            ? dsa.status_reason
+            : null) ||
           (onboardingStatus === "DOCUMENT_PENDING"
             ? "Pending document resolution"
             : "Query / Callback raised"),
@@ -4756,6 +4802,63 @@ export function DsaProfilePage({ id }: { id: string }) {
       );
   };
 
+/**
+ * Resolve a stage's displayed remarks, honouring BYPASS first.
+ *
+ * 1. Bypassed stage (routed around)  -> the bypass wording.
+ * 2. Otherwise the real recorded message.
+ * 3. The generic default ONLY when this stage genuinely acted but recorded no
+ *    remarks of its own.
+ *
+ * A level the case has NOT reached yet (or is currently sitting at) has no
+ * actioned row, so it yields "" — never a fabricated "Recommended by <role>".
+ * Previously the default was applied unconditionally, which made upcoming
+ * stages claim they had reviewed the case.
+ */
+const resolveStageRemarksOrBypass = (
+  level: number,
+  stageCode: string,
+  fallback: string,
+): string =>
+  resolveStageRemarksForDisplay({
+    approvals: dsa?.approvals,
+    level,
+    stageCode,
+    currentLevel: workflowLevelInfo?.currentLevel ?? null,
+    statusReason: dsa?.status_reason,
+    statusReasonAction: dsa?.status_reason_action,
+    defaultText: fallback,
+  });
+
+/**
+ * Status for one stage in the Decisions panel, honouring bypass so a stage the
+ * case routed past reads SKIPPED instead of a fabricated RECOMMENDED.
+ */
+const resolveStageStatus = (
+  level: number,
+  stageCode: string,
+  approvalStatus: string | null | undefined,
+  reachedText: string,
+): string => {
+  if (
+    resolveStageBypassShared({
+      approvals: dsa?.approvals,
+      level,
+      stageCode,
+      currentLevel: workflowLevelInfo?.currentLevel ?? null,
+    })
+  ) {
+    return "SKIPPED";
+  }
+
+  if (approvalStatus) return String(approvalStatus).toUpperCase();
+
+  const cur = workflowLevelInfo?.currentLevel ?? 1;
+  if (cur > level) return reachedText;
+  if (cur === level) return "ACTIVE";
+  return "PENDING";
+};
+
   const l1Approval: any = pickLatestApproval(
     (a: any) =>
       Number(a.approval_level) === 1 || a.stage_code === "LEVEL_1_MAKER",
@@ -4969,14 +5072,11 @@ export function DsaProfilePage({ id }: { id: string }) {
       a.stage_code === "LEVEL_7_HO_CREDIT_HEAD",
   );
 
-  const makerRemarks =
-    l1Approval?.remarks ||
-    dsa?.status_reason ||
-    (l1Approval?.status === "RECOMMENDED" ||
-    l1Approval?.status === "SUBMITTED" ||
-    (workflowLevelInfo?.currentLevel ?? 1) > 1
-      ? "Maker verification completed and forwarded to Checker"
-      : "");
+  const makerRemarks = resolveStageRemarksOrBypass(
+    1,
+    "LEVEL_1_MAKER",
+    "Maker verification completed and forwarded to Checker",
+  );
 
   const isL2Actioned = Boolean(
     l2Approval?.status === "RECOMMENDED" ||
@@ -4987,47 +5087,41 @@ export function DsaProfilePage({ id }: { id: string }) {
       (workflowLevelInfo?.currentLevel ?? 1) > 2,
   );
 
-  const checkerRemarks =
-    l2Approval?.remarks ||
-    (isL2Actioned
-      ? "Due Diligence completed and forwarded by Checker"
-      : "");
+  const checkerRemarks = resolveStageRemarksOrBypass(
+    2,
+    "LEVEL_2_CHECKER",
+    "Due Diligence completed and forwarded by Checker",
+  );
 
-  const l3Remarks =
-    l3Approval?.remarks ||
-    (l3Approval?.status === "RECOMMENDED" ||
-    (workflowLevelInfo?.currentLevel ?? 1) > 3
-      ? "Recommended by Sub-Region Head"
-      : "");
+  const l3Remarks = resolveStageRemarksOrBypass(
+    3,
+    "LEVEL_3_SUB_REGION_HEAD",
+    "Recommended by Sub-Region Head",
+  );
 
-  const l4Remarks =
-    l4Approval?.remarks ||
-    (l4Approval?.status === "SKIPPED"
-      ? "Bypassed per workflow rule (No DGM posted for branch)"
-      : l4Approval?.status === "RECOMMENDED" ||
-          (workflowLevelInfo?.currentLevel ?? 1) > 4
-        ? "Recommended by DGM"
-        : "");
+  const l4Remarks = resolveStageRemarksOrBypass(
+    4,
+    "LEVEL_4_DGM",
+    "Recommended by DGM",
+  );
 
-  const l5Remarks =
-    l5Approval?.remarks ||
-    (l5Approval?.status === "RECOMMENDED" ||
-    (workflowLevelInfo?.currentLevel ?? 1) > 5
-      ? "Recommended by Region Head"
-      : "");
+  const l5Remarks = resolveStageRemarksOrBypass(
+    5,
+    "LEVEL_5_REGION_HEAD",
+    "Recommended by Region Head",
+  );
 
-  const l6Remarks =
-    l6Approval?.remarks ||
-    (l6Approval?.status === "RECOMMENDED" ||
-    (workflowLevelInfo?.currentLevel ?? 1) > 6
-      ? "Credit appraisal recommended for sanction"
-      : "");
+  const l6Remarks = resolveStageRemarksOrBypass(
+    6,
+    "LEVEL_6_HO_CREDIT_OFFICER",
+    "Credit appraisal recommended for sanction",
+  );
 
-  const l7Remarks =
-    l7Approval?.remarks ||
-    (l7Approval?.status === "APPROVED"
-      ? "Final Sanction & Approval granted by HO Credit Head"
-      : "");
+  const l7Remarks = resolveStageRemarksOrBypass(
+    7,
+    "LEVEL_7_HO_CREDIT_HEAD",
+    "Final Sanction & Approval granted by HO Credit Head",
+  );
 
   const isL7AlreadyApproved = Boolean(
     dsa?.onboarding_status === "APPROVED" ||
@@ -6965,17 +7059,21 @@ export function DsaProfilePage({ id }: { id: string }) {
                     date: l3Hist?.date || l3Approval?.actioned_at,
                     remarks:
                       getCleanRemark(l3Hist?.remarks) ||
-                      getCleanRemark(l3Approval?.remarks) ||
-                      ((workflowLevelInfo?.currentLevel ?? 1) > 3
-                        ? "Recommended by Sub-Region Head"
-                        : ""),
-                    status:
-                      l3Approval?.status ||
-                      ((workflowLevelInfo?.currentLevel ?? 1) > 3
-                        ? "RECOMMENDED"
-                        : l3Hist
-                          ? "RECOMMENDED"
-                          : "PENDING"),
+                      resolveStageRemarksForDisplay({
+                        approvals: dsa?.approvals,
+                        level: 3,
+                        stageCode: "LEVEL_3_SUB_REGION_HEAD",
+                        currentLevel: workflowLevelInfo?.currentLevel ?? null,
+                        statusReason: dsa?.status_reason,
+                        statusReasonAction: dsa?.status_reason_action,
+                        defaultText: "Recommended by Sub-Region Head",
+                      }),
+                    status: resolveStageStatus(
+                      3,
+                      "LEVEL_3_SUB_REGION_HEAD",
+                      l3Approval?.status,
+                      "RECOMMENDED",
+                    ),
                   },
                   {
                     level: 4,
@@ -6984,21 +7082,25 @@ export function DsaProfilePage({ id }: { id: string }) {
                     name:
                       l4Hist?.name ||
                       l4Approval?.actioned_by?.name ||
-                      (l4Approval?.status === "SKIPPED"
-                        ? "System Auto-Bypass"
-                        : "—"),
+                      "—",
                     date: l4Hist?.date || l4Approval?.actioned_at,
                     remarks:
                       getCleanRemark(l4Hist?.remarks) ||
-                      getCleanRemark(l4Approval?.remarks) ||
-                      (l4Approval?.status === "SKIPPED"
-                        ? "Bypassed per workflow rule (No DGM posted for branch)"
-                        : (workflowLevelInfo?.currentLevel ?? 1) > 4
-                          ? "Recommended by DGM"
-                          : ""),
-                    status:
-                      l4Approval?.status ||
-                      (l4Hist ? "RECOMMENDED" : "PENDING"),
+                      resolveStageRemarksForDisplay({
+                        approvals: dsa?.approvals,
+                        level: 4,
+                        stageCode: "LEVEL_4_DGM",
+                        currentLevel: workflowLevelInfo?.currentLevel ?? null,
+                        statusReason: dsa?.status_reason,
+                        statusReasonAction: dsa?.status_reason_action,
+                        defaultText: "Recommended by DGM",
+                      }),
+                    status: resolveStageStatus(
+                      4,
+                      "LEVEL_4_DGM",
+                      l4Approval?.status,
+                      "RECOMMENDED",
+                    ),
                   },
                   {
                     level: 5,
@@ -7008,17 +7110,21 @@ export function DsaProfilePage({ id }: { id: string }) {
                     date: l5Hist?.date || l5Approval?.actioned_at,
                     remarks:
                       getCleanRemark(l5Hist?.remarks) ||
-                      getCleanRemark(l5Approval?.remarks) ||
-                      ((workflowLevelInfo?.currentLevel ?? 1) > 5
-                        ? "Recommended by Region Head"
-                        : ""),
-                    status:
-                      l5Approval?.status ||
-                      ((workflowLevelInfo?.currentLevel ?? 1) > 5
-                        ? "RECOMMENDED"
-                        : l5Hist
-                          ? "RECOMMENDED"
-                          : "PENDING"),
+                      resolveStageRemarksForDisplay({
+                        approvals: dsa?.approvals,
+                        level: 5,
+                        stageCode: "LEVEL_5_REGION_HEAD",
+                        currentLevel: workflowLevelInfo?.currentLevel ?? null,
+                        statusReason: dsa?.status_reason,
+                        statusReasonAction: dsa?.status_reason_action,
+                        defaultText: "Recommended by Region Head",
+                      }),
+                    status: resolveStageStatus(
+                      5,
+                      "LEVEL_5_REGION_HEAD",
+                      l5Approval?.status,
+                      "RECOMMENDED",
+                    ),
                   },
                   {
                     level: 6,
@@ -7028,17 +7134,21 @@ export function DsaProfilePage({ id }: { id: string }) {
                     date: l6Hist?.date || l6Approval?.actioned_at,
                     remarks:
                       getCleanRemark(l6Hist?.remarks) ||
-                      getCleanRemark(l6Approval?.remarks) ||
-                      ((workflowLevelInfo?.currentLevel ?? 1) > 6
-                        ? "Credit appraisal recommended for sanction"
-                        : ""),
-                    status:
-                      l6Approval?.status ||
-                      ((workflowLevelInfo?.currentLevel ?? 1) > 6
-                        ? "RECOMMENDED"
-                        : l6Hist
-                          ? "RECOMMENDED"
-                          : "PENDING"),
+                      resolveStageRemarksForDisplay({
+                        approvals: dsa?.approvals,
+                        level: 6,
+                        stageCode: "LEVEL_6_HO_CREDIT_OFFICER",
+                        currentLevel: workflowLevelInfo?.currentLevel ?? null,
+                        statusReason: dsa?.status_reason,
+                        statusReasonAction: dsa?.status_reason_action,
+                        defaultText: "Credit appraisal recommended for sanction",
+                      }),
+                    status: resolveStageStatus(
+                      6,
+                      "LEVEL_6_HO_CREDIT_OFFICER",
+                      l6Approval?.status,
+                      "RECOMMENDED",
+                    ),
                   },
                   {
                     level: 7,
@@ -7048,17 +7158,23 @@ export function DsaProfilePage({ id }: { id: string }) {
                     date: l7Hist?.date || l7Approval?.actioned_at,
                     remarks:
                       getCleanRemark(l7Hist?.remarks) ||
-                      getCleanRemark(l7Approval?.remarks) ||
-                      (isAlreadyApproved
-                        ? "Final Sanction granted. Application approved."
-                        : ""),
-                    status:
-                      l7Approval?.status ||
-                      (isAlreadyApproved
-                        ? "APPROVED"
-                        : l7Hist
-                          ? "APPROVED"
-                          : "PENDING"),
+                      resolveStageRemarksForDisplay({
+                        approvals: dsa?.approvals,
+                        level: 7,
+                        stageCode: "LEVEL_7_HO_CREDIT_HEAD",
+                        currentLevel: workflowLevelInfo?.currentLevel ?? null,
+                        statusReason: dsa?.status_reason,
+                        statusReasonAction: dsa?.status_reason_action,
+                        defaultText: isAlreadyApproved
+                          ? "Final Sanction granted. Application approved."
+                          : "Final Sanction & Approval granted by HO Credit Head",
+                      }),
+                    status: resolveStageStatus(
+                      7,
+                      "LEVEL_7_HO_CREDIT_HEAD",
+                      l7Approval?.status,
+                      isAlreadyApproved ? "APPROVED" : "RECOMMENDED",
+                    ),
                   },
                   postL7Hist
                     ? (() => {
@@ -10224,18 +10340,13 @@ export function DsaProfilePage({ id }: { id: string }) {
                         roleBadge: "Maker",
                         name: "Maker Intake & Verification",
                         role: "Branch Maker",
-                        status:
-                          l1Approval?.status ||
-                          (workflowLevelInfo.currentLevel > 1
-                            ? "SUBMITTED"
-                            : workflowLevelInfo.currentLevel === 1
-                              ? "ACTIVE"
-                              : "PENDING"),
-                        remarks:
-                          makerRemarks ||
-                          (workflowLevelInfo.currentLevel > 1
-                            ? "Maker verification completed and forwarded to Checker"
-                            : ""),
+                        status: resolveStageStatus(
+                          1,
+                          "LEVEL_1_MAKER",
+                          l1Approval?.status,
+                          "SUBMITTED",
+                        ),
+                        remarks: makerRemarks,
                         actionedAt: l1Approval?.actioned_at,
                       },
                       {
@@ -10243,13 +10354,12 @@ export function DsaProfilePage({ id }: { id: string }) {
                         roleBadge: "Checker",
                         name: "Checker Due Diligence",
                         role: "Branch / Sub-Region Checker",
-                        status:
-                          l2Approval?.status ||
-                          (workflowLevelInfo.currentLevel > 2
-                            ? "SUBMITTED"
-                            : workflowLevelInfo.currentLevel === 2
-                              ? "ACTIVE"
-                              : "PENDING"),
+                        status: resolveStageStatus(
+                          2,
+                          "LEVEL_2_CHECKER",
+                          l2Approval?.status,
+                          "SUBMITTED",
+                        ),
                         remarks: checkerRemarks,
                         actionedAt: l2Approval?.actioned_at,
                       },
@@ -10258,18 +10368,13 @@ export function DsaProfilePage({ id }: { id: string }) {
                         roleBadge: "Sub-Region Head",
                         name: "Sub-Region Head Review",
                         role: "Sub-Region Head",
-                        status:
-                          l3Approval?.status ||
-                          (workflowLevelInfo.currentLevel > 3
-                            ? "RECOMMENDED"
-                            : workflowLevelInfo.currentLevel === 3
-                              ? "ACTIVE"
-                              : "PENDING"),
-                        remarks:
-                          l3Remarks ||
-                          (workflowLevelInfo.currentLevel > 3
-                            ? "Recommended by Sub-Region Head"
-                            : ""),
+                        status: resolveStageStatus(
+                          3,
+                          "LEVEL_3_SUB_REGION_HEAD",
+                          l3Approval?.status,
+                          "RECOMMENDED",
+                        ),
+                        remarks: l3Remarks,
                         actionedAt: l3Approval?.actioned_at,
                       },
                       {
@@ -10277,22 +10382,13 @@ export function DsaProfilePage({ id }: { id: string }) {
                         roleBadge: "DGM",
                         name: "DGM Recommendation",
                         role: "DGM (Conditional)",
-                        status:
-                          l4Approval?.status ||
-                          (workflowLevelInfo.currentLevel > 4
-                            ? l4Approval?.status === "SKIPPED"
-                              ? "SKIPPED"
-                              : "RECOMMENDED"
-                            : workflowLevelInfo.currentLevel === 4
-                              ? "ACTIVE"
-                              : "PENDING"),
-                        remarks:
-                          l4Remarks ||
-                          (workflowLevelInfo.currentLevel > 4
-                            ? l4Approval?.status === "SKIPPED"
-                              ? "Bypassed per workflow rule (No DGM posted for branch)"
-                              : "Recommended by DGM"
-                            : ""),
+                        status: resolveStageStatus(
+                          4,
+                          "LEVEL_4_DGM",
+                          l4Approval?.status,
+                          "RECOMMENDED",
+                        ),
+                        remarks: l4Remarks,
                         actionedAt: l4Approval?.actioned_at,
                       },
                       {
@@ -10300,18 +10396,13 @@ export function DsaProfilePage({ id }: { id: string }) {
                         roleBadge: "Region Head",
                         name: "Region Head Review",
                         role: "Region Head",
-                        status:
-                          l5Approval?.status ||
-                          (workflowLevelInfo.currentLevel > 5
-                            ? "RECOMMENDED"
-                            : workflowLevelInfo.currentLevel === 5
-                              ? "ACTIVE"
-                              : "PENDING"),
-                        remarks:
-                          l5Remarks ||
-                          (workflowLevelInfo.currentLevel > 5
-                            ? "Recommended by Region Head"
-                            : ""),
+                        status: resolveStageStatus(
+                          5,
+                          "LEVEL_5_REGION_HEAD",
+                          l5Approval?.status,
+                          "RECOMMENDED",
+                        ),
+                        remarks: l5Remarks,
                         actionedAt: l5Approval?.actioned_at,
                       },
                       {
@@ -10319,18 +10410,13 @@ export function DsaProfilePage({ id }: { id: string }) {
                         roleBadge: "Credit Officer",
                         name: "HO Credit Appraisal",
                         role: "HO Credit Officer",
-                        status:
-                          l6Approval?.status ||
-                          (workflowLevelInfo.currentLevel > 6
-                            ? "RECOMMENDED"
-                            : workflowLevelInfo.currentLevel === 6
-                              ? "ACTIVE"
-                              : "PENDING"),
-                        remarks:
-                          l6Remarks ||
-                          (workflowLevelInfo.currentLevel > 6
-                            ? "Credit appraisal recommended for sanction"
-                            : ""),
+                        status: resolveStageStatus(
+                          6,
+                          "LEVEL_6_HO_CREDIT_OFFICER",
+                          l6Approval?.status,
+                          "RECOMMENDED",
+                        ),
+                        remarks: l6Remarks,
                         actionedAt: l6Approval?.actioned_at,
                       },
                       {
@@ -10338,18 +10424,13 @@ export function DsaProfilePage({ id }: { id: string }) {
                         roleBadge: "Credit Head",
                         name: "HO Credit Head Final Sanction",
                         role: "HO Credit Head",
-                        status:
-                          l7Approval?.status ||
-                          (workflowLevelInfo.isCompleted
-                            ? "APPROVED"
-                            : workflowLevelInfo.currentLevel === 7
-                              ? "ACTIVE"
-                              : "PENDING"),
-                        remarks:
-                          l7Remarks ||
-                          (workflowLevelInfo.isCompleted
-                            ? "Final Sanction granted. Application approved."
-                            : ""),
+                        status: resolveStageStatus(
+                          7,
+                          "LEVEL_7_HO_CREDIT_HEAD",
+                          l7Approval?.status,
+                          workflowLevelInfo.isCompleted ? "APPROVED" : "RECOMMENDED",
+                        ),
+                        remarks: l7Remarks,
                         actionedAt: l7Approval?.actioned_at,
                       },
                     ].map((step) => {

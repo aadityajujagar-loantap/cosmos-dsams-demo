@@ -238,13 +238,13 @@ export const DSA_WORK_BUCKETS: {
     value: "received",
     label: "Received",
     description:
-      "Applications routed to your stage that still need your decision.",
+      "Applications routed to your stage that still need your decision, plus any specifically assigned to you.",
   },
   {
     value: "in_process",
     label: "In Process",
     description:
-      "Applications sitting at your stage awaiting your approve, recommend or query action.",
+      "Applications currently assigned to you — you are the one processing them.",
   },
   {
     value: "rejected",

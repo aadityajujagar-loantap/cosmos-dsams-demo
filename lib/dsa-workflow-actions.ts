@@ -207,6 +207,221 @@ export function canShowCallBackAction(params: {
   return viewerLevel === prev;
 }
 
+/**
+ * Decide whether a workflow stage was BYPASSED, and return the wording to show.
+ *
+ * Returns `null` when the stage was genuinely actioned (or is still ahead /
+ * is the live stage) — the caller then resolves the real message.
+ *
+ * This is data-driven and level-agnostic, so it covers every role and any
+ * conditional step, not just the DGM:
+ *   1. A row explicitly marked SKIPPED (conditional step not applicable) is a
+ *      recorded outcome.
+ *   2. A stage with NO actioned row of its own, while the case has already
+ *      moved past it, was routed around — e.g. an L3 -> L5 re-allocation skips
+ *      L4, leaving L4's row PENDING. Reading `currentLevel > level` as
+ *      "that level recommended" is what rendered "Recommended by DGM".
+ *
+ * The DGM wording is only used when the row is genuinely SKIPPED by the
+ * DGM_POSTING condition; a jump over L4 gets the generic wording instead,
+ * because claiming "no DGM posted" there would be false.
+ */
+export function resolveStageBypass(params: {
+  approvals: unknown;
+  level: number;
+  stageCode: string;
+  currentLevel: number | null;
+}): string | null {
+  const { approvals, level, stageCode, currentLevel } = params;
+
+  const rows: any[] = Array.isArray(approvals)
+    ? (approvals as any[]).filter(
+        (a) =>
+          Number(a?.approval_level) === level || a?.stage_code === stageCode,
+      )
+    : [];
+
+  const DGM_BYPASS =
+    "Bypassed per workflow rule (No DGM posted for branch)";
+  const GENERIC_BYPASS =
+    "Skipped — case routed past this level without review";
+
+  const explicitlySkipped = rows.some(
+    (a) => String(a?.status ?? "").toUpperCase() === "SKIPPED",
+  );
+  if (explicitlySkipped) {
+    return level === 4 ? DGM_BYPASS : "Skipped per workflow rule";
+  }
+
+  // Any row this stage actually actioned? Then it was reviewed.
+  const actioned = rows.filter(
+    (a) =>
+      Boolean(a?.actioned_at) ||
+      (a?.status && String(a.status).toUpperCase() !== "PENDING"),
+  );
+  if (actioned.length > 0) return null;
+
+  // Nothing pending here and the case is already further along => routed past.
+  const cur = Number(currentLevel);
+  if (Number.isFinite(cur) && cur > level) return GENERIC_BYPASS;
+
+  return null;
+}
+
+/**
+ * Has this stage genuinely taken an action of its own?
+ *
+ * A stage only "acted" if it has an actioned, non-SKIPPED row. Levels the case
+ * has not reached yet (or is currently sitting at) have only a PENDING row, so
+ * they return false and must never be given a "<Role> recommended" default.
+ */
+export function stageActed(params: {
+  approvals: unknown;
+  level: number;
+  stageCode: string;
+}): boolean {
+  const { approvals, level, stageCode } = params;
+  const rows: any[] = Array.isArray(approvals)
+    ? (approvals as any[]).filter(
+        (a) =>
+          Number(a?.approval_level) === level || a?.stage_code === stageCode,
+      )
+    : [];
+
+  return rows.some(
+    (a) =>
+      (Boolean(a?.actioned_at) ||
+        (a?.status && String(a.status).toUpperCase() !== "PENDING")) &&
+      String(a?.status ?? "").toUpperCase() !== "SKIPPED",
+  );
+}
+
+/**
+ * Full display text for one stage, for the Decisions panel.
+ *
+ *   1. Bypassed (routed past)        -> bypass wording
+ *   2. Real recorded remarks        -> as entered by the authority
+ *   3. `defaultText`                -> ONLY when the stage actually acted
+ *   4. ""                           -> level not reached / currently live
+ *
+ * Step 3 is gated on an actioned row precisely so an upcoming stage cannot
+ * claim to have reviewed the case.
+ */
+export function resolveStageRemarksForDisplay(params: {
+  approvals: unknown;
+  level: number;
+  stageCode: string;
+  currentLevel: number | null;
+  statusReason?: string | null;
+  statusReasonAction?: string | null;
+  defaultText?: string;
+}): string {
+  const {
+    approvals,
+    level,
+    stageCode,
+    currentLevel,
+    statusReason = null,
+    statusReasonAction = null,
+    defaultText = "",
+  } = params;
+
+  const bypass = resolveStageBypass({
+    approvals,
+    level,
+    stageCode,
+    currentLevel,
+  });
+  if (bypass) return bypass;
+
+  return resolveStageRemarks({
+    approvals,
+    level,
+    stageCode,
+    statusReason,
+    statusReasonAction,
+    fallback: stageActed({ approvals, level, stageCode }) ? defaultText : "",
+  });
+}
+
+/**
+ * Resolve the real, recorded message for one workflow stage.
+ *
+ * The per-level UI must never invent a generic "Recommended by <role>" when
+ * the case was actually re-allocated, forwarded or called back — that generic
+ * text is what mislabelled a level-jumping hand-off (e.g. L3 -> L5 with no DGM
+ * posted).
+ *
+ * Resolution order:
+ *   1. Remarks on the stage's own newest actioned row.
+ *   2. Remarks on any earlier actioned row of that stage — a prior RE_ALLOCATE
+ *      reason is the meaningful text when the newest row is a bare placeholder.
+ *   3. `statusReason`, but ONLY when it describes THIS stage's own last action
+ *      (row status === statusReasonAction). This surfaces the real
+ *      "Re-allocated from X to Y (...)" / "Called back ..." message on the
+ *      correct stage, and prevents it leaking onto other stages.
+ *   4. `fallback` (the stage-specific generic default).
+ *
+ * A skipped stage keeps its own explicit "bypassed" wording — that is a real
+ * recorded outcome, so callers should short-circuit on SKIPPED before this.
+ */
+export function resolveStageRemarks(params: {
+  approvals: unknown;
+  level: number;
+  stageCode: string;
+  statusReason?: string | null;
+  statusReasonAction?: string | null;
+  fallback?: string;
+}): string {
+  const {
+    approvals,
+    level,
+    stageCode,
+    statusReason = null,
+    statusReasonAction = null,
+    fallback = "",
+  } = params;
+
+  const rows: any[] = Array.isArray(approvals)
+    ? (approvals as any[]).filter(
+        (a) =>
+          Number(a?.approval_level) === level || a?.stage_code === stageCode,
+      )
+    : [];
+
+  // Actioned rows only: a re-armed PENDING placeholder has no message.
+  const actioned = rows
+    .filter(
+      (a) =>
+        Boolean(a?.actioned_at) ||
+        (a?.status && String(a.status).toUpperCase() !== "PENDING"),
+    )
+    .sort((a, b) => {
+      const aT = a?.actioned_at ? new Date(a.actioned_at).getTime() : 0;
+      const bT = b?.actioned_at ? new Date(b.actioned_at).getTime() : 0;
+      if (aT !== bT) return bT - aT;
+      return Number(b?.id ?? 0) - Number(a?.id ?? 0);
+    });
+
+  const withRemarks = actioned.find(
+    (a) => String(a?.remarks ?? "").trim() !== "",
+  );
+  if (withRemarks) return String(withRemarks.remarks).trim();
+
+  const latest = actioned[0];
+  const reason = String(statusReason ?? "").trim();
+  if (
+    latest &&
+    reason &&
+    String(latest?.status ?? "").toUpperCase() ===
+      String(statusReasonAction ?? "").toUpperCase()
+  ) {
+    return reason;
+  }
+
+  return fallback;
+}
+
 // ---------------------------------------------------------------------------
 // Self-check mirroring the backend matrix. Run with:
 //   DSA_WORKFLOW_ACTIONS_CHECK=1 node <compiled>
@@ -247,6 +462,265 @@ if (
   const raOk = JSON.stringify(ra) === JSON.stringify([false, false, true, true, true, false, false]);
   if (!raOk) failed++;
   console.log(`${raOk ? "PASS" : "FAIL"}  RE_ALLOCATE levels -> [${ra.join(", ")}]`);
+
+  // ---- resolveStageRemarks: real message must beat the generic default ----
+  const stageCases: [string, string][] = [
+    [
+      "L3 RE_ALLOCATE keeps the re-allocation reason",
+      resolveStageRemarks({
+        approvals: [{ id: 1, approval_level: 3, status: "REALLOCATED", remarks: "Re-allocating to Region Head for expedited approval." }],
+        level: 3,
+        stageCode: "LEVEL_3_SUB_REGION_HEAD",
+        fallback: "Recommended by Sub-Region Head",
+      }),
+    ],
+    [
+      "L4 CALL_BACK (remarks null) falls back to status_reason",
+      resolveStageRemarks({
+        approvals: [{ id: 2, approval_level: 4, status: "CALLED_BACK", remarks: null }],
+        level: 4,
+        stageCode: "LEVEL_4_DGM",
+        statusReason: "Called back to DGM for clarification.",
+        statusReasonAction: "CALLED_BACK",
+        fallback: "Recommended by DGM",
+      }),
+    ],
+    [
+      "L4 RE_ALLOCATED with null remarks falls back to status_reason",
+      resolveStageRemarks({
+        approvals: [{ id: 3, approval_level: 4, status: "REALLOCATED", remarks: null }],
+        level: 4,
+        stageCode: "LEVEL_4_DGM",
+        statusReason: "Re-allocated from [DGM] to [Region Head] (Anil)",
+        statusReasonAction: "REALLOCATED",
+        fallback: "Recommended by DGM",
+      }),
+    ],
+    [
+      "PENDING placeholder never wins over an earlier RE_ALLOCATE reason",
+      resolveStageRemarks({
+        approvals: [
+          { id: 4, approval_level: 5, status: "REALLOCATED", remarks: "Re-allocating onward.", actioned_at: "2026-01-01T10:00:00Z" },
+          { id: 9, approval_level: 5, status: "PENDING", remarks: null, actioned_at: null },
+        ],
+        level: 5,
+        stageCode: "LEVEL_5_REGION_HEAD",
+        fallback: "Recommended by Region Head",
+      }),
+    ],
+    [
+      "status_reason must NOT leak onto a stage that did not cause it",
+      resolveStageRemarks({
+        approvals: [{ id: 5, approval_level: 3, status: "RECOMMENDED", remarks: null }],
+        level: 3,
+        stageCode: "LEVEL_3_SUB_REGION_HEAD",
+        statusReason: "Re-allocated from [DGM] to [Region Head] (Anil)",
+        statusReasonAction: "REALLOCATED",
+        fallback: "Recommended by Sub-Region Head",
+      }),
+    ],
+    [
+      "plain RECOMMEND with no remarks still uses the generic default",
+      resolveStageRemarks({
+        approvals: [{ id: 6, approval_level: 6, status: "RECOMMENDED", remarks: null }],
+        level: 6,
+        stageCode: "LEVEL_6_HO_CREDIT_OFFICER",
+        fallback: "Credit appraisal recommended for sanction",
+      }),
+    ],
+    [
+      "L7 APPROVED remark wins over the sanction default",
+      resolveStageRemarks({
+        approvals: [{ id: 7, approval_level: 7, status: "APPROVED", remarks: "Sanctioned as per terms discussed." }],
+        level: 7,
+        stageCode: "LEVEL_7_HO_CREDIT_HEAD",
+        fallback: "Final Sanction & Approval granted by HO Credit Head",
+      }),
+    ],
+  ];
+
+  const expectedByCase: Record<string, string> = {
+    "L3 RE_ALLOCATE keeps the re-allocation reason":
+      "Re-allocating to Region Head for expedited approval.",
+    "L4 CALL_BACK (remarks null) falls back to status_reason":
+      "Called back to DGM for clarification.",
+    "L4 RE_ALLOCATED with null remarks falls back to status_reason":
+      "Re-allocated from [DGM] to [Region Head] (Anil)",
+    "PENDING placeholder never wins over an earlier RE_ALLOCATE reason":
+      "Re-allocating onward.",
+    "status_reason must NOT leak onto a stage that did not cause it":
+      "Recommended by Sub-Region Head",
+    "plain RECOMMEND with no remarks still uses the generic default":
+      "Credit appraisal recommended for sanction",
+    "L7 APPROVED remark wins over the sanction default":
+      "Sanctioned as per terms discussed.",
+  };
+
+  for (const [name, got] of stageCases) {
+    const want = expectedByCase[name];
+    const ok = got === want && String(got).trim() !== "";
+    if (!ok) failed++;
+    console.log(
+      `${ok ? "PASS" : "FAIL"}  ${name} -> "${got}"${ok ? "" : ` (expected "${want}")`}`,
+    );
+  }
+
+  // ---- resolveStageBypass: a routed-past stage must never read as reviewed ----
+  const L3_5_JUMP = [
+    { id: 1, approval_level: 1, status: "RECOMMENDED", remarks: "L1 done" },
+    { id: 2, approval_level: 2, status: "RECOMMENDED", remarks: "L2 done" },
+    { id: 3, approval_level: 3, status: "REALLOCATED", remarks: "Jumping L3 -> L5." },
+    // L4 was NEVER actioned and stays PENDING after the jump — this is the row
+    // that used to render "Recommended by DGM".
+    { id: 4, approval_level: 4, status: "PENDING", remarks: null },
+    { id: 5, approval_level: 5, status: "PENDING", remarks: null },
+  ];
+
+  const bypassCases: [string, string | null][] = [
+    [
+      "L3->L5 jump: L4 reads as routed past, not recommended",
+      resolveStageBypass({
+        approvals: L3_5_JUMP,
+        level: 4,
+        stageCode: "LEVEL_4_DGM",
+        currentLevel: 5,
+      }),
+    ],
+    [
+      "L3->L5 jump: the level that acted (L3) is NOT bypassed",
+      resolveStageBypass({
+        approvals: L3_5_JUMP,
+        level: 3,
+        stageCode: "LEVEL_3_SUB_REGION_HEAD",
+        currentLevel: 5,
+      }),
+    ],
+    [
+      "L3->L5 jump: the live level (L5) is NOT bypassed",
+      resolveStageBypass({
+        approvals: L3_5_JUMP,
+        level: 5,
+        stageCode: "LEVEL_5_REGION_HEAD",
+        currentLevel: 5,
+      }),
+    ],
+    [
+      "genuinely SKIPPED L4 keeps the DGM wording",
+      resolveStageBypass({
+        approvals: [{ id: 9, approval_level: 4, status: "SKIPPED", remarks: null }],
+        level: 4,
+        stageCode: "LEVEL_4_DGM",
+        currentLevel: 5,
+      }),
+    ],
+    [
+      "a stage that DID act is never bypassed, even when passed",
+      resolveStageBypass({
+        approvals: [{ id: 8, approval_level: 4, status: "RECOMMENDED", remarks: "DGM approved" }],
+        level: 4,
+        stageCode: "LEVEL_4_DGM",
+        currentLevel: 6,
+      }),
+    ],
+    [
+      "a REJECTED stage is never bypassed",
+      resolveStageBypass({
+        approvals: [{ id: 7, approval_level: 4, status: "REJECTED", remarks: "no" }],
+        level: 4,
+        stageCode: "LEVEL_4_DGM",
+        currentLevel: 4,
+      }),
+    ],
+    [
+      "levels still ahead of the case are never bypassed",
+      resolveStageBypass({
+        approvals: [{ id: 6, approval_level: 6, status: "PENDING", remarks: null }],
+        level: 6,
+        stageCode: "LEVEL_6_HO_CREDIT_OFFICER",
+        currentLevel: 3,
+      }),
+    ],
+  ];
+
+  const bypassExpected: (string | null)[] = [
+    "Skipped — case routed past this level without review",
+    null,
+    null,
+    "Bypassed per workflow rule (No DGM posted for branch)",
+    null,
+    null,
+    null,
+  ];
+
+  bypassCases.forEach(([name, got], i) => {
+    const want = bypassExpected[i];
+    const ok = got === want;
+    if (!ok) failed++;
+    console.log(
+      `${ok ? "PASS" : "FAIL"}  ${name} -> ${got === null ? "null" : `"${got}"`}${ok ? "" : ` (expected ${want === null ? "null" : `"${want}"`})`}`,
+    );
+  });
+
+  // ---- resolveStageRemarksForDisplay: defaults only for stages that ACTED ----
+  // Mirrors the reported bug: case at L5 after an L3 -> L5 re-allocation.
+  // L4 routed past (skipped), L5 live, L6/L7 not reached. Only L3 acted.
+  const PANEL_ROWS = [
+    { id: 1, approval_level: 1, status: "RECOMMENDED", remarks: "L1 done" },
+    { id: 2, approval_level: 2, status: "RECOMMENDED", remarks: "L2 done" },
+    { id: 3, approval_level: 3, status: "REALLOCATED", remarks: "Jumping L3 -> L5." },
+    { id: 4, approval_level: 4, status: "PENDING", remarks: null },
+    { id: 5, approval_level: 5, status: "PENDING", remarks: null },
+    { id: 6, approval_level: 6, status: "PENDING", remarks: null },
+    { id: 7, approval_level: 7, status: "PENDING", remarks: null },
+  ];
+
+  const panel = (level: number, code: string, def: string) =>
+    resolveStageRemarksForDisplay({
+      approvals: PANEL_ROWS,
+      level,
+      stageCode: code,
+      currentLevel: 5,
+      statusReason: "Re-allocated from [Sub-Region Head] to [Region Head] (Anil)",
+      statusReasonAction: "REALLOCATED",
+      defaultText: def,
+    });
+
+  const panelCases: [string, string][] = [
+    ["L4 routed past shows the skipped wording", panel(4, "LEVEL_4_DGM", "Recommended by DGM")],
+    ["L5 live level shows NO default", panel(5, "LEVEL_5_REGION_HEAD", "Recommended by Region Head")],
+    ["L6 not reached shows NO default", panel(6, "LEVEL_6_HO_CREDIT_OFFICER", "Credit appraisal recommended for sanction")],
+    ["L7 not reached shows NO default", panel(7, "LEVEL_7_HO_CREDIT_HEAD", "Final Sanction & Approval granted by HO Credit Head")],
+    ["L3 keeps the real re-allocation reason", panel(3, "LEVEL_3_SUB_REGION_HEAD", "Recommended by Sub-Region Head")],
+  ];
+
+  const panelExpected = [
+    "Skipped — case routed past this level without review",
+    "",
+    "",
+    "",
+    "Jumping L3 -> L5.",
+  ];
+
+  panelCases.forEach(([name, got], i) => {
+    const want = panelExpected[i];
+    const ok = got === want;
+    if (!ok) failed++;
+    console.log(
+      `${ok ? "PASS" : "FAIL"}  ${name} -> ${got === "" ? "(empty)" : `"${got}"`}${ok ? "" : ` (expected ${want === "" ? "(empty)" : `"${want}"`})`}`,
+    );
+  });
+
+  // A stage that DID act but recorded no remarks still gets its default.
+  const actedNoRemarks = resolveStageRemarksForDisplay({
+    approvals: [{ id: 20, approval_level: 6, status: "RECOMMENDED", remarks: null }],
+    level: 6,
+    stageCode: "LEVEL_6_HO_CREDIT_OFFICER",
+    currentLevel: 7,
+    defaultText: "Credit appraisal recommended for sanction",
+  });
+  const actedOk = actedNoRemarks === "Credit appraisal recommended for sanction";
+  if (!actedOk) failed++;
+  console.log(`${actedOk ? "PASS" : "FAIL"}  acted stage with no remarks keeps its default -> "${actedNoRemarks}"`);
 
   // N -> N-1 rule, walked through the walkthrough's own scenarios.
   // `prev` is resolvePreviousActorLevel(approvals, level) for each case.
