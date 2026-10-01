@@ -6,7 +6,9 @@
     "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "bundle:offline": "node scripts/make-offline-bundle.mjs",
+    "install:offline": "npm ci --offline --cache ./.npm-offline-cache"
   },
   "dependencies": {
     "clsx": "^2.1.1",
