@@ -190,14 +190,15 @@ export function DsaUploadSignedAgreementScreen({ token }: DsaUploadSignedAgreeme
       {/* Top Header */}
       <header className="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-50">
         <div className="flex items-center gap-3">
-          <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-white/10 p-1 border border-white/10 shadow-inner">
+          <div className="relative shrink-0 rounded-lg overflow-hidden bg-white/95 px-2.5 py-1.5 border border-white/10 shadow-inner">
             <Image
-              src={withBasePath("/images/bank-logo.png")}
+              src={withBasePath("/logo-dsasm-cosmos.png")}
               alt="Cosmos Bank Logo"
-              width={36}
-              height={36}
-              className="object-contain"
+              width={708}
+              height={118}
+              className="h-6 w-auto"
               priority
+              unoptimized
             />
           </div>
           <div>

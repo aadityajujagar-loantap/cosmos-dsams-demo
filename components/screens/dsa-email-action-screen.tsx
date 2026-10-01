@@ -134,10 +134,10 @@ export function DsaEmailActionScreen({ token }: DsaEmailActionScreenProps) {
         <div className="flex items-center gap-3">
           <div className="bg-white p-2 rounded-xl shadow-md border border-slate-700/40">
             <Image
-              src={withBasePath("/cosmos-logo.png")}
+              src={withBasePath("/logo-dsasm-cosmos.png")}
               alt="Cosmos Bank"
-              width={120}
-              height={32}
+              width={708}
+              height={118}
               className="h-7 w-auto object-contain"
               priority
             />
