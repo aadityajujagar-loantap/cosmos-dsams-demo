@@ -27,6 +27,7 @@ import { useMockStore } from "@/lib/store";
 import { withBasePath } from "@/lib/base-path";
 import type { MockStore, Notification } from "@/lib/types";
 import { cn, formatDate, initials } from "@/lib/utils";
+import { isRoleAllowedOnPortal } from "@/lib/portal";
 
 interface NavItem {
   href: string;
@@ -191,14 +192,28 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const mounted = useIsClient();
 
+  // Branch portal boundary (web1-agent = DSA only, web2-branch = bank staff only).
+  // Runs on mount too, so a stale localStorage session from the other branch cannot
+  // keep rendering the wrong portal. logout() clears the token, so the unauthenticated
+  // branch below then sends them to /login as well.
   useEffect(() => {
-    if (mounted && !currentUser) {
+    if (!mounted) return;
+
+    if (!currentUser) {
       router.push("/login");
+      return;
     }
-    if (mounted && currentUser && !isPathAllowedForRole(currentUser.role, pathname)) {
+
+    if (!isRoleAllowedOnPortal(currentUser.role)) {
+      logout();
+      router.replace("/login");
+      return;
+    }
+
+    if (!isPathAllowedForRole(currentUser.role, pathname)) {
       router.replace(defaultPathForRole(currentUser.role));
     }
-  }, [currentUser, pathname, router, mounted]);
+  }, [currentUser, pathname, router, mounted, logout]);
 
   const readNotificationIds = useMemo(() => {
     if (readNotificationsVersion < 0) return [];
