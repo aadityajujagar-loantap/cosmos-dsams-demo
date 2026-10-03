@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/toast";
 import { useMockStore } from "@/lib/store";
 import { withBasePath } from "@/lib/base-path";
 import { authApi } from "@/apis/auth";
+import { isAgentPortal } from "@/lib/portal";
 
 const OTP_LENGTH = 6;
 const EMPTY_OTP = Array.from({ length: OTP_LENGTH }, () => "");
@@ -39,7 +40,9 @@ export default function LoginPage() {
   const [otpRefId, setOtpRefId] = useState("");
   const [mobileHint, setMobileHint] = useState("");
   const [otpDigits, setOtpDigits] = useState<string[]>(EMPTY_OTP);
-  const [loginPortal, setLoginPortal] = useState<"bank" | "dsa">("bank");
+  // Derived from the committed build-time portal flag, never user-switchable:
+  // web1-agent is DSA-only, web2-branch is bank-staff-only. Route stays /login.
+  const loginPortal: "bank" | "dsa" = isAgentPortal ? "dsa" : "bank";
   const [error, setError] = useState("");
   const [verifying, setVerifying] = useState(false);
 
@@ -74,11 +77,14 @@ export default function LoginPage() {
     }
   }, []);
 
+  // The DSA portal has no captcha step, so never fetch or poll one there.
   useEffect(() => {
+    if (isAgentPortal) return;
     refreshCaptcha();
   }, [refreshCaptcha]);
 
   useEffect(() => {
+    if (isAgentPortal) return;
     const intervalId = window.setInterval(refreshCaptcha, 60_000);
     return () => window.clearInterval(intervalId);
   }, [refreshCaptcha]);
@@ -359,39 +365,7 @@ export default function LoginPage() {
 
       <div className="flex h-full w-full items-center justify-center overflow-hidden bg-white p-4 sm:p-6 lg:w-1/2 xl:p-8">
         <div className="w-full max-w-md space-y-4">
-          {/* Portal Switcher */}
-          <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 border border-slate-200 text-xs font-bold">
-            <button
-              type="button"
-              onClick={() => {
-                setLoginPortal("bank");
-                setError("");
-                setStep("credentials");
-              }}
-              className={`h-9 rounded-lg transition ${
-                loginPortal === "bank"
-                  ? "bg-white text-blue-900 shadow-sm font-extrabold"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              Bank Staff Login
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setLoginPortal("dsa");
-                setError("");
-                setStep("credentials");
-              }}
-              className={`h-9 rounded-lg transition ${
-                loginPortal === "dsa"
-                  ? "bg-white text-blue-900 shadow-sm font-extrabold"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              DSA Partner Portal
-            </button>
-          </div>
+          {/* No portal switcher: the active portal is fixed per branch in lib/portal.ts. */}
 
           <div className="space-y-1.5 text-center lg:text-left">
             <h2 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
