@@ -27,7 +27,7 @@ import { useMockStore } from "@/lib/store";
 import { withBasePath } from "@/lib/base-path";
 import type { MockStore, Notification } from "@/lib/types";
 import { cn, formatDate, initials } from "@/lib/utils";
-import { isRoleAllowedOnPortal } from "@/lib/portal";
+import { isRoleAllowedOnPortal, portalDeniedMessage } from "@/lib/portal";
 
 interface NavItem {
   href: string;
@@ -205,6 +205,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
 
     if (!isRoleAllowedOnPortal(currentUser.role)) {
+      // Stale session from the other branch. Surface the reason on /login instead of
+      // dropping the user at the sign-in screen with no explanation.
+      try {
+        sessionStorage.setItem("auth_portal_denied_notice", portalDeniedMessage());
+      } catch {
+        // Ignore storage errors
+      }
       logout();
       router.replace("/login");
       return;

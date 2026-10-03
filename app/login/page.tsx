@@ -10,7 +10,8 @@ import { useToast } from "@/components/ui/toast";
 import { useMockStore } from "@/lib/store";
 import { withBasePath } from "@/lib/base-path";
 import { authApi } from "@/apis/auth";
-import { isAgentPortal } from "@/lib/portal";
+import { isAgentPortal, portalDeniedMessage } from "@/lib/portal";
+import type { AuthSession } from "@/types/auth";
 
 const OTP_LENGTH = 6;
 const EMPTY_OTP = Array.from({ length: OTP_LENGTH }, () => "");
@@ -54,6 +55,16 @@ export default function LoginPage() {
           sessionStorage.removeItem("auth_expired_notice");
           setError(notice);
         }
+        const denied = sessionStorage.getItem("auth_portal_denied_notice");
+        if (denied) {
+          sessionStorage.removeItem("auth_portal_denied_notice");
+          setError(denied);
+          toast({
+            description: denied,
+            title: "Unauthorized",
+            variant: "warning",
+          });
+        }
       } catch {
         // Ignore storage errors
       }
@@ -77,14 +88,13 @@ export default function LoginPage() {
     }
   }, []);
 
-  // The DSA portal has no captcha step, so never fetch or poll one there.
+  // Both portals use CAPTCHA: the backend verifies it on /auth/login and /auth/dsa-login,
+  // so the agent portal must fetch and submit one too.
   useEffect(() => {
-    if (isAgentPortal) return;
     refreshCaptcha();
   }, [refreshCaptcha]);
 
   useEffect(() => {
-    if (isAgentPortal) return;
     const intervalId = window.setInterval(refreshCaptcha, 60_000);
     return () => window.clearInterval(intervalId);
   }, [refreshCaptcha]);
@@ -100,6 +110,23 @@ export default function LoginPage() {
     window.requestAnimationFrame(() => otpRefs.current[0]?.focus());
   }, [step]);
 
+  // Single funnel for both login paths: refuses a wrong-portal session before it is
+  // persisted, and reports it as an unauthorized error instead of letting the shell
+  // guard silently log the user out after showing a success toast.
+  const startAllowedSession = async (session: AuthSession) => {
+    if (login(session)) return true;
+
+    // The backend already consumed the CAPTCHA during authentication, so a new one is
+    // required before retrying. refreshCaptcha() clears `error` on success, so the
+    // unauthorized message must be set afterwards or it would be wiped.
+    await refreshCaptcha();
+    setStep("credentials");
+    setError(portalDeniedMessage());
+    setPassword("");
+    setOtpDigits([...EMPTY_OTP]);
+    return false;
+  };
+
   const resetOtp = () => {
     setOtpDigits([...EMPTY_OTP]);
     window.requestAnimationFrame(() => otpRefs.current[0]?.focus());
@@ -107,8 +134,8 @@ export default function LoginPage() {
 
   const handleDsaSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!identifier.trim() || !password) {
-      const msg = "Email and password are required for DSA Partner login.";
+    if (!identifier.trim() || !password || !captcha.trim()) {
+      const msg = "Email, password and CAPTCHA are required for DSA Partner login.";
       setError(msg);
       toast({
         title: "Validation Error",
@@ -123,14 +150,47 @@ export default function LoginPage() {
       const response = await authApi.dsaLogin({
         email: identifier.trim(),
         password,
+        captcha_key: captchaKey,
+        captcha_value: captcha,
       });
 
       if (response && response.token) {
-        login({
+        // Role must come from server-attested facts, never from guessing on the email or
+        // ticket pattern:
+        //   - `dsa` present -> onboarded DSA. The backend only sets it after passing the
+        //     DsaUserMapping + ACTIVE gate, so it is the authority on DSA-ness. An onboarded
+        //     DSA holds no Spatie role (only role_in_dsa on its mapping).
+        //   - `dsa` absent  -> not a DSA partner, so fall back to the user's real roles.
+        //     Bank staff carry Spatie roles, so a staff account that somehow reached this
+        //     endpoint resolves to a bank role and the portal gate refuses it.
+        const isDsaPartner = Boolean(response.dsa);
+        const roles = isDsaPartner
+          ? [{ id: 0, name: "DSA Partner", permissions: [] }]
+          : (response.roles ?? []);
+
+        if (!isDsaPartner && roles.length === 0) {
+          // Refresh first: refreshCaptcha() clears `error` on success.
+          await refreshCaptcha();
+          setError(
+            "Unable to determine your account type. Contact your administrator.",
+          );
+          toast({
+            title: "Login Failed",
+            description:
+              "Unable to determine your account type. Contact your administrator.",
+            variant: "warning",
+          });
+          return;
+        }
+
+        const session: AuthSession = {
           token: response.token,
-          user: response.user as any,
-          roles: [{ id: 99, name: "DSA Partner", permissions: [] }],
-        });
+          user: response.user as AuthSession["user"],
+          roles,
+        };
+
+        if (!(await startAllowedSession(session))) return;
+
         toast({
           title: "DSA Portal Login",
           description: `Welcome, ${response.user.name || "Partner"}!`,
@@ -286,7 +346,7 @@ export default function LoginPage() {
       });
 
       if (response.status === "0") {
-        login(response.respData);
+        if (!(await startAllowedSession(response.respData))) return;
       } else {
         setError(response.message);
         toast({
@@ -437,12 +497,11 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {loginPortal === "bank" ? (
-                <div className="space-y-1.5">
-                  <label htmlFor="captcha" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Captcha
-                  </label>
-                  <div className="grid grid-cols-[1fr_1fr_44px] gap-3">
+              <div className="space-y-1.5">
+                <label htmlFor="captcha" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Captcha
+                </label>
+                <div className="grid grid-cols-[1fr_1fr_44px] gap-3">
                     <div className="relative">
                       <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                       <input
@@ -482,11 +541,13 @@ export default function LoginPage() {
                     </button>
                   </div>
                 </div>
-              ) : (
-                <p className="text-[11px] text-slate-500 pt-1 leading-relaxed">
-                  Partner login checks operational status <span className="font-semibold text-emerald-700">ACTIVE</span> (assigned upon agreement verification).
-                </p>
-              )}
+                {loginPortal === "dsa" ? (
+                  <p className="text-[11px] text-slate-500 pt-1 leading-relaxed">
+                    Partner login checks operational status{" "}
+                    <span className="font-semibold text-emerald-700">ACTIVE</span> (assigned upon
+                    agreement verification).
+                  </p>
+                ) : null}
 
               <div className="flex gap-3 pt-1">
                 <button

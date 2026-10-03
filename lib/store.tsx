@@ -58,6 +58,7 @@ import {
 import { journeyPath } from "@/lib/journey-links";
 import { makeId, seededDsaId, titleCase } from "@/lib/utils";
 import { buildApplicationJourney } from "@/lib/product-journeys";
+import { isRoleAllowedOnPortal, portalDeniedMessage } from "@/lib/portal";
 
 interface StoreContextValue {
   createItem: <K extends CollectionName>(collection: K, item: EntityMap[K]) => void;
@@ -72,7 +73,8 @@ interface StoreContextValue {
   ) => void;
   currentUser: DemoSessionUser | null;
   setCurrentUser: (user: DemoSessionUser | null) => void;
-  login: (session: AuthSession) => void;
+  /** Returns false when the session was refused by this build's portal boundary. */
+  login: (session: AuthSession) => boolean;
   logout: () => void;
   hasPermission: (permission: string) => boolean;
   hasRole: (role: string | string[]) => boolean;
@@ -1613,6 +1615,17 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     (session: AuthSession) => {
       const user = sessionUserFromAuthSession(session);
 
+      // Portal boundary: refuse the session before it is persisted, so a wrong-portal
+      // login cannot show a success toast and then be silently dropped by the shell guard.
+      if (!isRoleAllowedOnPortal(user.role)) {
+        toast({
+          description: portalDeniedMessage(),
+          title: "Unauthorized",
+          variant: "warning",
+        });
+        return false;
+      }
+
       authService.startSession(session);
       const permNames = Array.from(
         new Set(session.roles.flatMap((r) => (r.permissions || []).map((p) => p.name)))
@@ -1627,6 +1640,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
         title: "Authentication successful",
         variant: "success",
       });
+      return true;
     },
     [toast],
   );
