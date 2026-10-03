@@ -1,7 +1,7 @@
 /**
  * Build-wide portal switch.
  *
- * web1-agent  -> "agent"  : DSA partners only. Email + password, no captcha, no OTP.
+ * web1-agent  -> "agent"  : DSA partners only. Email + password + captcha.
  * web2-branch -> "branch" : bank branch staff only. Username + password + captcha + OTP.
  *
  * Both branches keep the login route at /login; only this constant differs.
@@ -27,6 +27,17 @@ export const PORTAL: PortalMode = "branch";
 export const DSA_PORTAL_ROLES = ["DSA Partner", "DSA Agent"] as const;
 
 export const isAgentPortal = isPortalModeFor(PORTAL);
+/** Shown when valid credentials belong to the other portal. */
+export const PORTAL_DENIED_MESSAGE: Record<PortalMode, string> = {
+  agent:
+    "Unauthorized: this account is not a DSA partner. Use the bank staff portal to sign in with these credentials.",
+  branch:
+    "Unauthorized: DSA partners cannot sign in here. Use the DSA partner portal to sign in with these credentials.",
+};
+
+export function portalDeniedMessage(mode: PortalMode = PORTAL): string {
+  return PORTAL_DENIED_MESSAGE[mode];
+}
 
 /** The actual boundary rule, with the mode passed in so both branches can be exercised.
  * The agent portal admits only DSA roles; the branch portal admits everything else.

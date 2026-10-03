@@ -68,6 +68,8 @@ export const authApi = {
   dsaLogin: (payload: {
     email: string;
     password: string;
+    captcha_key: string;
+    captcha_value: string;
   }): Promise<{
     token: string;
     user: {
@@ -79,6 +81,14 @@ export const authApi = {
       is_active: boolean;
       created_at: string;
       updated_at: string;
+    };
+    roles?: { id: number; name: string; permissions: { id: number; name: string }[] }[];
+    /** Server-attested DSA partnership. Present only for onboarded, ACTIVE DSAs. */
+    dsa?: {
+      id: number;
+      code?: string | null;
+      role_in_dsa?: string | null;
+      operational_status?: string | null;
     };
   }> => {
     return request<any>("/auth/dsa-login", {
