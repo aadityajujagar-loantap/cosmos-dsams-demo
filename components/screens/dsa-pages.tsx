@@ -3356,7 +3356,12 @@ export function DsaProfilePage({ id }: { id: string }) {
   // kyc_verifications must never count as approval. PAN is approved only when the
   // Maker runs it from the button, which writes a dsa_verifications row.
   const isKycTypeVerified = useCallback(
-    (key: string, codePatterns: string[], includeKycTable = true) => {
+    (
+      key: string,
+      codePatterns: string[],
+      includeKycTable = true,
+      exactTypes?: string[],
+    ) => {
       // 1. In-session explicit failure takes absolute precedence
       if (failedKyc[key]) return false;
 
@@ -3415,7 +3420,11 @@ export function DsaProfilePage({ id }: { id: string }) {
           codePatterns.some((p) => t.includes(p.toUpperCase())) &&
           isSuccess &&
           !isFailed &&
-          isAfterCreation
+          isAfterCreation &&
+          // When exactTypes is supplied, the kyc_verifications.type must be one of them.
+          // PAN_TO_GSTIN contains "GST" as a substring, so without this a PAN-to-GSTIN
+          // row would satisfy the GST slot as well.
+          (!exactTypes || exactTypes.some((x) => t === x.toUpperCase()))
         );
       });
       if (inDbList) return true;
@@ -3549,13 +3558,6 @@ export function DsaProfilePage({ id }: { id: string }) {
     dsa?.operational_status !== "ACTIVE" &&
     dsa?.onboarding_status !== "REJECTED",
   );
-
-  // View Data button access:
-  // PAN  → Maker + Checker only
-  // All others (GST/Bank/Udyam/CIBIL/AML) → Checker only
-  // L3-L7 and any other role → hidden entirely
-  const canViewPanKycData = isMakerUser || isCheckerRole;
-  const canViewKycData    = isCheckerRole;
 
   const handleVerifyKyc = async (
     type: string,
@@ -4675,7 +4677,11 @@ export function DsaProfilePage({ id }: { id: string }) {
       isKycTypeVerified("pan", ["PAN"], false));
   const isGstChecked =
     !failedKyc.gst &&
-    (Boolean(verifiedKyc.gst) || isKycTypeVerified("gst", ["GST"]));
+    (Boolean(verifiedKyc.gst) ||
+      // exactTypes prevents PAN_TO_GSTIN from satisfying the GST slot: its type
+      // contains "GST", so a plain substring match made a PAN check appear to
+      // verify GST as well.
+      isKycTypeVerified("gst", ["GST"], true, ["GST_BASIC"]));
   const isBankChecked =
     !failedKyc.bank &&
     (Boolean(verifiedKyc.bank) || isKycTypeVerified("bank", ["BANK", "BAV"]));
@@ -4691,6 +4697,18 @@ export function DsaProfilePage({ id }: { id: string }) {
     !failedKyc.aml &&
     (Boolean(verifiedKyc.aml) ||
       isKycTypeVerified("aml", ["AML", "SANCTION", "COMPASS"]));
+
+  // View Data button access. Two independent gates, BOTH required:
+  //  1. Role: PAN -> Maker + Checker only; all others -> Checker only.
+  //  2. Status: that specific verification must already have run and succeeded.
+  // The role gate alone was not enough: a Checker saw "View Data" on KYC rows that
+  // had never been checked, and opening the modal fired a live gateway call.
+  const canViewPanKycData = (isMakerUser || isCheckerRole) && isPanChecked;
+  const canViewGstKycData = isCheckerRole && isGstChecked;
+  const canViewBankKycData = isCheckerRole && isBankChecked;
+  const canViewUdyamKycData = isCheckerRole && isUdyamChecked;
+  const canViewCibilKycData = isCheckerRole && isCibilChecked;
+  const canViewAmlKycData = isCheckerRole && isAmlChecked;
 
   const isAllKycVerified = Boolean(
     isPanChecked &&
@@ -7959,12 +7977,29 @@ const resolveStageStatus = (
                       }
                       return true;
                     });
-                    const getVerif = (code: string, includeKycTable = true) => {
+                    // allowedTypes narrows the kyc_verifications.type match to an exact set,
+                    // so a substring in another type (e.g. PAN_TO_GSTIN contains "GST")
+                    // cannot satisfy the requested slot.
+                    const getVerif = (
+                      code: string,
+                      includeKycTable = true,
+                      allowedTypes?: string[],
+                    ) => {
+                      const matchesType = (t: string) => {
+                        const upper = t.toUpperCase();
+                        if (!allowedTypes) return upper.includes(code.toUpperCase());
+                        return allowedTypes.some((a) => upper === a.toUpperCase());
+                      };
                       const fromDsa = ((dsa as any)?.verifications || []).find(
                         (v: any) => {
-                          const match = (v.verification_code || "")
-                            .toUpperCase()
-                            .includes(code.toUpperCase());
+                          const vc = String(v.verification_code || "").toUpperCase();
+                          // dsa_verifications codes are exact registry codes (GST, UDYAM,
+                          // PAN_ADVANCED_INDIVIDUAL, ...); match whole tokens only.
+                          const match = allowedTypes
+                            ? allowedTypes.some(
+                                (a) => vc === a.toUpperCase() || vc.includes(a.toUpperCase()),
+                              )
+                            : vc.includes(code.toUpperCase());
                           if (!match) return false;
                           if (dsa?.created_at && v.created_at) {
                             return (
@@ -7979,8 +8014,7 @@ const resolveStageStatus = (
 
                       const fromDb = kycVerificationsList.find((v: any) => {
                         const t = String(v.type || "").toUpperCase();
-                        const isMatch = t.includes(code.toUpperCase());
-                        if (!isMatch) return false;
+                        if (!matchesType(t)) return false;
                         if (dsa?.created_at && v.created_at) {
                           return (
                             new Date(v.created_at) >= new Date(dsa.created_at)
@@ -8001,7 +8035,11 @@ const resolveStageStatus = (
 
                     // PAN reads dsa_verifications only — onboarding KYC rows are not approval.
                     const panVerif = getVerif("PAN", false);
-                    const gstVerif = getVerif("GST");
+                    // PAN_TO_GSTIN must NOT satisfy the GST slot: its type string contains
+                    // "GST", so a substring match would let a PAN-to-GSTIN row satisfy both.
+                    const gstVerif =
+                      getVerif("GST", true, ["GST_BASIC"]) ??
+                      getVerif("GSTIN", true, ["GST_BASIC"]);
                     const bankVerif = getVerif("BANK") || getVerif("BAV");
                     const udyamVerif = getVerif("UDYAM");
                     const cibilVerif = getVerif("CIBIL");
@@ -8227,7 +8265,7 @@ const resolveStageStatus = (
                                       : "ScoreMe PAN-to-GSTIN"}
                             </span>
                             <div className="flex items-center gap-1.5">
-                              {canViewKycData && (
+                              {canViewGstKycData && (
                                 <Button
                                   size="sm"
                                   type="button"
@@ -8346,7 +8384,7 @@ const resolveStageStatus = (
                                     : "Bank Account Verification (BAV)"}
                             </span>
                             <div className="flex items-center gap-1.5">
-                              {canViewKycData && (
+                              {canViewBankKycData && (
                                 <Button
                                   size="sm"
                                   type="button"
@@ -8431,7 +8469,7 @@ const resolveStageStatus = (
                                     : "Ministry of MSME Portal"}
                             </span>
                             <div className="flex items-center gap-1.5">
-                              {canViewKycData && (
+                              {canViewUdyamKycData && (
                                 <Button
                                   size="sm"
                                   type="button"
@@ -8517,7 +8555,7 @@ const resolveStageStatus = (
                                     : "TransUnion CIBIL Gateway"}
                             </span>
                             <div className="flex items-center gap-1.5">
-                              {canViewKycData && (
+                              {canViewCibilKycData && (
                                 <Button
                                   size="sm"
                                   type="button"
@@ -8600,7 +8638,7 @@ const resolveStageStatus = (
                                     : "Compass AML Gateway"}
                             </span>
                             <div className="flex items-center gap-1.5">
-                              {canViewKycData && (
+                              {canViewAmlKycData && (
                                 <Button
                                   size="sm"
                                   type="button"
@@ -8724,9 +8762,7 @@ const resolveStageStatus = (
                                 <Check className="h-3.5 w-3.5" />
                                 {submittingCheckerReport
                                   ? "Submitting..."
-                                  : hasCheckerGeneratedReport
-                                    ? "Re-submit DD Report"
-                                    : "Submit DD Report"}
+                                  : "Submit DD Note"}
                               </Button>
                             </div>
                           </div>
