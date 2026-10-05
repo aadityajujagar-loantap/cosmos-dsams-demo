@@ -314,6 +314,19 @@ function CheckboxDropdown({
 
 const getDraftKey = (mode: string) => `cosmos_dsa_onboarding_v2_${mode}`;
 
+/** Completed years from an ISO (YYYY-MM-DD) DOB. Blank when DOB is missing/invalid. */
+export function ageFromIsoDob(iso: string): string {
+  if (!iso) return "";
+  const dob = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(dob.getTime())) return "";
+  const now = new Date();
+  let age = now.getFullYear() - dob.getFullYear();
+  const beforeBirthday = now.getMonth() - dob.getMonth() < 0 ||
+    (now.getMonth() === dob.getMonth() && now.getDate() < dob.getDate());
+  if (beforeBirthday) age -= 1;
+  return age >= 0 ? String(age) : "";
+}
+
 function maskAadhaar(val: string): string {
   if (!val) return "";
   const raw = val.replace(/[^0-9Xx]/g, "");
@@ -443,6 +456,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   const [displayDob, setDisplayDob] = useState<string>("");   // DD/MM/YYYY for display
   const [aadhaarNo, setAadhaarNo] = useState<string>("");
   const [isAadhaarFocused, setIsAadhaarFocused] = useState<boolean>(false);
+  // Age is derived from DOB. Only kept as its own editable field when DOB is absent
+  // (e.g. PAN response returned no DOB), which is why it starts blank.
+  const [age, setAge] = useState<string>("");
   const [educationQualification, setEducationQualification] = useState<string>("");
   const [educationOptions, setEducationOptions] = useState<{ key: string; label: string }[]>(FALLBACK_EDUCATION_OPTIONS);
   const [loadingEducation, setLoadingEducation] = useState<boolean>(false);
@@ -782,7 +798,27 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     return stateOptions;
   }, [officeStateName, stateOptions]);
 
-  // Keep office address in sync when "Keep same as residential" toggle is active
+  // PAN autofill is authoritative for Aadhaar: once populated the field is locked so the
+  // masked value cannot be edited. If the PAN response carried no Aadhaar it stays blank
+  // and remains editable for manual entry.
+  const isAadhaarLocked = Boolean(aadhaarNo.trim());
+
+  // Age is shown read-only whenever it can be derived from DOB, and only becomes
+  // editable when DOB is blank. Derived value wins over any stored manual entry.
+  const derivedAge = ageFromIsoDob(dateOfBirth);
+  const resolvedAge = derivedAge || age;
+  const isAgeLocked = Boolean(resolvedAge);
+
+  // Mirror DOB into age. Clearing DOB leaves a manual age editable; the derived value
+  // always takes precedence so the two can never disagree.
+  useEffect(() => {
+    if (derivedAge) setAge(derivedAge);
+  }, [derivedAge]);
+
+  // Keep office address in sync when "Keep same as residential" toggle is active.
+  // Only copies residential -> office. It must never write while the toggle is off,
+  // otherwise editing the residential address would wipe what the user typed into the
+  // office fields. Clearing on untoggle is handled by the toggle's onClick.
   useEffect(() => {
     if (isOfficeSameAsResidence) {
       setOfficeAddress(address);
@@ -1740,13 +1776,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         if (detailsData.city) setCity(detailsData.city);
         if (detailsData.pinCode) setPincode(String(detailsData.pinCode).slice(0, 6));
 
-        // Office Address fallback if separate
-        if (!isOfficeSameAsResidence) {
-          if (!officeAddress && combinedAddress) setOfficeAddress(combinedAddress);
-          if (!officeStateName && detailsData.state) setOfficeStateName(detailsData.state);
-          if (!officeCity && detailsData.city) setOfficeCity(detailsData.city);
-          if (!officePincode && detailsData.pinCode) setOfficePincode(String(detailsData.pinCode).slice(0, 6));
-        }
+        // Office address is deliberately NOT auto-filled here. When "keep same as
+        // residential" is off the office fields must stay blank for manual entry;
+        // seeding them from the PAN response would look pre-filled and mask the toggle.
 
         toast({
           title: isEntity ? "Entity PAN Verified & Auto-Populated" : "PAN Verified & Auto-Populated",
@@ -2204,6 +2236,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       payload.date_of_birth = dateOfBirth;
       payload.education_qualification = educationQualification;
       payload.aadhaar_no = aadhaarNo.replace(/-/g, "").toUpperCase();
+      // AgePolicy reads Dsa.age in preference to date_of_birth, so send the resolved
+      // value (derived from DOB, or the manual entry when DOB is blank).
+      if (resolvedAge) payload.age = Number(resolvedAge);
     } else {
       payload.entity_name = entityName;
       payload.constitution = constitution;
@@ -3044,6 +3079,31 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     </div>
                     <div className="flex flex-col">
                       <div className="h-5 flex items-center">
+                        <Label htmlFor="age" className="text-sm font-bold text-slate-700 leading-none">Age (years)</Label>
+                      </div>
+                      <Input
+                        id="age"
+                        name="age"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        value={resolvedAge}
+                        readOnly={isAgeLocked}
+                        aria-readonly={isAgeLocked}
+                        title={
+                          isAgeLocked
+                            ? "Derived from Date of Birth and locked."
+                            : "Date of Birth is blank, so age can be entered manually."
+                        }
+                        onChange={(e) => setAge(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                        placeholder={isAgeLocked ? "" : "Enter age"}
+                        className={`mt-1.5 h-9 ${
+                          isAgeLocked ? "bg-slate-100 text-slate-600" : "bg-white"
+                        }`}
+                        maxLength={3}
+                      />
+                    </div>
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
                         <Label htmlFor="aadhaar_no" className="text-sm font-bold text-slate-700 leading-none">Aadhaar Number * (12 digits)</Label>
                       </div>
                       <Input
@@ -3056,7 +3116,15 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         value={isAadhaarFocused ? aadhaarNo : maskAadhaar(aadhaarNo)}
                         onFocus={() => setIsAadhaarFocused(true)}
                         onBlur={() => setIsAadhaarFocused(false)}
+                        readOnly={isAadhaarLocked}
+                        aria-readonly={isAadhaarLocked}
+                        title={
+                          isAadhaarLocked
+                            ? "Auto-populated from the PAN verification response and locked."
+                            : undefined
+                        }
                         onChange={(e) => {
+                          if (isAadhaarLocked) return;
                           const val = e.target.value;
                           const raw = val.replace(/[^0-9Xx]/g, "").slice(0, 12).toUpperCase();
                           if (raw.length > 8) {
@@ -3068,7 +3136,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           }
                         }}
                         placeholder="XXXX-XXXX-XXXX"
-                        className="mt-1.5 font-mono tracking-wider h-9 bg-white"
+                        className={`mt-1.5 font-mono tracking-wider h-9 ${
+                          isAadhaarLocked ? "bg-slate-100 text-slate-600" : "bg-white"
+                        }`}
                         maxLength={14}
                         required
                       />
@@ -3717,6 +3787,13 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                             setOfficeStateName(stateName);
                             setOfficeCity(city);
                             setOfficePincode(pincode);
+                          } else {
+                            // Clear immediately so the fields read as blank the moment the
+                            // toggle flips, without waiting for the sync effect above.
+                            setOfficeAddress("");
+                            setOfficeStateName("");
+                            setOfficeCity("");
+                            setOfficePincode("");
                           }
                         }}
                         className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${

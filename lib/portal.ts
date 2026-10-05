@@ -21,7 +21,7 @@ export function isPortalModeFor(mode: PortalMode) {
   return mode === "agent";
 }
 
-export const PORTAL: PortalMode = "agent";
+export const PORTAL: PortalMode = "branch";
 
 /** Roles that belong to the DSA (external partner) portal. */
 export const DSA_PORTAL_ROLES = ["DSA Partner", "DSA Agent"] as const;
