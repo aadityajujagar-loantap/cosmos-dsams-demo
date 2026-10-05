@@ -716,7 +716,7 @@ export function DsaVerifyEmailScreen({ token, type, applicationId }: DsaVerifyEm
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p>© 2026 The Cosmos Co-operative Bank Ltd. All rights reserved. Regulated by RBI.</p>
+          <p>© 2026 Cosmos Co-operative Bank Ltd. All rights reserved.</p>
           <div className="flex items-center gap-4 text-slate-400 text-[11px]">
             <span>Cosmos Security Services</span>
             <span>•</span>

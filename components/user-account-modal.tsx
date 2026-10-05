@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { KeyRound, LogOut, ShieldCheck, UserRound } from "lucide-react";
+import { LogOut } from "lucide-react";
 
 import { authApi } from "@/apis/auth";
-import { Badge, Button, Card, CardContent, Field, Input, Label, Modal } from "@/components/ui/primitives";
+import { Badge, Button, Modal } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { authService } from "@/services/authService";
 import type { Role, User } from "@/types/auth";
@@ -26,15 +26,16 @@ function roleNames(roles: Role[]) {
   return roles.map((role) => role.name).filter(Boolean);
 }
 
-function permissionNames(roles: Role[]) {
-  return Array.from(
-    new Set(roles.flatMap((role) => role.permissions?.map((permission) => permission.name) ?? [])),
-  ).sort();
-}
-
 function fieldValue(value: unknown) {
   if (value === null || value === undefined || value === "") return "-";
   return String(value);
+}
+
+function initials(name: string) {
+  const parts = name.split(" ").filter(Boolean);
+  if (!parts.length) return "U";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 }
 
 export function UserAccountModal({ fallbackUser, onClose, onSignOut, open }: UserAccountModalProps) {
@@ -80,117 +81,101 @@ export function UserAccountModal({ fallbackUser, onClose, onSignOut, open }: Use
   }, [open, toast]);
 
   const storedRoles = useMemo(() => authService.getRoles(), [open]);
-  const storedPermissions = useMemo(() => authService.getPermissions(), [open]);
   const resolvedRoles = backendRoles.length ? roleNames(backendRoles) : storedRoles;
-  const resolvedPermissions = backendRoles.length ? permissionNames(backendRoles) : storedPermissions;
   const user = backendUser;
+
+  const displayName = fieldValue(user?.name ?? fallbackUser.name);
+  const displayEmail = fieldValue(user?.email ?? fallbackUser.email);
+  const displayRole = resolvedRoles[0] || fallbackUser.role;
 
   return (
     <Modal
-      description="Backend session profile, role assignments, and effective permissions."
+      description="Active session and account details."
       onClose={onClose}
       open={open}
-      title="User account"
-      width="max-w-3xl"
+      title="User Profile"
+      width="max-w-md"
     >
       <div className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-[1fr_260px]">
-          <Card>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-3">
-                <span className="grid h-11 w-11 place-items-center rounded-md bg-slate-900 text-white">
-                  <UserRound className="h-5 w-5" />
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate text-base font-semibold text-slate-950">
-                    {fieldValue(user?.name ?? fallbackUser.name)}
-                  </p>
-                  <p className="truncate text-sm text-slate-500">
-                    {fieldValue(user?.email ?? fallbackUser.email)}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field>
-                  <Label>User ID</Label>
-                  <Input readOnly value={fieldValue(user?.id ?? fallbackUser.id)} />
-                </Field>
-                <Field>
-                  <Label>Ticket number</Label>
-                  <Input readOnly value={fieldValue(user?.ticket_no)} />
-                </Field>
-                <Field>
-                  <Label>Phone</Label>
-                  <Input readOnly value={fieldValue(user?.phone)} />
-                </Field>
-                <Field>
-                  <Label>Branch code</Label>
-                  <Input readOnly value={fieldValue(user?.branch_code ?? fallbackUser.code)} />
-                </Field>
-                <Field>
-                  <Label>Branch role</Label>
-                  <Input readOnly value={fieldValue(user?.branch_role_id)} />
-                </Field>
-                <Field>
-                  <Label>Zone code</Label>
-                  <Input readOnly value={fieldValue(user?.zone_code)} />
-                </Field>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="space-y-3">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-blue-600" />
-                <p className="text-sm font-semibold text-slate-950">Access</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {(resolvedRoles.length ? resolvedRoles : [fallbackUser.role]).map((role) => (
-                  <Badge key={role} tone="blue">
-                    {role}
-                  </Badge>
-                ))}
-              </div>
-              <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Token status</p>
-                <p className="mt-1 text-sm font-medium text-slate-900">
-                  {authService.getToken() ? "Bearer token active" : "No token found"}
-                </p>
-              </div>
-              {loading ? <p className="text-sm text-slate-500">Loading backend account...</p> : null}
-            </CardContent>
-          </Card>
+        {/* Profile Card Header */}
+        <div className="flex items-center gap-3.5 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-slate-900 text-sm font-bold text-white shadow-xs">
+            {initials(displayName)}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="truncate text-sm font-bold text-slate-900 leading-tight">
+                {displayName}
+              </h3>
+              <Badge tone="blue" className="text-[10px] h-5 font-bold uppercase shrink-0">
+                {displayRole}
+              </Badge>
+            </div>
+            <p className="truncate text-xs font-medium text-slate-500 mt-0.5">
+              {displayEmail}
+            </p>
+          </div>
         </div>
 
-        <Card>
-          <CardContent className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <KeyRound className="h-4 w-4 text-blue-600" />
-                <p className="text-sm font-semibold text-slate-950">Effective permissions</p>
-              </div>
-              <Badge>{resolvedPermissions.length} permissions</Badge>
-            </div>
-            {resolvedPermissions.length ? (
-              <div className="flex max-h-44 flex-wrap gap-2 overflow-auto rounded-md border border-slate-100 p-3">
-                {resolvedPermissions.map((permission) => (
-                  <Badge key={permission}>{permission}</Badge>
-                ))}
-              </div>
-            ) : (
-              <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-500">
-                No permissions were returned for this account.
-              </p>
-            )}
-          </CardContent>
-        </Card>
+        {/* Account Details Summary */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center justify-between">
+            <span>Assignment &amp; Scope</span>
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 normal-case">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              {authService.getToken() ? "Session Active" : "No Token"}
+            </span>
+          </div>
 
-        <div className="flex justify-end border-t border-slate-100 pt-3">
-          <Button onClick={onSignOut} type="button" variant="danger">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+            <div className="space-y-0.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">User ID</span>
+              <p className="font-mono font-bold text-slate-900">{fieldValue(user?.id ?? fallbackUser.id)}</p>
+            </div>
+            <div className="space-y-0.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ticket Number</span>
+              <p className="font-mono font-bold text-slate-900">{fieldValue(user?.ticket_no)}</p>
+            </div>
+            <div className="space-y-0.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Phone</span>
+              <p className="font-medium text-slate-800">{fieldValue(user?.phone)}</p>
+            </div>
+            <div className="space-y-0.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Branch Code</span>
+              <p className="font-mono font-bold text-slate-900">{fieldValue(user?.branch_code ?? fallbackUser.code)}</p>
+            </div>
+            <div className="space-y-0.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Branch Role</span>
+              <p className="font-medium text-slate-800">{fieldValue(user?.branch_role_id)}</p>
+            </div>
+            <div className="space-y-0.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Zone Code</span>
+              <p className="font-medium text-slate-800">{fieldValue(user?.zone_code)}</p>
+            </div>
+          </div>
+          {loading && (
+            <p className="mt-2 text-[11px] text-slate-400 italic">Syncing latest account data...</p>
+          )}
+        </div>
+
+        {/* Actions Footer */}
+        <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            className="text-xs font-semibold text-slate-600"
+          >
+            Close
+          </Button>
+          <Button
+            type="button"
+            onClick={onSignOut}
+            variant="danger"
+            className="gap-2 text-xs font-bold px-4 py-2 shadow-xs"
+          >
             <LogOut className="h-4 w-4" />
-            Sign out
+            Sign Out
           </Button>
         </div>
       </div>

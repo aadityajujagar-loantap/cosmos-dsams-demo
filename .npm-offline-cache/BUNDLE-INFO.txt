@@ -1,0 +1,7 @@
+Generated: 2026-10-01T10:49:04.967Z
+Package:   cosmos-dsa-demo@0.1.0
+Lockfile:  v3
+Tarballs:  471
+
+Install offline with:
+  npm run install:offline

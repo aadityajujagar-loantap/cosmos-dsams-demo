@@ -115,8 +115,8 @@ export function DsaUploadSignedAgreementScreen({ token }: DsaUploadSignedAgreeme
       alert("Please select a valid PDF document.");
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      alert("File size exceeds maximum limit of 2MB.");
+    if (file.size > 10 * 1024 * 1024) {
+      alert("File size exceeds maximum limit of 10MB.");
       return;
     }
     setSelectedFile(file);
@@ -190,19 +190,20 @@ export function DsaUploadSignedAgreementScreen({ token }: DsaUploadSignedAgreeme
       {/* Top Header */}
       <header className="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-50">
         <div className="flex items-center gap-3">
-          <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-white/10 p-1 border border-white/10 shadow-inner">
+          <div className="relative shrink-0 rounded-lg overflow-hidden bg-white/95 px-2.5 py-1.5 border border-white/10 shadow-inner">
             <Image
-              src={withBasePath("/images/bank-logo.png")}
+              src={withBasePath("/logo-dsasm-cosmos.png")}
               alt="Cosmos Bank Logo"
-              width={36}
-              height={36}
-              className="object-contain"
+              width={708}
+              height={118}
+              className="h-6 w-auto"
               priority
+              unoptimized
             />
           </div>
           <div>
             <h1 className="text-sm font-semibold tracking-tight text-white flex items-center gap-1.5">
-              THE COSMOS CO-OP. BANK LTD.
+              COSMOS CO-OP. BANK LTD.
               <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
                 DSA Agreement Execution
               </span>
@@ -277,7 +278,7 @@ export function DsaUploadSignedAgreementScreen({ token }: DsaUploadSignedAgreeme
                     Signed Agreement Uploaded Successfully!
                   </h2>
                   <p className="text-xs text-slate-300 max-w-lg mx-auto leading-relaxed">
-                    Thank you! Your signed Master Partnership Agreement document has been securely stored and submitted to The Cosmos Co-Operative Bank Ltd.
+                    Thank you! Your signed Master Partnership Agreement document has been securely stored and submitted to Cosmos Co-Operative Bank Ltd.
                   </p>
                 </div>
 
@@ -486,7 +487,7 @@ export function DsaUploadSignedAgreementScreen({ token }: DsaUploadSignedAgreeme
                     className="mt-0.5 rounded border-slate-700 text-emerald-600 focus:ring-emerald-500/20 bg-slate-900 w-4 h-4"
                   />
                   <div className="text-xs text-slate-300 leading-relaxed">
-                    <span className="font-semibold text-white">Declaration of Physical Execution:</span> I hereby confirm that this document represents the genuine, complete, and physically signed and stamped Master Partnership Agreement executed with The Cosmos Co-Operative Bank Ltd.
+                    <span className="font-semibold text-white">Declaration of Physical Execution:</span> I hereby confirm that this document represents the genuine, complete, and physically signed and stamped Master Partnership Agreement executed with Cosmos Co-Operative Bank Ltd.
                   </div>
                 </label>
 
@@ -514,7 +515,7 @@ export function DsaUploadSignedAgreementScreen({ token }: DsaUploadSignedAgreeme
 
       {/* Footer */}
       <footer className="border-t border-slate-800/80 bg-slate-950/60 px-6 py-4 text-center text-[11px] text-slate-500">
-        &copy; {new Date().getFullYear()} The Cosmos Co-operative Bank Ltd. All rights reserved. | DSAMS Digital Onboarding
+        &copy; {new Date().getFullYear()} Cosmos Co-operative Bank Ltd. All rights reserved. | DSAMS Digital Onboarding
       </footer>
     </div>
   );

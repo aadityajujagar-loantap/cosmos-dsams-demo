@@ -4,7 +4,10 @@ import type { Permission, Role, User, BranchRole } from "@/types/auth";
 import type { ActivityLog } from "@/types/activityLog";
 import type {
   Dsa,
+  DsaActivityHistory,
+  DsaCaseLockResult,
   DsaDocument,
+  DsaEligibleUsersResponse,
   StateOption,
   DistrictOption,
   BranchOption,
@@ -430,6 +433,8 @@ export const adminApi = {
     page?: number;
     sort_by?: string;
     sort_order?: string;
+    /** Task 22 — role-scoped work bucket. */
+    bucket?: "all" | "received" | "in_process" | "rejected" | "approved";
   }): Promise<BackendResponse<DsaListResponse>> => {
     return request<BackendResponse<DsaListResponse>>(`/v1/dsa${compactParams(params)}`, {
       method: "GET",
@@ -457,8 +462,39 @@ export const adminApi = {
   },
 
   // ── DSA Onboarding (V1 Multi-Step Architecture) ───────────────────────────
-  sendSelfOnboardingOtp: async (payload: { mobile: string; branch_id: number }): Promise<BackendResponse<{ mobile: string; reference_id: string; expires_at: string }>> => {
+  sendSelfOnboardingOtp: async (payload: {
+    mobile: string;
+    branch_id: number;
+    email?: string;
+    name?: string;
+  }): Promise<BackendResponse<{
+    mobile: string;
+    email?: string;
+    reference_id: string;
+    otp_sent?: boolean;
+    email_sent?: boolean;
+    expires_at?: string;
+    note?: string;
+    email_note?: string;
+  }>> => {
     return request<BackendResponse<any>>("/v1/dsa/self/send-otp", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  triggerEmailOtp: async (payload: {
+    email: string;
+    reference_id?: string;
+    mobile?: string;
+    name?: string;
+  }): Promise<BackendResponse<{
+    email: string;
+    reference_id: string;
+    email_sent: boolean;
+    email_note?: string;
+  }>> => {
+    return request<BackendResponse<any>>("/v1/dsa/self/trigger-email-otp", {
       method: "POST",
       body: JSON.stringify(payload),
     });
@@ -502,8 +538,8 @@ export const adminApi = {
     file: File,
     remarks?: string
   ): Promise<BackendResponse<any>> => {
-    if (file && file.size > 2 * 1024 * 1024) {
-      throw new Error("File size exceeds maximum allowed limit of 2MB.");
+    if (file && file.size > 10 * 1024 * 1024) {
+      throw new Error("File size exceeds maximum allowed limit of 10MB.");
     }
     const formData = new FormData();
     formData.append("visit_report_file", file);
@@ -529,12 +565,6 @@ export const adminApi = {
     return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/maker/submit`, {
       method: "POST",
       body: JSON.stringify(payload ?? {}),
-    });
-  },
-
-  getMakerDeviationReport: async (idOrCode: number | string): Promise<BackendResponse<any>> => {
-    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/maker/deviation-report`, {
-      method: "GET",
     });
   },
 
@@ -584,9 +614,40 @@ export const adminApi = {
     });
   },
 
+  generateCheckerDdReviewReport: async (
+    idOrCode: number | string,
+    payload?: {
+      observations?: string;
+      remarks?: string;
+      exception_remarks?: string;
+      recommendation?: string;
+      structured_data?: any;
+    }
+  ): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/checker/dd-review-report`, {
+      method: "POST",
+      body: JSON.stringify(payload ?? {}),
+    });
+  },
+
   getCheckerDdReviewReport: async (idOrCode: number | string, evaluationId?: string): Promise<BackendResponse<any>> => {
     const query = evaluationId ? `?evaluation_id=${evaluationId}` : "";
     return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/checker/dd-review-report${query}`, { method: "GET" });
+  },
+
+  getDdReviewReport: async (idOrCode: number | string): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/dd-review-report`, { method: "GET" });
+  },
+
+  getDdReviewReportPdf: async (idOrCode: number | string): Promise<BackendResponse<{
+    document_id: number;
+    document_type: string;
+    file_name: string;
+    file_path: string;
+    file_url: string;
+    size?: string;
+  }>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/dd-review-report/pdf`, { method: "GET" });
   },
 
   submitCheckerApplication: async (
@@ -621,12 +682,24 @@ export const adminApi = {
   updateWorkflowAction: async (
     idOrCode: number | string,
     payload: {
-      action: "RECOMMEND" | "APPROVE" | "REJECT" | "REVERT" | "QUERY" | "RESUBMIT";
+      action: "RECOMMEND" | "APPROVE" | "REJECT" | "REVERT" | "CALL_BACK" | "RE_ALLOCATE" | "FORWARD" | "QUERY" | "RESUBMIT";
       remarks?: string;
       query?: string;
+      target_user_id?: number;
+      confirmed?: boolean;
     }
   ): Promise<BackendResponse<any>> => {
     return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/update-workflow-action`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  raiseDsaQuery: async (
+    idOrCode: number | string,
+    payload: { remarks: string; query?: string }
+  ): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/query`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
@@ -824,8 +897,8 @@ export const adminApi = {
       uploaded_at: string;
     };
   }>> => {
-    if (payload.file && payload.file.size > 2 * 1024 * 1024) {
-      throw new Error("File size exceeds maximum allowed limit of 2MB.");
+    if (payload.file && payload.file.size > 10 * 1024 * 1024) {
+      throw new Error("File size exceeds maximum allowed limit of 10MB.");
     }
     if (payload.file) {
       const formData = new FormData();
@@ -927,6 +1000,33 @@ export const adminApi = {
     });
   },
 
+  approveSignedAgreement: async (
+    idOrCode: number | string,
+    remarks?: string
+  ): Promise<BackendResponse<{
+    success: boolean;
+    message: string;
+    dsa_id: number;
+    dsa_code: string;
+    agreement_status: string;
+    agreement_approved_at: string;
+    agreement_expires_at: string;
+    operational_status: string;
+    upload_locked: boolean;
+    document: {
+      document_id: number;
+      status: string;
+      remarks?: string;
+      file_name?: string;
+      file_url?: string;
+    };
+  }>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/agreement/approve`, {
+      method: "POST",
+      body: JSON.stringify({ remarks }),
+    });
+  },
+
   // ── DSA Documents ───────────────────────────────────────────────────────────
   getDsaDocuments: async (idOrCode: number | string): Promise<BackendResponse<DsaDocument[]>> => {
     return request<BackendResponse<DsaDocument[]>>(`/v1/dsa/${idOrCode}/documents`, {
@@ -939,12 +1039,17 @@ export const adminApi = {
     return `${apiBase}/api/v1/dsa/${idOrCode}/documents/${documentId}/file`;
   },
 
+  getDsaVisitReportFileUrl: (idOrCode: number | string): string => {
+    const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").replace(/\/api\/?$/, "");
+    return `${apiBase}/api/v1/dsa/${idOrCode}/visit-report/file`;
+  },
+
   uploadDsaDocument: async (
     idOrCode: number | string,
     payload: { file?: File; document_base64?: string; file_name?: string; document_type: string; owner_name?: string; remarks?: string }
   ): Promise<BackendResponse<DsaDocument>> => {
-    if (payload.file && payload.file.size > 2 * 1024 * 1024) {
-      throw new Error("File size exceeds maximum allowed limit of 2MB.");
+    if (payload.file && payload.file.size > 10 * 1024 * 1024) {
+      throw new Error("File size exceeds maximum allowed limit of 10MB.");
     }
     let base64Data = payload.document_base64;
     let fileName = payload.file_name;
@@ -992,6 +1097,52 @@ export const adminApi = {
       method: "POST",
       body: JSON.stringify(payload),
     });
+  },
+
+  // ── Task 22: Case Assignment, User-Level Locking & Activity History ────────
+  // `/assign` and `/release` are backend aliases; canonical routes are used here.
+
+  acquireCase: async (
+    idOrCode: number | string,
+    payload?: { remarks?: string }
+  ): Promise<BackendResponse<DsaCaseLockResult>> => {
+    return request<BackendResponse<DsaCaseLockResult>>(`/v1/dsa/${idOrCode}/acquire-case`, {
+      method: "POST",
+      body: JSON.stringify(payload ?? {}),
+    });
+  },
+
+  releaseCase: async (
+    idOrCode: number | string,
+    payload?: { remarks?: string }
+  ): Promise<BackendResponse<DsaCaseLockResult>> => {
+    return request<BackendResponse<DsaCaseLockResult>>(`/v1/dsa/${idOrCode}/release-case`, {
+      method: "POST",
+      body: JSON.stringify(payload ?? {}),
+    });
+  },
+
+  getApprovalHistory: async (
+    idOrCode: number | string
+  ): Promise<BackendResponse<DsaActivityHistory>> => {
+    return request<BackendResponse<DsaActivityHistory>>(`/v1/dsa/${idOrCode}/approval/history`, {
+      method: "GET",
+    });
+  },
+
+  /**
+   * Task 20C — candidates for RE_ALLOCATE / FORWARD.
+   * The backend throws (400) unless the current pending step is L3/L4/L5 for
+   * RE_ALLOCATE, so callers should only invoke it at those levels.
+   */
+  getEligibleUsers: async (
+    idOrCode: number | string,
+    action: "RE_ALLOCATE" | "FORWARD" = "RE_ALLOCATE"
+  ): Promise<BackendResponse<DsaEligibleUsersResponse>> => {
+    return request<BackendResponse<DsaEligibleUsersResponse>>(
+      `/v1/dsa/${idOrCode}/eligible-users?action=${action}`,
+      { method: "GET" }
+    );
   },
 
   // â”€â”€ Product Management â”€â”€
@@ -1814,8 +1965,46 @@ export const adminApi = {
     pan: string;
     dsa_temp_id?: string;
     dsa_id?: number;
+    mobile?: string;
+    email?: string;
   }): Promise<KycApiResponse<any>> => {
     return request<KycApiResponse<any>>("/v1/kyc/scoreme/pan-advance", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * POST /api/v1/kyc/karza/pan-entity
+   * Entity PAN verification with corporate legal name match and status
+   */
+  verifyPanEntity: async (payload: {
+    pan: string;
+    dsa_temp_id?: string;
+    dsa_id?: number;
+    entity_name?: string;
+    mobile?: string;
+    email?: string;
+  }): Promise<KycApiResponse<any>> => {
+    return request<KycApiResponse<any>>("/v1/kyc/karza/pan-entity", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * POST /api/v1/dsa/check-duplicate
+   * Check if a DSA record already exists with PAN, email, mobile, or GST
+   */
+  checkDsaDuplicate: async (payload: {
+    pan?: string;
+    email?: string;
+    mobile?: string;
+    gst?: string;
+    exclude_id?: number | string;
+    dsa_id?: number | string;
+  }): Promise<BackendResponse<{ exists: boolean; field?: string; message?: string }>> => {
+    return request<BackendResponse<any>>("/v1/dsa/check-duplicate", {
       method: "POST",
       body: JSON.stringify(payload),
     });

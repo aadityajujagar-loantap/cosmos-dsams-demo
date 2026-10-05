@@ -42,3 +42,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 node_modules.zip
+/scratch*
+
+# Offline npm bundle
+.npm-offline-cache/

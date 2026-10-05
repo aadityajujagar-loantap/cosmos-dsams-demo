@@ -40,8 +40,7 @@ export default function DsaSelfOnboardingPage() {
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500">
         <p>
-          © 2026 The Cosmos Co-operative Bank Ltd. All rights reserved.
-          Regulated by RBI.
+          © 2026 Cosmos Co-operative Bank Ltd. All rights reserved.
         </p>
       </footer>
     </div>

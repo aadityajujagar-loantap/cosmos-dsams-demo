@@ -2377,8 +2377,8 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
       toast({ title: "Email required", description: "Enter customer email address.", variant: "warning" });
       return;
     }
-    if (isExistingCustomer && (!accountNumber || accountNumber.length !== 12)) {
-      toast({ title: "Account number required", description: "Enter a valid 12-digit account number.", variant: "warning" });
+    if (isExistingCustomer && !accountNumber?.trim()) {
+      toast({ title: "Account number required", description: "Enter account number.", variant: "warning" });
       return;
     }
     if (!captchaValue.trim()) {
@@ -2590,7 +2590,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
                 <div className="space-y-6">
                   <div>
                     <h2 className="text-lg font-bold text-slate-900">Basic Details</h2>
-                    <p className="text-xs text-slate-500 mt-1">Fill in your details to avail the Cosmos Personal Loan</p>
+                    <p className="text-xs text-slate-500 mt-1">Fill in your details to avail Cosmos Personal Loan</p>
                   </div>
 
                   <div className="grid gap-6 md:grid-cols-2 max-w-2xl mx-auto">
@@ -2726,7 +2726,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
                 <div className="space-y-6 max-w-md mx-auto">
                   <div>
                     <h2 className="text-lg font-bold text-slate-900">Basic Details</h2>
-                    <p className="text-xs text-slate-500 mt-1">Fill in your details to avail the Cosmos Personal Loan</p>
+                    <p className="text-xs text-slate-500 mt-1">Fill in your details to avail Cosmos Personal Loan</p>
                   </div>
 
                   <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center gap-3 text-sm text-emerald-800">

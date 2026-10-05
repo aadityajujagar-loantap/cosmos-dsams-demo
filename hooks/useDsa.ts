@@ -5,6 +5,8 @@ import { getUserBranchScope, isDsaInBranchScope, type UserBranchScope } from "@/
 import type {
   Dsa,
   DsaDocument,
+  DsaActivityHistory,
+  DsaWorkBucket,
   StateOption,
   DistrictOption,
   BranchOption,
@@ -142,10 +144,29 @@ export function normalizeDsaData(dsa: any): any {
     dsa.applicant_prior_experience ||
     (dsa.experience_years
       ? `${dsa.experience_years} years in financial products distribution`
-      : "1 years in financial products distribution");
+      : "");
+
+  const experienceYears =
+    dsa.experience_years !== undefined && dsa.experience_years !== null
+      ? String(dsa.experience_years)
+      : null;
+
+  const rawDsaCode = dsa.dsa_code;
+  const normalizedDsaCode =
+    typeof rawDsaCode === "object" && rawDsaCode !== null
+      ? (rawDsaCode.code || "")
+      : rawDsaCode;
+
+  const rawCode = dsa.code;
+  const normalizedCode =
+    typeof rawCode === "object" && rawCode !== null
+      ? (rawCode.code || "")
+      : rawCode;
 
   return {
     ...dsa,
+    dsa_code: normalizedDsaCode,
+    code: normalizedCode,
     name: fullName,
     contact_person: contactPerson,
     gst_applicable: isGstApplicable,
@@ -163,6 +184,7 @@ export function normalizeDsaData(dsa: any): any {
     branch_code: branchCode,
     business_premises_ownership: businessPremisesOwnership,
     applicant_prior_experience: applicantPriorExperience,
+    experience_years: experienceYears,
   };
 }
 
@@ -170,7 +192,7 @@ export function useDsa() {
   const [dsas, setDsas] = useState<Dsa[]>([]);
   const [currentDsa, setCurrentDsa] = useState<Dsa | null>(null);
   const [loading, setLoading] = useState(false);
-  const [listLoading, setListLoading] = useState(false);
+  const [listLoading, setListLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [dsaListError, setDsaListError] = useState("");
   const [userBranchScope, setUserBranchScope] = useState<UserBranchScope | null>(null);
@@ -200,7 +222,8 @@ export function useDsa() {
       city?: string;
       state?: string;
       business_type?: string;
-      approval_bucket?: number;
+      /** Task 22 — role-scoped work bucket, filtered server-side. */
+      bucket?: DsaWorkBucket;
       per_page?: number;
       page?: number;
       sort_by?: string;
@@ -410,14 +433,24 @@ export function useDsa() {
     async (
       idOrCode: number | string,
       payload: {
-        action: "RECOMMEND" | "APPROVE" | "REJECT" | "REVERT" | "QUERY" | "RESUBMIT";
+        action: "RECOMMEND" | "APPROVE" | "REJECT" | "REVERT" | "CALL_BACK" | "RE_ALLOCATE" | "FORWARD" | "QUERY" | "RESUBMIT";
         remarks?: string;
         query?: string;
+        target_user_id?: number;
+        confirmed?: boolean;
       }
     ) => {
       setActionLoading(true);
       try {
         const response = await adminApi.updateWorkflowAction(idOrCode, payload);
+        const isConfirmReq =
+          (response as any)?.status === "confirmation_required" ||
+          (response as any)?.requires_confirmation === true;
+
+        if (isConfirmReq) {
+          return response;
+        }
+
         toast({
           title: `Action [${payload.action}] processed`,
           description: response.message || "Workflow updated successfully.",
@@ -426,7 +459,7 @@ export function useDsa() {
         if (response.data) {
           setCurrentDsa(normalizeDsaData(response.data));
         }
-        return response.data;
+        return response.data || response;
       } catch (error: unknown) {
         toast({
           title: `Action failed`,
@@ -441,14 +474,47 @@ export function useDsa() {
     [toast]
   );
 
+  const raiseDsaQuery = useCallback(
+    async (
+      idOrCode: number | string,
+      payload: { remarks: string; query?: string }
+    ) => {
+      setActionLoading(true);
+      try {
+        const response = await adminApi.raiseDsaQuery(idOrCode, payload);
+        toast({
+          title: "Query raised to Maker",
+          description:
+            response.message ||
+            "Case returned to the Level 1 Maker for resolution.",
+          variant: "success",
+        });
+        if (response.data) {
+          setCurrentDsa(normalizeDsaData(response.data));
+        }
+        return response.data || response;
+      } catch (error: unknown) {
+        toast({
+          title: "Query failed",
+          description: errorMessage(error, "Failed to raise query to Maker."),
+          variant: "warning",
+        });
+        return null;
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [toast]
+  );
+
   const fetchDeviationReport = useCallback(
     async (idOrCode: number | string) => {
       try {
-        const response = await adminApi.getCheckerDdReviewReport(idOrCode);
+        const response = await adminApi.getDdReviewReport(idOrCode);
         return response.data;
       } catch {
         try {
-          const fallback = await adminApi.getMakerDeviationReport(idOrCode);
+          const fallback = await adminApi.getCheckerDdReviewReport(idOrCode);
           return fallback.data;
         } catch {
           return null;
@@ -470,11 +536,21 @@ export function useDsa() {
         });
         return response.data;
       } catch (error: unknown) {
-        toast({
-          title: `Verification [${code}] failed`,
-          description: errorMessage(error, `Failed to execute verification [${code}].`),
-          variant: "destructive",
-        });
+        const msg = errorMessage(error, `Failed to execute verification [${code}].`);
+        const isUnauthorized =
+          msg.toLowerCase().includes("unauthorized") ||
+          msg.toLowerCase().includes("only checker") ||
+          (error as any)?.response?.status === 400 ||
+          (error as any)?.response?.status === 401 ||
+          (error as any)?.response?.status === 403;
+
+        if (!isUnauthorized) {
+          toast({
+            title: `Verification [${code}] failed`,
+            description: msg,
+            variant: "destructive",
+          });
+        }
         return null;
       } finally {
         setActionLoading(false);
@@ -510,6 +586,40 @@ export function useDsa() {
         toast({
           title: "Failed to save DD Note",
           description: errorMessage(error, "Could not save Due Diligence Note."),
+          variant: "warning",
+        });
+        return null;
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [toast]
+  );
+
+  const generateCheckerDdReviewReport = useCallback(
+    async (
+      idOrCode: number | string,
+      payload?: {
+        observations?: string;
+        remarks?: string;
+        exception_remarks?: string;
+        recommendation?: string;
+        structured_data?: any;
+      }
+    ) => {
+      setActionLoading(true);
+      try {
+        const response = await adminApi.generateCheckerDdReviewReport(idOrCode, payload);
+        toast({
+          title: "Due Diligence Report Generated",
+          description: response.message || "Due Diligence and Deviation Report generated successfully.",
+          variant: "success",
+        });
+        return response.data;
+      } catch (error: unknown) {
+        toast({
+          title: "Report Generation Notice",
+          description: errorMessage(error, "Failed to generate Due Diligence Review Report."),
           variant: "warning",
         });
         return null;
@@ -722,8 +832,33 @@ export function useDsa() {
     [toast]
   );
 
+  const approveSignedAgreement = useCallback(
+    async (idOrCode: number | string, remarks?: string) => {
+      setActionLoading(true);
+      try {
+        const response = await adminApi.approveSignedAgreement(idOrCode, remarks);
+        toast({
+          title: "Agreement Approved & DSA Activated",
+          description: response.message || "Signed agreement verified. DSA partner is now ACTIVE.",
+          variant: "success",
+        });
+        return response.data;
+      } catch (error: unknown) {
+        toast({
+          title: "Approval failed",
+          description: errorMessage(error, "Failed to approve signed agreement."),
+          variant: "warning",
+        });
+        return null;
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [toast]
+  );
+
   const uploadDsaDocument = useCallback(
-    async (idOrCode: number | string, payload: { file: File; document_type: string; owner_name?: string }) => {
+    async (idOrCode: number | string, payload: { file: File; document_type: string; owner_name?: string; remarks?: string }) => {
       setActionLoading(true);
       try {
         const response = await adminApi.uploadDsaDocument(idOrCode, payload);
@@ -808,6 +943,122 @@ export function useDsa() {
     [toast]
   );
 
+  // ── Task 22: Case Assignment, User-Level Locking & Activity History ────────
+
+  const fetchApprovalHistory = useCallback(
+    async (idOrCode: number | string): Promise<DsaActivityHistory | null> => {
+      try {
+        const response = await adminApi.getApprovalHistory(idOrCode);
+        return response.data;
+      } catch (error: unknown) {
+        toast({
+          title: "Activity history unavailable",
+          description: errorMessage(
+            error,
+            "Could not load the case activity history.",
+          ),
+          variant: "warning",
+        });
+        return null;
+      }
+    },
+    [toast]
+  );
+
+  const acquireCase = useCallback(
+    async (idOrCode: number | string, remarks?: string) => {
+      setActionLoading(true);
+      try {
+        const response = await adminApi.acquireCase(
+          idOrCode,
+          remarks ? { remarks } : {},
+        );
+        toast({
+          title: "Case acquired",
+          description:
+            response.message ||
+            "You now hold an exclusive lock on this case.",
+          variant: "success",
+        });
+        return response.data;
+      } catch (error: unknown) {
+        toast({
+          title: "Case already locked",
+          description: errorMessage(
+            error,
+            "This case is currently being processed by another user.",
+          ),
+          variant: "warning",
+        });
+        return null;
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [toast]
+  );
+
+  // ── Task 20C: CALL_BACK & RE-allocate candidate picker ─────────────────────
+  // Deliberately surfaces the backend's own validation message (e.g. "Only
+  // Levels L3, L4, and L5 are allowed") instead of swallowing it, so the UI can
+  // explain why the list is unavailable instead of showing an empty picker.
+
+  const fetchEligibleUsers = useCallback(
+    async (
+      idOrCode: number | string,
+      action: "RE_ALLOCATE" | "FORWARD" = "RE_ALLOCATE"
+    ) => {
+      try {
+        const response = await adminApi.getEligibleUsers(idOrCode, action);
+        return response.data ?? null;
+      } catch (error: unknown) {
+        toast({
+          title: "Eligible users unavailable",
+          description: errorMessage(
+            error,
+            "Could not load the list of eligible users for this action."
+          ),
+          variant: "warning",
+        });
+        return null;
+      }
+    },
+    [toast]
+  );
+
+  const releaseCase = useCallback(
+    async (idOrCode: number | string, remarks?: string) => {
+      setActionLoading(true);
+      try {
+        const response = await adminApi.releaseCase(
+          idOrCode,
+          remarks ? { remarks } : {},
+        );
+        toast({
+          title: "Case released (un-acquired)",
+          description:
+            response.message ||
+            "You no longer hold this case. It is back in the eligible queue for your stage.",
+          variant: "success",
+        });
+        return response.data;
+      } catch (error: unknown) {
+        toast({
+          title: "Release failed",
+          description: errorMessage(
+            error,
+            "Failed to release the case lock.",
+          ),
+          variant: "warning",
+        });
+        return null;
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [toast]
+  );
+
   // ── Location Dropdowns ───────────────────────────────────────────────────
 
   const fetchStatesDropdown = useCallback(async () => {
@@ -881,7 +1132,9 @@ export function useDsa() {
     submitMakerApplication,
     submitCheckerApplication,
     updateWorkflowAction,
+    raiseDsaQuery,
     fetchDeviationReport,
+    generateCheckerDdReviewReport,
     triggerCheckerVerification,
     fetchCheckerDdNote,
     saveCheckerDdNote,
@@ -895,9 +1148,14 @@ export function useDsa() {
     fetchDsaAgreement,
     fetchSignedAgreementReview,
     verifySignedAgreement,
+    approveSignedAgreement,
     uploadDsaDocument,
     updateDsaDocumentStatus,
     deleteDsaDocument,
+    fetchApprovalHistory,
+    fetchEligibleUsers,
+    acquireCase,
+    releaseCase,
     fetchStatesDropdown,
     fetchDistrictsDropdown,
     fetchBranchesDropdown,

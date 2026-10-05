@@ -31,7 +31,7 @@ export function Button({
   return (
     <button
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-md font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:pointer-events-none disabled:opacity-50",
+        "inline-flex items-center justify-center gap-2 rounded-md font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:pointer-events-none disabled:opacity-50 whitespace-nowrap shrink-0",
         size === "sm" && "h-7 px-2.5 text-xs",
         size === "md" && "h-9 px-3.5 text-sm",
         size === "icon" && "h-9 w-9",
@@ -328,14 +328,59 @@ export function Select({
   );
 }
 
+function renderWithRedAsterisks(node: ReactNode): ReactNode {
+  if (node === null || node === undefined || typeof node === "boolean" || typeof node === "number") {
+    return node;
+  }
+  if (typeof node === "string") {
+    if (!node.includes("*")) return node;
+    const parts = node.split("*");
+    return parts.map((part, i) => (
+      <React.Fragment key={i}>
+        {part}
+        {i < parts.length - 1 && (
+          <span
+            className="text-red-500 font-bold ml-0.5"
+            style={{ color: "#ef4444", fontWeight: "bold" }}
+            aria-hidden="true"
+          >
+            *
+          </span>
+        )}
+      </React.Fragment>
+    ));
+  }
+  if (Array.isArray(node)) {
+    return Children.map(node, (child) => renderWithRedAsterisks(child));
+  }
+  if (isValidElement(node) && (node.props as any)?.children) {
+    return React.cloneElement(node as React.ReactElement<any>, {
+      children: renderWithRedAsterisks((node.props as any).children),
+    });
+  }
+  return node;
+}
+
+export function MandatoryAsterisk({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn("text-red-500 font-bold ml-0.5", className)}
+      style={{ color: "#ef4444", fontWeight: "bold" }}
+      aria-hidden="true"
+    >
+      *
+    </span>
+  );
+}
+
 export function Label({
   children,
   className,
   ...props
 }: LabelHTMLAttributes<HTMLLabelElement> & { children: ReactNode }) {
   return (
-    <label className={cn("text-xs font-semibold uppercase tracking-wide text-slate-500", className)} {...props}>
-      {children}
+    <label className={cn("text-sm font-bold uppercase tracking-wide text-slate-700", className)} {...props}>
+      {renderWithRedAsterisks(children)}
     </label>
   );
 }
@@ -343,6 +388,19 @@ export function Label({
 export function Field({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={cn("space-y-1.5", className)}>{children}</div>;
 }
+
+const MODAL_WIDTH_FALLBACKS: Record<string, string> = {
+  "max-w-xs": "20rem",
+  "max-w-sm": "24rem",
+  "max-w-md": "28rem",
+  "max-w-lg": "32rem",
+  "max-w-xl": "36rem",
+  "max-w-2xl": "42rem",
+  "max-w-3xl": "48rem",
+  "max-w-4xl": "56rem",
+  "max-w-5xl": "64rem",
+  "max-w-6xl": "72rem",
+};
 
 export function Modal({
   children,
@@ -353,6 +411,7 @@ export function Modal({
   width = "max-w-2xl",
   className,
   bodyClassName,
+  style,
 }: {
   children: ReactNode;
   open: boolean;
@@ -362,6 +421,7 @@ export function Modal({
   width?: string;
   className?: string;
   bodyClassName?: string;
+  style?: React.CSSProperties;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -378,6 +438,11 @@ export function Modal({
   }, [onClose, open]);
 
   if (!open) return null;
+
+  const resolvedMaxWidth =
+    style?.maxWidth ||
+    (MODAL_WIDTH_FALLBACKS[width] ? MODAL_WIDTH_FALLBACKS[width] : undefined);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6" style={{ outline: 'none' }}>
       <button
@@ -395,7 +460,11 @@ export function Modal({
         )}
         role="dialog"
         aria-modal="true"
-        style={{ outline: 'none' }}
+        style={{
+          outline: "none",
+          maxWidth: resolvedMaxWidth,
+          ...style,
+        }}
       >
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 px-6 py-4">
           <div>

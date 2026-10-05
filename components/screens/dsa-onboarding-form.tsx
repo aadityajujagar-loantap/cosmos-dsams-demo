@@ -22,12 +22,19 @@ import {
   Loader2,
   ChevronDown,
   Download,
+  Mail,
+  Smartphone,
+  Send,
+  ShieldCheck,
+  CreditCard,
+  Sparkles,
+  Home,
 } from "lucide-react";
 import { adminApi } from "@/apis/admin";
 import { useMockStore } from "@/lib/store";
 import { useToast } from "@/components/ui/toast";
 import { Button, Card, CardContent, DatePicker, Input, Label, Select } from "@/components/ui/primitives";
-import { formatDate, generateDsaId } from "@/lib/utils";
+import { cn, formatDate, generateDsaId } from "@/lib/utils";
 
 export type OnboardingMode = "branch" | "self";
 export type DsaType = "INDIVIDUAL" | "ENTITY";
@@ -228,14 +235,14 @@ function CheckboxDropdown({
         id={id}
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm transition hover:border-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 min-h-[38px]"
+        className="flex h-9 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:opacity-50 disabled:pointer-events-none disabled:bg-slate-50"
       >
-        <div className="flex flex-wrap items-center gap-1.5 overflow-hidden text-left">
+        <div className="flex items-center gap-1.5 overflow-hidden text-left truncate">
           {selectedKeys.length === 0 ? (
-            <span className="text-slate-400 font-normal">{placeholder}</span>
+            <span className="text-slate-400 font-normal truncate">{placeholder}</span>
           ) : (
             <div className="flex items-center gap-1.5 truncate">
-              <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800">
+              <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800 shrink-0">
                 {selectedKeys.length} selected
               </span>
               <span className="truncate text-slate-700 font-medium max-w-[180px] sm:max-w-[260px]">
@@ -245,7 +252,7 @@ function CheckboxDropdown({
           )}
         </div>
         <ChevronDown
-          className={`h-4 w-4 flex-shrink-0 text-slate-400 transition-transform duration-200 ${
+          className={`h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 ${
             isOpen ? "rotate-180 text-blue-600" : ""
           }`}
         />
@@ -306,6 +313,14 @@ function CheckboxDropdown({
 }
 
 const getDraftKey = (mode: string) => `cosmos_dsa_onboarding_v2_${mode}`;
+
+function maskAadhaar(val: string): string {
+  if (!val) return "";
+  const raw = val.replace(/[^0-9Xx]/g, "");
+  if (raw.length < 4) return val;
+  const last4 = raw.slice(-4);
+  return `XXXX-XXXX-${last4}`;
+}
 
 function base64ToFile(base64: string, filename: string): File {
   try {
@@ -412,6 +427,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   const [otpReferenceId, setOtpReferenceId] = useState<string>("");
   const [isSendingOtp, setIsSendingOtp] = useState<boolean>(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState<boolean>(false);
+  const [emailOtpSent, setEmailOtpSent] = useState<boolean>(false);
+  const [emailDeliveryNote, setEmailDeliveryNote] = useState<string>("");
+  const [smsDeliveryNote, setSmsDeliveryNote] = useState<string>("");
+  const [selfEmail, setSelfEmail] = useState<string>("");
 
   // Form Fields - Individual
   const [applicantTitle, setApplicantTitle] = useState<string>("");
@@ -445,6 +464,17 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
   // Common Identity / Contact
   const [pan, setPan] = useState<string>("");
+  const [isVerifyingPan, setIsVerifyingPan] = useState<boolean>(false);
+  const [panVerified, setPanVerified] = useState<boolean>(false);
+  const [panVerificationData, setPanVerificationData] = useState<{
+    fullName?: string;
+    aadhaarLinked?: string;
+    maskedAadhaar?: string;
+    category?: string;
+    email?: string;
+    referenceId?: string;
+  } | null>(null);
+  const [verifyingStakeholderIdx, setVerifyingStakeholderIdx] = useState<number | null>(null);
   const [email, setEmail] = useState<string>("");
   const [mobile, setMobile] = useState<string>("");
   const [contactPerson, setContactPerson] = useState<string>("");
@@ -691,14 +721,19 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
   const handleStateChange = (newState: string) => {
     setStateName(newState);
+    if (isOfficeSameAsResidence) {
+      setOfficeStateName(newState);
+    }
     if (!newState) {
       setCity("");
+      if (isOfficeSameAsResidence) setOfficeCity("");
       return;
     }
     const newCode = newState.toUpperCase().replace(/[\s-]+/g, "_");
     const matchingCities = cityOptions.filter((c) => c.stateKey === newCode);
     if (city && matchingCities.length > 0 && !matchingCities.some((c) => c.key === city)) {
       setCity("");
+      if (isOfficeSameAsResidence) setOfficeCity("");
     }
   };
 
@@ -757,22 +792,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     }
   }, [isOfficeSameAsResidence, address, stateName, city, pincode]);
 
-  const getAadhaarDisplayValue = () => {
-    if (isAadhaarFocused) return aadhaarNo;
-    const clean = aadhaarNo.replace(/\D/g, "");
-    if (!clean) return "";
-    if (clean.length === 12) {
-      return `XXXX-XXXX-${clean.slice(8)}`;
-    }
-    if (clean.length > 8) {
-      return `XXXX-XXXX-${clean.slice(8)}`;
-    }
-    if (clean.length > 4) {
-      return `XXXX-${clean.slice(4)}`;
-    }
-    return "XXXX-XXXX-XXXX";
-  };
-
   // Ensure branchId always resolves to a valid existing branch
   useEffect(() => {
     if (branches.length > 0) {
@@ -827,7 +846,18 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         if (data.natureOfBusiness !== undefined) setNatureOfBusiness(data.natureOfBusiness);
         if (data.stakeholders) setStakeholders(data.stakeholders);
         if (data.pan !== undefined) setPan(data.pan);
-        if (data.email !== undefined) setEmail(data.email);
+        if (data.panVerified !== undefined) setPanVerified(Boolean(data.panVerified));
+        if (data.panVerificationData !== undefined) setPanVerificationData(data.panVerificationData);
+
+        const restoredSelfEmail = data.selfEmail || (mode === "self" && data.email ? data.email : "");
+        if (restoredSelfEmail) setSelfEmail(restoredSelfEmail);
+
+        // Restore email cleanly from draft if present, otherwise fallback to PAN verified email
+        if (data.email !== undefined) {
+          setEmail(data.email);
+        } else if (data.panVerificationData?.email) {
+          setEmail(String(data.panVerificationData.email).trim());
+        }
         if (data.mobile !== undefined) setMobile(data.mobile);
         if (data.contactPerson !== undefined) setContactPerson(data.contactPerson);
         if (data.gstApplicable !== undefined) setGstApplicable(data.gstApplicable);
@@ -905,6 +935,116 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     }
   };
 
+  const handleSwitchDsaType = (newType: DsaType) => {
+    if (newType === dsaType) return;
+
+    // Reset step to 1 and update type
+    setStep(1);
+    setDsaType(newType);
+
+    // Clear saved draft to avoid cross-contamination
+    clearDraft();
+
+    // Reset OTP verification state
+    if (mode === "self") {
+      setBranchId(branches.length > 0 ? String(branches[0].id ?? branches[0].branch_id ?? "1") : "");
+      setOtpSent(false);
+      setOtpVerified(false);
+      setOtpValue("");
+      setOtpReferenceId("");
+      setEmailOtpSent(false);
+      setEmailDeliveryNote("");
+      setSmsDeliveryNote("");
+      setSelfEmail("");
+    } else {
+      setOtpVerified(true);
+    }
+
+    // Reset PAN & Identity state
+    setPan("");
+    setIsVerifyingPan(false);
+    setPanVerified(false);
+    setPanVerificationData(null);
+    setVerifyingStakeholderIdx(null);
+
+    // Reset Individual Fields
+    setApplicantTitle("");
+    setFirstName("");
+    setMiddleName("");
+    setLastName("");
+    setDateOfBirth("");
+    setDisplayDob("");
+    setAadhaarNo("");
+    setIsAadhaarFocused(false);
+    setEducationQualification("");
+
+    // Reset Entity Fields
+    setEntityName("");
+    setConstitution("");
+    setNatureOfBusiness("");
+    setStakeholders([
+      {
+        stakeholder_type: "",
+        name: "",
+        mobile_no: "",
+        pan: "",
+        aadhaar: "",
+        din_dpin_no: "",
+      },
+    ]);
+
+    // Reset Common Contact & Business Fields
+    setEmail("");
+    setMobile("");
+    setContactPerson("");
+    setGstApplicable(false);
+    setGstNumber("");
+    setShopActNumber("");
+    setUdyamNumber("");
+    setExperienceYears("0");
+    setPriorExperienceDetails("");
+    setSelectedLicenses([]);
+
+    // Reset Address Details
+    setAddress("");
+    setCity("");
+    setStateName("");
+    setPincode("");
+    setIsOfficeSameAsResidence(true);
+    setOfficeAddress("");
+    setOfficeCity("");
+    setOfficeStateName("");
+    setOfficePincode("");
+    setBusinessPremisesOwnership("");
+
+    // Reset Banking Details
+    setBankName("");
+    setAccountName("");
+    setAccountNumber("");
+    setConfirmAccountNumber("");
+    setAccountType("");
+    setIfsc("");
+
+    // Reset References
+    setReference1Name("");
+    setReference1Contact("");
+    setReference2Name("");
+    setReference2Contact("");
+
+    // Reset Documents & Declaration
+    setUploadedDocs({});
+    setVisitReportRemarks("");
+    setDeclarationAgreed(false);
+    setCreatedDsaId(null);
+    setSubmittedDsa(null);
+
+    toast({
+      title: `${newType === "INDIVIDUAL" ? "Individual" : "Entity"} DSA Selected`,
+      description: "Started fresh onboarding application.",
+      variant: "info",
+    });
+  };
+
   // Persist draft state to localStorage & sessionStorage
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -946,6 +1086,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           natureOfBusiness,
           stakeholders,
           pan,
+          panVerified,
+          panVerificationData,
+          selfEmail,
           email,
           mobile,
           contactPerson,
@@ -1021,6 +1164,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     natureOfBusiness,
     stakeholders,
     pan,
+    panVerified,
+    panVerificationData,
+    selfEmail,
     email,
     mobile,
     contactPerson,
@@ -1105,7 +1251,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     if (experienceYears !== "0" && experienceYears !== "") {
       dynamicDocs.push({
         type: "experience_certificate",
-        label: `Experience certificates / empanelment letters from Banks / FIs (${experienceYears} yrs)`,
+        label: `Experience certificates / FIs (${experienceYears} yrs)`,
         required: true,
         requirementLabel: "Mandatory",
       });
@@ -1193,10 +1339,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   };
 
   const handleFileUpload = (docType: string, file: File) => {
-    if (file.size > 2 * 1024 * 1024) {
+    if (file.size > 10 * 1024 * 1024) {
       toast({
         title: "File too large",
-        description: "Maximum allowed file size is 2MB.",
+        description: "Maximum allowed file size is 10MB.",
         variant: "warning",
       });
       return;
@@ -1237,26 +1383,52 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       toast({ title: "Mobile Required", description: "Enter valid 10-digit mobile number.", variant: "warning" });
       return;
     }
+    if (!selfEmail || !selfEmail.trim()) {
+      toast({ title: "Email Required", description: "Enter applicant email address.", variant: "warning" });
+      return;
+    }
     const selectedBranch = branches.find((b) => String(b.id ?? b.branch_id) === String(branchId)) || branches[0];
     const validBranchId = selectedBranch ? Number(selectedBranch.id ?? selectedBranch.branch_id) : (Number(branchId) || 1);
 
     setIsSendingOtp(true);
     try {
-      const res: any = await adminApi.sendSelfOnboardingOtp({ mobile, branch_id: validBranchId });
+      const applicantName = dsaType === "INDIVIDUAL" ? `${firstName} ${lastName}`.trim() : entityName;
+      const res: any = await adminApi.sendSelfOnboardingOtp({
+        mobile,
+        branch_id: validBranchId,
+        email: selfEmail.trim() || undefined,
+        name: applicantName || undefined,
+      });
       setOtpSent(true);
       setOtpValue("");
       const refId = res?.data?.reference_id || res?.reference_id;
       if (refId) setOtpReferenceId(refId);
+
       const note = res?.data?.note || res?.note;
+      const emailSent = res?.data?.email_sent ?? res?.email_sent;
+      const emailNote = res?.data?.email_note ?? res?.email_note;
+
+      if (emailSent) {
+        setEmailOtpSent(true);
+      }
+      setSmsDeliveryNote(note || "SMS dispatched");
+      setEmailDeliveryNote(emailNote || (emailSent ? `Sent to ${selfEmail}` : ""));
+
+      let description = res?.message || `OTP sent to ${mobile}.`;
+      if (selfEmail.trim() && emailSent) {
+        description = `OTP dispatched to mobile (+91 ${mobile}) and email (${selfEmail.trim()}). Enter code from either channel.`;
+      }
+
       toast({
-        title: "OTP Sent",
-        description: res?.message ? `${res.message}${note ? ` (${note})` : ""}` : `OTP sent to ${mobile}.`,
+        title: "OTP Dispatched",
+        description,
         variant: "success",
       });
     } catch (err: any) {
       setOtpSent(false);
       setOtpValue("");
       setOtpReferenceId("");
+      setEmailOtpSent(false);
       const msg = err?.data?.message || err?.message || "Failed to send OTP.";
       toast({
         title: "Cannot Send OTP",
@@ -1287,6 +1459,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         dsa_type: dsaType,
       });
       setOtpVerified(true);
+      if (typeof document !== "undefined") {
+        (document.activeElement as HTMLElement)?.blur();
+      }
       toast({
         title: "Mobile Verified",
         description: res?.message || "Mobile number successfully verified.",
@@ -1302,6 +1477,360 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       });
     } finally {
       setIsVerifyingOtp(false);
+    }
+  };
+
+  const parseDobOrDoi = (dateStr: string): { iso: string; display: string } | null => {
+    if (!dateStr) return null;
+    const trimmed = dateStr.trim();
+    const dMmmY = trimmed.match(/^(\d{1,2})[-/]([A-Za-z]{3})[-/](\d{4})$/);
+    if (dMmmY) {
+      const day = dMmmY[1].padStart(2, "0");
+      const monthNames: Record<string, string> = {
+        jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
+        jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
+      };
+      const month = monthNames[dMmmY[2].toLowerCase()] || "01";
+      const year = dMmmY[3];
+      return { iso: `${year}-${month}-${day}`, display: `${day}/${month}/${year}` };
+    }
+    const dmy = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    if (dmy) {
+      const day = dmy[1].padStart(2, "0");
+      const month = dmy[2].padStart(2, "0");
+      const year = dmy[3];
+      return { iso: `${year}-${month}-${day}`, display: `${day}/${month}/${year}` };
+    }
+    const ymd = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+    if (ymd) {
+      const year = ymd[1];
+      const month = ymd[2].padStart(2, "0");
+      const day = ymd[3].padStart(2, "0");
+      return { iso: `${year}-${month}-${day}`, display: `${day}/${month}/${year}` };
+    }
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return { iso: `${year}-${month}-${day}`, display: `${day}/${month}/${year}` };
+    }
+    return null;
+  };
+
+  const handleVerifyPan = async () => {
+    const trimmedPan = pan.trim().toUpperCase();
+    const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/i;
+    if (!trimmedPan || !panRegex.test(trimmedPan)) {
+      toast({
+        title: "Valid PAN Required",
+        description: "Please enter a valid 10-character PAN format (e.g. ABCDE1234F).",
+        variant: "warning",
+      });
+      return;
+    }
+
+    setIsVerifyingPan(true);
+    const isEntity = dsaType === "ENTITY";
+    const resolvedContactMobile = mobile.trim() || undefined;
+    const resolvedContactEmail = (selfEmail.trim() || email.trim()) || undefined;
+
+    try {
+      // Duplicate pre-check on PAN / Mobile / Email
+      try {
+        const dupCheck: any = await adminApi.checkDsaDuplicate({
+          pan: trimmedPan,
+          mobile: resolvedContactMobile,
+          email: resolvedContactEmail,
+          exclude_id: createdDsaId || undefined,
+        }).catch((e: any) => e?.data ?? e);
+
+        if (
+          dupCheck?.status === false ||
+          dupCheck?.exists === true ||
+          dupCheck?.message?.includes("already exists") ||
+          dupCheck?.error?.includes("already exists")
+        ) {
+          setPanVerified(false);
+          toast({
+            title: "Submission Failed",
+            description: "A DSA record with this PAN, Email, or Mobile already exists.",
+            variant: "destructive",
+          });
+          return;
+        }
+      } catch (dupErr: any) {
+        const dupMsg = String(dupErr?.data?.message || dupErr?.message || "");
+        if (dupMsg.toLowerCase().includes("already exists")) {
+          setPanVerified(false);
+          toast({
+            title: "Submission Failed",
+            description: "A DSA record with this PAN, Email, or Mobile already exists.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
+      const res: any = isEntity
+        ? await adminApi.verifyPanEntity({
+            pan: trimmedPan,
+            dsa_temp_id: otpReferenceId || undefined,
+            entity_name: entityName || undefined,
+            mobile: resolvedContactMobile,
+            email: resolvedContactEmail,
+          })
+        : await adminApi.verifyPanAdvance({
+            pan: trimmedPan,
+            dsa_temp_id: otpReferenceId || undefined,
+            mobile: resolvedContactMobile,
+            email: resolvedContactEmail,
+          });
+
+      const resData = res?.data ?? res;
+      const isSuccess = Boolean(res?.success || resData?.status === "SUCCESS" || resData?.statusCode === 101);
+      const detailsData = resData?.details?.data || resData?.details?.result || resData?.data || resData?.result || resData;
+
+      if (isSuccess && detailsData) {
+        const panApiEmail =
+          detailsData?.email ||
+          detailsData?.emailAddress ||
+          detailsData?.email_id ||
+          resData?.details?.data?.email ||
+          resData?.data?.email ||
+          res?.data?.details?.data?.email ||
+          res?.data?.email;
+
+        const resolvedName =
+          detailsData.fullName ||
+          detailsData.name ||
+          detailsData.entity_name ||
+          "";
+
+        setPan(trimmedPan);
+        setPanVerified(true);
+        setPanVerificationData({
+          fullName: resolvedName,
+          aadhaarLinked: detailsData.aadhaarLinked,
+          maskedAadhaar: detailsData.maskedAadhaarNumber,
+          category: detailsData.category,
+          email: panApiEmail ? String(panApiEmail).trim() : undefined,
+          referenceId: resData?.reference_id || resData?.details?.referenceId,
+        });
+
+        // 1. Name & Identity Population
+        if (dsaType === "INDIVIDUAL") {
+          let resolvedFirst = String(
+            detailsData.firstName ??
+            detailsData.first_name ??
+            detailsData.givenName ??
+            detailsData.given_name ??
+            "",
+          ).trim();
+          let resolvedMiddle = String(
+            detailsData.middleName ??
+            detailsData.middle_name ??
+            detailsData.midName ??
+            detailsData.mid_name ??
+            detailsData.secondName ??
+            detailsData.second_name ??
+            detailsData.fatherName ??
+            detailsData.father_name ??
+            "",
+          ).trim();
+          let resolvedLast = String(
+            detailsData.lastName ??
+            detailsData.last_name ??
+            detailsData.surName ??
+            detailsData.surname ??
+            "",
+          ).trim();
+
+          if (!resolvedFirst && resolvedName) {
+            const parts = String(resolvedName).trim().split(/\s+/);
+            if (parts.length === 1) {
+              resolvedFirst = parts[0];
+            } else if (parts.length === 2) {
+              resolvedFirst = parts[0];
+              resolvedLast = parts[1];
+            } else if (parts.length >= 3) {
+              resolvedFirst = parts[0];
+              resolvedMiddle = parts.slice(1, -1).join(" ");
+              resolvedLast = parts[parts.length - 1];
+            }
+          }
+
+          // If middle name is identical to last name, clear middle name
+          if (resolvedMiddle && resolvedLast && resolvedMiddle.toLowerCase() === resolvedLast.toLowerCase()) {
+            resolvedMiddle = "";
+          }
+
+          if (resolvedFirst) setFirstName(resolvedFirst);
+          setMiddleName(resolvedMiddle);
+          if (resolvedLast) setLastName(resolvedLast);
+          if (detailsData.gender) {
+            const g = String(detailsData.gender).toLowerCase();
+            if (g === "male" && !applicantTitle) setApplicantTitle("Mr.");
+            else if (g === "female" && !applicantTitle) setApplicantTitle("Mrs.");
+          }
+        } else {
+          // ENTITY Mode
+          if (resolvedName) {
+            if (detailsData.category !== "P" || !entityName) {
+              setEntityName(resolvedName);
+            }
+            if (!contactPerson) {
+              setContactPerson(resolvedName);
+            }
+          }
+          if (!constitution && detailsData.category) {
+            const cat = String(detailsData.category).toUpperCase();
+            if (cat === "C" || cat === "COMPANY") setConstitution("Pvt Ltd");
+            else if (cat === "F" || cat === "FIRM" || cat === "PARTNERSHIP") setConstitution("Partnership");
+            else if (cat === "T" || cat === "TRUST") setConstitution("Trust");
+            else if (cat === "P" || cat === "PROPRIETORSHIP") setConstitution("Proprietorship");
+            else if (cat === "L" || cat === "LLP") setConstitution("LLP");
+          }
+        }
+
+        // 2. Date of Birth / Incorporation
+        const dobOrDoi = detailsData.dobOrDoi || detailsData.dateOfIncorporation || detailsData.doi;
+        if (dobOrDoi) {
+          const parsed = parseDobOrDoi(dobOrDoi);
+          if (parsed) {
+            setDateOfBirth(parsed.iso);
+            setDisplayDob(parsed.display);
+          }
+        }
+
+        // 3. Contact Info
+        if (detailsData.phone && !mobile) {
+          setMobile(String(detailsData.phone).replace(/\D/g, "").slice(0, 10));
+        }
+        if (panApiEmail) {
+          const cleanEmail = String(panApiEmail).trim();
+          setEmail(cleanEmail);
+          if (!selfEmail) {
+            setSelfEmail(cleanEmail);
+          }
+        }
+
+        // 3b. Aadhaar Auto-Population
+        if (detailsData.maskedAadhaarNumber) {
+          const raw = String(detailsData.maskedAadhaarNumber).replace(/[^0-9Xx]/g, "").slice(0, 12).toUpperCase();
+          if (raw.length > 8) {
+            setAadhaarNo(`${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8)}`);
+          } else if (raw.length > 4) {
+            setAadhaarNo(`${raw.slice(0, 4)}-${raw.slice(4)}`);
+          } else {
+            setAadhaarNo(raw);
+          }
+        }
+
+        // 4. Address Details (Step 2)
+        const addrParts = [
+          detailsData.buildingName,
+          detailsData.streetName,
+          detailsData.locality,
+        ].filter(Boolean);
+        const combinedAddress = addrParts.join(", ");
+
+        if (combinedAddress) setAddress(combinedAddress);
+        if (detailsData.state) setStateName(detailsData.state);
+        if (detailsData.city) setCity(detailsData.city);
+        if (detailsData.pinCode) setPincode(String(detailsData.pinCode).slice(0, 6));
+
+        // Office Address fallback if separate
+        if (!isOfficeSameAsResidence) {
+          if (!officeAddress && combinedAddress) setOfficeAddress(combinedAddress);
+          if (!officeStateName && detailsData.state) setOfficeStateName(detailsData.state);
+          if (!officeCity && detailsData.city) setOfficeCity(detailsData.city);
+          if (!officePincode && detailsData.pinCode) setOfficePincode(String(detailsData.pinCode).slice(0, 6));
+        }
+
+        toast({
+          title: isEntity ? "Entity PAN Verified & Auto-Populated" : "PAN Verified & Auto-Populated",
+          description: `Verified for ${resolvedName || trimmedPan}. ${isEntity ? "Corporate entity" : "Personal"} & address fields auto-populated across pages.`,
+          variant: "success",
+        });
+      } else {
+        setPanVerified(false);
+        const errMsg = String(res?.message || resData?.message || "");
+        const isDuplicate = errMsg.toLowerCase().includes("already exists");
+        toast({
+          title: isDuplicate ? "Submission Failed" : isEntity ? "Entity PAN Verification Failed" : "PAN Verification Failed",
+          description: isDuplicate ? "A DSA record with this PAN, Email, or Mobile already exists." : (res?.message || "Invalid PAN or record not found."),
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      setPanVerified(false);
+      const msg = String(err?.data?.message || err?.message || (isEntity ? "Could not connect to Karza verification gateway." : "Could not connect to ScoreMe verification gateway."));
+      const isDuplicate = msg.toLowerCase().includes("already exists");
+      toast({
+        title: isDuplicate ? "Submission Failed" : "Verification Request Failed",
+        description: isDuplicate ? "A DSA record with this PAN, Email, or Mobile already exists." : msg,
+        variant: "destructive",
+      });
+    } finally {
+      setIsVerifyingPan(false);
+    }
+  };
+
+  const handleVerifyStakeholderPan = async (index: number) => {
+    const s = stakeholders[index];
+    const trimmedPan = s?.pan?.trim()?.toUpperCase();
+    const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/i;
+    if (!trimmedPan || !panRegex.test(trimmedPan)) {
+      toast({
+        title: "Valid PAN Required",
+        description: "Please enter a valid 10-character PAN format for stakeholder.",
+        variant: "warning",
+      });
+      return;
+    }
+
+    setVerifyingStakeholderIdx(index);
+    try {
+      const res: any = await adminApi.verifyPanAdvance({ pan: trimmedPan, is_stakeholder: true } as any);
+      const resData = res?.data ?? res;
+      const isSuccess = Boolean(res?.success || resData?.status === "SUCCESS");
+      const detailsData = resData?.details?.data || resData?.data || resData;
+
+      if (isSuccess && detailsData) {
+        setStakeholders((prev) => {
+          const next = [...prev];
+          const updated = { ...next[index] };
+          if (detailsData.fullName) updated.name = detailsData.fullName;
+          if (detailsData.phone && !updated.mobile_no) {
+            updated.mobile_no = String(detailsData.phone).replace(/\D/g, "").slice(0, 10);
+          }
+          if (detailsData.maskedAadhaarNumber && !updated.aadhaar) {
+            updated.aadhaar = String(detailsData.maskedAadhaarNumber).trim().toUpperCase();
+          }
+          next[index] = updated;
+          return next;
+        });
+        toast({
+          title: "Stakeholder PAN Verified",
+          description: `Verified for ${detailsData.fullName || trimmedPan}. Name auto-populated.`,
+          variant: "success",
+        });
+      } else {
+        toast({
+          title: "Stakeholder PAN Verification Failed",
+          description: res?.message || "Invalid PAN or record not found.",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Verification Error",
+        description: err?.message || "Failed to verify stakeholder PAN.",
+        variant: "destructive",
+      });
+    } finally {
+      setVerifyingStakeholderIdx(null);
     }
   };
 
@@ -1339,8 +1868,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         toast({ title: "Valid PAN Required", description: "Valid 10-character PAN format (e.g. ABCDE1234F) is mandatory.", variant: "warning" });
         return false;
       }
+      const resolvedEmail = email.trim() || selfEmail.trim();
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!email || !emailRegex.test(email.trim())) {
+      if (!resolvedEmail || !emailRegex.test(resolvedEmail)) {
         toast({ title: "Valid Email Required", description: "Valid email address is mandatory.", variant: "warning" });
         return false;
       }
@@ -1363,16 +1893,18 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           return false;
         }
         if (!educationQualification) {
-          toast({ title: "Qualification Required", description: "Please select highest educational qualification.", variant: "warning" });
+          toast({ title: "Qualification Required", description: "Please select highest qualification.", variant: "warning" });
           return false;
         }
+        const unhyphenatedAadhaar = aadhaarNo.replace(/-/g, "").trim();
+        const isMaskedAadhaar = /^[0-9X]{12}$/i.test(unhyphenatedAadhaar);
         const cleanAadhaar = aadhaarNo.replace(/\D/g, "");
-        if (!cleanAadhaar) {
+        if (!aadhaarNo.trim()) {
           toast({ title: "Aadhaar Required", description: "Aadhaar number is mandatory.", variant: "warning" });
           return false;
         }
-        if (cleanAadhaar.length !== 12) {
-          toast({ title: "Invalid Aadhaar", description: "Aadhaar number must be exactly 12 digits.", variant: "warning" });
+        if (cleanAadhaar.length !== 12 && !isMaskedAadhaar) {
+          toast({ title: "Invalid Aadhaar", description: "Aadhaar number must be exactly 12 digits or verified masked Aadhaar.", variant: "warning" });
           return false;
         }
       } else {
@@ -1443,10 +1975,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         toast({ title: "Bank Details Required", description: "All bank account details including account type are mandatory.", variant: "warning" });
         return false;
       }
-      if (accountNumber.trim().length < 9) {
-        toast({ title: "Invalid Account Number", description: "Bank account number must be at least 9 digits.", variant: "warning" });
-        return false;
-      }
       if (accountNumber !== confirmAccountNumber) {
         toast({ title: "Account Numbers Mismatch", description: "Account number and confirmation do not match.", variant: "warning" });
         return false;
@@ -1460,19 +1988,24 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     }
 
     if (currentStep === 4) {
-      if (!reference1Name.trim() || !reference1Contact.trim() || !reference2Name.trim() || !reference2Contact.trim()) {
-        toast({ title: "Two References Required", description: "Both reference persons with valid mobile numbers are mandatory.", variant: "warning" });
-        return false;
-      }
-      if (reference1Contact.replace(/\D/g, "").length !== 10 || reference2Contact.replace(/\D/g, "").length !== 10) {
-        toast({ title: "Invalid Reference Mobile", description: "Both references must have 10-digit mobile numbers.", variant: "warning" });
-        return false;
-      }
-      if (reference1Contact.replace(/\D/g, "") === reference2Contact.replace(/\D/g, "")) {
-        toast({ title: "Duplicate Reference Contact", description: "Reference 1 and Reference 2 cannot have the same mobile number.", variant: "warning" });
-        return false;
-      }
-      if (dsaType === "ENTITY") {
+      if (dsaType === "INDIVIDUAL") {
+        if (!reference1Name.trim() || !reference1Contact.trim() || !reference2Name.trim() || !reference2Contact.trim()) {
+          toast({ title: "Two References Required", description: "Both reference persons with valid mobile numbers are mandatory.", variant: "warning" });
+          return false;
+        }
+        if (reference1Contact.replace(/\D/g, "").length !== 10 || reference2Contact.replace(/\D/g, "").length !== 10) {
+          toast({ title: "Invalid Reference Mobile", description: "Both references must have 10-digit mobile numbers.", variant: "warning" });
+          return false;
+        }
+        if (reference1Contact.replace(/\D/g, "") === reference2Contact.replace(/\D/g, "")) {
+          toast({ title: "Duplicate Reference Contact", description: "Reference 1 and Reference 2 cannot have the same mobile number.", variant: "warning" });
+          return false;
+        }
+      } else {
+        if (stakeholders.length === 0) {
+          toast({ title: "Stakeholder Required", description: "At least one key stakeholder must be added.", variant: "warning" });
+          return false;
+        }
         for (let i = 0; i < stakeholders.length; i++) {
           const s = stakeholders[i];
           if (!s.stakeholder_type.trim() || !s.name.trim() || !s.pan.trim() || !s.mobile_no.trim()) {
@@ -1500,7 +2033,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
             });
             return false;
           }
-          if (s.aadhaar && s.aadhaar.replace(/\D/g, "").length !== 12) {
+          const isStakeholderMasked = s.aadhaar ? /^[0-9X]{12}$/i.test(s.aadhaar.trim()) : false;
+          if (s.aadhaar && s.aadhaar.replace(/\D/g, "").length !== 12 && !isStakeholderMasked) {
             toast({
               title: `Stakeholder ${i + 1} Invalid Aadhaar`,
               description: "Aadhaar number must be 12 digits.",
@@ -1536,11 +2070,47 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     return true;
   };
 
-  const handleNext = () => {
-    if (validateStep(step)) {
-      setStep((prev) => Math.min(prev + 1, 6));
-      window.scrollTo({ top: 0, behavior: "smooth" });
+  const handleNext = async () => {
+    if (!validateStep(step)) {
+      return;
     }
+    if (step === 1) {
+      try {
+        const dupCheck: any = await adminApi.checkDsaDuplicate({
+          pan: pan.trim().toUpperCase(),
+          mobile: mobile.trim() || undefined,
+          email: (selfEmail.trim() || email.trim()) || undefined,
+          gst: gstApplicable && gstNumber.trim() ? gstNumber.trim().toUpperCase() : undefined,
+          exclude_id: createdDsaId || undefined,
+        }).catch((e: any) => e?.data ?? e);
+
+        if (
+          dupCheck?.status === false ||
+          dupCheck?.exists === true ||
+          dupCheck?.message?.includes("already exists") ||
+          dupCheck?.error?.includes("already exists")
+        ) {
+          toast({
+            title: "Submission Failed",
+            description: "A DSA record with this PAN, Email, or Mobile already exists.",
+            variant: "destructive",
+          });
+          return;
+        }
+      } catch (dupErr: any) {
+        const dupMsg = String(dupErr?.data?.message || dupErr?.message || "");
+        if (dupMsg.toLowerCase().includes("already exists")) {
+          toast({
+            title: "Submission Failed",
+            description: "A DSA record with this PAN, Email, or Mobile already exists.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+    }
+    setStep((prev) => Math.min(prev + 1, 6));
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleBack = () => {
@@ -1591,7 +2161,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       dsa_type: dsaType,
       branch_id: validBranchId,
       pan: pan.toUpperCase(),
-      email,
+      email: email.trim() || selfEmail.trim(),
       mobile,
       contact_person: contactPerson || undefined,
       applicant_prior_experience: resolvedPriorExperience,
@@ -1633,7 +2203,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       payload.last_name = lastName;
       payload.date_of_birth = dateOfBirth;
       payload.education_qualification = educationQualification;
-      payload.aadhaar_no = aadhaarNo.replace(/\D/g, "");
+      payload.aadhaar_no = aadhaarNo.replace(/-/g, "").toUpperCase();
     } else {
       payload.entity_name = entityName;
       payload.constitution = constitution;
@@ -1814,7 +2384,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
   if (!isMounted) {
     return (
-      <div className="mx-auto max-w-5xl py-12 px-4 sm:px-6">
+      <div className="mx-auto max-w-6xl py-12 px-4 sm:px-6">
         <div className="h-64 rounded-xl border border-slate-200 bg-white shadow-sm flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
@@ -1859,34 +2429,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   {dsaType}
                 </span>
               </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-600">Queue Status</span>
-                <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-800">
-                  Pending Maker Review
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-600">Documents Attached</span>
-                <span className="font-semibold text-emerald-700">{Object.keys(uploadedDocs).length} files</span>
-              </div>
-              <div className="border-t border-slate-200 pt-3 space-y-2 text-xs text-slate-700">
-                <div>
-                  <span className="font-semibold text-slate-500">Registered Address: </span>
-                  <span>{address ? `${address}, ${city}, ${stateName} - ${pincode}` : `${city}, ${stateName} - ${pincode}`}</span>
-                </div>
-                <div>
-                  <span className="font-semibold text-slate-500">Office Address: </span>
-                  <span>
-                    {isOfficeSameAsResidence
-                      ? `Same as Registered Address (${city})`
-                      : `${officeAddress}, ${officeCity}, ${officeStateName} - ${officePincode}`}
-                  </span>
-                </div>
-                <div>
-                  <span className="font-semibold text-slate-500">Premises Ownership: </span>
-                  <span className="font-medium text-slate-900">{businessPremisesOwnership === "Owned" ? "Self Owned" : businessPremisesOwnership === "Rented" ? "Rented / Leased Premises" : "N/A"}</span>
-                </div>
-              </div>
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
@@ -1913,6 +2455,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       setLastName("");
                       setMiddleName("");
                       setPan("");
+                      setSelfEmail("");
                       setEmail("");
                       setMobile("");
                       setAadhaarNo("");
@@ -1958,7 +2501,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   }
 
   return (
-    <div className="mx-auto max-w-5xl py-6 px-4 sm:px-6">
+    <div className="mx-auto max-w-6xl py-6 px-4 sm:px-6">
       {/* Header Banner */}
       <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-200 pb-5">
         <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
@@ -1981,7 +2524,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
             { id: 1, name: "DSA Type & Identity", desc: "Type & Contact" },
             { id: 2, name: "Address & Premises", desc: "Location Details" },
             { id: 3, name: "Bank Details", desc: "Payout Account" },
-            { id: 4, name: "References", desc: dsaType === "ENTITY" ? "Refs & Key Persons" : "Two References" },
+            { id: 4, name: dsaType === "ENTITY" ? "Stakeholders" : "References", desc: dsaType === "ENTITY" ? "Entity Stakeholders" : "Two References" },
             { id: 5, name: "Document Uploads", desc: "Checklist Matrix" },
             { id: 6, name: "Review & Submit", desc: "DPDP Declaration" },
           ].map((s) => {
@@ -1995,7 +2538,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   if (isDone) setStep(s.id);
                 }}
                 disabled={!isDone && !isCurrent}
-                className={`flex flex-col text-left border-t-4 pt-2.5 transition-colors ${
+                className={`flex flex-col w-full text-left border-t-4 pt-2.5 transition-colors ${
                   isDone
                     ? "border-blue-600 text-blue-900 cursor-pointer"
                     : isCurrent
@@ -2024,7 +2567,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
               "DSA Type & Identity",
               "Address & Premises",
               "Bank Details",
-              "References",
+              dsaType === "ENTITY" ? "Entity Stakeholders" : "References",
               "Document Uploads",
               "Review & Submit",
             ][step - 1]}
@@ -2046,7 +2589,15 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
               {/* DSA Type Radio Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div
-                  onClick={() => setDsaType("INDIVIDUAL")}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleSwitchDsaType("INDIVIDUAL")}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleSwitchDsaType("INDIVIDUAL");
+                    }
+                  }}
                   className={`cursor-pointer rounded-xl border p-4 transition-all flex items-start gap-3.5 ${
                     dsaType === "INDIVIDUAL"
                       ? "border-blue-600 bg-blue-50/50 ring-2 ring-blue-600/20 shadow-sm"
@@ -2068,7 +2619,15 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                 </div>
 
                 <div
-                  onClick={() => setDsaType("ENTITY")}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleSwitchDsaType("ENTITY")}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleSwitchDsaType("ENTITY");
+                    }
+                  }}
                   className={`cursor-pointer rounded-xl border p-4 transition-all flex items-start gap-3.5 ${
                     dsaType === "ENTITY"
                       ? "border-blue-600 bg-blue-50/50 ring-2 ring-blue-600/20 shadow-sm"
@@ -2090,22 +2649,42 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                 </div>
               </div>
 
-              {/* Branch Selection (Public Self-Onboarding) */}
+
+
+              {/* Branch Selection & Contact Verification (Public Self-Onboarding) */}
               {mode === "self" && (
-                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-4">
-                  <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    <Building className="h-4 w-4 text-blue-600" />
-                    Target Branch & Mobile Verification
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-5 space-y-4 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 bg-purple-50 text-purple-600 border border-purple-200 rounded-xl flex items-center justify-center">
+                        <Smartphone className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+                          Mobile OTP Authentication & Branch Selection
+                        </h4> 
+                      </div>
+                    </div>
+                    {otpVerified && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800 border border-emerald-300">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                        Mobile & Email Verified
+                      </span>
+                    )}
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="branch_id" className="text-xs font-semibold">Select Home Branch *</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="branch_id" className="text-sm font-bold text-slate-700 leading-none">
+                          Select Home Branch *
+                        </Label>
+                      </div>
                       <Select
                         id="branch_id"
                         value={branchId}
                         onChange={(e) => setBranchId(e.target.value)}
-                        className="mt-1"
+                        className="mt-1.5 h-9 bg-white"
                       >
                         {branches.map((b, idx) => {
                           const val = String(b.id ?? b.branch_id ?? idx + 1);
@@ -2118,94 +2697,282 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       </Select>
                     </div>
 
-                    <div>
-                      <Label htmlFor="self_mobile" className="text-xs font-semibold">Applicant Mobile Number *</Label>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Input
-                          id="self_mobile"
-                          value={mobile}
-                          onChange={(e) => {
-                            setMobile(e.target.value.replace(/\D/g, "").slice(0, 10));
-                            setOtpSent(false);
-                            setOtpVerified(false);
-                            setOtpValue("");
-                            setOtpReferenceId("");
-                          }}
-                          placeholder="Enter 10-digit mobile"
-                          disabled={otpVerified}
-                          maxLength={10}
-                        />
-                        {!otpVerified && (
-                          <Button
-                            type="button"
-                            onClick={handleSendOtp}
-                            disabled={isSendingOtp || mobile.length !== 10}
-                            className="text-xs whitespace-nowrap bg-blue-600 hover:bg-blue-700 text-white"
-                          >
-                            {isSendingOtp ? "Sending..." : otpSent ? "Resend" : "Send OTP"}
-                          </Button>
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="self_mobile" className="text-sm font-bold text-slate-700 leading-none">
+                          Applicant Mobile Number *
+                        </Label>
+                      </div>
+                      <Input
+                        id="self_mobile"
+                        disabled={false}
+                        value={mobile}
+                        onChange={(e) => {
+                          setMobile(e.target.value.replace(/\D/g, "").slice(0, 10));
+                          setOtpSent(false);
+                          setOtpVerified(false);
+                          setOtpValue("");
+                          setOtpReferenceId("");
+                          setEmailOtpSent(false);
+                        }}
+                        placeholder="10-digit mobile number"
+                        maxLength={10}
+                        className="mt-1.5 font-mono text-sm h-9 bg-white cursor-text focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="self_email" className="text-sm font-bold text-slate-700 leading-none">
+                          Applicant Email Address *
+                        </Label>
+                      </div>
+                      <Input
+                        id="self_email"
+                        disabled={false}
+                        type="email"
+                        value={selfEmail}
+                        onChange={(e) => {
+                          setSelfEmail(e.target.value);
+                          setOtpSent(false);
+                          setOtpVerified(false);
+                          setOtpValue("");
+                          setOtpReferenceId("");
+                          setEmailOtpSent(false);
+                        }}
+                        placeholder="applicant@example.com"
+                        className="mt-1.5 text-sm h-9 bg-white cursor-text focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Actions / Status before verification */}
+                  {!otpVerified && (
+                    <div className="pt-1 flex flex-wrap items-center gap-2.5">
+                      <Button
+                        type="button"
+                        onClick={handleSendOtp}
+                        disabled={isSendingOtp || mobile.length !== 10 || !selfEmail.trim()}
+                        className="text-xs bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm flex items-center gap-1.5"
+                      >
+                        {isSendingOtp ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Send className="h-3.5 w-3.5" />
                         )}
-                        {otpVerified && (
-                          <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
-                              <Check className="h-3.5 w-3.5" /> Verified
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setOtpVerified(false);
-                                setOtpSent(false);
-                                setOtpValue("");
-                                setOtpReferenceId("");
-                              }}
-                              className="text-[11px] text-blue-600 hover:underline font-medium whitespace-nowrap"
-                            >
-                              Change
-                            </button>
+                        {isSendingOtp
+                          ? "Dispatching OTP..."
+                          : otpSent
+                          ? "Resend to Mobile & Email"
+                          : "Send OTP (SMS & Email)"}
+                      </Button>
+
+                      <span className="text-[11px] text-slate-500">
+                        {otpSent
+                          ? "The same OTP is valid from either channel."
+                          : "Sends a single 6-digit OTP code to both your mobile text message and email address."}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* OTP Verification & Channel Status Box */}
+                  {otpSent && (
+                    <div className="rounded-xl border border-blue-200/80 bg-blue-50/40 p-4 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 border-b border-blue-100 pb-2.5">
+                        <div>
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-blue-950">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                            {otpVerified ? "Mobile & Email Identity Verified" : "OTP Dispatched Successfully"}
                           </div>
-                        )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 rounded bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700 border border-slate-200">
+                            <Smartphone className="h-3 w-3 text-emerald-600" />
+                            SMS: +91 {mobile}
+                          </span>
+                          {selfEmail.trim() ? (
+                            <span className="inline-flex items-center gap-1 rounded bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700 border border-slate-200">
+                              <Mail className="h-3.5 w-3.5 text-indigo-600" />
+                              Email: {selfEmail}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 border border-amber-200">
+                              Email not provided
+                            </span>
+                          )}
+                        </div>
                       </div>
 
-                      {otpSent && !otpVerified && (
-                        <div className="mt-3 flex items-center gap-2">
+                      <div className="pt-1">
+                        <div className="h-5 flex items-center">
+                          <Label htmlFor="otp_code_input" className="text-sm font-bold text-slate-700 leading-none">
+                            Enter 6-Digit OTP *
+                          </Label>
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-3">
                           <Input
+                            id="otp_code_input"
                             value={otpValue}
-                            onChange={(e) => setOtpValue(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                            placeholder="Enter 6-digit OTP"
+                            disabled={otpVerified}
+                            tabIndex={otpVerified ? -1 : 0}
+                            onChange={(e) => {
+                              setOtpValue(e.target.value.replace(/\D/g, "").slice(0, 6));
+                              if (otpVerified) setOtpVerified(false);
+                            }}
+                            placeholder="• • • • • •"
                             maxLength={6}
-                            className="font-mono text-sm"
+                            className={cn(
+                              "font-mono text-center tracking-[0.4em] text-base font-bold bg-white w-48 h-9 shrink-0",
+                              otpVerified && "disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed pointer-events-none select-none focus:ring-0 focus:outline-none focus:border-slate-200"
+                            )}
                           />
                           <Button
                             type="button"
                             onClick={handleVerifyOtp}
-                            disabled={isVerifyingOtp || otpValue.length !== 6}
-                            className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white whitespace-nowrap"
+                            disabled={isVerifyingOtp || otpValue.length !== 6 || otpVerified}
+                            tabIndex={otpVerified ? -1 : 0}
+                            className={cn(
+                              "text-xs font-semibold whitespace-nowrap h-9 px-4 shrink-0 flex items-center gap-1.5",
+                              otpVerified
+                                ? "bg-emerald-600 text-white opacity-90 cursor-default pointer-events-none select-none focus:ring-0 focus:outline-none"
+                                : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                            )}
                           >
-                            {isVerifyingOtp ? "Verifying..." : "Verify OTP"}
+                            {isVerifyingOtp ? (
+                              <span className="flex items-center gap-1.5">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Verifying...
+                              </span>
+                            ) : otpVerified ? (
+                              <span className="flex items-center gap-1.5">
+                                <CheckCircle2 className="h-3.5 w-3.5" /> Verified
+                              </span>
+                            ) : (
+                              "Verify OTP"
+                            )}
                           </Button>
+
+                          <div className="flex items-center gap-1.5 text-xs text-slate-500 pl-1 sm:pl-2">
+                            <span>Didn't receive the OTP?</span>
+                            <button
+                              type="button"
+                              onClick={handleSendOtp}
+                              disabled={isSendingOtp || mobile.length !== 10 || !selfEmail.trim()}
+                              className="text-blue-600 hover:underline font-semibold disabled:opacity-50 inline-flex items-center gap-1"
+                            >
+                              {isSendingOtp ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                              Resend to Mobile & Email
+                            </button>
+                          </div>
                         </div>
-                      )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
 
+              {/* Instant Identity Verification (PAN API) */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-5 space-y-4 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl flex items-center justify-center">
+                      <CreditCard className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+                        PAN Verification
+                      </h4>
+                    </div>
+                  </div>
+                  {panVerified && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800 border border-emerald-300">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                      PAN Verified
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 max-w-xl">
+                  <div className="flex-1 flex flex-col">
+                    <div className="h-5 flex items-center">
+                      <Label htmlFor="pan_number_top" className="text-sm font-bold text-slate-700 leading-none">
+                        {dsaType === "INDIVIDUAL" ? "Individual PAN Number *" : "Entity PAN Number *"}
+                      </Label>
+                    </div>
+                    <Input
+                      id="pan_number_top"
+                      value={pan}
+                      disabled={panVerified}
+                      tabIndex={panVerified ? -1 : 0}
+                      onChange={(e) => {
+                        setPan(e.target.value.toUpperCase().slice(0, 10));
+                        setPanVerified(false);
+                        setPanVerificationData(null);
+                      }}
+                      placeholder="ABCDE1234F"
+                      className={cn(
+                        "mt-1.5 font-mono uppercase text-sm tracking-wider h-9 bg-white cursor-text focus:ring-2 focus:ring-blue-100 focus:border-blue-500",
+                        panVerified && "disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed pointer-events-none select-none focus:ring-0 focus:outline-none focus:border-slate-200"
+                      )}
+                      maxLength={10}
+                      required
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={handleVerifyPan}
+                    disabled={isVerifyingPan || pan.trim().length !== 10 || panVerified}
+                    tabIndex={panVerified ? -1 : 0}
+                    className={cn(
+                      "text-xs font-semibold whitespace-nowrap h-9 px-4 shrink-0 flex items-center justify-center gap-1.5 transition-all shadow-sm",
+                      panVerified
+                        ? "bg-emerald-600 text-white opacity-90 cursor-default pointer-events-none select-none focus:ring-0 focus:outline-none"
+                        : "bg-blue-600 hover:bg-blue-700 text-white"
+                    )}
+                  >
+                    {isVerifyingPan ? (
+                      <span className="flex items-center gap-1.5">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Verifying PAN...
+                      </span>
+                    ) : panVerified ? (
+                      <span className="flex items-center gap-1.5">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Verified
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1.5">
+                        <Sparkles className="h-3.5 w-3.5" /> Verify & Auto-Fill
+                      </span>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
               {/* INDIVIDUAL FORM FIELDS */}
               {dsaType === "INDIVIDUAL" && (
-                <div className="space-y-4 pt-2">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                    <User className="h-4 w-4 text-blue-600" />
-                    Individual Personal Details
-                  </h4>
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-5 space-y-4 shadow-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl flex items-center justify-center">
+                          <User className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+                            Individual Personal Details
+                          </h4>
+                        </div>
+                      </div>
+                    </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                    <div>
-                      <Label htmlFor="applicant_title" className="text-xs font-semibold">Title *</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-6 items-start">
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="applicant_title" className="text-sm font-bold text-slate-700 leading-none">Title *</Label>
+                      </div>
                       <Select
                         id="applicant_title"
                         value={applicantTitle}
                         onChange={(e) => setApplicantTitle(e.target.value)}
-                        className="mt-1"
+                        className="mt-1.5 h-9 bg-white"
                       >
                         <option value="">{loadingTitle ? "Loading..." : "Select Title"}</option>
                         {titleOptions.map((opt) => (
@@ -2216,41 +2983,46 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         )}
                       </Select>
                     </div>
-                    <div>
-                      <Label htmlFor="first_name" className="text-xs font-semibold">First Name *</Label>
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="first_name" className="text-sm font-bold text-slate-700 leading-none">First Name *</Label>
+                      </div>
                       <Input
                         id="first_name"
                         value={firstName}
                         onChange={(e) => setFirstName(e.target.value)}
                         placeholder="e.g. Ramesh"
-                        className="mt-1"
+                        className="mt-1.5 h-9 bg-white"
                       />
                     </div>
-                    <div>
-                      <Label htmlFor="middle_name" className="text-xs font-semibold">Middle Name (Optional)</Label>
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="middle_name" className="text-sm font-bold text-slate-700 leading-none">Middle Name (Optional)</Label>
+                      </div>
                       <Input
                         id="middle_name"
                         value={middleName}
                         onChange={(e) => setMiddleName(e.target.value)}
                         placeholder="e.g. Kumar"
-                        className="mt-1"
+                        className="mt-1.5 h-9 bg-white"
                       />
                     </div>
-                    <div>
-                      <Label htmlFor="last_name" className="text-xs font-semibold">Last Name *</Label>
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="last_name" className="text-sm font-bold text-slate-700 leading-none">Last Name *</Label>
+                      </div>
                       <Input
                         id="last_name"
                         value={lastName}
                         onChange={(e) => setLastName(e.target.value)}
                         placeholder="e.g. Sharma"
-                        className="mt-1"
+                        className="mt-1.5 h-9 bg-white"
                       />
                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <Label htmlFor="date_of_birth" className="text-xs font-semibold">Date of Birth * (DD/MM/YYYY)</Label>
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="date_of_birth" className="text-sm font-bold text-slate-700 leading-none">Date of Birth * (DD/MM/YYYY)</Label>
+                      </div>
                       <DatePicker
                         id="date_of_birth"
                         value={dateOfBirth}
@@ -2266,23 +3038,14 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         }}
                         max={new Date().toISOString().slice(0, 10)}
                         placeholder="DD/MM/YYYY"
-                        className="mt-1"
+                        className="mt-1.5"
                         required
                       />
                     </div>
-                    <div>
-                      <Label htmlFor="pan" className="text-xs font-semibold">Individual PAN *</Label>
-                      <Input
-                        id="pan"
-                        value={pan}
-                        onChange={(e) => setPan(e.target.value.toUpperCase().slice(0, 10))}
-                        placeholder="ABCDE1234F"
-                        className="mt-1 font-mono uppercase"
-                        maxLength={10}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="aadhaar_no" className="text-xs font-semibold">Aadhaar Number * (12 digits)</Label>
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="aadhaar_no" className="text-sm font-bold text-slate-700 leading-none">Aadhaar Number * (12 digits)</Label>
+                      </div>
                       <Input
                         id="aadhaar_no"
                         name="aadhaar_no"
@@ -2290,62 +3053,64 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         autoCorrect="off"
                         autoCapitalize="off"
                         spellCheck={false}
-                        aria-autocomplete="none"
-                        data-lpignore="true"
-                        data-1p-ignore="true"
-                        data-form-type="other"
-                        value={getAadhaarDisplayValue()}
+                        value={isAadhaarFocused ? aadhaarNo : maskAadhaar(aadhaarNo)}
                         onFocus={() => setIsAadhaarFocused(true)}
                         onBlur={() => setIsAadhaarFocused(false)}
                         onChange={(e) => {
                           const val = e.target.value;
-                          if (isAadhaarFocused) {
-                            setAadhaarNo(val.replace(/\D/g, "").slice(0, 12));
+                          const raw = val.replace(/[^0-9Xx]/g, "").slice(0, 12).toUpperCase();
+                          if (raw.length > 8) {
+                            setAadhaarNo(`${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8)}`);
+                          } else if (raw.length > 4) {
+                            setAadhaarNo(`${raw.slice(0, 4)}-${raw.slice(4)}`);
                           } else {
-                            const digits = val.replace(/\D/g, "");
-                            if (digits.length === 12) setAadhaarNo(digits);
+                            setAadhaarNo(raw);
                           }
                         }}
-                        placeholder={isAadhaarFocused ? "Enter 12-digit Aadhaar" : "XXXX-XXXX-XXXX"}
-                        className="mt-1 font-mono tracking-wider"
-                        maxLength={isAadhaarFocused ? 12 : 14}
+                        placeholder="XXXX-XXXX-XXXX"
+                        className="mt-1.5 font-mono tracking-wider h-9 bg-white"
+                        maxLength={14}
                         required
                       />
                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    {mode === "branch" && (
-                      <div>
-                        <Label htmlFor="branch_mobile" className="text-xs font-semibold">Mobile Number *</Label>
+                    {mode === "branch" ? (
+                      <div className="flex flex-col">
+                        <div className="h-5 flex items-center">
+                          <Label htmlFor="branch_mobile" className="text-sm font-bold text-slate-700 leading-none">Mobile Number *</Label>
+                        </div>
                         <Input
                           id="branch_mobile"
                           value={mobile}
                           onChange={(e) => setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
                           placeholder="9876543210"
-                          className="mt-1 font-mono"
+                          className="mt-1.5 font-mono h-9 bg-white"
                           maxLength={10}
                         />
                       </div>
+                    ) : (
+                      <div className="flex flex-col">
+                        <div className="h-5 flex items-center">
+                          <Label htmlFor="email" className="text-sm font-bold text-slate-700 leading-none">Email Address *</Label>
+                        </div>
+                        <Input
+                          id="email"
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="ramesh.sharma@example.com"
+                          className="mt-1.5 h-9 bg-white"
+                        />
+                      </div>
                     )}
-                    <div>
-                      <Label htmlFor="email" className="text-xs font-semibold">Email Address *</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="ramesh.sharma@example.com"
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="education" className="text-xs font-semibold">Highest Educational Qualification *</Label>
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="education" className="text-sm font-bold text-slate-700 leading-none">Highest Qualification *</Label>
+                      </div>
                       <Select
                         id="education"
                         value={educationQualification}
                         onChange={(e) => setEducationQualification(e.target.value)}
-                        className="mt-1"
+                        className="mt-1.5 h-9 bg-white"
                       >
                         <option value="">{loadingEducation ? "Loading qualifications..." : "Select Qualification"}</option>
                         {educationOptions.map((opt) => (
@@ -2360,61 +3125,83 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     </div>
                   </div>
 
-                  {/* GST Registration Applicable */}
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div>
-                        <span className="text-xs font-bold text-slate-800">GST Registration Applicable?</span>
-                        <p className="text-[11px] text-slate-500">If registered under GST, certificate upload is mandatory.</p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <label className="flex items-center gap-1.5 text-xs cursor-pointer font-medium">
-                          <input
-                            type="radio"
-                            name="individual_gst_applicable"
-                            checked={gstApplicable}
-                            onChange={() => handleGstToggle(true)}
-                          />
-                          Yes
-                        </label>
-                        <label className="flex items-center gap-1.5 text-xs cursor-pointer font-medium">
-                          <input
-                            type="radio"
-                            name="individual_gst_applicable"
-                            checked={!gstApplicable}
-                            onChange={() => handleGstToggle(false)}
-                          />
-                          No
-                        </label>
-                      </div>
-                    </div>
-
-                    {gstApplicable && (
-                      <div className="pt-2">
-                        <Label htmlFor="individual_gst_number" className="text-xs font-semibold">GSTIN / GST Number *</Label>
+                  {mode === "branch" && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-start">
+                      <div className="flex flex-col md:col-span-2">
+                        <div className="h-5 flex items-center">
+                          <Label htmlFor="email" className="text-sm font-bold text-slate-700 leading-none">Email Address *</Label>
+                        </div>
                         <Input
-                          id="individual_gst_number"
-                          value={gstNumber}
-                          onChange={(e) => setGstNumber(e.target.value.toUpperCase().slice(0, 15))}
-                          placeholder="27FGHIJ5678K1Z5"
-                          className="mt-1 font-mono uppercase max-w-sm"
-                          maxLength={15}
+                          id="email"
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="ramesh.sharma@example.com"
+                          className="mt-1.5 h-9 bg-white"
                         />
                       </div>
-                    )}
+                    </div>
+                  )}
+                </div>
+
+                {/* GST & Business Details Block */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-5 space-y-4 shadow-sm">
+                  {/* GST Registration Applicable */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-200/80">
+                    <div>
+                      <span className="text-sm font-bold text-slate-800">GST Registration Applicable?</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-1.5 text-sm cursor-pointer font-bold text-slate-700">
+                        <input
+                          type="radio"
+                          name="individual_gst_applicable"
+                          checked={gstApplicable}
+                          onChange={() => handleGstToggle(true)}
+                        />
+                        Yes
+                      </label>
+                      <label className="flex items-center gap-1.5 text-sm cursor-pointer font-bold text-slate-700">
+                        <input
+                          type="radio"
+                          name="individual_gst_applicable"
+                          checked={!gstApplicable}
+                          onChange={() => handleGstToggle(false)}
+                        />
+                        No
+                      </label>
+                    </div>
                   </div>
 
-                  {/* Prior Experience & Registered Business Proof (Separate from GST) */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                    <div>
-                      <Label htmlFor="experience_years" className="text-xs font-semibold text-slate-700">
-                        Applicant Prior Experience / Empanelment with other Banks/FIs
-                      </Label>
+                  {gstApplicable && (
+                    <div className="pt-1">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="individual_gst_number" className="text-sm font-bold text-slate-700 leading-none">GSTIN / GST Number *</Label>
+                      </div>
+                      <Input
+                        id="individual_gst_number"
+                        value={gstNumber}
+                        onChange={(e) => setGstNumber(e.target.value.toUpperCase().slice(0, 15))}
+                        placeholder="27FGHIJ5678K1Z5"
+                        className="mt-1.5 font-mono uppercase max-w-sm h-9 bg-white text-sm"
+                        maxLength={15}
+                      />
+                    </div>
+                  )}
+
+                  {/* Prior Experience & Registered Business Proof */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="experience_years" className="text-sm font-bold text-slate-700 leading-none">
+                          Applicant Prior Experience
+                        </Label>
+                      </div>
                       <Select
                         id="experience_years"
                         value={experienceYears}
                         onChange={(e) => setExperienceYears(e.target.value)}
-                        className="mt-1"
+                        className="mt-1.5 h-9 bg-white text-sm"
                       >
                         <option value="0">0 (No prior experience)</option>
                         <option value="1">1 year</option>
@@ -2428,43 +3215,44 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           value={priorExperienceDetails}
                           onChange={(e) => setPriorExperienceDetails(e.target.value)}
                           placeholder="Prior experience summary"
-                          className="mt-2 text-xs"
+                          className="mt-2 text-sm h-9 bg-white"
                         />
                       )}
                     </div>
 
                     {!gstApplicable && (
-                      <div>
-                        <Label className="text-xs font-semibold text-slate-700">
-                          Registered Business Proof
-                        </Label>
-                        <div className="mt-1">
-                          <CheckboxDropdown
-                            id="individual_business_licenses"
-                            placeholder="Business Proof (Shop Act / Udyam)"
-                            options={businessLicenseOptions}
-                            selectedKeys={selectedLicenses}
-                            onChange={(keys) => {
-                              setSelectedLicenses(keys);
-                              if (!keys.includes("SHOP_ACT")) {
-                                setShopActNumber("");
-                                setUploadedDocs((prev) => {
-                                  const next = { ...prev };
-                                  delete next["business_license_shop_act"];
-                                  return next;
-                                });
-                              }
-                              if (!keys.includes("UDYAM")) {
-                                setUdyamNumber("");
-                                setUploadedDocs((prev) => {
-                                  const next = { ...prev };
-                                  delete next["business_license_udyam"];
-                                  return next;
-                                });
-                              }
-                            }}
-                          />
+                      <div className="flex flex-col">
+                        <div className="h-5 flex items-center">
+                          <Label htmlFor="individual_business_licenses" className="text-sm font-bold text-slate-700 leading-none">
+                            Registered Business Proof
+                          </Label>
                         </div>
+                        <CheckboxDropdown
+                          id="individual_business_licenses"
+                          placeholder="Business Proof (Shop Act / Udyam)"
+                          options={businessLicenseOptions}
+                          selectedKeys={selectedLicenses}
+                          className="mt-1.5 text-sm"
+                          onChange={(keys) => {
+                            setSelectedLicenses(keys);
+                            if (!keys.includes("SHOP_ACT")) {
+                              setShopActNumber("");
+                              setUploadedDocs((prev) => {
+                                const next = { ...prev };
+                                delete next["business_license_shop_act"];
+                                return next;
+                              });
+                            }
+                            if (!keys.includes("UDYAM")) {
+                              setUdyamNumber("");
+                              setUploadedDocs((prev) => {
+                                const next = { ...prev };
+                                delete next["business_license_udyam"];
+                                return next;
+                              });
+                            }
+                          }}
+                        />
                       </div>
                     )}
                   </div>
@@ -2473,193 +3261,215 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   {!gstApplicable && (selectedLicenses.includes("SHOP_ACT") || selectedLicenses.includes("UDYAM")) && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                       {selectedLicenses.includes("SHOP_ACT") && (
-                        <div>
-                          <Label htmlFor="individual_shop_act_number" className="text-xs font-semibold text-slate-700">
-                            Shop Act License / Registration Number *
-                          </Label>
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label htmlFor="individual_shop_act_number" className="text-sm font-bold text-slate-700 leading-none">
+                              Shop Act License / Registration Number *
+                            </Label>
+                          </div>
                           <Input
                             id="individual_shop_act_number"
                             value={shopActNumber}
                             onChange={(e) => setShopActNumber(e.target.value.toUpperCase())}
                             placeholder="e.g. MH/PUN/SHOP/12345"
-                            className="mt-1 text-xs font-mono uppercase"
+                            className="mt-1.5 text-sm font-mono uppercase h-9 bg-white"
                           />
                         </div>
                       )}
                       {selectedLicenses.includes("UDYAM") && (
-                        <div>
-                          <Label htmlFor="individual_udyam_number" className="text-xs font-semibold text-slate-700">
-                            Udyam Registration Number *
-                          </Label>
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label htmlFor="individual_udyam_number" className="text-sm font-bold text-slate-700 leading-none">
+                              Udyam Registration Number *
+                            </Label>
+                          </div>
                           <Input
                             id="individual_udyam_number"
                             value={udyamNumber}
                             onChange={(e) => setUdyamNumber(e.target.value.toUpperCase())}
                             placeholder="e.g. UDYAM-MH-00-1234567"
-                            className="mt-1 text-xs font-mono uppercase"
+                            className="mt-1.5 text-sm font-mono uppercase h-9 bg-white"
                           />
                         </div>
                       )}
                     </div>
                   )}
                 </div>
+                </div>
               )}
 
               {/* ENTITY FORM FIELDS */}
               {dsaType === "ENTITY" && (
-                <div className="space-y-4 pt-2">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                    <Building2 className="h-4 w-4 text-blue-600" />
-                    Corporate / Business Entity Details
-                  </h4>
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-5 space-y-4 shadow-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl flex items-center justify-center">
+                          <Building2 className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+                            Corporate / Business Entity Details
+                          </h4>
+                          <p className="text-[11px] text-slate-500">
+                            Organization constitution, registration and key stakeholder information
+                          </p>
+                        </div>
+                      </div>
+                    </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="entity_name" className="text-xs font-semibold">Entity Legal Name *</Label>
-                      <Input
-                        id="entity_name"
-                        value={entityName}
-                        onChange={(e) => setEntityName(e.target.value)}
-                        placeholder="e.g. Apex Financial Solutions Pvt Ltd"
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="constitution" className="text-xs font-semibold">Constitution of Business *</Label>
-                      <Select
-                        id="constitution"
-                        value={constitution}
-                        onChange={(e) => setConstitution(e.target.value)}
-                        className="mt-1"
-                      >
-                        <option value="">Select Constitution</option>
-                        <option value="Proprietorship">Proprietorship</option>
-                        <option value="Partnership">Partnership Firm</option>
-                        <option value="LLP">Limited Liability Partnership (LLP)</option>
-                        <option value="Pvt Ltd">Private Limited Company</option>
-                        <option value="Public Ltd">Public Limited Company</option>
-                        <option value="Trust">Trust</option>
-                        <option value="Co-op Society">Co-operative Society</option>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <Label htmlFor="nature_of_business" className="text-xs font-semibold">Nature of Business *</Label>
-                      <Input
-                        id="nature_of_business"
-                        value={natureOfBusiness}
-                        onChange={(e) => setNatureOfBusiness(e.target.value)}
-                        placeholder="Loan Distribution & Financial Services"
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="entity_pan" className="text-xs font-semibold">Business Entity PAN *</Label>
-                      <Input
-                        id="entity_pan"
-                        value={pan}
-                        onChange={(e) => setPan(e.target.value.toUpperCase().slice(0, 10))}
-                        placeholder="FGHIJ5678K"
-                        className="mt-1 font-mono uppercase"
-                        maxLength={10}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="contact_person" className="text-xs font-semibold">Key Contact Person Name *</Label>
-                      <Input
-                        id="contact_person"
-                        value={contactPerson}
-                        onChange={(e) => setContactPerson(e.target.value)}
-                        placeholder="e.g. Vikram Malhotra"
-                        className="mt-1"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {mode === "branch" && (
-                      <div>
-                        <Label htmlFor="entity_mobile" className="text-xs font-semibold">Official Contact Mobile *</Label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="flex flex-col">
+                        <div className="h-5 flex items-center">
+                          <Label htmlFor="entity_name" className="text-sm font-bold text-slate-700 leading-none">Entity Legal Name *</Label>
+                        </div>
                         <Input
-                          id="entity_mobile"
-                          value={mobile}
-                          onChange={(e) => setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                          placeholder="9899988877"
-                          className="mt-1 font-mono"
-                          maxLength={10}
+                          id="entity_name"
+                          value={entityName}
+                          onChange={(e) => setEntityName(e.target.value)}
+                          placeholder="e.g. Apex Financial Solutions Pvt Ltd"
+                          className="mt-1.5 h-9 bg-white text-sm"
                         />
                       </div>
-                    )}
-                    <div>
-                      <Label htmlFor="entity_email" className="text-xs font-semibold">Official Contact Email *</Label>
-                      <Input
-                        id="entity_email"
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="info@apexfin.com"
-                        className="mt-1"
-                      />
+                      <div className="flex flex-col">
+                        <div className="h-5 flex items-center">
+                          <Label htmlFor="constitution" className="text-sm font-bold text-slate-700 leading-none">Constitution of Business *</Label>
+                        </div>
+                        <Select
+                          id="constitution"
+                          value={constitution}
+                          onChange={(e) => setConstitution(e.target.value)}
+                          className="mt-1.5 h-9 bg-white text-sm"
+                        >
+                          <option value="">Select Constitution</option>
+                          <option value="Proprietorship">Proprietorship</option>
+                          <option value="Partnership">Partnership Firm</option>
+                          <option value="LLP">Limited Liability Partnership (LLP)</option>
+                          <option value="Pvt Ltd">Private Limited Company</option>
+                          <option value="Public Ltd">Public Limited Company</option>
+                          <option value="Trust">Trust</option>
+                          <option value="Co-op Society">Co-operative Society</option>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="flex flex-col">
+                        <div className="h-5 flex items-center">
+                          <Label htmlFor="nature_of_business" className="text-sm font-bold text-slate-700 leading-none">Nature of Business *</Label>
+                        </div>
+                        <Input
+                          id="nature_of_business"
+                          value={natureOfBusiness}
+                          onChange={(e) => setNatureOfBusiness(e.target.value)}
+                          placeholder="Loan Distribution & Financial Services"
+                          className="mt-1.5 h-9 bg-white text-sm"
+                        />
+                      </div>
+                      <div className="flex flex-col">
+                        <div className="h-5 flex items-center">
+                          <Label htmlFor="contact_person" className="text-sm font-bold text-slate-700 leading-none">Key Contact Person Name *</Label>
+                        </div>
+                        <Input
+                          id="contact_person"
+                          value={contactPerson}
+                          onChange={(e) => setContactPerson(e.target.value)}
+                          placeholder="e.g. Vikram Malhotra"
+                          className="mt-1.5 h-9 bg-white text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {mode === "branch" && (
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label htmlFor="entity_mobile" className="text-sm font-bold text-slate-700 leading-none">Official Contact Mobile *</Label>
+                          </div>
+                          <Input
+                            id="entity_mobile"
+                            value={mobile}
+                            onChange={(e) => setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                            placeholder="9899988877"
+                            className="mt-1.5 font-mono h-9 bg-white text-sm"
+                            maxLength={10}
+                          />
+                        </div>
+                      )}
+                      <div className="flex flex-col">
+                        <div className="h-5 flex items-center">
+                          <Label htmlFor="entity_email" className="text-sm font-bold text-slate-700 leading-none">Official Contact Email *</Label>
+                        </div>
+                        <Input
+                          id="entity_email"
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="info@apexfin.com"
+                          className="mt-1.5 h-9 bg-white text-sm"
+                        />
+                      </div>
                     </div>
                   </div>
 
+                  {/* GST & Business Details Block */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-5 space-y-4 shadow-sm">
                   {/* GST Registration Applicable */}
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div>
-                        <span className="text-xs font-bold text-slate-800">GST Registration Applicable?</span>
-                        <p className="text-[11px] text-slate-500">If registered under GST, certificate upload is mandatory.</p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <label className="flex items-center gap-1.5 text-xs cursor-pointer font-medium">
-                          <input
-                            type="radio"
-                            name="entity_gst_applicable"
-                            checked={gstApplicable}
-                            onChange={() => handleGstToggle(true)}
-                          />
-                          Yes
-                        </label>
-                        <label className="flex items-center gap-1.5 text-xs cursor-pointer font-medium">
-                          <input
-                            type="radio"
-                            name="entity_gst_applicable"
-                            checked={!gstApplicable}
-                            onChange={() => handleGstToggle(false)}
-                          />
-                          No
-                        </label>
-                      </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-200/80">
+                    <div>
+                      <span className="text-sm font-bold text-slate-800">GST Registration Applicable?</span>
                     </div>
-
-                    {gstApplicable && (
-                      <div className="pt-2">
-                        <Label htmlFor="gst_number" className="text-xs font-semibold">GSTIN / GST Number *</Label>
-                        <Input
-                          id="gst_number"
-                          value={gstNumber}
-                          onChange={(e) => setGstNumber(e.target.value.toUpperCase().slice(0, 15))}
-                          placeholder="27FGHIJ5678K1Z5"
-                          className="mt-1 font-mono uppercase max-w-sm"
-                          maxLength={15}
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-1.5 text-sm cursor-pointer font-bold text-slate-700">
+                        <input
+                          type="radio"
+                          name="entity_gst_applicable"
+                          checked={gstApplicable}
+                          onChange={() => handleGstToggle(true)}
                         />
-                      </div>
-                    )}
+                        Yes
+                      </label>
+                      <label className="flex items-center gap-1.5 text-sm cursor-pointer font-bold text-slate-700">
+                        <input
+                          type="radio"
+                          name="entity_gst_applicable"
+                          checked={!gstApplicable}
+                          onChange={() => handleGstToggle(false)}
+                        />
+                        No
+                      </label>
+                    </div>
                   </div>
 
-                  {/* Entity Prior Experience & Registered Business Proof (Separate from GST) */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                    <div>
-                      <Label htmlFor="entity_experience_years" className="text-xs font-semibold text-slate-700">
-                        Entity Prior Experience / Empanelment Letters
-                      </Label>
+                  {gstApplicable && (
+                    <div className="pt-1">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="gst_number" className="text-sm font-bold text-slate-700 leading-none">GSTIN / GST Number *</Label>
+                      </div>
+                      <Input
+                        id="gst_number"
+                        value={gstNumber}
+                        onChange={(e) => setGstNumber(e.target.value.toUpperCase().slice(0, 15))}
+                        placeholder="27FGHIJ5678K1Z5"
+                        className="mt-1.5 font-mono uppercase max-w-sm h-9 bg-white text-sm"
+                        maxLength={15}
+                      />
+                    </div>
+                  )}
+
+                  {/* Entity Prior Experience & Registered Business Proof */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="entity_experience_years" className="text-sm font-bold text-slate-700 leading-none">
+                          Entity Prior Experience / Empanelment Letters
+                        </Label>
+                      </div>
                       <Select
                         id="entity_experience_years"
                         value={experienceYears}
                         onChange={(e) => setExperienceYears(e.target.value)}
-                        className="mt-1"
+                        className="mt-1.5 h-9 bg-white text-sm"
                       >
                         <option value="0">0 (No prior experience)</option>
                         <option value="1">1 year</option>
@@ -2672,44 +3482,45 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           id="entity_experience_details"
                           value={priorExperienceDetails}
                           onChange={(e) => setPriorExperienceDetails(e.target.value)}
-                          placeholder="Prior experience summary (e.g. 5 years in loan distribution with Axis Bank)"
-                          className="mt-2 text-xs"
+                          placeholder="Prior experience summary"
+                          className="mt-2 text-sm h-9 bg-white"
                         />
                       )}
                     </div>
 
                     {!gstApplicable && (
-                      <div>
-                        <Label className="text-xs font-semibold text-slate-700">
-                          Entity Registered Business Proof
-                        </Label>
-                        <div className="mt-1">
-                          <CheckboxDropdown
-                            id="entity_business_licenses"
-                            placeholder="Business Proof (Shop Act / Udyam)"
-                            options={businessLicenseOptions}
-                            selectedKeys={selectedLicenses}
-                            onChange={(keys) => {
-                              setSelectedLicenses(keys);
-                              if (!keys.includes("SHOP_ACT")) {
-                                setShopActNumber("");
-                                setUploadedDocs((prev) => {
-                                  const next = { ...prev };
-                                  delete next["business_license_shop_act"];
-                                  return next;
-                                });
-                              }
-                              if (!keys.includes("UDYAM")) {
-                                setUdyamNumber("");
-                                setUploadedDocs((prev) => {
-                                  const next = { ...prev };
-                                  delete next["business_license_udyam"];
-                                  return next;
-                                });
-                              }
-                            }}
-                          />
+                      <div className="flex flex-col">
+                        <div className="h-5 flex items-center">
+                          <Label htmlFor="entity_business_licenses" className="text-sm font-bold text-slate-700 leading-none">
+                            Entity Registered Business Proof
+                          </Label>
                         </div>
+                        <CheckboxDropdown
+                          id="entity_business_licenses"
+                          placeholder="Business Proof (Shop Act / Udyam)"
+                          options={businessLicenseOptions}
+                          selectedKeys={selectedLicenses}
+                          className="mt-1.5 text-sm"
+                          onChange={(keys) => {
+                            setSelectedLicenses(keys);
+                            if (!keys.includes("SHOP_ACT")) {
+                              setShopActNumber("");
+                              setUploadedDocs((prev) => {
+                                const next = { ...prev };
+                                delete next["business_license_shop_act"];
+                                return next;
+                              });
+                            }
+                            if (!keys.includes("UDYAM")) {
+                              setUdyamNumber("");
+                              setUploadedDocs((prev) => {
+                                const next = { ...prev };
+                                delete next["business_license_udyam"];
+                                return next;
+                              });
+                            }
+                          }}
+                        />
                       </div>
                     )}
                   </div>
@@ -2718,35 +3529,40 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   {!gstApplicable && (selectedLicenses.includes("SHOP_ACT") || selectedLicenses.includes("UDYAM")) && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                       {selectedLicenses.includes("SHOP_ACT") && (
-                        <div>
-                          <Label htmlFor="entity_shop_act_number" className="text-xs font-semibold text-slate-700">
-                            Shop Act License / Registration Number *
-                          </Label>
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label htmlFor="entity_shop_act_number" className="text-sm font-bold text-slate-700 leading-none">
+                              Shop Act License / Registration Number *
+                            </Label>
+                          </div>
                           <Input
                             id="entity_shop_act_number"
                             value={shopActNumber}
                             onChange={(e) => setShopActNumber(e.target.value.toUpperCase())}
                             placeholder="e.g. MH/PUN/SHOP/12345"
-                            className="mt-1 text-xs font-mono uppercase"
+                            className="mt-1.5 text-sm font-mono uppercase h-9 bg-white"
                           />
                         </div>
                       )}
                       {selectedLicenses.includes("UDYAM") && (
-                        <div>
-                          <Label htmlFor="entity_udyam_number" className="text-xs font-semibold text-slate-700">
-                            Udyam Registration Number *
-                          </Label>
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label htmlFor="entity_udyam_number" className="text-sm font-bold text-slate-700 leading-none">
+                              Udyam Registration Number *
+                            </Label>
+                          </div>
                           <Input
                             id="entity_udyam_number"
                             value={udyamNumber}
                             onChange={(e) => setUdyamNumber(e.target.value.toUpperCase())}
                             placeholder="e.g. UDYAM-MH-00-1234567"
-                            className="mt-1 text-xs font-mono uppercase"
+                            className="mt-1.5 text-sm font-mono uppercase h-9 bg-white"
                           />
                         </div>
                       )}
                     </div>
                   )}
+                </div>
                 </div>
               )}
             </div>
@@ -2754,110 +3570,195 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
           {/* STEP 2: ADDRESS & PREMISES */}
           {step === 2 && (
-            <div className="space-y-3">
-              <h3 className="text-lg font-bold text-slate-900">Business & Registered Address Details</h3>
+            <div className="space-y-4">
+              <h3 className="text-lg font-bold text-slate-900">Address Details</h3>
               <div className="space-y-4">
                 {/* Residence Address Section */}
-                <div className="space-y-3">
-                  <div>
-                    <Label htmlFor="address" className="text-xs font-semibold text-slate-700">Residence Address *</Label>
-                    <textarea
-                      id="address"
-                      rows={3}
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      placeholder="House/Flat No., Building, Street, Landmark"
-                      className="mt-1 w-full rounded-md border border-slate-300 p-2.5 text-xs shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-5 space-y-4 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl flex items-center justify-center">
+                        <Home className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+                          Residence Address
+                        </h4>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <Label htmlFor="state" className="text-xs font-semibold text-slate-700">State *</Label>
-                      <Select
-                        id="state"
-                        value={stateName}
-                        onChange={(e) => handleStateChange(e.target.value)}
-                        className="mt-1"
-                        disabled={loadingStates}
-                      >
-                        <option value="">{loadingStates ? "Loading states..." : "Select State"}</option>
-                        {resolvedStateOptions.map((s) => (
-                          <option key={s.key} value={s.key}>
-                            {s.label}
-                          </option>
-                        ))}
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="city" className="text-xs font-semibold text-slate-700">City *</Label>
-                      <Select
-                        id="city"
-                        value={city}
-                        onChange={(e) => setCity(e.target.value)}
-                        className="mt-1"
-                        disabled={!stateName || loadingCities}
-                      >
-                        <option value="">
-                          {!stateName
-                            ? "Select State first"
-                            : loadingCities
-                            ? "Loading cities..."
-                            : "Select City"}
-                        </option>
-                        {resolvedResidenceCityOptions.map((c) => (
-                          <option key={c.key} value={c.key}>
-                            {c.label}
-                          </option>
-                        ))}
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="pincode" className="text-xs font-semibold text-slate-700">Pincode (6 digits) *</Label>
-                      <Input
-                        id="pincode"
-                        value={pincode}
-                        onChange={(e) => setPincode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                        placeholder="400001"
-                        className="mt-1 font-mono"
-                        maxLength={6}
+                  <div className="space-y-3">
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="address" className="text-sm font-bold text-slate-700 leading-none">Residence Address *</Label>
+                      </div>
+                      <textarea
+                        id="address"
+                        rows={3}
+                        value={address}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setAddress(val);
+                          if (isOfficeSameAsResidence) {
+                            setOfficeAddress(val);
+                          }
+                        }}
+                        placeholder="House/Flat No., Building, Street, Landmark"
+                        className="mt-1.5 w-full rounded-md border border-slate-300 p-2.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
                       />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
+                      <div className="flex flex-col">
+                        <div className="h-5 flex items-center">
+                          <Label htmlFor="state" className="text-sm font-bold text-slate-700 leading-none">State *</Label>
+                        </div>
+                        <Select
+                          id="state"
+                          value={stateName}
+                          onChange={(e) => handleStateChange(e.target.value)}
+                          className="mt-1.5 bg-white"
+                          disabled={loadingStates}
+                        >
+                          <option value="">{loadingStates ? "Loading states..." : "Select State"}</option>
+                          {resolvedStateOptions.map((s) => (
+                            <option key={s.key} value={s.key}>
+                              {s.label}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <div className="flex flex-col">
+                        <div className="h-5 flex items-center">
+                          <Label htmlFor="city" className="text-sm font-bold text-slate-700 leading-none">City *</Label>
+                        </div>
+                        <Select
+                          id="city"
+                          value={city}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCity(val);
+                            if (isOfficeSameAsResidence) {
+                              setOfficeCity(val);
+                            }
+                          }}
+                          className="mt-1.5 bg-white"
+                          disabled={!stateName || loadingCities}
+                        >
+                          <option value="">
+                            {!stateName
+                              ? "Select State first"
+                              : loadingCities
+                              ? "Loading cities..."
+                              : "Select City"}
+                          </option>
+                          {resolvedResidenceCityOptions.map((c) => (
+                            <option key={c.key} value={c.key}>
+                              {c.label}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <div className="flex flex-col">
+                        <div className="h-5 flex items-center">
+                          <Label htmlFor="pincode" className="text-sm font-bold text-slate-700 leading-none">Pincode (6 digits) *</Label>
+                        </div>
+                        <Input
+                          id="pincode"
+                          value={pincode}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, "").slice(0, 6);
+                            setPincode(val);
+                            if (isOfficeSameAsResidence) {
+                              setOfficePincode(val);
+                            }
+                          }}
+                          placeholder="400001"
+                          className="mt-1.5 font-mono bg-white"
+                          maxLength={6}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Office Address Section */}
-                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-4">
-                  <div>
-                    <span className="text-xs font-bold text-slate-800">Office Address</span>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      Business premises and registered office location details
-                    </p>
+                <div className={cn(
+                  "rounded-xl border border-slate-200 bg-slate-50/70 p-5 shadow-sm transition-all",
+                  !isOfficeSameAsResidence && "space-y-4"
+                )}>
+                  <div className={cn(
+                    "flex flex-col sm:flex-row sm:items-center justify-between gap-2",
+                    !isOfficeSameAsResidence && "border-b border-slate-200/80 pb-3"
+                  )}>
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl flex items-center justify-center">
+                        <Building2 className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+                          Office Address
+                        </h4>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-sm font-bold text-slate-800">Keep same as residential</span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={isOfficeSameAsResidence}
+                        onClick={() => {
+                          const next = !isOfficeSameAsResidence;
+                          setIsOfficeSameAsResidence(next);
+                          if (next) {
+                            setOfficeAddress(address);
+                            setOfficeStateName(stateName);
+                            setOfficeCity(city);
+                            setOfficePincode(pincode);
+                          }
+                        }}
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${
+                          isOfficeSameAsResidence ? "bg-blue-600" : "bg-slate-300"
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            isOfficeSameAsResidence ? "translate-x-5" : "translate-x-0"
+                          }`}
+                        />
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Office Address Fields (Collapsed when toggled same as residential) */}
-                  {!isOfficeSameAsResidence ? (
+                  {/* Office Address Fields (Hidden when toggled same as residential) */}
+                  {!isOfficeSameAsResidence && (
                     <div className="space-y-3">
-                      <div>
-                        <Label htmlFor="office_address" className="text-xs font-semibold text-slate-700">Office Address *</Label>
+                      <div className="flex flex-col">
+                        <div className="h-5 flex items-center">
+                          <Label htmlFor="office_address" className="text-sm font-bold text-slate-700 leading-none">Office Address *</Label>
+                        </div>
                         <textarea
                           id="office_address"
                           rows={3}
                           value={officeAddress}
                           onChange={(e) => setOfficeAddress(e.target.value)}
                           placeholder="House/Flat No., Building, Street, Landmark"
-                          className="mt-1 w-full rounded-md border border-slate-300 p-2.5 text-xs shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          className="mt-1.5 w-full rounded-md border border-slate-300 p-2.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
                         />
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div>
-                          <Label htmlFor="office_state" className="text-xs font-semibold text-slate-700">State *</Label>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label htmlFor="office_state" className="text-sm font-bold text-slate-700 leading-none">State *</Label>
+                          </div>
                           <Select
                             id="office_state"
                             value={officeStateName}
                             onChange={(e) => handleOfficeStateChange(e.target.value)}
-                            className="mt-1"
+                            className="mt-1.5 bg-white"
                             disabled={loadingStates}
                           >
                             <option value="">{loadingStates ? "Loading states..." : "Select State"}</option>
@@ -2868,13 +3769,15 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                             ))}
                           </Select>
                         </div>
-                        <div>
-                          <Label htmlFor="office_city" className="text-xs font-semibold text-slate-700">City *</Label>
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label htmlFor="office_city" className="text-sm font-bold text-slate-700 leading-none">City *</Label>
+                          </div>
                           <Select
                             id="office_city"
                             value={officeCity}
                             onChange={(e) => setOfficeCity(e.target.value)}
-                            className="mt-1"
+                            className="mt-1.5 bg-white"
                             disabled={!officeStateName || loadingCities}
                           >
                             <option value="">
@@ -2891,73 +3794,34 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                             ))}
                           </Select>
                         </div>
-                        <div>
-                          <Label htmlFor="office_pincode" className="text-xs font-semibold text-slate-700">Pincode (6 digits) *</Label>
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label htmlFor="office_pincode" className="text-sm font-bold text-slate-700 leading-none">Pincode (6 digits) *</Label>
+                          </div>
                           <Input
                             id="office_pincode"
                             value={officePincode}
                             onChange={(e) => setOfficePincode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                             placeholder="411001"
-                            className="mt-1 font-mono"
+                            className="mt-1.5 font-mono bg-white"
                             maxLength={6}
                           />
                         </div>
                       </div>
                     </div>
-                  ) : (
-                    <div className="flex items-center gap-2 rounded-lg bg-blue-50/90 border border-blue-200 px-3 py-2 text-xs text-blue-800">
-                      <Check className="h-4 w-4 text-blue-600 flex-shrink-0" />
-                      <span>Residential address is used as office address.</span>
-                    </div>
                   )}
-
-                  {/* Toggle Button: Keep same as residential */}
-                  <div className={`flex items-center justify-between ${!isOfficeSameAsResidence ? "pt-3 border-t border-slate-200" : ""}`}>
-                    <div>
-                      <span className="text-xs font-bold text-slate-800">Keep same as residential</span>
-                      <p className="text-[11px] text-slate-500">
-                        {isOfficeSameAsResidence
-                          ? "Office address is synced with residential address"
-                          : "Toggle to automatically use residential address for office"}
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={isOfficeSameAsResidence}
-                      onClick={() => {
-                        const next = !isOfficeSameAsResidence;
-                        setIsOfficeSameAsResidence(next);
-                        if (next) {
-                          setOfficeAddress(address);
-                          setOfficeStateName(stateName);
-                          setOfficeCity(city);
-                          setOfficePincode(pincode);
-                        }
-                      }}
-                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${
-                        isOfficeSameAsResidence ? "bg-blue-600" : "bg-slate-300"
-                      }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                          isOfficeSameAsResidence ? "translate-x-5" : "translate-x-0"
-                        }`}
-                      />
-                    </button>
-                  </div>
                 </div>
 
                 {/* Premises Ownership */}
-                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
-                  <span className="text-xs font-bold text-slate-800">Business Premises Ownership *</span>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    If rented, a valid Rent Agreement document is mandatory at Step 5.
-                  </p>
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-5 space-y-3 shadow-sm">
+                  <div className="border-b border-slate-200/80 pb-3">
+                    <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                      Business Premises Ownership <span className="text-red-500 font-bold ml-0.5" style={{ color: "#ef4444" }}>*</span>
+                    </h4>
+                  </div>
 
-                  <div className="mt-3 flex items-center gap-6">
-                    <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                  <div className="mt-3 flex flex-wrap items-center gap-6">
+                    <label className="flex items-center gap-2.5 text-sm font-semibold cursor-pointer text-slate-800 hover:text-slate-900">
                       <input
                         type="radio"
                         name="ownership"
@@ -2968,18 +3832,20 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                             removeDoc("rent_agreement");
                           }
                         }}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 cursor-pointer"
                       />
                       <span>Self Owned Premises</span>
                     </label>
 
-                    <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                    <label className="flex items-center gap-2.5 text-sm font-semibold cursor-pointer text-blue-700 hover:text-blue-800">
                       <input
                         type="radio"
                         name="ownership"
                         checked={businessPremisesOwnership === "Rented"}
                         onChange={() => setBusinessPremisesOwnership("Rented")}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 cursor-pointer"
                       />
-                      <span className="text-blue-700">Rented / Leased Premises (Rent Agreement required)</span>
+                      <span>Rented / Leased Premises (Rent Agreement required)</span>
                     </label>
                   </div>
                 </div>
@@ -2993,72 +3859,72 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
               <h3 className="text-lg font-bold text-slate-900">Bank Details</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="bank_name" className="text-xs font-semibold">Bank Name *</Label>
+                  <Label htmlFor="bank_name" className="text-sm font-bold text-slate-700 leading-none">Bank Name *</Label>
                   <Input
                     id="bank_name"
                     value={bankName}
                     onChange={(e) => setBankName(e.target.value)}
-                    placeholder="e.g. The Cosmos Co-operative Bank Ltd."
-                    className="mt-1"
+                    placeholder="e.g. Cosmos Co-operative Bank Ltd."
+                    className="mt-1.5 text-sm"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="account_name" className="text-xs font-semibold">Account Holder Name *</Label>
+                  <Label htmlFor="account_name" className="text-sm font-bold text-slate-700 leading-none">Account Holder Name *</Label>
                   <Input
                     id="account_name"
                     value={accountName}
                     onChange={(e) => setAccountName(e.target.value)}
                     placeholder="Exact name as in bank records"
-                    className="mt-1"
+                    className="mt-1.5 text-sm"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="account_number" className="text-xs font-semibold">Account Number *</Label>
+                  <Label htmlFor="account_number" className="text-sm font-bold text-slate-700 leading-none">Account Number *</Label>
                   <Input
                     id="account_number"
                     value={accountNumber}
                     onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ""))}
                     placeholder="e.g. 50100012345678"
-                    className="mt-1 font-mono"
+                    className="mt-1.5 font-mono text-sm"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="confirm_account_number" className="text-xs font-semibold">Confirm Account Number *</Label>
+                  <Label htmlFor="confirm_account_number" className="text-sm font-bold text-slate-700 leading-none">Confirm Account Number *</Label>
                   <Input
                     id="confirm_account_number"
                     value={confirmAccountNumber}
                     onChange={(e) => setConfirmAccountNumber(e.target.value.replace(/\D/g, ""))}
                     placeholder="Re-enter account number"
-                    className="mt-1 font-mono"
+                    className="mt-1.5 font-mono text-sm"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="account_type" className="text-xs font-semibold">Account Type *</Label>
+                  <Label htmlFor="account_type" className="text-sm font-bold text-slate-700 leading-none">Account Type *</Label>
                   <Select
                     id="account_type"
                     value={accountType}
                     onChange={(e) => setAccountType(e.target.value as any)}
-                    className="mt-1"
+                    className="mt-1.5 text-sm"
                   >
                     <option value="">Select Account Type</option>
-                    <option value="Current">Current Account (Recommended for DSA)</option>
+                    <option value="Current">Current Account</option>
                     <option value="Savings">Savings Account</option>
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="ifsc" className="text-xs font-semibold">IFSC Code *</Label>
+                  <Label htmlFor="ifsc" className="text-sm font-bold text-slate-700 leading-none">IFSC Code *</Label>
                   <Input
                     id="ifsc"
                     value={ifsc}
                     onChange={(e) => setIfsc(e.target.value.toUpperCase().slice(0, 11))}
                     placeholder="e.g. COSB0000001"
-                    className="mt-1 font-mono uppercase"
+                    className="mt-1.5 font-mono uppercase text-sm"
                     maxLength={11}
                   />
                 </div>
@@ -3066,79 +3932,80 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
             </div>
           )}
 
-          {/* STEP 4: REFERENCES & STAKEHOLDERS */}
+          {/* STEP 4: REFERENCES / STAKEHOLDERS */}
           {step === 4 && (
             <div className="space-y-6">
-                <h3 className="text-lg font-bold text-slate-900">References & Entity Stakeholders</h3>
+              <h3 className="text-lg font-bold text-slate-900">
+                {dsaType === "ENTITY" ? "Entity Stakeholders" : "References"}
+              </h3>
 
-              {/* Two References Section */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-4">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                  <Users className="h-4 w-4 text-blue-600" />
-                  Two Independent References (Mandatory)
-                </span>
+              {/* Two References Section (Individual Only) */}
+              {dsaType === "INDIVIDUAL" && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-4">
+                  <span className="text-sm font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <Users className="h-4 w-4 text-blue-600" />
+                    References
+                  </span>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="ref1_name" className="text-xs font-semibold">Reference 1: Full Name *</Label>
-                    <Input
-                      id="ref1_name"
-                      value={reference1Name}
-                      onChange={(e) => setReference1Name(e.target.value)}
-                      placeholder="e.g. Suresh Patel"
-                      className="mt-1"
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="ref1_name" className="text-sm font-bold text-slate-700 leading-none">Reference 1: Full Name *</Label>
+                      <Input
+                        id="ref1_name"
+                        value={reference1Name}
+                        onChange={(e) => setReference1Name(e.target.value)}
+                        placeholder="e.g. Suresh Patel"
+                        className="mt-1.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="ref1_contact" className="text-sm font-bold text-slate-700 leading-none">Reference 1: Contact Number *</Label>
+                      <Input
+                        id="ref1_contact"
+                        value={reference1Contact}
+                        onChange={(e) => setReference1Contact(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                        placeholder="9811122233"
+                        className="mt-1.5 font-mono text-sm"
+                        maxLength={10}
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <Label htmlFor="ref1_contact" className="text-xs font-semibold">Reference 1: Contact Number *</Label>
-                    <Input
-                      id="ref1_contact"
-                      value={reference1Contact}
-                      onChange={(e) => setReference1Contact(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                      placeholder="9811122233"
-                      className="mt-1 font-mono"
-                      maxLength={10}
-                    />
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="ref2_name" className="text-sm font-bold text-slate-700 leading-none">Reference 2: Full Name *</Label>
+                      <Input
+                        id="ref2_name"
+                        value={reference2Name}
+                        onChange={(e) => setReference2Name(e.target.value)}
+                        placeholder="e.g. Amit Sharma"
+                        className="mt-1.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="ref2_contact" className="text-sm font-bold text-slate-700 leading-none">Reference 2: Contact Number *</Label>
+                      <Input
+                        id="ref2_contact"
+                        value={reference2Contact}
+                        onChange={(e) => setReference2Contact(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                        placeholder="9822233344"
+                        className="mt-1.5 font-mono text-sm"
+                        maxLength={10}
+                      />
+                    </div>
                   </div>
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="ref2_name" className="text-xs font-semibold">Reference 2: Full Name *</Label>
-                    <Input
-                      id="ref2_name"
-                      value={reference2Name}
-                      onChange={(e) => setReference2Name(e.target.value)}
-                      placeholder="e.g. Amit Sharma"
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="ref2_contact" className="text-xs font-semibold">Reference 2: Contact Number *</Label>
-                    <Input
-                      id="ref2_contact"
-                      value={reference2Contact}
-                      onChange={(e) => setReference2Contact(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                      placeholder="9822233344"
-                      className="mt-1 font-mono"
-                      maxLength={10}
-                    />
-                  </div>
-                </div>
-              </div>
+              )}
 
               {/* Stakeholders Section (Entity DSA Only) */}
               {dsaType === "ENTITY" && (
                 <div className="space-y-4 pt-2">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                      <h4 className="text-sm font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                         <Briefcase className="h-4 w-4 text-blue-600" />
-                        Key Persons / Partners / Directors (At least 1 Mandatory)
+                        Key Persons / Partners / Directors
                       </h4>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        Enter stakeholder details. In Step 5, you must upload photograph, PAN and Aadhaar for at least one key person.
-                      </p>
                     </div>
                     <Button
                       type="button"
@@ -3154,7 +4021,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     {stakeholders.map((s, idx) => (
                       <div key={idx} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm relative">
                         <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
-                          <span className="text-xs font-bold text-slate-800">Stakeholder #{idx + 1}</span>
+                          <span className="text-sm font-bold text-slate-800">Stakeholder #{idx + 1}</span>
                           {stakeholders.length > 1 && (
                             <button
                               type="button"
@@ -3168,11 +4035,11 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div>
-                            <Label className="text-[11px] font-semibold">Role / Designation *</Label>
+                            <Label className="text-sm font-bold text-slate-700 leading-none">Role / Designation *</Label>
                             <Select
                               value={s.stakeholder_type}
                               onChange={(e) => handleUpdateStakeholder(idx, "stakeholder_type", e.target.value)}
-                              className="mt-1 text-xs"
+                              className="mt-1.5 text-sm"
                             >
                               <option value="">Select Role</option>
                               <option value="Director">Director</option>
@@ -3183,21 +4050,21 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                             </Select>
                           </div>
                           <div>
-                            <Label className="text-[11px] font-semibold">Full Name *</Label>
+                            <Label className="text-sm font-bold text-slate-700 leading-none">Full Name *</Label>
                             <Input
                               value={s.name}
                               onChange={(e) => handleUpdateStakeholder(idx, "name", e.target.value)}
                               placeholder="e.g. Vikram Malhotra"
-                              className="mt-1 text-xs"
+                              className="mt-1.5 text-sm"
                             />
                           </div>
                           <div>
-                            <Label className="text-[11px] font-semibold">Mobile Number *</Label>
+                            <Label className="text-sm font-bold text-slate-700 leading-none">Mobile Number *</Label>
                             <Input
                               value={s.mobile_no}
                               onChange={(e) => handleUpdateStakeholder(idx, "mobile_no", e.target.value.replace(/\D/g, "").slice(0, 10))}
                               placeholder="9899988877"
-                              className="mt-1 text-xs font-mono"
+                              className="mt-1.5 text-sm font-mono"
                               maxLength={10}
                             />
                           </div>
@@ -3205,22 +4072,38 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
                           <div>
-                            <Label className="text-[11px] font-semibold">Individual PAN *</Label>
-                            <Input
-                              value={s.pan}
-                              onChange={(e) => handleUpdateStakeholder(idx, "pan", e.target.value.toUpperCase().slice(0, 10))}
-                              placeholder="ABCDE1111A"
-                              className="mt-1 text-xs font-mono uppercase"
-                              maxLength={10}
-                            />
+                            <Label className="text-sm font-bold text-slate-700 leading-none">Individual PAN *</Label>
+                            <div className="mt-1.5 flex items-center gap-1.5">
+                              <Input
+                                value={s.pan}
+                                onChange={(e) => handleUpdateStakeholder(idx, "pan", e.target.value.toUpperCase().slice(0, 10))}
+                                placeholder="ABCDE1111A"
+                                className="text-sm font-mono uppercase h-9 flex-1"
+                                maxLength={10}
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={verifyingStakeholderIdx === idx || !s.pan || s.pan.length !== 10}
+                                onClick={() => handleVerifyStakeholderPan(idx)}
+                                className="h-9 shrink-0 px-2.5 text-xs flex items-center gap-1 font-semibold"
+                              >
+                                {verifyingStakeholderIdx === idx ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  "Verify"
+                                )}
+                              </Button>
+                            </div>
                           </div>
                           <div>
-                            <Label className="text-[11px] font-semibold">Aadhaar Number *</Label>
+                            <Label className="text-sm font-bold text-slate-700 leading-none">Aadhaar Number *</Label>
                             <Input
                               value={s.aadhaar}
-                              onChange={(e) => handleUpdateStakeholder(idx, "aadhaar", e.target.value.replace(/\D/g, "").slice(0, 12))}
+                              onChange={(e) => handleUpdateStakeholder(idx, "aadhaar", e.target.value.replace(/[^0-9Xx]/g, "").slice(0, 12).toUpperCase())}
                               placeholder="999988887777"
-                              className="mt-1 text-xs font-mono"
+                              className="mt-1.5 text-sm font-mono"
                               maxLength={12}
                               autoComplete="off"
                               autoCorrect="off"
@@ -3231,12 +4114,12 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                             />
                           </div>
                           <div>
-                            <Label className="text-[11px] font-semibold">DIN / DPIN Number (Optional)</Label>
+                            <Label className="text-sm font-bold text-slate-700 leading-none">DIN / DPIN Number (Optional)</Label>
                             <Input
                               value={s.din_dpin_no || ""}
                               onChange={(e) => handleUpdateStakeholder(idx, "din_dpin_no", e.target.value)}
                               placeholder="01234567"
-                              className="mt-1 text-xs font-mono"
+                              className="mt-1.5 text-sm font-mono"
                             />
                           </div>
                         </div>
@@ -3257,9 +4140,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     <h3 className="text-lg font-bold text-slate-900">
                       {dsaType === "INDIVIDUAL" ? "Individual DSA" : "Entity DSA"} — Document Checklist
                     </h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Attach verified documents (Max 2MB per file, PDF/JPG/PNG). All mandatory documents marked below are required to submit.
-                    </p>
                   </div>
                   <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-blue-50 text-blue-800 border border-blue-200">
                     Attached: {currentDocList.filter((d) => Boolean(uploadedDocs[d.type])).length} / {currentDocList.length}
@@ -3281,8 +4161,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
               {/* Document Items Matrix */}
               <div className="border border-slate-200 rounded-xl divide-y divide-slate-200 overflow-hidden shadow-sm">
                 <div className="bg-slate-100/80 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-700 grid grid-cols-12 gap-3">
-                  <span className="col-span-5 sm:col-span-6">Document Name</span>
-                  <span className="col-span-3 sm:col-span-3">Status / Rule</span>
+                  <span className="col-span-8 sm:col-span-9">Document Name</span>
                   <span className="col-span-4 sm:col-span-3 text-right">Action / Upload</span>
                 </div>
 
@@ -3298,29 +4177,18 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       }`}
                     >
                       {/* Document Label */}
-                      <div className="col-span-5 sm:col-span-6">
+                      <div className="col-span-8 sm:col-span-9">
                         <div className="flex items-center gap-2">
                           <FileText className={`h-4 w-4 flex-shrink-0 ${attached ? "text-emerald-600" : "text-slate-400"}`} />
-                          <span className="font-semibold text-slate-800">{doc.label}</span>
+                          <span className="text-sm font-bold text-slate-800">
+                            {doc.label}{required && <span className="text-red-500 font-bold ml-0.5" style={{ color: "#ef4444" }}>*</span>}
+                          </span>
                         </div>
                         {attached && (
                           <span className="text-[11px] text-emerald-700 font-medium ml-6 block">
                             ✓ {attached.name} ({attached.size})
                           </span>
                         )}
-                      </div>
-
-                      {/* Requirement Badge */}
-                      <div className="col-span-3 sm:col-span-3">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            required
-                              ? "bg-rose-100 text-rose-800"
-                              : "bg-slate-100 text-slate-600"
-                          }`}
-                        >
-                          {required ? "Mandatory" : "Optional"}
-                        </span>
                       </div>
 
                       {/* File Upload Button / Remove Button */}
@@ -3369,10 +4237,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       <FileText className="h-4 w-4" />
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h4 className="text-sm font-bold text-slate-900">DSA Consent Form</h4>
-                      <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-800">
-                        Mandatory
-                      </span>
+                      <h4 className="text-sm font-bold text-slate-900">DSA Consent Form <span className="text-red-500 font-bold ml-0.5" style={{ color: "#ef4444" }}>*</span></h4>
                     </div>
                   </div>
 
@@ -3431,13 +4296,13 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
               {/* Remarks for Bank Staff Visit Report */}
               {mode === "branch" && uploadedDocs["visit_report"] && (
                 <div className="pt-2">
-                  <Label htmlFor="visit_remarks" className="text-xs font-semibold">Office Visit Report Remarks</Label>
+                  <Label htmlFor="visit_remarks" className="text-sm font-bold text-slate-700 leading-none">Office Visit Report Remarks</Label>
                   <Input
                     id="visit_remarks"
                     value={visitReportRemarks}
                     onChange={(e) => setVisitReportRemarks(e.target.value)}
                     placeholder="e.g. Physical premises verified by Branch Maker on site."
-                    className="mt-1"
+                    className="mt-1.5 text-sm"
                   />
                 </div>
               )}
@@ -3447,180 +4312,366 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           {/* STEP 6: REVIEW & FINAL SUBMISSION */}
           {step === 6 && (
             <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">Review Application & Declaration</h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Review and verify all application details and uploaded documents before submission.
+              {/* Formal Report Header */}
+              <div className="text-center pb-3 border-b-2 border-slate-900">
+                <h2 className="text-sm sm:text-base font-bold uppercase tracking-wider text-slate-900">
+                  DSA Application Review &amp; Declaration
+                </h2>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-0.5">
+                  ({dsaType === "ENTITY" ? "Corporate Entity Application" : "Individual Application"})
                 </p>
               </div>
 
-              {/* Dynamic 2-Column Review Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start text-xs">
-                {/* Column 1: Identity & Profile, Bank Account Details, References */}
-                <div className="space-y-4">
-                  {/* Identity Summary */}
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
-                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                      <span className="font-bold text-slate-800 uppercase tracking-wide">Identity & Profile</span>
-                      <span className="font-bold text-blue-600">{dsaType}</span>
-                    </div>
-                    <div className="space-y-1 pt-1 text-slate-700">
+              {/* Application Top Metadata Bar */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 text-xs gap-y-1.5 text-slate-700 font-medium pb-2 border-b border-slate-200">
+                <div>
+                  <span className="font-bold text-slate-900">Application Type:</span>{" "}
+                  <span className="font-bold text-blue-700">{dsaType}</span>
+                </div>
+                <div className="sm:text-right">
+                  <span className="font-bold text-slate-900">Review Date:</span> {formatDate(new Date().toISOString())}
+                </div>
+                {mode === "branch" && branchId && (
+                  <div className="sm:text-right">
+                    <span className="font-bold text-slate-900">Home Branch:</span>{" "}
+                    <span className="font-semibold text-slate-800">{branches.find((b) => String(b.id) === String(branchId))?.branch_name || branchId}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* SECTION 1: APPLICANT / ENTITY DETAILS */}
+              <div>
+                <div className="bg-[#0f172a] text-white px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-t">
+                  SECTION 1: {dsaType === "INDIVIDUAL" ? "Applicant & Identity Details" : "Corporate & Business Entity Details"}
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
+                    <tbody>
                       {dsaType === "INDIVIDUAL" ? (
                         <>
-                          <p><span className="text-slate-500">Applicant:</span> <span className="font-semibold">{applicantTitle ? `${applicantTitle} ` : ""}{firstName} {middleName} {lastName}</span></p>
-                          <p><span className="text-slate-500">DOB:</span> {formatDate(dateOfBirth)}</p>
-                          <p><span className="text-slate-500">Highest Qualification:</span> {educationQualification}</p>
-                          <p><span className="text-slate-500">Aadhaar:</span> {aadhaarNo ? `XXXX-XXXX-${aadhaarNo.slice(-4)}` : "N/A"}</p>
+                          <tr>
+                            <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Applicant Full Name:</td>
+                            <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-bold text-slate-900">
+                              {applicantTitle ? `${applicantTitle} ` : ""}{firstName} {middleName} {lastName}
+                            </td>
+                            <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Date of Birth:</td>
+                            <td className="w-[25%] bg-white border border-slate-300 p-2.5 text-slate-900">{formatDate(dateOfBirth)}</td>
+                          </tr>
+                          <tr>
+                            <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">PAN Number:</td>
+                            <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-mono font-bold text-slate-900">
+                              {pan} {panVerified && <span className="ml-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">ScoreMe Verified</span>}
+                            </td>
+                            <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Aadhaar Number:</td>
+                            <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-mono text-slate-900">
+                              {aadhaarNo ? maskAadhaar(aadhaarNo) : "N/A"}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Mobile Number:</td>
+                            <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-mono text-slate-900">{mobile}</td>
+                            <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Email Address:</td>
+                            <td className="w-[25%] bg-white border border-slate-300 p-2.5 text-slate-900">{email || selfEmail}</td>
+                          </tr>
+                          <tr>
+                            <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Highest Qualification:</td>
+                            <td className="w-[25%] bg-white border border-slate-300 p-2.5 text-slate-900">{educationQualification || "N/A"}</td>
+                            <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Prior Experience:</td>
+                            <td className="w-[25%] bg-white border border-slate-300 p-2.5 text-slate-900 font-medium">
+                              {priorExperienceDetails.trim() || (experienceYears === "0" ? "0 (No prior experience)" : `${experienceYears} yrs`)}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">GST Registration:</td>
+                            <td className="w-[25%] bg-white border border-slate-300 p-2.5 text-slate-900">
+                              {gstApplicable ? `Applicable (${gstNumber})` : "Not Applicable"}
+                            </td>
+                            <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Registered Business Proof:</td>
+                            <td className="w-[25%] bg-white border border-slate-300 p-2.5 text-slate-900">
+                              {!gstApplicable ? (
+                                selectedLicenses.length > 0
+                                  ? selectedLicenses.map((k) => businessLicenseOptions.find((o) => o.key === k)?.label || k).join(", ")
+                                  : "None"
+                              ) : "GST Registered"}
+                            </td>
+                          </tr>
+                          {!gstApplicable && (shopActNumber || udyamNumber) && (
+                            <tr>
+                              <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Shop Act License No:</td>
+                              <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-mono text-slate-900">{shopActNumber || "N/A"}</td>
+                              <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Udyam Registration No:</td>
+                              <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-mono text-slate-900">{udyamNumber || "N/A"}</td>
+                            </tr>
+                          )}
                         </>
                       ) : (
                         <>
-                          <p><span className="text-slate-500">Entity:</span> <span className="font-semibold">{entityName}</span></p>
-                          <p><span className="text-slate-500">Constitution:</span> {constitution}</p>
-                          <p><span className="text-slate-500">Nature of Business:</span> {natureOfBusiness}</p>
-                          <p><span className="text-slate-500">Contact Person:</span> {contactPerson}</p>
-                        </>
-                      )}
-                      <p><span className="text-slate-500">PAN:</span> <span className="font-mono font-semibold">{pan}</span></p>
-                      {gstApplicable && <p><span className="text-slate-500">GSTIN:</span> <span className="font-mono font-semibold">{gstNumber}</span></p>}
-                      <p><span className="text-slate-500">Mobile:</span> {mobile}</p>
-                      <p><span className="text-slate-500">Email:</span> {email}</p>
-                      <p><span className="text-slate-500">Prior Experience:</span> <span className="font-semibold">{priorExperienceDetails.trim() || (experienceYears === "0" ? "0 (No prior experience)" : `${experienceYears} yrs`)}</span></p>
-                      {!gstApplicable && (
-                        <>
-                          <p><span className="text-slate-500">Business Proof:</span> <span className="font-semibold">{selectedLicenses.length > 0 ? selectedLicenses.map((k) => businessLicenseOptions.find((o) => o.key === k)?.label || k).join(", ") : "None"}</span></p>
-                          {shopActNumber && <p><span className="text-slate-500">Shop Act No:</span> <span className="font-mono font-semibold">{shopActNumber}</span></p>}
-                          {udyamNumber && <p><span className="text-slate-500">Udyam No:</span> <span className="font-mono font-semibold">{udyamNumber}</span></p>}
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Bank Details Summary */}
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
-                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                      <span className="font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-                        <Briefcase className="h-3.5 w-3.5 text-emerald-600" />
-                        Bank Account Details
-                      </span>
-                      <span className="font-bold text-emerald-600">{accountType || "Savings"}</span>
-                    </div>
-                    <div className="space-y-1.5 pt-1 text-slate-700">
-                      <p><span className="text-slate-500">Bank Name:</span> <span className="font-medium text-slate-900">{bankName}</span></p>
-                      <p><span className="text-slate-500">Account Name:</span> <span className="font-medium text-slate-900">{accountName}</span></p>
-                      <p><span className="text-slate-500">Account No:</span> <span className="font-mono font-semibold text-slate-900">{accountNumber}</span></p>
-                      <p><span className="text-slate-500">IFSC Code:</span> <span className="font-mono font-semibold text-slate-900">{ifsc}</span></p>
-                    </div>
-                  </div>
-
-                  {/* References */}
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
-                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                      <span className="font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-                        <Users className="h-3.5 w-3.5 text-blue-600" />
-                        References
-                      </span>
-                    </div>
-                    <div className="space-y-1 pt-1 text-slate-700">
-                      <p><span className="text-slate-500">Ref 1:</span> {reference1Name} ({reference1Contact})</p>
-                      <p><span className="text-slate-500">Ref 2:</span> {reference2Name} ({reference2Contact})</p>
-                      {dsaType === "ENTITY" && (
-                        <p className="pt-1 text-blue-700 font-semibold">
-                          {stakeholders.length} Key Person(s) / Stakeholder(s) Added
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Column 2: Address & Operating Premises, Documents Prepared */}
-                <div className="space-y-4">
-                  {/* Address & Operating Premises Summary */}
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
-                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                      <span className="font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-                        <MapPin className="h-3.5 w-3.5 text-rose-600" />
-                        Address & Premises Details
-                      </span>
-                      <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800">
-                        {businessPremisesOwnership === "Owned" ? "Self Owned" : "Rented / Leased"}
-                      </span>
-                    </div>
-                    <div className="space-y-2 pt-1 text-slate-700">
-                      <div>
-                        <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Residential / Registered Address</p>
-                        <p className="font-medium text-slate-900 mt-0.5 leading-relaxed">
-                          {address ? `${address}, ${city}, ${stateName} - ${pincode}` : `${city}, ${stateName} - ${pincode}`}
-                        </p>
-                      </div>
-
-                      <div className="pt-1.5 border-t border-slate-200/70">
-                        <div className="flex items-center justify-between">
-                          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Office / Operating Premises</p>
-                          {isOfficeSameAsResidence && (
-                            <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                              Same as Residence
-                            </span>
+                          <tr>
+                            <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Entity Legal Name:</td>
+                            <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-bold text-slate-900">{entityName || "N/A"}</td>
+                            <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Constitution:</td>
+                            <td className="w-[25%] bg-white border border-slate-300 p-2.5 text-slate-900">{constitution || "N/A"}</td>
+                          </tr>
+                          <tr>
+                            <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Nature of Business:</td>
+                            <td className="w-[25%] bg-white border border-slate-300 p-2.5 text-slate-900">{natureOfBusiness || "N/A"}</td>
+                            <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Key Contact Person:</td>
+                            <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-semibold text-slate-900">{contactPerson || "N/A"}</td>
+                          </tr>
+                          <tr>
+                            <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Entity PAN Number:</td>
+                            <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-mono font-bold text-slate-900">
+                              {pan} {panVerified && <span className="ml-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">ScoreMe Verified</span>}
+                            </td>
+                            <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">GST Registration:</td>
+                            <td className="w-[25%] bg-white border border-slate-300 p-2.5 text-slate-900">
+                              {gstApplicable ? `Applicable (${gstNumber})` : "Not Applicable"}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Official Mobile:</td>
+                            <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-mono text-slate-900">{mobile}</td>
+                            <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Official Email:</td>
+                            <td className="w-[25%] bg-white border border-slate-300 p-2.5 text-slate-900">{email || selfEmail}</td>
+                          </tr>
+                          <tr>
+                            <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Prior Experience:</td>
+                            <td className="w-[25%] bg-white border border-slate-300 p-2.5 text-slate-900">
+                              {priorExperienceDetails.trim() || (experienceYears === "0" ? "0 (No prior experience)" : `${experienceYears} yrs`)}
+                            </td>
+                            <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Registered Business Proof:</td>
+                            <td className="w-[25%] bg-white border border-slate-300 p-2.5 text-slate-900">
+                              {!gstApplicable ? (
+                                selectedLicenses.length > 0
+                                  ? selectedLicenses.map((k) => businessLicenseOptions.find((o) => o.key === k)?.label || k).join(", ")
+                                  : "None"
+                              ) : "GST Registered"}
+                            </td>
+                          </tr>
+                          {!gstApplicable && (shopActNumber || udyamNumber) && (
+                            <tr>
+                              <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Shop Act License No:</td>
+                              <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-mono text-slate-900">{shopActNumber || "N/A"}</td>
+                              <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Udyam Registration No:</td>
+                              <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-mono text-slate-900">{udyamNumber || "N/A"}</td>
+                            </tr>
                           )}
-                        </div>
-                        <p className="font-medium text-slate-900 mt-0.5 leading-relaxed">
-                          {isOfficeSameAsResidence
-                            ? `${address}, ${city}, ${stateName} - ${pincode}`
-                            : `${officeAddress}, ${officeCity}, ${officeStateName} - ${officePincode}`}
-                        </p>
-                      </div>
-
-                      <div className="pt-1.5 border-t border-slate-200/70 flex items-center justify-between text-[11px]">
-                        <span className="text-slate-500">Business Premises Ownership:</span>
-                        <span className="font-semibold text-slate-900">
-                          {businessPremisesOwnership === "Owned" ? "Self Owned" : businessPremisesOwnership === "Rented" ? "Rented / Leased Premises" : "Not Specified"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Documents Prepared */}
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
-                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                      <span className="font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-                        <FileText className="h-3.5 w-3.5 text-blue-600" />
-                        Documents Prepared ({Object.keys(uploadedDocs).length} files)
-                      </span>
-                    </div>
-                    <ul className="space-y-1.5 pt-1 text-slate-700 divide-y divide-slate-100">
-                      {Object.entries(uploadedDocs).map(([key, item]) => (
-                        <li key={key} className="flex items-center justify-between gap-3 text-[11px] pt-1.5 first:pt-0">
-                          <span className="font-medium text-slate-800 flex items-center gap-1.5 truncate">
-                            <FileText className="h-3 w-3 text-blue-600 shrink-0" />
-                            {getDocDisplayLabel(key, currentDocList)}
-                          </span>
-                          <span className="text-slate-600 font-mono text-[10px] bg-white px-2 py-0.5 rounded border border-slate-200 truncate max-w-[200px] shrink-0 text-right font-medium shadow-2xs">
-                            {item.name}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                        </>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
-              {/* DPDP Act Declaration Box */}
-              <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex-shrink-0">
-                    {uploadedDocs["dsa_consent_dpdp"] ? (
-                      <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                    ) : (
-                      <Info className="h-5 w-5 text-amber-600" />
-                    )}
+              {/* SECTION 2: ADDRESS & PREMISES DETAILS */}
+              <div>
+                <div className="bg-[#0f172a] text-white px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-t">
+                  SECTION 2: Address &amp; Operating Premises Details
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
+                    <tbody>
+                      <tr>
+                        <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
+                          {dsaType === "INDIVIDUAL" ? "Residential Address:" : "Registered Office Address:"}
+                        </td>
+                        <td colSpan={3} className="bg-white border border-slate-300 p-2.5 text-slate-900">
+                          {address ? `${address}, ${city}, ${stateName} - ${pincode}` : `${city}, ${stateName} - ${pincode}`}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
+                          Operating / Office Address:
+                        </td>
+                        <td colSpan={3} className="bg-white border border-slate-300 p-2.5 text-slate-900">
+                          {isOfficeSameAsResidence
+                            ? `${address ? `${address}, ` : ""}${city}, ${stateName} - ${pincode} (Same as ${dsaType === "INDIVIDUAL" ? "Residential" : "Registered Office"} Address)`
+                            : `${officeAddress ? `${officeAddress}, ` : ""}${officeCity}, ${officeStateName} - ${officePincode}`}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
+                          Business Premises Ownership:
+                        </td>
+                        <td colSpan={3} className="bg-white border border-slate-300 p-2.5 font-semibold text-slate-900">
+                          {businessPremisesOwnership === "Owned"
+                            ? "Self Owned"
+                            : businessPremisesOwnership === "Rented"
+                            ? "Rented / Leased Premises"
+                            : "Not Specified"}
+                        </td>
+                      </tr>
+                      {mode === "branch" && visitReportRemarks && (
+                        <tr>
+                          <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
+                            Visit Report Remarks:
+                          </td>
+                          <td colSpan={3} className="bg-white border border-slate-300 p-2.5 text-slate-900">
+                            {visitReportRemarks}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* SECTION 3: BANK DETAILS */}
+              <div>
+                <div className="bg-[#0f172a] text-white px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-t">
+                  SECTION 3: Bank Account Details
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
+                    <tbody>
+                      <tr>
+                        <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Bank Name:</td>
+                        <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-bold text-slate-900">{bankName || "N/A"}</td>
+                        <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Account Holder Name:</td>
+                        <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-semibold text-slate-900">{accountName || "N/A"}</td>
+                      </tr>
+                      <tr>
+                        <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Account Number:</td>
+                        <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-mono font-bold text-slate-900">{accountNumber || "N/A"}</td>
+                        <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Account Type:</td>
+                        <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-semibold text-slate-900">{accountType || "Savings"}</td>
+                      </tr>
+                      <tr>
+                        <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">IFSC Code:</td>
+                        <td colSpan={3} className="bg-white border border-slate-300 p-2.5 font-mono font-bold text-slate-900">{ifsc || "N/A"}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* SECTION 4: REFERENCES / STAKEHOLDERS */}
+              <div>
+                <div className="bg-[#0f172a] text-white px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-t">
+                  SECTION 4: {dsaType === "ENTITY" ? "Key Entity Stakeholders" : "Independent References"}
+                </div>
+                {dsaType === "INDIVIDUAL" ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
+                      <tbody>
+                        <tr>
+                          <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Reference 1:</td>
+                          <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-semibold text-slate-900">
+                            {reference1Name} ({reference1Contact})
+                          </td>
+                          <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Reference 2:</td>
+                          <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-semibold text-slate-900">
+                            {reference2Name} ({reference2Contact})
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
-                  <div className="text-xs text-slate-800 leading-relaxed space-y-1">
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <span className="font-bold text-blue-900">
-                        DSA Consent & Declaration (Under Digital Personal Data Protection Act)
-                      </span>
+                ) : (
+                  stakeholders.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
+                        <thead>
+                          <tr className="bg-slate-100 text-slate-700 font-bold">
+                            <th className="border border-slate-300 p-2 text-left w-10">#</th>
+                            <th className="border border-slate-300 p-2 text-left w-[20%]">Role / Designation</th>
+                            <th className="border border-slate-300 p-2 text-left w-[25%]">Full Name</th>
+                            <th className="border border-slate-300 p-2 text-left w-[15%]">Mobile</th>
+                            <th className="border border-slate-300 p-2 text-left w-[15%]">PAN</th>
+                            <th className="border border-slate-300 p-2 text-left w-[15%]">Aadhaar</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {stakeholders.map((s, idx) => (
+                            <tr key={idx} className="bg-white">
+                              <td className="border border-slate-300 p-2 font-bold text-slate-600 text-center">{idx + 1}</td>
+                              <td className="border border-slate-300 p-2 font-semibold text-slate-800">{s.stakeholder_type || "N/A"}</td>
+                              <td className="border border-slate-300 p-2 font-bold text-slate-900">{s.name || "N/A"}</td>
+                              <td className="border border-slate-300 p-2 font-mono text-slate-800">{s.mobile_no || "N/A"}</td>
+                              <td className="border border-slate-300 p-2 font-mono font-semibold text-slate-800">{s.pan || "N/A"}</td>
+                              <td className="border border-slate-300 p-2 font-mono text-slate-800">{s.aadhaar ? maskAadhaar(s.aadhaar) : "N/A"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="bg-white border border-slate-300 p-4 text-xs text-slate-500 italic">
+                      No stakeholders added.
+                    </div>
+                  )
+                )}
+              </div>
+
+              {/* SECTION 5: DOCUMENTS ATTACHED */}
+              <div>
+                <div className="bg-[#0f172a] text-white px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-t flex items-center justify-between">
+                  <span>SECTION 5: Uploaded Documents Checklist</span>
+                  <span className="text-[11px] font-normal normal-case opacity-90">
+                    {Object.keys(uploadedDocs).length} Files Attached
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-700 font-bold">
+                        <th className="border border-slate-300 p-2 text-left w-10">#</th>
+                        <th className="border border-slate-300 p-2 text-left w-[40%]">Document Name</th>
+                        <th className="border border-slate-300 p-2 text-left w-[35%]">Attached File</th>
+                        <th className="border border-slate-300 p-2 text-left w-[15%]">File Size</th>
+                        <th className="border border-slate-300 p-2 text-center w-[10%]">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.keys(uploadedDocs).length > 0 ? (
+                        Object.entries(uploadedDocs).map(([key, item], idx) => (
+                          <tr key={key} className="bg-white">
+                            <td className="border border-slate-300 p-2 text-slate-500 font-medium text-center">{idx + 1}</td>
+                            <td className="border border-slate-300 p-2 font-bold text-slate-800">
+                              {getDocDisplayLabel(key, currentDocList)}
+                            </td>
+                            <td className="border border-slate-300 p-2 font-mono text-[11px] text-slate-800 truncate">
+                              {item.name}
+                            </td>
+                            <td className="border border-slate-300 p-2 font-mono text-[11px] text-slate-600">
+                              {item.size || "Attached"}
+                            </td>
+                            <td className="border border-slate-300 p-2 text-center">
+                              <span className="inline-flex items-center text-emerald-700 font-bold text-[11px]">
+                                <CheckCircle2 className="h-3.5 w-3.5 mr-0.5 text-emerald-600" /> Attached
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="border border-slate-300 p-3 text-center text-slate-400 italic">
+                            No documents attached yet
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* SECTION 6: DECLARATION & DPDP ACT CONSENT */}
+              <div>
+                <div className="bg-[#0f172a] text-white px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-t">
+                  SECTION 6: Consent &amp; Declaration (Under Digital Personal Data Protection Act)
+                </div>
+                <div className="border border-slate-300 border-t-0 p-4 space-y-3 bg-white">
+                  <p className="text-xs text-slate-700 leading-relaxed text-justify">
+                    I/We hereby declare that all information and documents furnished above are true, complete, and authentic.
+                    I/We grant express consent to Cosmos Co-operative Bank Ltd. to verify details, conduct due diligence,
+                    and process my personal and business data strictly for empanelment, origination, and regulatory compliance as formalized in the attached signed DSA consent document.
+                  </p>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-200 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-800">Signed Consent Form Status:</span>
                       {uploadedDocs["dsa_consent_dpdp"] ? (
-                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800">
-                          ✓ Signed Consent Form Uploaded ({uploadedDocs["dsa_consent_dpdp"].name})
+                        <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Uploaded ({uploadedDocs["dsa_consent_dpdp"].name})
                         </span>
                       ) : (
                         <span className="inline-flex items-center rounded-full bg-rose-100 px-2.5 py-0.5 text-[10px] font-bold text-rose-800">
@@ -3628,11 +4679,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         </span>
                       )}
                     </div>
-                    <p className="text-slate-600">
-                      I/We hereby declare that all information and documents furnished above are true, complete, and authentic.
-                      I/We grant express consent to The Cosmos Co-operative Bank Ltd. to verify details, conduct due diligence,
-                      and process my personal and business data strictly for empanelment, origination, and regulatory compliance as formalized in the attached signed DSA consent document.
-                    </p>
                   </div>
                 </div>
               </div>

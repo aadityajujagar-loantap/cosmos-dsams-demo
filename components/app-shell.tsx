@@ -11,7 +11,6 @@ import {
   LayoutDashboard,
   LineChart,
   Menu, MapPin,
-  Search,
   Send,
   Settings,
   ShieldCheck,
@@ -22,7 +21,7 @@ import {
 } from "lucide-react";
 import { ReactNode, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
-import { Button, Input, Modal } from "@/components/ui/primitives";
+import { Button, Modal } from "@/components/ui/primitives";
 import { UserAccountModal } from "@/components/user-account-modal";
 import { useMockStore } from "@/lib/store";
 import { withBasePath } from "@/lib/base-path";
@@ -189,13 +188,11 @@ function inferStoredNotificationHref(notification: Notification, store: MockStor
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [globalQuery, setGlobalQuery] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [navOpenGroup, setNavOpenGroup] = useState<string | null>();
   const [readNotificationsVersion, setReadNotificationsVersion] = useState(0);
-  const [searchOpen, setSearchOpen] = useState(false);
   const { store, currentUser, logout, hasPermission } = useMockStore();
 
   const mounted = useIsClient();
@@ -537,51 +534,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
   }, [currentUser]);
 
-  const globalResults = useMemo(() => {
-    const query = globalQuery.trim().toLowerCase();
-    if (!query) return [];
-
-    const searchableDsas =
-      currentUser?.role === "DSA Partner"
-        ? store.dsas.filter((item) => item.id === currentUser.id)
-        : currentUser?.role === "Branch User"
-        ? store.dsas.filter((item) => item.manager === currentUser.name)
-        : store.dsas;
-    const searchableApplications =
-      currentUser?.role === "Branch User" || currentUser?.role === "Branch Regional Head"
-        ? []
-        : currentUser?.role === "DSA Partner"
-          ? store.applications.filter((item) => item.dsaId === currentUser.id)
-          : store.applications;
-
-    return [
-      ...searchableDsas
-        .filter((item) =>
-          [item.name, item.code, item.pan, item.mobile, item.email].some((value) =>
-            value.toLowerCase().includes(query),
-          ),
-        )
-        .map((item) => ({
-          href: `/dsa/${item.id}`,
-          kind: "DSA",
-          label: item.name,
-          meta: `${item.code} Â· ${item.pan}`,
-        })),
-      ...searchableApplications
-        .filter((item) =>
-          [item.applicationId, item.customer, item.pan, item.aadhaar, item.mobile, item.email].some(
-            (value) => value.toLowerCase().includes(query),
-          ),
-        )
-        .map((item) => ({
-          href: `/applications/${item.id}`,
-          kind: "Application",
-          label: `${item.applicationId} Â· ${item.customer}`,
-          meta: `${item.product} Â· ${item.status}`,
-        })),
-    ].slice(0, 10);
-  }, [currentUser, globalQuery, store.applications, store.dsas]);
-
   const notificationRows = useMemo(() => {
     if (!currentUser) return [];
 
@@ -848,7 +800,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <aside
         className="fixed left-0 top-0 z-30 hidden h-screen w-64 border-r border-slate-200 bg-white lg:flex lg:flex-col"
       >
-        <div className="flex h-16 items-center border-b border-slate-100 px-4">
+        <div className="flex h-16 items-center border-b border-slate-100 px-4 shrink-0">
           <Image
             alt="Cosmos Bank"
             className="h-9 w-auto max-w-[230px]"
@@ -860,68 +812,68 @@ export function AppShell({ children }: { children: ReactNode }) {
           />
         </div>
         {navigation}
-      </aside>
-
-      <div className="flex min-h-screen flex-col lg:pl-64">
-        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
-          <div className="flex h-16 items-center gap-3 px-4 lg:px-5">
-            <Button
-              aria-label="Open navigation"
-              className="lg:hidden"
-              onClick={() => setMobileOpen(true)}
-              size="icon"
-              type="button"
-              variant="ghost"
-            >
-              <Menu className="h-5 w-5" />
-            </Button>
-            <div className="relative hidden max-w-xl flex-1 md:block">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <Input
-                aria-label="Global search"
-                className="bg-slate-50 pl-9"
-                onChange={(event) => {
-                  setGlobalQuery(event.target.value);
-                  setSearchOpen(true);
-                }}
-                onFocus={() => setSearchOpen(true)}
-                placeholder="Search DSAs, applications, PAN, Aadhaar"
-                value={globalQuery}
-              />
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              <button
-                aria-label="Open notifications"
-                className="relative grid h-10 w-10 place-items-center rounded-md border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
-                onClick={() => setNotificationsOpen(true)}
-                type="button"
-              >
+        <div className="border-t border-slate-200 p-3 shrink-0 space-y-2">
+          <button
+            type="button"
+            onClick={() => setNotificationsOpen(true)}
+            aria-label="Open notifications"
+            className="group flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200/80 bg-white p-2 text-left transition hover:bg-slate-50 hover:border-slate-300"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="relative grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700 transition group-hover:bg-slate-200">
                 <Bell className="h-4 w-4" />
                 {notificationRows.length ? (
-                  <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white">
+                  <span className="absolute -right-1 -top-1 grid h-4.5 min-w-4.5 place-items-center rounded-full bg-rose-600 px-1 text-[9px] font-bold text-white">
                     {notificationRows.length}
                   </span>
                 ) : null}
-              </button>
-              <div className="relative">
-                <button
-                  aria-haspopup="dialog"
-                  className="flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 pr-3 text-left text-sm hover:bg-slate-50"
-                  onClick={() => setProfileOpen(true)}
-                  type="button"
-                >
-                  <span className="grid h-7 w-7 place-items-center rounded-md bg-slate-900 text-xs font-semibold text-white">
-                    {initials(currentUser.name)}
-                  </span>
-                  <span className="hidden sm:block">
-                    <span className="block text-xs font-semibold text-slate-950">{currentUser.name}</span>
-                    <span className="block text-[11px] text-slate-500">{currentUser.role}</span>
-                  </span>
-                  <ChevronDown className="h-4 w-4 text-slate-400" />
-                </button>
-              </div>
+              </span>
+              <span className="text-xs font-semibold text-slate-800">Notifications</span>
             </div>
-          </div>
+            {notificationRows.length ? (
+              <span className="text-[11px] font-semibold text-rose-600">
+                {notificationRows.length} new
+              </span>
+            ) : (
+              <span className="text-[11px] text-slate-400">All read</span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setProfileOpen(true)}
+            className="group flex w-full items-center gap-3 rounded-lg border border-slate-200/80 bg-slate-50/70 p-2 text-left transition hover:bg-slate-100 hover:border-slate-300"
+          >
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-900 text-xs font-bold text-white shadow-xs">
+              {initials(currentUser.name)}
+            </span>
+            <div className="min-w-0 flex-1">
+              <span className="block truncate text-xs font-bold text-slate-900 leading-tight">
+                {currentUser.name}
+              </span>
+              <span className="block truncate text-[11px] font-medium text-slate-500">
+                {currentUser.role}
+              </span>
+            </div>
+            <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 group-hover:text-slate-600 transition-colors" />
+          </button>
+        </div>
+      </aside>
+
+      <div className="flex min-h-screen flex-col lg:pl-64">
+        {/* Mobile Header only (drawer menu toggle) — desktop header removed as search bar is permanently removed */}
+        <header className="sticky top-0 z-20 flex h-14 items-center border-b border-slate-200 bg-white/95 px-4 backdrop-blur lg:hidden">
+          <Button
+            aria-label="Open navigation"
+            className="mr-3 shrink-0"
+            onClick={() => setMobileOpen(true)}
+            size="icon"
+            type="button"
+            variant="ghost"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+          <span className="text-sm font-bold text-slate-800">Cosmos Bank</span>
         </header>
         <main className="compact-dashboard flex flex-1 flex-col w-full px-3 py-3 sm:px-4 sm:py-3.5 lg:px-5 lg:py-4">{children}</main>
       </div>
@@ -935,7 +887,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             type="button"
           />
           <aside className="absolute left-0 top-0 flex h-full w-72 max-w-[86vw] flex-col bg-white shadow-2xl">
-            <div className="flex h-16 items-center border-b border-slate-100 px-4">
+            <div className="flex h-16 items-center border-b border-slate-100 px-4 shrink-0">
               <Image
                 alt="Cosmos Bank"
                 className="h-10 w-auto max-w-[210px]"
@@ -947,59 +899,62 @@ export function AppShell({ children }: { children: ReactNode }) {
               />
             </div>
             {navigation}
+            <div className="border-t border-slate-200 p-3 shrink-0 space-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileOpen(false);
+                  setNotificationsOpen(true);
+                }}
+                aria-label="Open notifications"
+                className="group flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200/80 bg-white p-2 text-left transition hover:bg-slate-50 hover:border-slate-300"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="relative grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700 transition group-hover:bg-slate-200">
+                    <Bell className="h-4 w-4" />
+                    {notificationRows.length ? (
+                      <span className="absolute -right-1 -top-1 grid h-4.5 min-w-4.5 place-items-center rounded-full bg-rose-600 px-1 text-[9px] font-bold text-white">
+                        {notificationRows.length}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="text-xs font-semibold text-slate-800">Notifications</span>
+                </div>
+                {notificationRows.length ? (
+                  <span className="text-[11px] font-semibold text-rose-600">
+                    {notificationRows.length} new
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-slate-400">All read</span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileOpen(false);
+                  setProfileOpen(true);
+                }}
+                className="group flex w-full items-center gap-3 rounded-lg border border-slate-200/80 bg-slate-50/70 p-2 text-left transition hover:bg-slate-100 hover:border-slate-300"
+              >
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-900 text-xs font-bold text-white shadow-xs">
+                  {initials(currentUser.name)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-bold text-slate-900 leading-tight">
+                    {currentUser.name}
+                  </span>
+                  <span className="block truncate text-[11px] font-medium text-slate-500">
+                    {currentUser.role}
+                  </span>
+                </div>
+                <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 group-hover:text-slate-600 transition-colors" />
+              </button>
+            </div>
           </aside>
         </div>
       ) : null}
 
-      <Modal
-        description="Search across partner and application identifiers."
-        onClose={() => setSearchOpen(false)}
-        open={searchOpen}
-        title="Global search"
-        width="max-w-3xl"
-      >
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <Input
-            autoFocus
-            className="pl-9"
-            onChange={(event) => setGlobalQuery(event.target.value)}
-            placeholder="Search by name, ID, PAN, Aadhaar, mobile, or email"
-            value={globalQuery}
-          />
-        </div>
-        <div className="mt-4 space-y-2">
-          {globalQuery.trim() ? (
-            globalResults.length ? (
-              globalResults.map((result) => (
-                <Link
-                  className="flex items-center justify-between gap-4 rounded-md border border-slate-100 p-3 hover:border-blue-200 hover:bg-blue-50/40"
-                  href={result.href}
-                  key={`${result.kind}-${result.label}`}
-                  onClick={() => {
-                    setGlobalQuery("");
-                    setSearchOpen(false);
-                  }}
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-950">{result.label}</p>
-                    <p className="truncate text-xs text-slate-500">{result.meta}</p>
-                  </div>
-                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                    {result.kind}
-                  </span>
-                </Link>
-              ))
-            ) : (
-              <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-500">No matching records found.</p>
-            )
-          ) : (
-            <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-500">
-              Start typing to search the mock workspace.
-            </p>
-          )}
-        </div>
-      </Modal>
       <Modal
         description="Unread alerts plus workflow items with no action for 4+ days."
         onClose={() => setNotificationsOpen(false)}

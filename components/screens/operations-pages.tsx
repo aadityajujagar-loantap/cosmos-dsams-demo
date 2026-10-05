@@ -505,7 +505,7 @@ function SlabsTab() {
               {/* Row 1: Product, Scheme, Slab Label */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-600">Product *</label>
+                  <label className="text-xs font-bold text-slate-600">Product <span className="text-red-500 font-bold ml-0.5">*</span></label>
                   <select
                     value={modalProductId}
                     onChange={(e) => setModalProductId(e.target.value)}
@@ -536,7 +536,7 @@ function SlabsTab() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-600">Loan Amt. Slab Label *</label>
+                  <label className="text-xs font-bold text-slate-600">Loan Amt. Slab Label <span className="text-red-500 font-bold ml-0.5">*</span></label>
                   <input
                     type="text"
                     value={slabLabel}
@@ -551,7 +551,7 @@ function SlabsTab() {
               {/* Row 2: Max Loan Amount */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-600">Max Loan Amount *</label>
+                  <label className="text-xs font-bold text-slate-600">Max Loan Amount <span className="text-red-500 font-bold ml-0.5">*</span></label>
                   <input
                     type="number"
                     value={maxLoanAmount}
@@ -729,7 +729,7 @@ function SlabsTab() {
               {/* Row 1: Product, Scheme, Slab Label */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-600">Product *</label>
+                  <label className="text-xs font-bold text-slate-600">Product <span className="text-red-500 font-bold ml-0.5">*</span></label>
                   <select
                     value={modalProductId}
                     onChange={(e) => setModalProductId(e.target.value)}
@@ -760,7 +760,7 @@ function SlabsTab() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-600">Loan Amt. Slab Label *</label>
+                  <label className="text-xs font-bold text-slate-600">Loan Amt. Slab Label <span className="text-red-500 font-bold ml-0.5">*</span></label>
                   <input
                     type="text"
                     value={slabLabel}
@@ -775,7 +775,7 @@ function SlabsTab() {
               {/* Row 2: Max Loan Amount */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-600">Max Loan Amount *</label>
+                  <label className="text-xs font-bold text-slate-600">Max Loan Amount <span className="text-red-500 font-bold ml-0.5">*</span></label>
                   <input
                     type="number"
                     value={maxLoanAmount}
@@ -1172,7 +1172,7 @@ function ProductTypeTab() {
               </h4>
 
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-600">Product Name *</label>
+                <label className="text-xs font-bold text-slate-600">Product Name <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <input
                   type="text"
                   placeholder="e.g. Home Loan, Personal Loan..."
@@ -1292,7 +1292,7 @@ function ProductTypeTab() {
               </h4>
 
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-600">Select Product *</label>
+                <label className="text-xs font-bold text-slate-600">Select Product <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <select
                   value={schemeProductId}
                   onChange={(e) => setSchemeProductId(e.target.value)}
@@ -1701,7 +1701,7 @@ function SchemeParametersTab() {
         </div>
         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-600">Select Product *</label>
+            <label className="text-xs font-bold text-slate-600">Select Product <span className="text-red-500 font-bold ml-0.5">*</span></label>
             <select
               value={selectedProductId}
               onChange={(e) => setSelectedProductId(e.target.value)}
@@ -1715,7 +1715,7 @@ function SchemeParametersTab() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-600">Select Scheme *</label>
+            <label className="text-xs font-bold text-slate-600">Select Scheme <span className="text-red-500 font-bold ml-0.5">*</span></label>
             <select
               value={selectedSchemeId}
               onChange={(e) => setSelectedSchemeId(e.target.value)}
@@ -1756,7 +1756,7 @@ function SchemeParametersTab() {
                 </div>
                 <div className="p-6 space-y-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-600">Min Loan Amt *</label>
+                    <label className="text-xs font-bold text-slate-600">Min Loan Amt <span className="text-red-500 font-bold ml-0.5">*</span></label>
                     <div className="relative flex items-center">
                       <span className="absolute left-3 text-slate-400 text-sm">₹</span>
                       <input
@@ -1770,7 +1770,7 @@ function SchemeParametersTab() {
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-600">Max Loan Amt *</label>
+                    <label className="text-xs font-bold text-slate-600">Max Loan Amt <span className="text-red-500 font-bold ml-0.5">*</span></label>
                     <div className="relative flex items-center">
                       <span className="absolute left-3 text-slate-400 text-sm">₹</span>
                       <input
@@ -1795,7 +1795,7 @@ function SchemeParametersTab() {
                 </div>
                 <div className="p-6 space-y-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-600">Min. Period (Months) *</label>
+                    <label className="text-xs font-bold text-slate-600">Min. Period (Months) <span className="text-red-500 font-bold ml-0.5">*</span></label>
                     <input
                       type="number"
                       value={minPeriodMonths}
@@ -1806,7 +1806,7 @@ function SchemeParametersTab() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-600">Max. Period (Months) *</label>
+                    <label className="text-xs font-bold text-slate-600">Max. Period (Months) <span className="text-red-500 font-bold ml-0.5">*</span></label>
                     <input
                       type="number"
                       value={maxPeriodMonths}
@@ -2507,7 +2507,7 @@ function ParameterMappingTab() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">Min Loan Amount (₹) *</label>
+                <label className="text-xs font-bold text-slate-700">Min Loan Amount (₹) <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <input
                   type="number"
                   required
@@ -2518,7 +2518,7 @@ function ParameterMappingTab() {
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">Max Loan Amount (₹) *</label>
+                <label className="text-xs font-bold text-slate-700">Max Loan Amount (₹) <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <input
                   type="number"
                   required
@@ -2532,7 +2532,7 @@ function ParameterMappingTab() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">Min Tenure (Months) *</label>
+                <label className="text-xs font-bold text-slate-700">Min Tenure (Months) <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <input
                   type="number"
                   required
@@ -2543,7 +2543,7 @@ function ParameterMappingTab() {
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">Max Tenure (Months) *</label>
+                <label className="text-xs font-bold text-slate-700">Max Tenure (Months) <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <input
                   type="number"
                   required

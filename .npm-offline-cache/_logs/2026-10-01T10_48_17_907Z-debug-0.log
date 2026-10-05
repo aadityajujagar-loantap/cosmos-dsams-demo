@@ -1,0 +1,25 @@
+0 verbose cli C:\Program Files\nodejs\node.exe C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js
+1 info using npm@11.17.0
+2 info using node@v24.19.0
+3 silly config load:file:C:\Program Files\nodejs\node_modules\npm\npmrc
+4 silly config load:file:C:\Users\Aaditya Jujagar\Desktop\cos-dsams\frontend\.npmrc
+5 silly config load:file:C:\Users\Aaditya Jujagar\.npmrc
+6 silly config load:file:C:\Users\Aaditya Jujagar\AppData\Roaming\npm\etc\npmrc
+7 verbose title npm cache add https://registry.npmjs.org/victory-vendor/-/victory-vendor-37.3.6.tgz
+8 verbose argv "cache" "add" "https://registry.npmjs.org/victory-vendor/-/victory-vendor-37.3.6.tgz" "--cache" "C:\\Users\\Aaditya Jujagar\\Desktop\\cos-dsams\\frontend\\.npm-offline-cache" "--prefer-offline" "--no-audit" "--no-fund"
+9 verbose logfile logs-max:10 dir:C:\Users\Aaditya Jujagar\Desktop\cos-dsams\frontend\.npm-offline-cache\_logs\2026-10-01T10_48_17_907Z-
+10 verbose logfile C:\Users\Aaditya Jujagar\Desktop\cos-dsams\frontend\.npm-offline-cache\_logs\2026-10-01T10_48_17_907Z-debug-0.log
+11 silly logfile start cleaning logs, removing 2 files
+12 silly cache add args [
+12 silly cache add   'https://registry.npmjs.org/victory-vendor/-/victory-vendor-37.3.6.tgz'
+12 silly cache add ]
+13 silly cache add spec https://registry.npmjs.org/victory-vendor/-/victory-vendor-37.3.6.tgz
+14 silly logfile done cleaning log files
+15 http fetch GET 200 https://registry.npmjs.org/victory-vendor/-/victory-vendor-37.3.6.tgz 207ms (cache miss)
+16 http cache https://registry.npmjs.org/victory-vendor/-/victory-vendor-37.3.6.tgz 81ms (cache hit)
+17 verbose cwd C:\Users\Aaditya Jujagar\Desktop\cos-dsams\frontend
+18 verbose os Windows_NT 10.0.19045
+19 verbose node v24.19.0
+20 verbose npm  v11.17.0
+21 verbose exit 0
+22 info ok

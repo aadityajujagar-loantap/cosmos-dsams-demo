@@ -135,19 +135,20 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
       {/* Top Header */}
       <header className="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-50">
         <div className="flex items-center gap-3">
-          <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-white/10 p-1 border border-white/10 shadow-inner">
+          <div className="relative shrink-0 rounded-lg overflow-hidden bg-white/95 px-2.5 py-1.5 border border-white/10 shadow-inner">
             <Image
-              src={withBasePath("/images/bank-logo.png")}
+              src={withBasePath("/logo-dsasm-cosmos.png")}
               alt="Cosmos Bank Logo"
-              width={36}
-              height={36}
-              className="object-contain"
+              width={708}
+              height={118}
+              className="h-6 w-auto"
               priority
+              unoptimized
             />
           </div>
           <div>
             <h1 className="text-sm font-semibold tracking-tight text-white flex items-center gap-1.5">
-              THE COSMOS CO-OP. BANK LTD.
+              COSMOS CO-OP. BANK LTD.
               <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
                 DSA Portal
               </span>
@@ -222,7 +223,7 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
                     Digital Acceptance Recorded Successfully!
                   </h2>
                   <p className="text-xs text-slate-300 max-w-md mx-auto leading-relaxed">
-                    Congratulations! Your Direct Selling Agent (DSA) empanelment with The Cosmos Co-Operative Bank Ltd. is now formally accepted.
+                    Congratulations! Your Direct Selling Agent (DSA) empanelment with Cosmos Co-Operative Bank Ltd. is now formally accepted.
                   </p>
                 </div>
 
@@ -367,7 +368,7 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
                     <div className="text-xs text-slate-300 space-y-1">
                       <span className="font-semibold text-white block">Declaration & Acceptance of Terms</span>
                       <p className="text-[11px] text-slate-400 leading-relaxed">
-                        I hereby acknowledge and agree to the terms and conditions set forth in the DSA Empanelment Letter issued by The Cosmos Co-Operative Bank Ltd. I confirm adherence to the code of conduct, compliance policies, and regulatory obligations applicable to Direct Selling Agents.
+                        I hereby acknowledge and agree to the terms and conditions set forth in the DSA Empanelment Letter issued by Cosmos Co-Operative Bank Ltd. I confirm adherence to the code of conduct, compliance policies, and regulatory obligations applicable to Direct Selling Agents.
                       </p>
                     </div>
                   </label>
@@ -397,7 +398,7 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
 
       {/* Footer */}
       <footer className="border-t border-slate-800/80 bg-slate-950/60 px-6 py-4 text-center text-[11px] text-slate-500">
-        &copy; {new Date().getFullYear()} The Cosmos Co-operative Bank Ltd. All rights reserved. | DSAMS Digital Onboarding
+        &copy; {new Date().getFullYear()} Cosmos Co-operative Bank Ltd. All rights reserved. | DSAMS Digital Onboarding
       </footer>
     </div>
   );
