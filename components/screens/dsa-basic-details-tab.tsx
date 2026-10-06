@@ -81,15 +81,14 @@ function SectionBlock({
 }
 import { getDsaDisplayStatus } from "./dsa-pages";
 import type { BranchOption } from "@/types/dsa";
+import { maskAadhaar } from "@/lib/mask-aadhaar";
 
+/**
+ * Read-only display of an Aadhaar number. Always masked to the last 4 digits —
+ * this is static text, so the full value must never reach the DOM.
+ */
 function formatAadhaarNumber(val?: string): string {
-  if (!val) return "";
-  const cleaned = String(val).trim();
-  const digits = cleaned.replace(/\D/g, "");
-  if (digits.length === 12) {
-    return `${digits.slice(0, 4)}-${digits.slice(4, 8)}-${digits.slice(8)}`;
-  }
-  return cleaned;
+  return maskAadhaar(val);
 }
 
 export type DetailBlockKey =
@@ -678,12 +677,42 @@ export function DsaBasicDetailsTab({
                   </Select>
                 </div>
                 <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
-                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Aadhaar (12 Digits)</Label>
+                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">
+                    Aadhaar (12 Digits)
+                  </Label>
                   <Input
-                    value={formData.aadhaar_no || ""}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, aadhaar_no: e.target.value }))}
+                    value={
+                      isAadhaarFieldFocused
+                        ? formData.aadhaar_no || ""
+                        : maskAadhaar(formData.aadhaar_no)
+                    }
+                    // Unmask only for the Maker while actively editing; re-mask on blur
+                    // and for every other role, so the first 8 digits never sit in the DOM.
+                    readOnly={!canEdit || !isAadhaarFieldFocused}
+                    title={
+                      !canEdit
+                        ? "Only the Maker can edit the Aadhaar number."
+                        : isAadhaarFieldFocused
+                          ? "Editing: Aadhaar is temporarily unmasked. Click away to re-mask."
+                          : "Click to reveal for editing."
+                    }
+                    onFocus={() => {
+                      if (canEdit) setIsAadhaarFieldFocused(true);
+                    }}
+                    onBlur={() => setIsAadhaarFieldFocused(false)}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        aadhaar_no: e.target.value.replace(/[^0-9Xx]/g, "").slice(0, 12),
+                      }))
+                    }
                     placeholder="12 digit Aadhaar"
-                    maxLength={12}
+                    maxLength={14}
+                    className={
+                      canEdit && isAadhaarFieldFocused
+                        ? "font-mono bg-white"
+                        : "font-mono bg-slate-100 text-slate-600"
+                    }
                   />
                   {errors.aadhaar_no && <p className="text-red-500 text-xs mt-1">{errors.aadhaar_no}</p>}
                 </div>
@@ -1862,7 +1891,9 @@ export function DsaBasicDetailsTab({
                         <td className="p-2.5 text-slate-600">{sh.stakeholder_type || "Partner / Director"}</td>
                         <td className="p-2.5 text-slate-600">{sh.mobile_no || "—"}</td>
                         <td className="p-2.5 font-mono text-slate-700">{sh.pan || sh.pan_no || "—"}</td>
-                        <td className="p-2.5 font-mono text-slate-600">{sh.din_dpin_no || sh.aadhaar || "—"}</td>
+                        <td className="p-2.5 font-mono text-slate-600">
+                          {maskAadhaar(sh.din_dpin_no || sh.aadhaar) || "—"}
+                        </td>
                       </tr>
                     ))
                   ) : (
