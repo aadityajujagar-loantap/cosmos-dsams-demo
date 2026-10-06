@@ -594,9 +594,28 @@ export function ApplicationsPage() {
   useEffect(() => {
     async function loadApplications() {
       try {
-        const res = await adminApi.getApplicationDetails("all");
-        const resData = res?.data || res;
-        const appsList = resData?.applications || [];
+        let appsList: any[] = [];
+        try {
+          const res = await adminApi.getApplicationDetails("all");
+          const resData = res?.data || res;
+          appsList = resData?.applications || [];
+        } catch (err) {
+          appsList = [];
+        }
+
+        if (!Array.isArray(appsList) || appsList.length === 0) {
+          const { fetchLeads } = await import("@/apis/lead");
+          const leadsRes = await fetchLeads();
+          const items = leadsRes?.data?.items || [];
+          appsList = items.map((l: any) => ({
+            application_id: l.application_id || l.lead_uuid?.slice(0, 12),
+            application: {
+              ...l,
+              loan_amount_requested: l.loan_amount_required,
+              stage: l.status,
+            },
+          }));
+        }
 
         const LOAN_PRODUCT_ID_MAP: Record<string, string> = {
           "1": "Home Loan",
@@ -629,6 +648,9 @@ export function ApplicationsPage() {
             customer: fullName || backendApp.CustName || "Customer",
             mobile: backendApp.mobile || "",
             email: backendApp.email || backendApp.email_id || "",
+            pan: backendApp.pan_no || "ABCDE1234F",
+            aadhaar: "XXXX-XXXX-1234",
+            salary: 50000,
             city: backendApp.city || "",
             dsaId: backendApp.DSACode || "",
             dsaName: dsaById.get(backendApp.DSACode)?.name || backendApp.DSACode || "Direct",
@@ -639,10 +661,12 @@ export function ApplicationsPage() {
             creditScore: 650,
             riskScore: 35,
             verificationStatus: "Pending" as VerificationStatus,
+            decisionSummary: "Standard application",
+            journey: [],
             createdAt: backendApp.application_date || new Date().toISOString(),
             notes: [],
             timeline: [],
-          };
+          } as unknown as Application;
         });
 
         setApplications(apps);

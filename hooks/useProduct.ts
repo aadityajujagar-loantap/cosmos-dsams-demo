@@ -1,16 +1,16 @@
 import { useState, useCallback } from "react";
 import { adminApi } from "@/apis/admin";
 import { useToast } from "@/components/ui/toast";
-import type { LoanProduct, LoanScheme, SchemeParameter, SchemeSlab } from "@/types/product";
+import type { LoanProduct, LoanType, LoanTypeParameter, LoanTypeSlab } from "@/types/product";
 
 export function useProduct() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [products, setProducts] = useState<LoanProduct[]>([]);
-  const [schemes, setSchemes] = useState<LoanScheme[]>([]);
-  const [currentParameter, setCurrentParameter] = useState<SchemeParameter | null>(null);
-  const [slabs, setSlabs] = useState<SchemeSlab[]>([]);
+  const [loanTypes, setLoanTypes] = useState<LoanType[]>([]);
+  const [currentParameter, setCurrentParameter] = useState<LoanTypeParameter | null>(null);
+  const [slabs, setSlabs] = useState<LoanTypeSlab[]>([]);
 
   const errorMessage = (err: unknown, fallback: string) => {
     if (err && typeof err === "object" && "message" in err) {
@@ -36,16 +36,16 @@ export function useProduct() {
     }
   }, [toast]);
 
-  const fetchSchemes = useCallback(async (productId: number) => {
+  const fetchLoanTypes = useCallback(async (productId: number) => {
     setLoading(true);
     try {
-      const response = await adminApi.getSchemes(productId);
-      setSchemes(response.data);
+      const response = await adminApi.getLoanTypes(productId);
+      setLoanTypes(response.data);
     } catch (err) {
-      console.error(`Failed to load schemes for product ${productId}:`, err);
+      console.error(`Failed to load loan types for product ${productId}:`, err);
       toast({
         title: "Load Failed",
-        description: errorMessage(err, "Failed to load product schemes."),
+        description: errorMessage(err, "Failed to load product loan types."),
         variant: "warning",
       });
     } finally {
@@ -53,16 +53,16 @@ export function useProduct() {
     }
   }, [toast]);
 
-  const fetchSchemeParameters = useCallback(async (schemeId: number) => {
+  const fetchLoanTypeParameters = useCallback(async (typeId: number) => {
     setLoading(true);
     try {
-      const response = await adminApi.getSchemeParameters(schemeId);
+      const response = await adminApi.getLoanTypeParameters(typeId);
       setCurrentParameter(response.data);
     } catch (err) {
-      console.error(`Failed to load parameters for scheme ${schemeId}:`, err);
+      console.error(`Failed to load parameters for loan type ${typeId}:`, err);
       toast({
         title: "Load Failed",
-        description: errorMessage(err, "Failed to load scheme parameters."),
+        description: errorMessage(err, "Failed to load loan type parameters."),
         variant: "warning",
       });
     } finally {
@@ -70,16 +70,16 @@ export function useProduct() {
     }
   }, [toast]);
 
-  const fetchSchemeSlabs = useCallback(async (schemeId: number) => {
+  const fetchLoanTypeSlabs = useCallback(async (typeId: number) => {
     setLoading(true);
     try {
-      const response = await adminApi.getSchemeSlabs(schemeId);
+      const response = await adminApi.getLoanTypeSlabs(typeId);
       setSlabs(response.data);
     } catch (err) {
-      console.error(`Failed to load slabs for scheme ${schemeId}:`, err);
+      console.error(`Failed to load slabs for loan type ${typeId}:`, err);
       toast({
         title: "Load Failed",
-        description: errorMessage(err, "Failed to load scheme slabs."),
+        description: errorMessage(err, "Failed to load loan type slabs."),
         variant: "warning",
       });
     } finally {
@@ -109,10 +109,10 @@ export function useProduct() {
     }
   }, [toast]);
 
-  const createSchemeSlab = useCallback(async (schemeId: number, payload: Partial<SchemeSlab> & { maker_comment?: string }) => {
+  const createLoanTypeSlab = useCallback(async (typeId: number, payload: Partial<LoanTypeSlab> & { maker_comment?: string }) => {
     setActionLoading(true);
     try {
-      const response = await adminApi.createSchemeSlab(schemeId, payload);
+      const response = await adminApi.createLoanTypeSlab(typeId, payload);
       toast({
         title: "Request Submitted",
         description: response.message || "Slab creation request submitted for review.",
@@ -131,10 +131,10 @@ export function useProduct() {
     }
   }, [toast]);
 
-  const updateSchemeSlab = useCallback(async (slabId: number, payload: Partial<SchemeSlab> & { maker_comment?: string }) => {
+  const updateLoanTypeSlab = useCallback(async (slabId: number, payload: Partial<LoanTypeSlab> & { maker_comment?: string }) => {
     setActionLoading(true);
     try {
-      const response = await adminApi.updateSchemeSlab(slabId, payload);
+      const response = await adminApi.updateLoanTypeSlab(slabId, payload);
       toast({
         title: "Update Submitted",
         description: response.message || "Slab update request submitted for review.",
@@ -153,10 +153,10 @@ export function useProduct() {
     }
   }, [toast]);
 
-  const deleteSchemeSlab = useCallback(async (slabId: number) => {
+  const deleteLoanTypeSlab = useCallback(async (slabId: number) => {
     setActionLoading(true);
     try {
-      const response = await adminApi.deleteSchemeSlab(slabId);
+      const response = await adminApi.deleteLoanTypeSlab(slabId);
       toast({
         title: "Delete Request Submitted",
         description: response.message || "Slab deletion request submitted for review.",
@@ -197,18 +197,25 @@ export function useProduct() {
     loading,
     actionLoading,
     products,
-    schemes,
+    loanTypes,
+    schemes: loanTypes, // legacy alias
     currentParameter,
     slabs,
     setSlabs,
     fetchProducts,
-    fetchSchemes,
-    fetchSchemeParameters,
-    fetchSchemeSlabs,
+    fetchLoanTypes,
+    fetchSchemes: fetchLoanTypes, // legacy alias
+    fetchLoanTypeParameters,
+    fetchSchemeParameters: fetchLoanTypeParameters, // legacy alias
+    fetchLoanTypeSlabs,
+    fetchSchemeSlabs: fetchLoanTypeSlabs, // legacy alias
     fetchAllProductSlabs,
     createProduct,
-    createSchemeSlab,
-    updateSchemeSlab,
-    deleteSchemeSlab,
+    createLoanTypeSlab,
+    createSchemeSlab: createLoanTypeSlab, // legacy alias
+    updateLoanTypeSlab,
+    updateSchemeSlab: updateLoanTypeSlab, // legacy alias
+    deleteLoanTypeSlab,
+    deleteSchemeSlab: deleteLoanTypeSlab, // legacy alias
   };
 }

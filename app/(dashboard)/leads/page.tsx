@@ -1,5 +1,5 @@
 import { LeadManagementScreen } from "@/components/screens/lead-management-screen";
 
-export default function Page() {
+export default function LeadsPage() {
   return <LeadManagementScreen />;
 }

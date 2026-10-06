@@ -520,9 +520,9 @@ function JourneySelection({
         </Select>
       </Field>
       <Field>
-        <Label htmlFor="sellNowScheme">Loan Scheme</Label>
+        <Label htmlFor="sellNowScheme">Loan Type</Label>
         <Select disabled={!selectedProduct || loadingSchemes} id="sellNowScheme" onChange={(event) => onSchemeChange(event.target.value)} value={selectedSchemeId}>
-          <option value="">{loadingSchemes ? "Loading schemes..." : "Select Scheme"}</option>
+          <option value="">{loadingSchemes ? "Loading loan types..." : "Select Loan Type"}</option>
           {schemes.map((s) => (
             <option key={s.id} value={String(s.id)}>
               {s.name}

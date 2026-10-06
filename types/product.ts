@@ -8,12 +8,13 @@ export interface LoanProduct {
   min_age_self_emp: number;
   max_age_self_emp: number;
   status: ProductStatus;
-  schemes_count?: number;
+  loan_types_count?: number;
+  schemes_count?: number; // legacy alias for compatibility
   created_at: string;
   updated_at: string;
 }
 
-export interface LoanScheme {
+export interface LoanType {
   id: number;
   loan_product_id: number;
   name: string;
@@ -23,8 +24,12 @@ export interface LoanScheme {
   updated_at: string;
 }
 
+// Legacy alias
+export type LoanScheme = LoanType;
+
 export interface RoiSlab {
   id?: number;
+  loan_type_parameter_id?: number;
   scheme_parameter_id?: number;
   slab_order: number;
   range_type: "upto" | "above";
@@ -34,6 +39,7 @@ export interface RoiSlab {
 
 export interface LtvSlab {
   id?: number;
+  loan_type_parameter_id?: number;
   scheme_parameter_id?: number;
   slab_order: number;
   range_type: "upto" | "above";
@@ -43,6 +49,7 @@ export interface LtvSlab {
 
 export interface FoirSlab {
   id?: number;
+  loan_type_parameter_id?: number;
   scheme_parameter_id?: number;
   slab_order: number;
   range_type: "upto" | "above";
@@ -50,9 +57,9 @@ export interface FoirSlab {
   max_foir_pct: number;
 }
 
-export interface SchemeParameter {
+export interface LoanTypeParameter {
   id: number;
-  loan_scheme_id: number;
+  loan_type_id: number;
   min_loan_amount: number | string;
   max_loan_amount: number | string;
   min_period_months: number;
@@ -68,6 +75,9 @@ export interface SchemeParameter {
   foir_slabs?: FoirSlab[];
 }
 
+// Legacy alias
+export type SchemeParameter = LoanTypeParameter;
+
 export interface ScoreBand {
   operator: "NA" | "gt" | "gte" | "lt" | "lte" | "between";
   value1: number | null;
@@ -75,9 +85,9 @@ export interface ScoreBand {
   label: string;
 }
 
-export interface SchemeSlab {
+export interface LoanTypeSlab {
   id: number;
-  loan_scheme_id: number;
+  loan_type_id: number;
   slab_label: string;
   max_loan_amount: string;
   max_loan_amount_val: number | null;
@@ -91,3 +101,6 @@ export interface SchemeSlab {
   created_at: string;
   updated_at: string;
 }
+
+// Legacy alias
+export type SchemeSlab = LoanTypeSlab;

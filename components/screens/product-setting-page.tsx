@@ -57,7 +57,7 @@ function productDefaults(product: string) {
 export function ProductSettingPage() {
   const { store, createItem, updateItem, currentUser } = useMockStore();
   const { toast } = useToast();
-  const { products, fetchProducts, schemes, fetchSchemes } = useProduct();
+  const { products, fetchProducts, loanTypes, fetchLoanTypes } = useProduct();
   const { dsas, fetchDsas } = useDsa();
 
   useEffect(() => {
@@ -66,7 +66,7 @@ export function ProductSettingPage() {
 
   const [product, setProduct] = useState<Product | "">("");
   const [partner, setPartner] = useState<string>("");
-  const [scheme, setScheme] = useState<string>("");
+  const [loanType, setLoanType] = useState<string>("");
   const [borrowerType, setBorrowerType] = useState<"salaried" | "selfEmployed">("salaried");
 
   // Add range inputs
@@ -138,25 +138,25 @@ export function ProductSettingPage() {
   const handleProductChange = (nextProduct: Product | "") => {
     if (!nextProduct) {
       setProduct("");
-      setScheme("");
+      setLoanType("");
       setRangeId("");
       setBannerName("");
       return;
     }
     const { code, url } = productDefaults(nextProduct);
     setProduct(nextProduct);
-    setScheme(""); // reset scheme when product changes
+    setLoanType(""); // reset loan type when product changes
     setRangeId((current) => current || `${code}_Commission_${(ranges.length + 1).toString().padStart(2, "0")}`);
     setBannerName((current) => current || `${url}_banner.png`);
 
     const prodObj = products.find((p) => p.name === nextProduct);
     if (prodObj) {
-      fetchSchemes(prodObj.id);
+      fetchLoanTypes(prodObj.id);
     }
   };
 
-  // Schemes available for the selected product (derived from backend schemes)
-  const schemesForProduct = schemes.map((s) => s.name);
+  // Loan types available for the selected product (derived from backend)
+  const loanTypesForProduct = loanTypes.map((s) => s.name);
 
   const handleAddRange = () => {
     if (!rangeId.trim()) {
@@ -245,10 +245,10 @@ export function ProductSettingPage() {
       return;
     }
 
-    if (!scheme) {
+    if (!loanType) {
       toast({
-        title: "Select Scheme",
-        description: "Choose a scheme for this product before saving.",
+        title: "Select Loan Type",
+        description: "Choose a loan type for this product before saving.",
         variant: "warning",
       });
       return;
@@ -511,15 +511,15 @@ export function ProductSettingPage() {
                 </Field>
 
                 <Field>
-                  <Label htmlFor="schemeSelect">Scheme *</Label>
+                  <Label htmlFor="loanTypeSelect">Loan Type *</Label>
                   <Select
-                    id="schemeSelect"
-                    value={scheme}
-                    onChange={(e) => setScheme(e.target.value)}
+                    id="loanTypeSelect"
+                    value={loanType}
+                    onChange={(e) => setLoanType(e.target.value)}
                     disabled={!product}
                   >
-                    <option value="">{product ? "Select scheme" : "Select product first"}</option>
-                    {schemesForProduct.map((s) => (
+                    <option value="">{product ? "Select loan type" : "Select product first"}</option>
+                    {loanTypesForProduct.map((s) => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </Select>
