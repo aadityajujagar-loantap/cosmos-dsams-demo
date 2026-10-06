@@ -428,6 +428,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   const [step, setStep] = useState<number>(1);
   const [dsaType, setDsaType] = useState<DsaType>("INDIVIDUAL");
   const [branches, setBranches] = useState<any[]>([]);
+  const [loadingBranches, setLoadingBranches] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submittedDsa, setSubmittedDsa] = useState<any | null>(null);
   const [createdDsaId, setCreatedDsaId] = useState<number | string | null>(null);
@@ -573,6 +574,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   // Fetch branches on mount and guarantee valid selection
   useEffect(() => {
     let mounted = true;
+    setLoadingBranches(true);
     adminApi.getBranchesDropdown()
       .then((res: any) => {
         const list = res?.data ?? res ?? [];
@@ -594,6 +596,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           setBranches(fallback);
           setBranchId((curr) => curr || "1");
         }
+      })
+      .finally(() => {
+        if (mounted) setLoadingBranches(false);
       });
     return () => {
       mounted = false;
@@ -2719,16 +2724,21 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         id="branch_id"
                         value={branchId}
                         onChange={(e) => setBranchId(e.target.value)}
+                        disabled={loadingBranches}
                         className="mt-1.5 h-9 bg-white"
                       >
-                        {branches.map((b, idx) => {
-                          const val = String(b.id ?? b.branch_id ?? idx + 1);
-                          return (
-                            <option key={val} value={val}>
-                              {`${b.branch_name} (${b.branch_code || "BR00"})`}
-                            </option>
-                          );
-                        })}
+                        {loadingBranches ? (
+                          <option value="">Loading branches...</option>
+                        ) : (
+                          branches.map((b, idx) => {
+                            const val = String(b.id ?? b.branch_id ?? idx + 1);
+                            return (
+                              <option key={val} value={val}>
+                                {`${b.branch_name} (${b.branch_code || "BR00"})`}
+                              </option>
+                            );
+                          })
+                        )}
                       </Select>
                     </div>
 
@@ -3056,7 +3066,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     </div>
                     <div className="flex flex-col">
                       <div className="h-5 flex items-center">
-                        <Label htmlFor="date_of_birth" className="text-sm font-bold text-slate-700 leading-none">Date of Birth * (DD/MM/YYYY)</Label>
+                        <Label htmlFor="date_of_birth" className="text-sm font-bold text-slate-700 leading-none">Date of Birth *</Label>
                       </div>
                       <DatePicker
                         id="date_of_birth"
@@ -3079,7 +3089,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     </div>
                     <div className="flex flex-col">
                       <div className="h-5 flex items-center">
-                        <Label htmlFor="age" className="text-sm font-bold text-slate-700 leading-none">Age (years)</Label>
+                        <Label htmlFor="age" className="text-sm font-bold text-slate-700 leading-none">Age *</Label>
                       </div>
                       <Input
                         id="age"
@@ -3104,7 +3114,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     </div>
                     <div className="flex flex-col">
                       <div className="h-5 flex items-center">
-                        <Label htmlFor="aadhaar_no" className="text-sm font-bold text-slate-700 leading-none">Aadhaar Number * (12 digits)</Label>
+                        <Label htmlFor="aadhaar_no" className="text-sm font-bold text-slate-700 leading-none">Aadhaar Number *</Label>
                       </div>
                       <Input
                         id="aadhaar_no"
@@ -3113,8 +3123,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         autoCorrect="off"
                         autoCapitalize="off"
                         spellCheck={false}
-                        value={isAadhaarFocused ? aadhaarNo : maskAadhaar(aadhaarNo)}
-                        onFocus={() => setIsAadhaarFocused(true)}
+                        value={isAadhaarLocked ? maskAadhaar(aadhaarNo) : isAadhaarFocused ? aadhaarNo : maskAadhaar(aadhaarNo)}
+                        onFocus={() => { if (!isAadhaarLocked) setIsAadhaarFocused(true); }}
                         onBlur={() => setIsAadhaarFocused(false)}
                         readOnly={isAadhaarLocked}
                         aria-readonly={isAadhaarLocked}

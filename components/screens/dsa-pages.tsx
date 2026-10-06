@@ -3768,7 +3768,17 @@ export function DsaProfilePage({ id }: { id: string }) {
         const regNo =
           dsa.business_license_no ||
           (dsa as any)?.udyam_registration_no ||
-          "UDYAM-MH-12-0012345";
+          (dsa as any)?.udyam_number ||
+          "";
+        if (!regNo.trim()) {
+          toast({
+            title: "Udyam Number Missing",
+            description:
+              "No Udyam registration number on the DSA profile to verify. Ask the applicant to provide it first.",
+            variant: "warning",
+          });
+          return;
+        }
         const res = await adminApi.verifyUdyam({
           registration_number: regNo,
           dsa_id: dsaIdNum,
@@ -4220,7 +4230,13 @@ export function DsaProfilePage({ id }: { id: string }) {
       const t = String(
         v.type || v.verification_type || v.verification_code || "",
       ).toUpperCase();
-      return pats.some((p) => t.includes(p.toUpperCase()));
+      return pats.some((p) => {
+        const pu = p.toUpperCase();
+        // UDYAM/MSME: exact match only — a substring hit on an unrelated
+        // verification type must not light up the Udyam slot.
+        if (pu === "UDYAM" || pu === "MSME") return t === pu || t.includes(`_${pu}`) || t.includes(`${pu}_`);
+        return t.includes(pu);
+      });
     };
     const afterCreation = (v: any) =>
       !dsa?.created_at ||
@@ -5559,7 +5575,6 @@ const resolveStageStatus = (
     );
 
   const applicantReviewDocs = allDisplayDocs.filter((d: any) => {
-    if (isVisitReportDocument(d)) return false;
     const dt = String(d.document_type || d.type || "").toUpperCase();
     return (
       dt !== "APPLICATION_FORM" &&
@@ -5663,6 +5678,9 @@ const resolveStageStatus = (
       if (!isVisitReportUploaded) {
         return "Physical Visit Report is required. Please upload the Physical Visit Report in the Documents tab before submitting to Checker.";
       }
+      if (hasUnverifiedApplicantDocs) {
+        return `Partner Documents Incomplete: ${applicantReviewDocs.length - applicantVerifiedDocsCount} document(s) still require verification in Documents tab before submitting to Checker.`;
+      }
     }
     if (isCheckerLevel) {
       if (hasUnverifiedApplicantDocs) {
@@ -5682,6 +5700,20 @@ const resolveStageStatus = (
       }
       if (hasUnverifiedDdlReport) {
         return "Due Diligence Report Verification Required: Please view and verify the updated Due Diligence Review Report in the Documents tab.";
+      }
+    }
+    if (workflowLevelInfo.currentLevel >= 3 && workflowLevelInfo.currentLevel <= 7) {
+      if (hasUnverifiedApplicantDocs) {
+        return `Partner Documents Incomplete: ${applicantReviewDocs.length - applicantVerifiedDocsCount} document(s) still require verification before proceeding.`;
+      }
+      if (!isVisitReportUploaded) {
+        return "Physical Visit Report Required: Please ensure the Physical Visit Report is uploaded and verified.";
+      }
+      if (!hasCheckerDdNote) {
+        return "Due Diligence Notes Required: Checker due diligence observations are missing.";
+      }
+      if (!hasCheckerGeneratedReport) {
+        return "Due Diligence Report Required: Checker Due Diligence & Deviations Report is missing.";
       }
     }
     return null;
@@ -7636,11 +7668,20 @@ const resolveStageStatus = (
         <Tabs
           onChange={setTab}
           tabs={[
-            { label: "DSA Approval", value: "actions" },
-            { label: "DSA Application Form", value: "overview" },
-            { label: "Documents Checklist", value: "documents" },
+            { label: "DSA Approval", value: "actions", dot: Boolean(getWorkflowBlockReason()) },
+            { label: "DSA Application Form", value: "overview", dot: pendingCheckerVerifications.length > 0 || !hasCheckerDdNote || !hasCheckerGeneratedReport },
+            { label: "Documents Checklist", value: "documents", dot: hasUnverifiedApplicantDocs || missingProfileDocuments.length > 0 || hasUnverifiedDdlReport },
             ...(canViewAgreementsTab
-              ? [{ label: "Agreements", value: "agreements" }]
+              ? [{
+                  label: "Agreements",
+                  value: "agreements",
+                  dot: (() => {
+                    const status = String(dsa?.agreement_status || "").toUpperCase();
+                    const isPendingMakerCheckerAction =
+                      status === "GENERATED" || status === "SIGNED_UPLOAD_PENDING";
+                    return isPendingMakerCheckerAction;
+                  })(),
+                }]
               : []),
             { label: "Audit Trails", value: "case-activity" },
           ]}
@@ -7694,6 +7735,12 @@ const resolveStageStatus = (
                     )}
                   />
                   <span>KYC</span>
+                  {pendingCheckerVerifications.length > 0 ? (
+                    <span
+                      className="inline-block h-2 w-2 rounded-full bg-amber-500"
+                      title="Pending statutory verifications"
+                    />
+                  ) : null}
                   <span
                     className={cn(
                       "inline-flex items-center justify-center px-1.5 py-0.2 rounded-full text-[10px] font-bold min-w-4 text-center",
@@ -7728,6 +7775,12 @@ const resolveStageStatus = (
                     )}
                   />
                   <span>Due Diligence Report</span>
+                  {!hasCheckerDdNote || !hasCheckerGeneratedReport ? (
+                    <span
+                      className="inline-block h-2 w-2 rounded-full bg-amber-500"
+                      title="Due diligence note or report pending"
+                    />
+                  ) : null}
                 </button>
               </div>
 
@@ -7738,11 +7791,31 @@ const resolveStageStatus = (
                   canEdit={canEditBasicDetails}
                   branches={branchesList}
                   isVisitReportUploaded={isVisitReportUploaded}
-                  onSaveBlock={async (blockKey, payload) => {
+                  onSaveBlock={async (blockKey, payload, supportingFiles) => {
                     const updated = await updateDsaProfile(dsa.id, payload);
                     if (updated) {
+                      if (supportingFiles && supportingFiles.length > 0) {
+                        for (const sf of supportingFiles) {
+                          try {
+                            await uploadDsaDocument(dsa.id, {
+                              file: sf.file,
+                              document_type: sf.document_type,
+                              remarks: `${sf.label} updated by Maker during detail edit`,
+                            });
+                          } catch (err) {
+                            toast({
+                              title: "Document Upload Failed",
+                              description: `Profile saved, but ${sf.label} upload failed. Please upload it from the Documents tab.`,
+                              variant: "warning",
+                            });
+                          }
+                        }
+                      }
                       if (fetchDsaDetail) {
                         await fetchDsaDetail(dsa.id);
+                      }
+                      if (fetchBackendDocuments) {
+                        await fetchBackendDocuments(true);
                       }
                       return true;
                     }
@@ -8451,12 +8524,20 @@ const resolveStageStatus = (
                             />
                           </div>
                           <div>
-                            <p className="text-sm font-bold text-slate-900">
-                              {dsa.business_type || "Sole Proprietorship"}
-                            </p>
-                            <p className="text-xs text-slate-600 mt-0.5">
-                              Category: MSME Registered Enterprise
-                            </p>
+                            {isUdyamChecked || (dsa as any)?.udyam_registration_no ? (
+                              <>
+                                <p className="text-sm font-bold text-slate-900">
+                                  {(dsa as any)?.udyam_registration_no || dsa.business_type || "MSME Registered Enterprise"}
+                                </p>
+                                <p className="text-xs text-slate-600 mt-0.5">
+                                  Category: MSME Registered Enterprise
+                                </p>
+                              </>
+                            ) : (
+                              <p className="text-sm text-slate-400 italic">
+                                No Udyam details yet. Trigger the Udyam check to fetch them.
+                              </p>
+                            )}
                           </div>
                           <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                             <span className="text-[11px] text-slate-500">
@@ -8938,6 +9019,12 @@ const resolveStageStatus = (
                               : cat.id === "exp"
                                 ? expMissingCount
                                 : otherMissingCount;
+                          const unverifiedCount = allDisplayDocs.filter(
+                            (d: any) =>
+                              getDocumentCategory(d) === cat.id &&
+                              getEffectiveDocStatus(d) !== "Verified",
+                          ).length;
+                          const hasPending = missingCount > 0 || unverifiedCount > 0;
 
                           return (
                             <button
@@ -8958,6 +9045,12 @@ const resolveStageStatus = (
                                 )}
                               />
                               <span>{cat.label}</span>
+                              {hasPending ? (
+                                <span
+                                  className="inline-block h-2 w-2 rounded-full bg-amber-500"
+                                  title="Pending items in this section"
+                                />
+                              ) : null}
                               <span
                                 className={cn(
                                   "inline-flex items-center justify-center px-1.5 py-0.2 rounded-full text-[10px] font-bold min-w-4 text-center",
@@ -8987,9 +9080,12 @@ const resolveStageStatus = (
                       </div>
 
                       {canApproveDocs && hasUnverifiedApplicantDocs && (
+                        <div className="flex flex-col items-start sm:items-end gap-1">
                         <Button
                           size="sm"
                           type="button"
+                          disabled={!isVisitReportUploaded}
+                          title={!isVisitReportUploaded ? "Upload the Physical Visit Report before bulk verify" : undefined}
                           onClick={async () => {
                             const toVerify = applicantReviewDocs.filter(
                               (d: any) =>
@@ -9033,6 +9129,12 @@ const resolveStageStatus = (
                           <Check className="h-3.5 w-3.5" />
                           Verify All Documents ({applicantReviewDocs.length})
                         </Button>
+                        {!isVisitReportUploaded && (
+                          <span className="text-[11px] font-medium text-amber-700">
+                            Upload the Physical Visit Report to enable bulk verify.
+                          </span>
+                        )}
+                        </div>
                       )}
                     </div>
 
@@ -10811,6 +10913,7 @@ const resolveStageStatus = (
                 type="button"
                 disabled={
                   actionLoading ||
+                  Boolean(getWorkflowBlockReason()) ||
                   workflowLevelInfo.isCompleted ||
                   dsa?.onboarding_status === "APPROVED" ||
                   approvingDsa?.onboarding_status === "APPROVED" ||
@@ -10823,6 +10926,16 @@ const resolveStageStatus = (
                 onClick={async () => {
                   if (!approvalRemarks.trim()) {
                     setApprovalRemarksError("Please provide approval remarks.");
+                    return;
+                  }
+                  const modalBlockReason = getWorkflowBlockReason();
+                  if (modalBlockReason) {
+                    toast({
+                      title: "Verification Incomplete",
+                      description: modalBlockReason,
+                      variant: "warning",
+                    });
+                    setApprovalRemarksError(modalBlockReason);
                     return;
                   }
 

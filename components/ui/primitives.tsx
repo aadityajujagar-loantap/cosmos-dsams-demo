@@ -534,7 +534,7 @@ export function Tabs({
   value,
   onChange,
 }: {
-  tabs: { label: string; value: string }[];
+  tabs: { label: string; value: string; dot?: boolean }[];
   value: string;
   onChange: (value: string) => void;
 }) {
@@ -550,7 +550,15 @@ export function Tabs({
           onClick={() => onChange(tab.value)}
           type="button"
         >
-          {tab.label}
+          <span className="inline-flex items-center gap-1.5">
+            {tab.label}
+            {tab.dot ? (
+              <span
+                className="inline-block h-2 w-2 rounded-full bg-amber-500"
+                title="Pending items in this tab"
+              />
+            ) : null}
+          </span>
         </button>
       ))}
     </div>

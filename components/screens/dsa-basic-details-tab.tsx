@@ -103,11 +103,86 @@ export type DetailBlockKey =
   | "stakeholders"
   | "associate_concerns";
 
+export interface SupportingFile {
+  document_type: string;
+  file: File;
+  label: string;
+}
+
+/**
+ * Doc-linked edit fields: changing these values requires a supporting
+ * document upload so the checker can verify the new value.
+ * key = formData field, value = { document_type, label }.
+ */
+export const DOC_LINKED_FIELDS: Record<string, { document_type: string; label: string }> = {
+  education_qualification: { document_type: "education_certificate", label: "Educational Qualification Certificate" },
+  aadhaar_no: { document_type: "aadhaar_card", label: "Aadhaar Card" },
+  pan: { document_type: "pan_card", label: "PAN Card" },
+  gst: { document_type: "gst_certificate", label: "GST Certificate" },
+  udyam_no: { document_type: "business_license_udyam", label: "Udyam Registration Certificate" },
+  shop_act_no: { document_type: "business_license_shop_act", label: "Shop Act License" },
+  experience_years: { document_type: "experience_certificate", label: "Experience Certificate" },
+  applicant_prior_experience: { document_type: "brief_profile", label: "Brief Profile / Experience Proof" },
+};
+
+/** True when the field value differs from the stored DSA value. */
+export function isFieldChanged(field: string, formValue: any, dsa: any): boolean {
+  const norm = (v: any) => String(v ?? "").trim();
+  const dsaVal =
+    field === "aadhaar_no"
+      ? dsa.aadhaar_no || dsa.aadhaar || ""
+      : field === "gst"
+        ? dsa.gst || ""
+        : dsa[field] ?? "";
+  return norm(formValue) !== norm(dsaVal);
+}
+
+function SupportingDocInput({
+  field,
+  file,
+  onPick,
+  onClear,
+}: {
+  field: string;
+  file?: File | null;
+  onPick: (f: File | null) => void;
+  onClear: () => void;
+}) {
+  const linked = DOC_LINKED_FIELDS[field];
+  if (!linked) return null;
+  return (
+    <div className="mt-2 rounded-md border border-dashed border-amber-300 bg-amber-50/60 p-2.5">
+      <Label className="text-[11px] font-semibold text-amber-800 mb-1 block">
+        Supporting document required — {linked.label} *
+      </Label>
+      {file ? (
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-medium text-slate-700 truncate">{file.name}</span>
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-[11px] font-semibold text-rose-600 hover:underline shrink-0"
+          >
+            Remove
+          </button>
+        </div>
+      ) : (
+        <Input
+          type="file"
+          accept=".pdf,.jpg,.jpeg,.png"
+          onChange={(e) => onPick(e.target.files?.[0] ?? null)}
+          className="text-xs h-8 bg-white"
+        />
+      )}
+    </div>
+  );
+}
+
 interface DsaBasicDetailsTabProps {
   dsa: any;
   canEdit: boolean;
   branches: BranchOption[];
-  onSaveBlock: (blockKey: DetailBlockKey, payload: Record<string, any>) => Promise<boolean>;
+  onSaveBlock: (blockKey: DetailBlockKey, payload: Record<string, any>, supportingFiles?: SupportingFile[]) => Promise<boolean>;
   loading?: boolean;
   isVisitReportUploaded?: boolean;
 }
@@ -124,13 +199,80 @@ export function DsaBasicDetailsTab({
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [savingBlock, setSavingBlock] = useState<DetailBlockKey | null>(null);
+  const [supportingFiles, setSupportingFiles] = useState<Record<string, File | null>>({});
+  const [isAadhaarFieldFocused, setIsAadhaarFieldFocused] = useState(false);
 
   const isEntity = dsa.dsa_type === "NON_INDIVIDUAL" || dsa.dsa_type === "ENTITY";
+
+  // Sync first_name + last_name -> contact_person for Individual DSAs
+  useEffect(() => {
+    if (!isEntity && activeEditBlock === "applicant") {
+      const fn = formData.first_name?.trim() || "";
+      const ln = formData.last_name?.trim() || "";
+      if (fn || ln) {
+        const newContact = [fn, ln].filter(Boolean).join(" ");
+        if (formData.contact_person !== newContact) {
+          setFormData((prev) => ({ ...prev, contact_person: newContact }));
+        }
+      }
+    }
+  }, [formData.first_name, formData.last_name, isEntity, activeEditBlock]);
+
+  // Sync age <-> date_of_birth for Individual DSAs
+  useEffect(() => {
+    if (!isEntity && activeEditBlock === "applicant") {
+      const dob = formData.date_of_birth;
+      const age = formData.age;
+      const today = new Date();
+      
+      if (dob && !age) {
+        // DOB changed, calculate age
+        const birthDate = new Date(dob);
+        let calcAge = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+          calcAge--;
+        }
+        if (calcAge >= 0 && calcAge < 120 && String(calcAge) !== String(formData.age)) {
+          setFormData((prev) => ({ ...prev, age: String(calcAge) }));
+        }
+      } else if (age && !dob) {
+        // Age changed, calculate DOB (approximate - Jan 1 of birth year)
+        const ageNum = parseInt(age, 10);
+        if (!isNaN(ageNum) && ageNum >= 18 && ageNum <= 100) {
+          const birthYear = today.getFullYear() - ageNum;
+          const newDob = `${birthYear}-01-01`;
+          if (formData.date_of_birth !== newDob) {
+            setFormData((prev) => ({ ...prev, date_of_birth: newDob }));
+          }
+        }
+      }
+    }
+  }, [formData.date_of_birth, formData.age, isEntity, activeEditBlock]);
+
+  const pickSupportingFile = (field: string, f: File | null) =>
+    setSupportingFiles((prev) => ({ ...prev, [field]: f }));
+  const clearSupportingFile = (field: string) =>
+    setSupportingFiles((prev) => {
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+
+  /** Doc-linked fields in this block whose value changed and need a file. */
+  const changedDocFields = (block: DetailBlockKey): string[] => {
+    const fieldsByBlock: Record<string, string[]> = {
+      applicant: ["education_qualification", "aadhaar_no"],
+      statutory: ["pan", "gst", "udyam_no", "shop_act_no", "experience_years", "applicant_prior_experience"],
+    };
+    return (fieldsByBlock[block] || []).filter((f) => isFieldChanged(f, formData[f], dsa));
+  };
 
   // Initialize block form data when entering edit mode
   const startEditing = (block: DetailBlockKey) => {
     setActiveEditBlock(block);
     setErrors({});
+    setSupportingFiles({});
 
     switch (block) {
       case "sourcing":
@@ -283,6 +425,8 @@ export function DsaBasicDetailsTab({
     setActiveEditBlock(null);
     setFormData({});
     setErrors({});
+    setSupportingFiles({});
+    setIsAadhaarFieldFocused(false);
   };
 
   const handleDobChange = (val: string) => {
@@ -381,6 +525,18 @@ export function DsaBasicDetailsTab({
   const saveEditing = async (block: DetailBlockKey) => {
     if (!validateBlock(block)) return;
 
+    // Doc-linked fields that changed require their supporting document.
+    const changed = changedDocFields(block);
+    const missing = changed.filter((f) => !supportingFiles[f]);
+    if (missing.length > 0) {
+      const labels = missing.map((f) => DOC_LINKED_FIELDS[f].label).join(", ");
+      setErrors((prev) => ({
+        ...prev,
+        _supporting: `Upload supporting document(s) for the changed field(s): ${labels}.`,
+      }));
+      return;
+    }
+
     setSavingBlock(block);
     try {
       const payload: Record<string, any> = { ...formData };
@@ -396,6 +552,8 @@ export function DsaBasicDetailsTab({
           payload.name = [payload.applicant_title, payload.first_name, payload.middle_name, payload.last_name]
             .filter(Boolean)
             .join(" ");
+          // Explicitly include individual fields so backend updates them and UI reflects changes
+          payload.contact_person = [payload.first_name, payload.last_name].filter(Boolean).join(" ");
         } else {
           payload.name = payload.entity_name;
         }
@@ -409,11 +567,18 @@ export function DsaBasicDetailsTab({
         payload.experience_years = payload.experience_years ? String(payload.experience_years) : null;
       }
 
-      const success = await onSaveBlock(block, payload);
+      const files: SupportingFile[] = changed.map((f) => ({
+        document_type: DOC_LINKED_FIELDS[f].document_type,
+        file: supportingFiles[f]!,
+        label: DOC_LINKED_FIELDS[f].label,
+      }));
+      const success = await onSaveBlock(block, payload, files);
       if (success) {
         setActiveEditBlock(null);
         setFormData({});
         setErrors({});
+        setSupportingFiles({});
+        setIsAadhaarFieldFocused(false);
       }
     } finally {
       setSavingBlock(null);
@@ -429,7 +594,8 @@ export function DsaBasicDetailsTab({
 
     if (isCurrentEditing) {
       return (
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-1.5">
           <Button
             variant="ghost"
             size="sm"
@@ -457,6 +623,10 @@ export function DsaBasicDetailsTab({
               </>
             )}
           </Button>
+          </div>
+          {errors._supporting ? (
+            <p className="text-amber-700 text-[11px] font-medium">{errors._supporting}</p>
+          ) : null}
         </div>
       );
     }
@@ -514,16 +684,15 @@ export function DsaBasicDetailsTab({
                 <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">
                   Sourcing Journey Mode
                 </Label>
-                <Select
-                  value={formData.submission_mode}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, submission_mode: e.target.value }))}
-                  className="w-full text-sm font-semibold"
-                >
-                  <option value="BRANCH">Branch Assisted Sourcing</option>
-                  <option value="SELF">Self-Onboarding (Online Portal)</option>
-                </Select>
+                <div className="text-sm font-semibold text-slate-900">
+                  {formData.submission_mode === "BRANCH"
+                    ? "Branch Assisted Sourcing"
+                    : formData.submission_mode === "SELF"
+                      ? "Self-Onboarding (Online Portal)"
+                      : formData.submission_mode || "Branch Sourced"}
+                </div>
                 <p className="text-[11px] text-slate-500 mt-1">
-                  Channels: Branch sourcing or customer self-service onboarding.
+                  This value is set during onboarding and cannot be changed.
                 </p>
               </div>
 
@@ -675,6 +844,14 @@ export function DsaBasicDetailsTab({
                     <option value="Professional (CA/CS/CFA)">Professional (CA/CS/CFA)</option>
                     <option value="Other">Other</option>
                   </Select>
+                  {isFieldChanged("education_qualification", formData.education_qualification, dsa) && (
+                    <SupportingDocInput
+                      field="education_qualification"
+                      file={supportingFiles.education_qualification}
+                      onPick={(f) => pickSupportingFile("education_qualification", f)}
+                      onClear={() => clearSupportingFile("education_qualification")}
+                    />
+                  )}
                 </div>
                 <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
                   <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">
@@ -688,7 +865,7 @@ export function DsaBasicDetailsTab({
                     }
                     // Unmask only for the Maker while actively editing; re-mask on blur
                     // and for every other role, so the first 8 digits never sit in the DOM.
-                    readOnly={!canEdit || !isAadhaarFieldFocused}
+                    readOnly={!canEdit}
                     title={
                       !canEdit
                         ? "Only the Maker can edit the Aadhaar number."
@@ -715,6 +892,14 @@ export function DsaBasicDetailsTab({
                     }
                   />
                   {errors.aadhaar_no && <p className="text-red-500 text-xs mt-1">{errors.aadhaar_no}</p>}
+                  {isFieldChanged("aadhaar_no", formData.aadhaar_no, dsa) && (
+                    <SupportingDocInput
+                      field="aadhaar_no"
+                      file={supportingFiles.aadhaar_no}
+                      onPick={(f) => pickSupportingFile("aadhaar_no", f)}
+                      onClear={() => clearSupportingFile("aadhaar_no")}
+                    />
+                  )}
                 </div>
               </div>
             ) : (
@@ -818,18 +1003,17 @@ export function DsaBasicDetailsTab({
             <DetailItem
               label="Legal Constitution"
               value={
-                dsa.constitution ||
-                (!isEntity
-                  ? "Individual / Sole Proprietorship"
-                  : "Commercial Entity")
+                isEntity
+                  ? (dsa.business_type || dsa.constitution || "—")
+                  : "Individual"
               }
             />
             <DetailItem
               label="Business Type / Category"
               value={
-                dsa.business_type ||
-                dsa.constitution ||
-                "Sole Proprietorship"
+                isEntity
+                  ? (dsa.business_type || "—")
+                  : (dsa.constitution || "—")
               }
             />
             <DetailItem
@@ -1042,6 +1226,14 @@ export function DsaBasicDetailsTab({
                   className="font-mono uppercase font-bold"
                 />
                 {errors.pan && <p className="text-red-500 text-xs mt-1">{errors.pan}</p>}
+                {isFieldChanged("pan", formData.pan, dsa) && (
+                  <SupportingDocInput
+                    field="pan"
+                    file={supportingFiles.pan}
+                    onPick={(f) => pickSupportingFile("pan", f)}
+                    onClear={() => clearSupportingFile("pan")}
+                  />
+                )}
               </div>
 
               <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
@@ -1078,6 +1270,14 @@ export function DsaBasicDetailsTab({
                     className="font-mono uppercase font-bold"
                   />
                   {errors.gst && <p className="text-red-500 text-xs mt-1">{errors.gst}</p>}
+                  {isFieldChanged("gst", formData.gst, dsa) && (
+                    <SupportingDocInput
+                      field="gst"
+                      file={supportingFiles.gst}
+                      onPick={(f) => pickSupportingFile("gst", f)}
+                      onClear={() => clearSupportingFile("gst")}
+                    />
+                  )}
                 </div>
               ) : null}
 
@@ -1102,6 +1302,14 @@ export function DsaBasicDetailsTab({
                   placeholder="UDYAM-XX-00-0000000"
                   className="font-mono"
                 />
+                {isFieldChanged("udyam_no", formData.udyam_no, dsa) && (
+                  <SupportingDocInput
+                    field="udyam_no"
+                    file={supportingFiles.udyam_no}
+                    onPick={(f) => pickSupportingFile("udyam_no", f)}
+                    onClear={() => clearSupportingFile("udyam_no")}
+                  />
+                )}
               </div>
 
               <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
@@ -1114,6 +1322,14 @@ export function DsaBasicDetailsTab({
                   placeholder="Shop Act Number"
                   className="font-mono"
                 />
+                {isFieldChanged("shop_act_no", formData.shop_act_no, dsa) && (
+                  <SupportingDocInput
+                    field="shop_act_no"
+                    file={supportingFiles.shop_act_no}
+                    onPick={(f) => pickSupportingFile("shop_act_no", f)}
+                    onClear={() => clearSupportingFile("shop_act_no")}
+                  />
+                )}
               </div>
 
               <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
@@ -1125,6 +1341,14 @@ export function DsaBasicDetailsTab({
                   onChange={(e) => setFormData((prev) => ({ ...prev, applicant_prior_experience: e.target.value }))}
                   placeholder="e.g. Retail loan sourcing, DSA empanelment"
                 />
+                {isFieldChanged("applicant_prior_experience", formData.applicant_prior_experience, dsa) && (
+                  <SupportingDocInput
+                    field="applicant_prior_experience"
+                    file={supportingFiles.applicant_prior_experience}
+                    onPick={(f) => pickSupportingFile("applicant_prior_experience", f)}
+                    onClear={() => clearSupportingFile("applicant_prior_experience")}
+                  />
+                )}
               </div>
 
               <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
@@ -1137,6 +1361,14 @@ export function DsaBasicDetailsTab({
                   onChange={(e) => setFormData((prev) => ({ ...prev, experience_years: e.target.value }))}
                   placeholder="Years"
                 />
+                {isFieldChanged("experience_years", formData.experience_years, dsa) && (
+                  <SupportingDocInput
+                    field="experience_years"
+                    file={supportingFiles.experience_years}
+                    onPick={(f) => pickSupportingFile("experience_years", f)}
+                    onClear={() => clearSupportingFile("experience_years")}
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -1198,22 +1430,29 @@ export function DsaBasicDetailsTab({
             />
             <DetailItem
               label="Financial / Sourcing Experience"
-              value={
-                dsa.applicant_prior_experience ? (
-                  <div>
-                    <span className="font-semibold text-slate-900">{dsa.applicant_prior_experience}</span>
-                    {dsa.experience_years && dsa.experience_years !== "0" && !dsa.applicant_prior_experience.includes(String(dsa.experience_years)) ? (
-                      <span className="text-slate-500 text-xs ml-1.5">({dsa.experience_years} yrs)</span>
-                    ) : null}
-                  </div>
-                ) : dsa.experience_years ? (
-                  `${dsa.experience_years} Years`
-                ) : dsa.empanelment_since_year ? (
-                  `Empanelled since ${dsa.empanelment_since_year}`
-                ) : (
-                  "New Partner Empanelment"
-                )
-              }
+              value={(() => {
+                const expYears = dsa.experience_years !== undefined && dsa.experience_years !== null ? Number(dsa.experience_years) : null;
+                const hasExpYears = expYears !== null && expYears >= 0;
+                const priorExp = dsa.applicant_prior_experience?.trim();
+                
+                if (priorExp) {
+                  return (
+                    <div>
+                      <span className="font-semibold text-slate-900">{priorExp}</span>
+                      {hasExpYears && expYears > 0 && !priorExp.includes(String(expYears)) ? (
+                        <span className="text-slate-500 text-xs ml-1.5">({expYears} yrs)</span>
+                      ) : null}
+                    </div>
+                  );
+                }
+                if (hasExpYears) {
+                  return `${expYears} Years`;
+                }
+                if (dsa.empanelment_since_year) {
+                  return `Empanelled since ${dsa.empanelment_since_year}`;
+                }
+                return "New Partner Empanelment";
+              })()}
             />
             <DetailItem
               label="Statutory Registration / License No"
@@ -1736,11 +1975,11 @@ export function DsaBasicDetailsTab({
       {/* ─────────────────────────────────────────────────────────────
           Section 9: Entity Stakeholders / Partners
          ───────────────────────────────────────────────────────────── */}
-      {isEntity && (
+      {isEntity && Array.isArray(dsa.stakeholders) && dsa.stakeholders.length > 0 && (
         <SectionBlock
           icon={Users}
           iconColor="text-indigo-600"
-          title={`Entity Stakeholders (${dsa.stakeholders?.length || 0})`}
+          title={`Entity Stakeholders (${dsa.stakeholders.length})`}
           action={renderHeaderAction("stakeholders")}
         >
 
