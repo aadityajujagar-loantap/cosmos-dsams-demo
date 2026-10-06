@@ -1,16 +1,22 @@
 /**
  * Build-wide portal switch.
  *
- * web1-agent  -> "agent"  : DSA partners only. Email + password + captcha.
- * web2-branch -> "branch" : bank branch staff only. Username + password + captcha + OTP.
+ * Controlled by NEXT_PUBLIC_PORTAL_MODE environment variable:
+ *   - "agent"  : DSA partners only (web1-agent). Email + password + captcha.
+ *   - "branch" : Bank branch staff only (web2-branch). Username + password + captcha + OTP.
  *
- * Both branches keep the login route at /login; only this constant differs.
- *
- * This is deliberately a committed constant, not process.env.NEXT_PUBLIC_*: `.env*` is
- * gitignored, so an env var would not travel with the branch and both checkouts would
- * resolve to the same portal. Flip this one line per branch instead.
+ * Both deployments keep the login route at /login; the env var decides which UI/API to use.
+ * Defaults to "branch" if not set (safe default for internal staff portal).
  */
 export type PortalMode = "agent" | "branch";
+
+/** Read portal mode from env at build time; no runtime dependency on process.env. */
+const getPortalMode = (): PortalMode => {
+  const envMode = process.env.NEXT_PUBLIC_PORTAL_MODE;
+  if (envMode === "agent" || envMode === "branch") return envMode;
+  // Default to branch (staff portal) for safety — prevents accidental DSA exposure
+  return "branch";
+};
 
 /**
  * Takes the mode as a parameter rather than comparing the PORTAL constant inline:
@@ -21,7 +27,7 @@ export function isPortalModeFor(mode: PortalMode) {
   return mode === "agent";
 }
 
-export const PORTAL: PortalMode = "branch";
+export const PORTAL: PortalMode = getPortalMode();
 
 /** Roles that belong to the DSA (external partner) portal. */
 export const DSA_PORTAL_ROLES = ["DSA Partner", "DSA Agent"] as const;
