@@ -2181,21 +2181,23 @@ export function LeadManagementScreen() {
                       </Button>
                     )}
 
-                    {/* Quick action: Bank Checker actions when IN_PROCESS */}
+                    {/* Quick action: Bank Checker sanction when IN_PROCESS */}
                     {isBankChecker && normStatus === "IN_PROCESS" && (
-                      <>
-                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => {
-                          setSanctionAmount(selectedLead.loan_amount_required || 0);
-                          setIsSanctionModalOpen(true);
-                        }}>
-                          <FileCheck className="h-3.5 w-3.5 mr-1" />
-                          Sanction Lead
-                        </Button>
-                        <Button size="sm" className="bg-rose-600 hover:bg-rose-700 text-white" onClick={() => setIsRejectModalOpen(true)}>
-                          <XCircle className="h-3.5 w-3.5 mr-1" />
-                          Reject Lead
-                        </Button>
-                      </>
+                      <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold" onClick={() => {
+                        setSanctionAmount(selectedLead.loan_amount_required || 0);
+                        setIsSanctionModalOpen(true);
+                      }}>
+                        <FileCheck className="h-3.5 w-3.5 mr-1" />
+                        Sanction Lead
+                      </Button>
+                    )}
+
+                    {/* Quick action: Reject Lead — ONLY for Bank Checker or DSA, NEVER for Maker */}
+                    {(isBankChecker || isDsa) && !isBankMaker && !["DISBURSED", "REJECTED", "CANCELLED"].includes(normStatus) && (
+                      <Button size="sm" className="bg-rose-600 hover:bg-rose-700 text-white font-semibold" onClick={() => setIsRejectModalOpen(true)}>
+                        <XCircle className="h-3.5 w-3.5 mr-1" />
+                        Reject Lead
+                      </Button>
                     )}
 
                     {/* Quick action: Bank Checker action when SANCTIONED */}
