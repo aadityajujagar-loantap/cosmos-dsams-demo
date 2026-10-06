@@ -630,7 +630,15 @@ export function LeadManagementScreen() {
         loadLeadDataOnly();
       }
     } catch (err: any) {
-      toast({ title: "Error", description: err?.response?.data?.message || err?.message, variant: "error" });
+      const serverData = err?.response?.data;
+      let errorMsg = serverData?.message || err?.message || "Failed to submit lead.";
+      if (serverData?.errors && typeof serverData.errors === 'object') {
+        const fieldErrors = Object.values(serverData.errors).flat().join(" ");
+        if (fieldErrors) {
+          errorMsg = `${errorMsg} ${fieldErrors}`;
+        }
+      }
+      toast({ title: "Error", description: errorMsg, variant: "error" });
     }
   };
 
