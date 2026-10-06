@@ -280,6 +280,7 @@ export function LeadManagementScreen() {
   const [shareableUrl, setShareableUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [selectedShareDsaCode, setSelectedShareDsaCode] = useState<string>("");
+  const [selectedShareProductId, setSelectedShareProductId] = useState<number | undefined>(undefined);
   const [generatingLink, setGeneratingLink] = useState(false);
 
   // Master Data
@@ -645,6 +646,7 @@ export function LeadManagementScreen() {
   const handleOpenShareModal = () => {
     setShareableUrl(null);
     setSelectedShareDsaCode("");
+    setSelectedShareProductId(undefined);
     setIsShareModalOpen(true);
     loadStaticMasterData();
     if (isDsa) {
@@ -661,7 +663,10 @@ export function LeadManagementScreen() {
 
     try {
       setGeneratingLink(true);
-      const res = await generateShareableToken(code ? { dsa_code: code } : undefined);
+      const params: any = {};
+      if (code) params.dsa_code = code;
+      if (selectedShareProductId) params.loan_product_id = selectedShareProductId;
+      const res = await generateShareableToken(Object.keys(params).length > 0 ? params : undefined);
       if (res?.status === "success") {
         setShareableUrl(res.data.shareable_url);
         setIsShareModalOpen(true);
@@ -1369,10 +1374,34 @@ export function LeadManagementScreen() {
             </div>
           )}
 
-          {isBankUser && !shareableUrl && (
+          {/* Pre-select Loan Product */}
+          <div className="space-y-1.5 bg-purple-50/50 p-3.5 rounded-2xl border border-purple-100">
+            <label className="block text-purple-950 font-bold uppercase tracking-wider text-[11px]">
+              Pre-select Loan Product (Optional)
+            </label>
+            <select
+              value={selectedShareProductId || ""}
+              onChange={(e) => {
+                const val = e.target.value ? Number(e.target.value) : undefined;
+                setSelectedShareProductId(val);
+                setShareableUrl(null);
+              }}
+              className="w-full border border-purple-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
+            >
+              <option value="">-- Any Loan Product (Customer Selects) --</option>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>{p.name || p.product_name}</option>
+              ))}
+            </select>
+            <p className="text-[10px] text-purple-700 font-medium">
+              When pre-selected, the product will be locked and non-changeable for the customer on the self-fill form.
+            </p>
+          </div>
+
+          {!shareableUrl && (
             <Button
               type="button"
-              disabled={generatingLink || !selectedShareDsaCode}
+              disabled={generatingLink || (isBankUser && !selectedShareDsaCode)}
               onClick={() => handleGenerateLink(selectedShareDsaCode)}
               className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl py-2.5 text-xs shadow-md shadow-blue-600/20 disabled:opacity-50"
             >
@@ -1382,7 +1411,7 @@ export function LeadManagementScreen() {
                 </>
               ) : (
                 <>
-                  <Share2 className="h-3.5 w-3.5 mr-1.5" /> Generate Link for Selected DSA
+                  <Share2 className="h-3.5 w-3.5 mr-1.5" /> Generate Shareable Link
                 </>
               )}
             </Button>

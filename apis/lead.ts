@@ -128,7 +128,7 @@ export const updateLead = async (id: string | number, leadData: Partial<LeadData
   return request(`/leads/${id}`, { method: 'PUT', body: JSON.stringify(leadData) });
 };
 
-export const generateShareableToken = async (params?: { dsa_code?: string; DSACode?: string }): Promise<any> => {
+export const generateShareableToken = async (params?: { dsa_code?: string; DSACode?: string; loan_product_id?: number }): Promise<any> => {
   return request('/leads/public/generate-token', {
     method: 'POST',
     body: params ? JSON.stringify(params) : undefined,
