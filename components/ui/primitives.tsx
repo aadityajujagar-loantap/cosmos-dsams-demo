@@ -475,7 +475,7 @@ export function Modal({
             <X className="h-4 w-4" />
           </Button>
         </div>
-        <div className={cn("flex-1 overflow-y-auto px-6 py-5", bodyClassName)}>{children}</div>
+        <div className={cn("flex-1 px-6 py-5", bodyClassName?.includes("overflow-") ? bodyClassName : cn("overflow-y-auto", bodyClassName))}>{children}</div>
       </div>
     </div>
   );
