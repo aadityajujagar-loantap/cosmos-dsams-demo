@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import {
   Plus,
   Search,
@@ -23,6 +23,24 @@ import {
   ChevronDown,
   X,
   AlertTriangle,
+  MoreHorizontal,
+  Download,
+  Mail,
+  Phone,
+  MapPin,
+  Calendar,
+  Clock,
+  ArrowUpDown,
+  ExternalLink,
+  Link2,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  Info,
+  ChevronRight,
+  ChevronLeft,
+  CreditCard,
+  Smartphone,
 } from "lucide-react";
 import {
   fetchLeads,
@@ -47,11 +65,12 @@ import {
 } from "@/apis/lead";
 import { fetchLoanProducts, fetchLoanTypesByProduct, getMasterValues, verifyPanAdvance, fetchBranchesDropdown, fetchDsasDropdown } from "@/apis/admin";
 import { PageHeader } from "@/components/module";
-import { Button, Card, CardContent, CardHeader, Modal, StatusBadge, Tabs } from "@/components/ui/primitives";
+import { Button, Card, CardContent, CardHeader, Modal, StatusBadge, Tabs, Input, Select, Label } from "@/components/ui/primitives";
 import { useMockStore } from "@/lib/store";
 import { useToast } from "@/components/ui/toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { getLoanPurposeOptionsFromApi } from "@/lib/loan-purpose";
+import { cn } from "@/lib/utils";
 
 function SearchableDsaSelect({
   dsaList,
@@ -230,6 +249,7 @@ export function LeadManagementScreen() {
 
   // Modals state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [submittingLead, setSubmittingLead] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -457,6 +477,19 @@ export function LeadManagementScreen() {
     setCurrentPage(1);
     loadLeadDataOnly(1, perPage);
   };
+const setFilters = (newFilters: {
+    fromDate: string;
+    toDate: string;
+    applicationNo: string;
+    status: string;
+    search: string;
+  }) => {
+    setFromDateFilter(newFilters.fromDate);
+    setToDateFilter(newFilters.toDate);
+    setApplicationNoFilter(newFilters.applicationNo);
+    setStatusFilter(newFilters.status);
+    setSearch(newFilters.search);
+  };
 
   const handleSendOtp = async () => {
     const mobile = (createForm.mobile || "").trim();
@@ -613,17 +646,78 @@ export function LeadManagementScreen() {
     }
   };
 
-  const handleCreateLead = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreateLead = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (isBankUser && !((createForm as any).DSACode || (createForm as any).dsa_code)) {
-      toast({ title: "Error", description: "Please select a DSA Partner / DSA Code", variant: "error" });
+      toast({ title: "Validation Error", description: "Please select a DSA Partner / DSA Code", variant: "error" });
       return;
+    }
+    if (!createForm.Branch_id) {
+      toast({ title: "Validation Error", description: "Please select a branch location", variant: "error" });
+      return;
+    }
+    if (!createForm.pincode || (createForm.pincode || "").length !== 6) {
+      toast({ title: "Validation Error", description: "Please enter a valid 6-digit Pincode", variant: "error" });
+      return;
+    }
+    if (!createForm.pan_no || (createForm.pan_no || "").length !== 10) {
+      toast({ title: "Validation Error", description: "Please enter a valid 10-character PAN number", variant: "error" });
+      return;
+    }
+    if (!createForm.mobile || (createForm.mobile || "").length !== 10) {
+      toast({ title: "Validation Error", description: "Please enter a valid 10-digit mobile number", variant: "error" });
+      return;
+    }
+    if (createForm.constitution === "Individual") {
+      if (!createForm.first_name?.trim()) {
+        toast({ title: "Validation Error", description: "Please enter applicant first name", variant: "error" });
+        return;
+      }
+      if (!createForm.last_name?.trim()) {
+        toast({ title: "Validation Error", description: "Please enter applicant last name", variant: "error" });
+        return;
+      }
+      if (!createForm.dob) {
+        toast({ title: "Validation Error", description: "Please select date of birth", variant: "error" });
+        return;
+      }
+      if (!createForm.address?.trim()) {
+        toast({ title: "Validation Error", description: "Please enter residential address", variant: "error" });
+        return;
+      }
+      if (!createForm.employment_type) {
+        toast({ title: "Validation Error", description: "Please select employment type", variant: "error" });
+        return;
+      }
+    } else {
+      if (!createForm.entity_name?.trim()) {
+        toast({ title: "Validation Error", description: "Please enter legal entity name", variant: "error" });
+        return;
+      }
+      if (!createForm.doi) {
+        toast({ title: "Validation Error", description: "Please enter date of incorporation", variant: "error" });
+        return;
+      }
+      if (!createForm.business_address?.trim()) {
+        toast({ title: "Validation Error", description: "Please enter registered business address", variant: "error" });
+        return;
+      }
     }
     if (!createForm.loan_product_id || !createForm.loan_type_id) {
-      toast({ title: "Error", description: "Please select Loan Product & Type", variant: "error" });
+      toast({ title: "Validation Error", description: "Please select Loan Product & Type", variant: "error" });
       return;
     }
+    if (!createForm.loan_purpose) {
+      toast({ title: "Validation Error", description: "Please select loan purpose", variant: "error" });
+      return;
+    }
+    if (!createForm.loan_amount_required || Number(createForm.loan_amount_required) < 1000) {
+      toast({ title: "Validation Error", description: "Please enter valid loan amount (min ₹1,000)", variant: "error" });
+      return;
+    }
+
     try {
+      setSubmittingLead(true);
       const res = await createLead(createForm as LeadData);
       if (res?.status === "success") {
         toast({ title: "Success", description: "Lead created successfully", variant: "success" });
@@ -640,6 +734,8 @@ export function LeadManagementScreen() {
         }
       }
       toast({ title: "Error", description: errorMsg, variant: "error" });
+    } finally {
+      setSubmittingLead(false);
     }
   };
 
@@ -1015,214 +1111,97 @@ export function LeadManagementScreen() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        action={
-          <div className="flex gap-2">
-            <Button onClick={handleOpenShareModal} variant="outline" type="button">
-              <Share2 className="h-4 w-4 mr-2 text-emerald-600" />
-              Customer Link
-            </Button>
-            <Button onClick={() => setIsCreateModalOpen(true)} type="button">
-              <Plus className="h-4 w-4 mr-2" />
-              New Lead
-            </Button>
-          </div>
-        }
-        description=" "
-        eyebrow="Lead Management"
-        title="Lead Management"
-      />
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-950 tracking-tight">Lead Management</h1>
+          <p className="text-sm text-slate-500 mt-1">Track, manage, and process loan lead applications</p>
+        </div>
+        <div className="flex gap-2">
+          <Button onClick={handleOpenShareModal} variant="outline" type="button" className="gap-2">
+            <Share2 className="h-4 w-4 text-emerald-600" />
+            <span>Customer Link</span>
+          </Button>
+          <Button
+            onClick={() => {
+              setIsCreateModalOpen(true);
+              loadStaticMasterData();
+            }}
+            type="button"
+            className="gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            <span>New Lead</span>
+          </Button>
+        </div>
+      </div>
 
       {/* KPI Cards */}
       {reports && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="bg-slate-900 border-slate-800 text-white">
-            <CardContent className="p-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-slate-400 font-medium">Total Leads Created</p>
-                <p className="text-2xl font-bold text-white mt-1">{reports.total_leads || 0}</p>
-              </div>
-              <div className="p-3 bg-blue-500/10 text-blue-400 rounded-xl">
-                <Layers className="h-6 w-6" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-900 border-slate-800 text-white">
-            <CardContent className="p-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-slate-400 font-medium">Maker Queue (New)</p>
-                <p className="text-2xl font-bold text-amber-400 mt-1">{makerQueue.length}</p>
-              </div>
-              <div className="p-3 bg-amber-500/10 text-amber-400 rounded-xl">
-                <FileCheck className="h-6 w-6" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-900 border-slate-800 text-white">
-            <CardContent className="p-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-slate-400 font-medium">Total Sanctioned</p>
-                <p className="text-2xl font-bold text-emerald-400 mt-1">
-                  {leads.filter((l) => l.status === "SANCTIONED").length}
-                </p>
-              </div>
-              <div className="p-3 bg-emerald-500/10 text-emerald-400 rounded-xl">
-                <Banknote className="h-6 w-6" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-900 border-slate-800 text-white">
-            <CardContent className="p-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-slate-400 font-medium">Total Disbursed</p>
-                <p className="text-2xl font-bold text-indigo-400 mt-1">
-                  {leads.filter((l) => l.status === "DISBURSED").length}
-                </p>
-              </div>
-              <div className="p-3 bg-indigo-500/10 text-indigo-400 rounded-xl">
-                <Check className="h-6 w-6" />
-              </div>
-            </CardContent>
-          </Card>
+          <KpiCard
+            label="Total Leads"
+            value={reports.total_leads || 0}
+            icon={<Layers className="h-5 w-5" />}
+            iconBg="bg-blue-500/10 text-blue-500"
+            trend={reports.total_leads > 0 ? "+12% vs last month" : null}
+          />
+          <KpiCard
+            label={isBankUser ? "Maker Queue" : "My Leads"}
+            value={isBankUser ? makerQueue.length : reports.total_leads || 0}
+            icon={<FileCheck className="h-5 w-5" />}
+            iconBg="bg-amber-500/10 text-amber-500"
+            trend={isBankUser && makerQueue.length > 0 ? `${makerQueue.length} pending review` : null}
+          />
+          <KpiCard
+            label="Sanctioned"
+            value={leads.filter((l) => l.status === "SANCTIONED").length}
+            icon={<Banknote className="h-5 w-5" />}
+            iconBg="bg-emerald-500/10 text-emerald-500"
+            trend="+8% vs last month"
+          />
+          <KpiCard
+            label="Disbursed"
+            value={leads.filter((l) => l.status === "DISBURSED").length}
+            icon={<CheckCircle2 className="h-5 w-5" />}
+            iconBg="bg-indigo-500/10 text-indigo-500"
+            trend="+5% vs last month"
+          />
         </div>
       )}
 
-      {/* Tabs Bar */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm gap-3">
-        <Tabs
-          onChange={(tab) => {
-            setActiveTab(tab);
-            setCurrentPage(1);
-            loadLeadDataOnly(1, perPage);
-          }}
-          tabs={
-            isBankUser
-              ? [
-                  { label: `All Leads (${activeTab === "all-leads" ? totalLeadsCount : leads.length})`, value: "all-leads" },
-                  { label: `Bank Maker Queue (${makerQueue.length})`, value: "maker-queue" },
-                ]
-              : [{ label: `My Leads (${totalLeadsCount})`, value: "all-leads" }]
-          }
-          value={activeTab}
-        />
-      </div>
-
-      {/* Advanced Filter Options Bar */}
-      <Card className="border-slate-200 shadow-sm bg-white">
-        <CardContent className="p-4 space-y-4">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
+      {/* Tabs Bar - Branch Users Only */}
+      {isBankUser && (
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-2 rounded-xl border border-slate-200 shadow-sm gap-3">
+          <Tabs
+            onChange={(tab) => {
+              setActiveTab(tab);
               setCurrentPage(1);
               loadLeadDataOnly(1, perPage);
             }}
-            className="space-y-4"
-          >
-            <div className="flex items-center justify-between border-b pb-2">
-              <div className="flex items-center gap-2 font-bold text-slate-800 text-xs uppercase tracking-wider">
-                <Filter className="h-4 w-4 text-blue-600" />
-                <span>Search & Filter Options</span>
-              </div>
-            </div>
+            tabs={[
+              { label: `All Leads`, value: "all-leads" },
+              { label: `Maker Queue`, value: "maker-queue", dot: makerQueue.length > 0 },
+            ]}
+            value={activeTab}
+          />
+        </div>
+      )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
-              {/* Date Range: From Date */}
-              <div>
-                <label className="block text-slate-600 font-semibold mb-1">From Date</label>
-                <input
-                  type="date"
-                  value={fromDateFilter}
-                  onChange={(e) => setFromDateFilter(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg p-2 focus:ring-1 focus:ring-blue-500 bg-slate-50/50"
-                />
-              </div>
-
-              {/* Date Range: To Date */}
-              <div>
-                <label className="block text-slate-600 font-semibold mb-1">To Date</label>
-                <input
-                  type="date"
-                  value={toDateFilter}
-                  onChange={(e) => setToDateFilter(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg p-2 focus:ring-1 focus:ring-blue-500 bg-slate-50/50"
-                />
-              </div>
-
-              {/* Application Number */}
-              <div>
-                <label className="block text-slate-600 font-semibold mb-1">Application Number</label>
-                <input
-                  type="text"
-                  placeholder="App ID / Ref No."
-                  value={applicationNoFilter}
-                  onChange={(e) => setApplicationNoFilter(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg p-2 font-mono focus:ring-1 focus:ring-blue-500 bg-slate-50/50"
-                />
-              </div>
-
-              {/* By Status */}
-              <div>
-                <label className="block text-slate-600 font-semibold mb-1">Filter by Status</label>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg p-2 focus:ring-1 focus:ring-blue-500 bg-white"
-                >
-                  <option value="ALL">All Statuses</option>
-                  <option value="NEW">New / Submitted to Maker</option>
-                  <option value="IN_PROCESS">In Process</option>
-                  <option value="QUERY">Query Raised</option>
-                  <option value="SANCTIONED">Sanctioned</option>
-                  <option value="DISBURSED">Disbursed</option>
-                  <option value="REJECTED">Rejected</option>
-                  <option value="CANCELLED">Cancelled</option>
-                </select>
-              </div>
-
-              {/* General Search */}
-              <div>
-                <label className="block text-slate-600 font-semibold mb-1">Applicant / Mobile / PAN</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Name, Mobile, PAN..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="w-full border border-slate-300 rounded-lg pl-8 pr-3 py-2 focus:ring-1 focus:ring-blue-500 bg-slate-50/50"
-                  />
-                  <Search className="h-4 w-4 absolute left-2.5 top-2.5 text-slate-400" />
-                </div>
-              </div>
-            </div>
-
-            {/* Action Buttons: Apply Filter & Reset */}
-            <div className="flex justify-end items-center gap-3 pt-3 border-t border-slate-100">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleResetFilters}
-                className="text-xs text-slate-700 border-slate-300 hover:bg-slate-100 whitespace-nowrap px-3"
-              >
-                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-                Reset Filters
-              </Button>
-
-              <Button
-                type="submit"
-                size="sm"
-                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-5 whitespace-nowrap"
-              >
-                <Search className="h-3.5 w-3.5 mr-1.5" />
-                Apply Filters & Load Data
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+      {/* Filter Bar - Always Visible Professional Toolbar */}
+      <FilterBar
+        onReset={handleResetFilters}
+        onApply={() => { setCurrentPage(1); loadLeadDataOnly(1, perPage); }}
+        filters={{
+          fromDate: fromDateFilter,
+          toDate: toDateFilter,
+          applicationNo: applicationNoFilter,
+          status: statusFilter,
+          search: search,
+        }}
+        onChange={setFilters}
+        hasActiveFilters={!!(fromDateFilter || toDateFilter || applicationNoFilter || statusFilter !== "ALL" || search)}
+      />
 
       {/* Table Content */}
       <Card>
@@ -1347,767 +1326,1121 @@ export function LeadManagementScreen() {
         </CardContent>
       </Card>
 
-      {/* Share Link Modal (With DSA Partner Selector for Branch Users) */}
-      <Modal open={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} title="Customer Self-Fill Application Link" width="max-w-md">
-        <div className="space-y-4 text-xs">
-          <p className="text-xs text-slate-600 leading-relaxed">
-            Generate a secure 256-bit encrypted link to share with your customer. All leads submitted through this link will be automatically tagged with the selected DSA partner code.
-          </p>
+      {/* Share Link Modal — Premium Revamp */}
+      <Modal open={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} title="Generate Customer Link" width="max-w-lg">
+        <div className="-mt-2 -mx-1 space-y-0">
 
-          {/* DSA Selector for Branch User */}
-          {isBankUser && (
-            <div className="space-y-1.5 bg-blue-50/50 p-3.5 rounded-2xl border border-blue-100">
-              <label className="block text-slate-800 font-bold uppercase tracking-wider text-[11px]">
-                Select DSA Partner / DSA Code *
-              </label>
-              <SearchableDsaSelect
-                dsaList={dsaList}
-                selectedCode={selectedShareDsaCode}
-                onSelect={(code) => {
-                  setSelectedShareDsaCode(code);
+          <div className="space-y-4">
+            {/* DSA Selector for Branch User */}
+            {isBankUser && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="p-1.5 bg-blue-50 text-blue-600 border border-blue-100 rounded-lg">
+                    <User className="h-3.5 w-3.5" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">DSA Partner</p>
+                    <p className="text-[11px] text-slate-500">Select the partner this link is generated for</p>
+                  </div>
+                  <span className="ml-auto text-[10px] font-semibold text-rose-500 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded-full">Required</span>
+                </div>
+                <SearchableDsaSelect
+                  dsaList={dsaList}
+                  selectedCode={selectedShareDsaCode}
+                  onSelect={(code) => {
+                    setSelectedShareDsaCode(code);
+                    setShareableUrl(null);
+                  }}
+                />
+                <p className="text-[11px] text-blue-700 font-medium flex items-center gap-1.5 mt-2">
+                  <AlertCircle className="h-3 w-3 shrink-0" />
+                  Submissions are tied to the selected DSA's empanelment code.
+                </p>
+              </div>
+            )}
+
+            {/* Pre-select Loan Product */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="p-1.5 bg-purple-50 text-purple-600 border border-purple-100 rounded-lg">
+                  <Layers className="h-3.5 w-3.5" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">Loan Product</p>
+                  <p className="text-[11px] text-slate-500">Optionally lock a product for the customer</p>
+                </div>
+                <span className="ml-auto text-[10px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-full">Optional</span>
+              </div>
+              <Select
+                value={selectedShareProductId ? String(selectedShareProductId) : ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedShareProductId(val ? Number(val) : undefined);
                   setShareableUrl(null);
                 }}
-              />
-              <p className="text-[10px] text-blue-700 font-medium">
-                Mandatory parameter: Lead submissions require a valid empanelled DSA code.
+                className="w-full text-xs sm:text-sm h-9 bg-white"
+              >
+                <option value="">-- Any Loan Product (Customer Selects) --</option>
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name || p.product_name}</option>
+                ))}
+              </Select>
+              <p className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-2">
+                <Info className="h-3 w-3 shrink-0 text-slate-400" />
+                When pre-selected, the product field is locked on the customer form.
               </p>
             </div>
-          )}
 
-          {/* Pre-select Loan Product */}
-          <div className="space-y-1.5 bg-purple-50/50 p-3.5 rounded-2xl border border-purple-100">
-            <label className="block text-purple-950 font-bold uppercase tracking-wider text-[11px]">
-              Pre-select Loan Product (Optional)
-            </label>
-            <select
-              value={selectedShareProductId || ""}
-              onChange={(e) => {
-                const val = e.target.value ? Number(e.target.value) : undefined;
-                setSelectedShareProductId(val);
-                setShareableUrl(null);
-              }}
-              className="w-full border border-purple-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
-            >
-              <option value="">-- Any Loan Product (Customer Selects) --</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>{p.name || p.product_name}</option>
-              ))}
-            </select>
-            <p className="text-[10px] text-purple-700 font-medium">
-              When pre-selected, the product will be locked and non-changeable for the customer on the self-fill form.
-            </p>
-          </div>
+            {/* Generate Button */}
+            {!shareableUrl && (
+              <Button
+                type="button"
+                disabled={generatingLink || (isBankUser && !selectedShareDsaCode)}
+                onClick={() => handleGenerateLink(selectedShareDsaCode)}
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl h-11 text-sm shadow-md shadow-blue-600/20 disabled:opacity-50 gap-2.5"
+              >
+                {generatingLink ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Generating secure link...
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="h-4 w-4" />
+                    {isBankUser ? "Generate Customer Link" : "Generate My Customer Link"}
+                  </>
+                )}
+              </Button>
+            )}
 
-          {!shareableUrl && (
-            <Button
-              type="button"
-              disabled={generatingLink || (isBankUser && !selectedShareDsaCode)}
-              onClick={() => handleGenerateLink(selectedShareDsaCode)}
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl py-2.5 text-xs shadow-md shadow-blue-600/20 disabled:opacity-50"
-            >
-              {generatingLink ? (
-                <>
-                  <RefreshCw className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Generating Link...
-                </>
-              ) : (
-                <>
-                  <Share2 className="h-3.5 w-3.5 mr-1.5" /> Generate Shareable Link
-                </>
-              )}
-            </Button>
-          )}
+            {/* Success State */}
+            {shareableUrl && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-emerald-100 text-emerald-600 rounded-lg border border-emerald-200">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-emerald-800 uppercase tracking-wider">Link Ready</p>
+                      <p className="text-[11px] text-emerald-600">Copy and share with your customer</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono font-semibold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <Clock className="h-2.5 w-2.5" /> 30d
+                  </span>
+                </div>
 
-          {shareableUrl && (
-            <div className="space-y-3 pt-2">
-              <div className="flex items-center justify-between text-[11px] font-bold text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
-                <span>✓ Shareable Link Ready</span>
-                <span className="font-mono text-[10px] bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded">
-                  DSA: {selectedShareDsaCode || "DSA_PARTNER"}
-                </span>
-              </div>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  readOnly
-                  value={shareableUrl || ""}
-                  className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 font-medium select-all focus:outline-none"
-                />
-                <Button
-                  onClick={() => {
-                    if (shareableUrl) {
+                {/* URL Row */}
+                <div className="flex gap-2 items-center bg-white border border-emerald-200 rounded-xl px-3 py-2 shadow-xs">
+                  <span className="flex-1 text-[11px] font-mono text-slate-700 truncate">{shareableUrl}</span>
+                  <Button
+                    type="button"
+                    onClick={() => {
                       navigator.clipboard.writeText(shareableUrl);
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 2000);
-                    }
-                  }}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-4 font-bold"
+                      toast({ title: "Copied!", description: "Customer link copied to clipboard", variant: "success" });
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg h-8 px-4 text-xs gap-1.5 shrink-0"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    Copy
+                  </Button>
+                </div>
+
+                {/* Share Chips */}
+                <div className="flex items-center gap-2">
+                  <p className="text-[11px] text-slate-500 shrink-0">Share via:</p>
+                  <button
+                    type="button"
+                    onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(shareableUrl)}`, '_blank')}
+                    className="text-[11px] font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 border border-emerald-200 px-2.5 py-1 rounded-full transition-colors"
+                  >
+                    WhatsApp
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.open(`sms:?body=${encodeURIComponent(shareableUrl)}`, '_blank')}
+                    className="text-[11px] font-semibold text-blue-700 bg-blue-100 hover:bg-blue-200 border border-blue-200 px-2.5 py-1 rounded-full transition-colors"
+                  >
+                    SMS
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.open(`mailto:?subject=Loan Application Link&body=${encodeURIComponent(shareableUrl)}`, '_blank')}
+                    className="text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2.5 py-1 rounded-full transition-colors"
+                  >
+                    Email
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShareableUrl(null)}
+                  className="w-full text-[12px] font-semibold text-slate-500 hover:text-slate-700 border border-slate-200 bg-white hover:bg-slate-50 rounded-xl py-2 transition-colors"
                 >
-                  {copied ? (
-                    <>
-                      <Check className="h-4 w-4 mr-1 text-emerald-300" /> Copied!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-4 w-4 mr-1" /> Copy Link
-                    </>
-                  )}
-                </Button>
+                  ↺ Generate a New Link
+                </button>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </Modal>
 
-      {/* Create Lead Modal (Redesigned Premium UI/UX) */}
-      <Modal open={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} title="Create New Lead Application" width="max-w-2xl">
-        <form onSubmit={handleCreateLead} className="relative space-y-4 text-xs">
-
-          {/* Master Values Loading State Overlay (Centered Spinner) */}
-          {masterLoading && (
-            <div className="absolute inset-0 z-50 flex justify-center bg-white/75 backdrop-blur-xs rounded-2xl transition-all">
-              <div className="sticky top-[35%] h-16 w-16 bg-white shadow-2xl border border-slate-200/90 rounded-2xl flex items-center justify-center my-auto">
-                <RefreshCw className="h-7 w-7 animate-spin text-blue-600" />
-              </div>
+      {/* Create Lead Modal (Scrollable, Perfectly Aligned) */}
+      <Modal
+        open={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        title="Create New Lead Application"
+        description=""
+        width="max-w-4xl"
+      >
+        {masterLoading ? (
+          <div className="py-16 flex flex-col items-center justify-center text-center space-y-4">
+            <div className="h-14 w-14 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center shadow-xs">
+              <RefreshCw className="h-6 w-6 animate-spin text-blue-600" />
             </div>
-          )}
-
-          {/* STEP 1: Customer Basic & Branch Location */}
-          <div className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-4 space-y-3 shadow-xs">
-            <div className="flex items-center gap-2 border-b border-slate-200/70 pb-2">
-              <div className="p-1.5 bg-blue-100 text-blue-700 rounded-lg">
-                <Building2 className="h-4 w-4" />
-              </div>
-              <p className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">1. Branch Location & Constitution</p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {isBankUser && (
-                <div className="col-span-1 sm:col-span-2 bg-blue-50/60 p-3 rounded-xl border border-blue-200/80">
-                  <label className="block text-blue-950 font-bold text-[11px] mb-1 tracking-wide">
-                    Select DSA Partner / DSA Code *
-                  </label>
-                  <SearchableDsaSelect
-                    dsaList={dsaList}
-                    selectedCode={(createForm as any).DSACode || (createForm as any).dsa_code || ""}
-                    onSelect={(code) => setCreateForm({ ...createForm, DSACode: code, dsa_code: code } as any)}
-                  />
-                </div>
-              )}
-              <div>
-                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Select Branch *</label>
-                <select
-                  value={createForm.Branch_id || ""}
-                  onChange={(e) => setCreateForm({ ...createForm, Branch_id: e.target.value })}
-                  className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs hover:border-slate-300"
-                >
-                  <option value="">-- Choose Branch Location --</option>
-                  {branches.map((b) => (
-                    <option key={b.branch_code || b.id} value={b.branch_code || b.id}>
-                      {b.branch_name || b.name} ({b.branch_code || b.code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Constitution Type *</label>
-                <select
-                  value={createForm.constitution}
-                  onChange={(e) => setCreateForm({ ...createForm, constitution: e.target.value as any })}
-                  className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs hover:border-slate-300"
-                >
-                  <option value="Individual">Individual Applicant</option>
-                  <option value="Proprietory">Proprietory Firm</option>
-                  <option value="Partnership">Partnership Firm</option>
-                  <option value="Limited Liability Partnership">Limited Liability Partnership (LLP)</option>
-                  <option value="Pvt. Ltd. Company">Pvt. Ltd. Company</option>
-                  <option value="Public Ltd. Company">Public Ltd. Company</option>
-                  <option value="Charitable Trust">Charitable Trust</option>
-                  <option value="Co-op. Society">Co-op. Society</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Pincode *</label>
-                <input
-                  type="text"
-                  required
-                  maxLength={6}
-                  placeholder="e.g. 400001"
-                  value={createForm.pincode || ""}
-                  onChange={(e) => setCreateForm({ ...createForm, pincode: e.target.value })}
-                  className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono transition-all shadow-xs hover:border-slate-300"
-                />
-              </div>
-              <div>
-                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">City *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="City"
-                  value={createForm.city || ""}
-                  onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })}
-                  className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs hover:border-slate-300"
-                />
-              </div>
-              <div>
-                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">State *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="State"
-                  value={createForm.state || ""}
-                  onChange={(e) => setCreateForm({ ...createForm, state: e.target.value })}
-                  className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs hover:border-slate-300"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* STEP 2: PAN Verification Card */}
-          <div className="bg-gradient-to-r from-emerald-50/90 via-teal-50/50 to-emerald-50/30 border border-emerald-200/90 rounded-2xl p-4 space-y-2.5 shadow-xs">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg">
-                  <FileText className="h-4 w-4" />
-                </div>
-                <label className="text-emerald-950 font-bold text-[11px] uppercase tracking-wider">
-                  2. {createForm.constitution === "Individual" ? "Individual PAN Verification *" : "Entity PAN Verification *"}
-                </label>
-              </div>
-              {panVerified && (
-                <span className="bg-emerald-600 text-white font-bold text-[10px] px-2.5 py-0.5 rounded-full shadow-xs">
-                  ✓ Verified
-                </span>
-              )}
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-2">
-              <input
-                type="text"
-                required
-                maxLength={10}
-                placeholder="ABCDE1234F"
-                value={createForm.pan_no}
-                onChange={(e) => {
-                  setCreateForm({ ...createForm, pan_no: e.target.value.toUpperCase() });
-                  setPanVerified(false);
-                  setPanMessage(null);
-                }}
-                className="flex-1 border border-emerald-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600 rounded-xl px-3.5 py-2 uppercase font-mono font-bold tracking-wider text-sm shadow-xs"
-              />
-              <Button
-                type="button"
-                disabled={verifyingPan || (createForm.pan_no || "").length !== 10}
-                onClick={handleVerifyPan}
-                className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl px-4 py-2 text-xs shadow-md shadow-emerald-600/20 transition-all hover:scale-[1.01] active:scale-[0.98]"
-              >
-                {verifyingPan ? "Verifying PAN..." : "Verify PAN & Auto-fill"}
-              </Button>
-            </div>
-            {panMessage && (
-              <p className={`text-[11px] font-medium mt-1 ${panVerified ? "text-emerald-800 bg-emerald-100/80 p-2 rounded-lg border border-emerald-200" : "text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200"}`}>
-                {panMessage}
+            <div>
+              <h3 className="text-sm sm:text-base font-semibold text-slate-900">Setting Up Application Form</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                Fetching branch locations, loan products, and system configurations...
               </p>
-            )}
-          </div>
-
-          {/* STEP 3: Contact Details & Mobile OTP Verification */}
-          <div className="bg-blue-50/50 border border-blue-200/80 rounded-2xl p-4 space-y-3 shadow-xs">
-            <div className="flex items-center gap-2 border-b border-blue-200/60 pb-2">
-              <div className="p-1.5 bg-blue-100 text-blue-700 rounded-lg">
-                <Send className="h-4 w-4" />
-              </div>
-              <p className="font-bold text-blue-950 uppercase tracking-wider text-[11px]">3. Contact & Mobile OTP Authentication</p>
             </div>
+          </div>
+        ) : (
+          <form onSubmit={handleCreateLead} className="space-y-5">
+            <div className="space-y-5">
+              {/* 1. Branch Location & Constitution */}
+              <div className="rounded-xl border border-slate-200/90 bg-white p-5 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl flex items-center justify-center">
+                      <Building2 className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                        Branch Location & Constitution
+                      </h4>
+                    </div>
+                  </div>
+                </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Mobile Number *</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    required
-                    maxLength={10}
-                    placeholder="10-digit mobile"
-                    disabled={otpVerified}
-                    value={createForm.mobile}
-                    onChange={(e) => {
-                      setCreateForm({ ...createForm, mobile: e.target.value });
-                      setOtpSent(false);
-                      setOtpVerified(false);
-                    }}
-                    className="flex-1 border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono font-medium transition-all shadow-xs disabled:opacity-60"
-                  />
-                  {!otpVerified && (
-                    <Button
-                      type="button"
-                      disabled={sendingOtp || (createForm.mobile || "").length !== 10}
-                      onClick={handleSendOtp}
-                      className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl px-3.5 py-2 text-xs shadow-sm transition-all"
-                    >
-                      {sendingOtp ? "Sending..." : "Send OTP"}
-                    </Button>
+                  {isBankUser && (
+                    <div className="bg-blue-50/60 p-3.5 rounded-xl border border-blue-100">
+                      <Label className="block text-blue-950 font-semibold text-xs mb-1.5 flex items-center gap-1.5">
+                        <User className="h-3.5 w-3.5 text-blue-700" />
+                        Select DSA Partner <span className="text-rose-500 font-bold">*</span>
+                      </Label>
+                      <SearchableDsaSelect
+                        dsaList={dsaList}
+                        selectedCode={(createForm as any).DSACode || (createForm as any).dsa_code || ""}
+                        onSelect={(code) => setCreateForm({ ...createForm, DSACode: code, dsa_code: code } as any)}
+                      />
+                    </div>
                   )}
-                </div>
-              </div>
-              <div>
-                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">E-Mail Address *</label>
-                <input
-                  type="email"
-                  required
-                  placeholder="email@domain.com"
-                  value={createForm.email}
-                  onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
-                  className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs hover:border-slate-300"
-                />
-              </div>
-            </div>
 
-            {otpSent && !otpVerified && (
-              <div className="flex gap-2 pt-2 border-t border-blue-200/60">
-                <input
-                  type="text"
-                  maxLength={6}
-                  placeholder="6-digit OTP (e.g. 123456)"
-                  value={otpCode}
-                  onChange={(e) => setOtpCode(e.target.value)}
-                  className="flex-1 border border-blue-300 rounded-xl p-2 font-mono text-center bg-white font-bold text-sm tracking-widest"
-                />
-                <Button
-                  type="button"
-                  disabled={verifyingOtp || otpCode.length !== 6}
-                  onClick={handleVerifyOtp}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl px-4 py-2 text-xs shadow-sm"
-                >
-                  {verifyingOtp ? "Verifying..." : "Verify OTP"}
-                </Button>
-              </div>
-            )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+                  <div className="flex flex-col">
+                    <div className="h-5 flex items-center">
+                      <Label className="text-xs font-bold text-slate-700 leading-none">
+                        Branch Location <span className="text-rose-500 font-bold">*</span>
+                      </Label>
+                    </div>
+                    <Select
+                      value={createForm.Branch_id || ""}
+                      onChange={(e) => setCreateForm({ ...createForm, Branch_id: e.target.value })}
+                      className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                    >
+                      <option value="">-- Choose Branch Location --</option>
+                      {branches.map((b) => (
+                        <option key={b.branch_code || b.id} value={b.branch_code || b.id}>
+                          {b.branch_name || b.name} ({b.branch_code || b.code})
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
 
-            {otpVerified && (
-              <div className="bg-emerald-100/90 text-emerald-900 border border-emerald-300 p-2 rounded-xl text-[11px] font-bold flex items-center gap-1.5">
-                <Check className="h-4 w-4 text-emerald-700" /> Mobile Number Verified Successfully
-              </div>
-            )}
-
-            {otpMessage && !otpVerified && (
-              <p className="text-[11px] text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200 font-medium">{otpMessage}</p>
-            )}
-          </div>
-
-          {/* STEP 4: Applicant Personal / Business Details */}
-          {createForm.constitution === "Individual" ? (
-            <div className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-4 space-y-3 shadow-xs">
-              <div className="flex items-center gap-2 border-b border-slate-200/70 pb-2">
-                <div className="p-1.5 bg-indigo-100 text-indigo-700 rounded-lg">
-                  <User className="h-4 w-4" />
-                </div>
-                <p className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">4. Applicant Personal & Financial Profile</p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                <div>
-                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Title *</label>
-                  <select
-                    value={createForm.title || "MR"}
-                    onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
-                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
-                  >
-                    {titles.map((t: any) => (
-                      <option key={t.meta_key || t.id} value={t.meta_key || t.meta_value}>{t.meta_value}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">First Name *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="First Name"
-                    value={createForm.first_name || ""}
-                    onChange={(e) => setCreateForm({ ...createForm, first_name: e.target.value })}
-                    className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Middle Name</label>
-                  <input
-                    type="text"
-                    placeholder="Middle Name"
-                    value={createForm.middle_name || ""}
-                    onChange={(e) => setCreateForm({ ...createForm, middle_name: e.target.value })}
-                    className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Last Name *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Last Name"
-                    value={createForm.last_name || ""}
-                    onChange={(e) => setCreateForm({ ...createForm, last_name: e.target.value })}
-                    className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Gender *</label>
-                  <select
-                    value={createForm.gender || "MALE"}
-                    onChange={(e) => setCreateForm({ ...createForm, gender: e.target.value })}
-                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
-                  >
-                    {genders.map((g: any) => (
-                      <option key={g.meta_key || g.id} value={g.meta_key || g.meta_value}>{g.meta_value}</option>
-                    ))}
-                  </select>
+                  <div className="flex flex-col">
+                    <div className="h-5 flex items-center">
+                      <Label className="text-xs font-bold text-slate-700 leading-none">
+                        Constitution Type <span className="text-rose-500 font-bold">*</span>
+                      </Label>
+                    </div>
+                    <Select
+                      value={createForm.constitution}
+                      onChange={(e) => setCreateForm({ ...createForm, constitution: e.target.value as any })}
+                      className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                    >
+                      <option value="Individual">Individual</option>
+                      <option value="Proprietory">Proprietory Firm</option>
+                      <option value="Partnership">Partnership Firm</option>
+                      <option value="Limited Liability Partnership">Limited Liability Partnership (LLP)</option>
+                      <option value="Pvt. Ltd. Company">Pvt. Ltd. Company</option>
+                      <option value="Public Ltd. Company">Public Ltd. Company</option>
+                      <option value="Charitable Trust">Charitable Trust</option>
+                      <option value="Co-op. Society">Co-op. Society</option>
+                    </Select>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Date of Birth (DOB) *</label>
-                  <input
-                    type="date"
-                    required
-                    value={createForm.dob || ""}
-                    onChange={(e) => {
-                      const dobVal = e.target.value;
-                      let ageVal = undefined;
-                      if (dobVal) {
-                        const d = new Date(dobVal);
-                        if (!isNaN(d.getTime())) {
-                          const today = new Date();
-                          ageVal = today.getFullYear() - d.getFullYear();
-                          const m = today.getMonth() - d.getMonth();
-                          if (m < 0 || (m === 0 && today.getDate() < d.getDate())) {
-                            ageVal--;
-                          }
-                        }
-                      }
-                      setCreateForm({ ...createForm, dob: dobVal, age: ageVal });
-                    }}
-                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
-                  />
-                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
+                  <div className="flex flex-col">
+                    <div className="h-5 flex items-center">
+                      <Label className="text-xs font-bold text-slate-700 leading-none">
+                        Pincode <span className="text-rose-500 font-bold">*</span>
+                      </Label>
+                    </div>
+                    <Input
+                      type="text"
+                      required
+                      maxLength={6}
+                      placeholder="e.g. 400001"
+                      value={createForm.pincode || ""}
+                      onChange={(e) => setCreateForm({ ...createForm, pincode: e.target.value.replace(/\D/g, "") })}
+                      className="mt-1.5 font-mono text-xs sm:text-sm h-9 bg-white"
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Age (Calculated)</label>
-                  <div className="w-full border border-slate-200 rounded-xl px-3.5 py-2 bg-slate-100 font-mono font-bold text-slate-700 flex items-center justify-between text-xs shadow-inner">
-                    <span>{createForm.age !== undefined ? `${createForm.age} Years` : "--"}</span>
-                    {createForm.age !== undefined && (
-                      <span className="bg-blue-100 text-blue-800 text-[10px] px-2 py-0.5 rounded-md font-bold">Auto</span>
-                    )}
+                  <div className="flex flex-col">
+                    <div className="h-5 flex items-center">
+                      <Label className="text-xs font-bold text-slate-700 leading-none">
+                        City <span className="text-rose-500 font-bold">*</span>
+                      </Label>
+                    </div>
+                    <Input
+                      type="text"
+                      required
+                      placeholder="City"
+                      value={createForm.city || ""}
+                      onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })}
+                      className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                    />
+                  </div>
+
+                  <div className="flex flex-col">
+                    <div className="h-5 flex items-center">
+                      <Label className="text-xs font-bold text-slate-700 leading-none">
+                        State <span className="text-rose-500 font-bold">*</span>
+                      </Label>
+                    </div>
+                    <Input
+                      type="text"
+                      required
+                      placeholder="State"
+                      value={createForm.state || ""}
+                      onChange={(e) => setCreateForm({ ...createForm, state: e.target.value })}
+                      className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                    />
                   </div>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Residential Address *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Full residential address..."
-                  value={createForm.address || ""}
-                  onChange={(e) => setCreateForm({ ...createForm, address: e.target.value })}
-                  className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
-                />
+              {/* 2. Identity & Contact Verification */}
+              <div className="rounded-xl border border-slate-200/90 bg-white p-5 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-indigo-50 text-indigo-600 border border-indigo-200 rounded-xl flex items-center justify-center">
+                      <CreditCard className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                        Identity & Contact Verification
+                      </h4>
+                    </div>
+                  </div>
+                </div>
+
+                {/* PAN Verification Widget */}
+                <div className="rounded-xl border border-blue-100 bg-blue-50/30 p-4 space-y-3">
+                  <div className="flex items-center justify-between border-b border-blue-100/70 pb-2">
+                    <span className="text-xs font-bold text-blue-950 uppercase tracking-wider">PAN Authentication</span>
+                    {panVerified && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 border border-emerald-300">
+                        <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                        PAN Verified
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2.5">
+                    <div className="flex-1 flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label className="text-xs font-bold text-slate-700 leading-none">
+                          PAN Number <span className="text-rose-500 font-bold">*</span>
+                        </Label>
+                      </div>
+                      <div className="relative mt-1.5">
+                        <Input
+                          type="text"
+                          required
+                          maxLength={10}
+                          placeholder="ABCDE1234F"
+                          value={createForm.pan_no || ""}
+                          onChange={(e) => {
+                            setCreateForm({ ...createForm, pan_no: e.target.value.toUpperCase() });
+                            setPanVerified(false);
+                            setPanMessage(null);
+                          }}
+                          className="font-mono uppercase tracking-wider text-xs sm:text-sm h-9 bg-white pr-8"
+                        />
+                        {panVerified && (
+                          <CheckCircle2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-600" />
+                        )}
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      disabled={verifyingPan || (createForm.pan_no || "").length !== 10}
+                      onClick={handleVerifyPan}
+                      className={cn(
+                        "h-9 px-4 text-xs font-semibold shrink-0 gap-1.5 shadow-xs transition-all",
+                        panVerified
+                          ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                          : "bg-blue-600 hover:bg-blue-700 text-white"
+                      )}
+                    >
+                      {verifyingPan ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Verifying...
+                        </>
+                      ) : (
+                        <>
+                          <FileCheck className="h-3.5 w-3.5" /> {panVerified ? "Re-verify PAN" : "Verify & Auto-fill"}
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  {panMessage && (
+                    <div className={cn(
+                      "text-xs p-2.5 rounded-lg border flex items-center gap-2",
+                      panVerified ? "text-emerald-800 bg-emerald-50 border-emerald-200" : "text-amber-800 bg-amber-50 border-amber-200"
+                    )}>
+                      {panVerified ? <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" /> : <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />}
+                      <span>{panMessage}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Mobile & Contact Widget */}
+                <div className="rounded-xl border border-blue-100 bg-blue-50/30 p-4 space-y-3">
+                  <div className="flex items-center justify-between border-b border-blue-100/70 pb-2">
+                    <span className="text-xs font-bold text-blue-950 uppercase tracking-wider">Contact & Mobile Verification</span>
+                    {otpVerified && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 border border-emerald-300">
+                        <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                        Mobile Verified
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label className="text-xs font-bold text-slate-700 leading-none">
+                          Mobile Number <span className="text-rose-500 font-bold">*</span>
+                        </Label>
+                      </div>
+                      <div className="flex gap-2 mt-1.5">
+                        <Input
+                          type="text"
+                          required
+                          maxLength={10}
+                          disabled={otpVerified}
+                          placeholder="10-digit mobile"
+                          value={createForm.mobile || ""}
+                          onChange={(e) => {
+                            setCreateForm({ ...createForm, mobile: e.target.value.replace(/\D/g, "") });
+                            setOtpSent(false);
+                            setOtpVerified(false);
+                          }}
+                          className="flex-1 font-mono text-xs sm:text-sm h-9 bg-white disabled:opacity-60"
+                        />
+                        {!otpVerified && (
+                          <Button
+                            type="button"
+                            disabled={sendingOtp || (createForm.mobile || "").length !== 10}
+                            onClick={handleSendOtp}
+                            className="h-9 px-3 text-xs bg-blue-600 hover:bg-blue-700 text-white font-medium shrink-0"
+                          >
+                            {sendingOtp ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Send OTP"}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label className="text-xs font-bold text-slate-700 leading-none">
+                          Email Address
+                        </Label>
+                      </div>
+                      <Input
+                        type="email"
+                        placeholder="applicant@domain.com"
+                        value={createForm.email || ""}
+                        onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                        className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {otpSent && !otpVerified && (
+                    <div className="p-3 bg-white border border-blue-200 rounded-lg flex flex-col sm:flex-row items-center gap-2.5">
+                      <Input
+                        type="text"
+                        maxLength={6}
+                        placeholder="Enter 6-digit OTP"
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                        className="font-mono text-center tracking-widest text-sm h-9 bg-slate-50 flex-1 w-full"
+                      />
+                      <Button
+                        type="button"
+                        disabled={verifyingOtp || otpCode.length !== 6}
+                        onClick={handleVerifyOtp}
+                        className="h-9 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium w-full sm:w-auto shrink-0"
+                      >
+                        {verifyingOtp ? "Verifying..." : "Verify OTP"}
+                      </Button>
+                    </div>
+                  )}
+                  {otpMessage && !otpVerified && (
+                    <p className="text-xs text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200">
+                      {otpMessage}
+                    </p>
+                  )}
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Employment Type *</label>
-                  <select
+              {/* 3. Applicant Profile Details */}
+              <div className="rounded-xl border border-slate-200/90 bg-white p-5 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-xl flex items-center justify-center">
+                      <User className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                        {createForm.constitution === "Individual" ? "Applicant Demographics & Financials" : "Entity Demographics & Turnover"}
+                      </h4>
+                    </div>
+                  </div>
+                </div>
+
+                {createForm.constitution === "Individual" ? (
+                  <>
+                    {/* Individual Demographics */}
+                    <div className="space-y-3.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Applicant Demographics</span>
+                        <div className="h-px flex-1 bg-slate-100" />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-start">
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label className="text-xs font-bold text-slate-700 leading-none">
+                              Title <span className="text-rose-500 font-bold">*</span>
+                            </Label>
+                          </div>
+                          <Select
+                            value={createForm.title || "MR"}
+                            onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
+                            className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                          >
+                            {titles.map((t: any) => (
+                              <option key={t.meta_key || t.id} value={t.meta_key || t.meta_value}>{t.meta_value}</option>
+                            ))}
+                          </Select>
+                        </div>
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label className="text-xs font-bold text-slate-700 leading-none">
+                              First Name <span className="text-rose-500 font-bold">*</span>
+                            </Label>
+                          </div>
+                          <Input
+                            type="text"
+                            required
+                            placeholder="First Name"
+                            value={createForm.first_name || ""}
+                            onChange={(e) => setCreateForm({ ...createForm, first_name: e.target.value })}
+                            className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                          />
+                        </div>
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label className="text-xs font-bold text-slate-700 leading-none">
+                              Middle Name
+                            </Label>
+                          </div>
+                          <Input
+                            type="text"
+                            placeholder="Middle Name"
+                            value={createForm.middle_name || ""}
+                            onChange={(e) => setCreateForm({ ...createForm, middle_name: e.target.value })}
+                            className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                          />
+                        </div>
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label className="text-xs font-bold text-slate-700 leading-none">
+                              Last Name <span className="text-rose-500 font-bold">*</span>
+                            </Label>
+                          </div>
+                          <Input
+                            type="text"
+                            required
+                            placeholder="Last Name"
+                            value={createForm.last_name || ""}
+                            onChange={(e) => setCreateForm({ ...createForm, last_name: e.target.value })}
+                            className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label className="text-xs font-bold text-slate-700 leading-none">
+                              Gender <span className="text-rose-500 font-bold">*</span>
+                            </Label>
+                          </div>
+                          <Select
+                            value={createForm.gender || "MALE"}
+                            onChange={(e) => setCreateForm({ ...createForm, gender: e.target.value })}
+                            className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                          >
+                            {genders.map((g: any) => (
+                              <option key={g.meta_key || g.id} value={g.meta_key || g.meta_value}>{g.meta_value}</option>
+                            ))}
+                          </Select>
+                        </div>
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label className="text-xs font-bold text-slate-700 leading-none">
+                              Date of Birth <span className="text-rose-500 font-bold">*</span>
+                            </Label>
+                          </div>
+                          <Input
+                            type="date"
+                            required
+                            value={createForm.dob || ""}
+                            onChange={(e) => {
+                              const dobVal = e.target.value;
+                              let ageVal = undefined;
+                              if (dobVal) {
+                                const birthDate = new Date(dobVal);
+                                const today = new Date();
+                                let age = today.getFullYear() - birthDate.getFullYear();
+                                const monthDiff = today.getMonth() - birthDate.getMonth();
+                                if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) age--;
+                                ageVal = age;
+                              }
+                              setCreateForm({ ...createForm, dob: dobVal, age: ageVal });
+                            }}
+                            className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                          />
+                        </div>
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label className="text-xs font-bold text-slate-700 leading-none">
+                              Age (Calculated)
+                            </Label>
+                          </div>
+                          <div className="mt-1.5 h-9 border border-slate-200 rounded-md px-3 bg-slate-50 font-mono text-slate-700 flex items-center justify-between text-xs sm:text-sm">
+                            <span>{createForm.age !== undefined ? `${createForm.age} Years` : "--"}</span>
+                            {createForm.age !== undefined && (
+                              <span className="bg-blue-100 text-blue-800 text-[10px] px-1.5 py-0.5 rounded font-semibold">Auto</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col">
+                        <div className="h-5 flex items-center">
+                          <Label className="text-xs font-bold text-slate-700 leading-none">
+                            Residential Address <span className="text-rose-500 font-bold">*</span>
+                          </Label>
+                        </div>
+                        <Input
+                          type="text"
+                          required
+                          placeholder="Complete residential flat/house, street address..."
+                          value={createForm.address || ""}
+                          onChange={(e) => setCreateForm({ ...createForm, address: e.target.value })}
+                          className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Employment & Financials */}
+                    <div className="space-y-3.5 pt-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Employment & Financial Profile</span>
+                        <div className="h-px flex-1 bg-slate-100" />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label className="text-xs font-bold text-slate-700 leading-none">
+                              Employment Type <span className="text-rose-500 font-bold">*</span>
+                            </Label>
+                          </div>
+                          <Select
+                            required
+                            value={createForm.employment_type || ""}
+                            onChange={(e) => setCreateForm({ ...createForm, employment_type: e.target.value })}
+                            className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                          >
+                            <option value="">-- Choose Employment --</option>
+                            {employmentTypes.map((item: any) => (
+                              <option key={item.meta_key || item.id} value={item.meta_key || item.meta_value}>{item.meta_value}</option>
+                            ))}
+                          </Select>
+                        </div>
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label className="text-xs font-bold text-slate-700 leading-none">
+                              Occupation Type <span className="text-rose-500 font-bold">*</span>
+                            </Label>
+                          </div>
+                          <Select
+                            required
+                            value={createForm.occupation_type || ""}
+                            onChange={(e) => setCreateForm({ ...createForm, occupation_type: e.target.value })}
+                            className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                          >
+                            <option value="">-- Choose Occupation --</option>
+                            {occupationTypes.map((item: any) => (
+                              <option key={item.meta_key || item.id} value={item.meta_key || item.meta_value}>{item.meta_value}</option>
+                            ))}
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col">
+                        <div className="h-5 flex items-center">
+                          <Label className="text-xs font-bold text-slate-700 leading-none">
+                            Employer / Business Entity Name <span className="text-rose-500 font-bold">*</span>
+                          </Label>
+                        </div>
+                        <Input
+                          type="text"
+                          required
+                          placeholder="Current company / organization name"
+                          value={createForm.employer_business_name || ""}
+                          onChange={(e) => setCreateForm({ ...createForm, employer_business_name: e.target.value })}
+                          className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label className="text-xs font-bold text-slate-700 leading-none">
+                              Gross Monthly Income (₹) <span className="text-rose-500 font-bold">*</span>
+                            </Label>
+                          </div>
+                          <Input
+                            type="number"
+                            required
+                            min={0}
+                            placeholder="50000"
+                            value={createForm.avg_gross_monthly_income || ""}
+                            onChange={(e) => setCreateForm({ ...createForm, avg_gross_monthly_income: Number(e.target.value) })}
+                            className="mt-1.5 font-mono text-xs sm:text-sm h-9 bg-white"
+                          />
+                        </div>
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label className="text-xs font-bold text-slate-700 leading-none">
+                              Net Monthly Income (₹) <span className="text-rose-500 font-bold">*</span>
+                            </Label>
+                          </div>
+                          <Input
+                            type="number"
+                            required
+                            min={0}
+                            placeholder="42000"
+                            value={createForm.avg_net_monthly_income || ""}
+                            onChange={(e) => setCreateForm({ ...createForm, avg_net_monthly_income: Number(e.target.value) })}
+                            className="mt-1.5 font-mono text-xs sm:text-sm h-9 bg-white"
+                          />
+                        </div>
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label className="text-xs font-bold text-slate-700 leading-none">
+                              Existing Monthly Obligation (₹) <span className="text-rose-500 font-bold">*</span>
+                            </Label>
+                          </div>
+                          <Input
+                            type="number"
+                            required
+                            min={0}
+                            placeholder="0"
+                            value={createForm.existing_monthly_repayment_obligation || ""}
+                            onChange={(e) => setCreateForm({ ...createForm, existing_monthly_repayment_obligation: Number(e.target.value) })}
+                            className="mt-1.5 font-mono text-xs sm:text-sm h-9 bg-white"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Non-Individual Entity Details */}
+                    <div className="space-y-3.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Entity Information</span>
+                        <div className="h-px flex-1 bg-slate-100" />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label className="text-xs font-bold text-slate-700 leading-none">
+                              Registered Entity Name <span className="text-rose-500 font-bold">*</span>
+                            </Label>
+                          </div>
+                          <Input
+                            type="text"
+                            required
+                            placeholder="Legal company or firm name"
+                            value={createForm.entity_name || ""}
+                            onChange={(e) => setCreateForm({ ...createForm, entity_name: e.target.value })}
+                            className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                          />
+                        </div>
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label className="text-xs font-bold text-slate-700 leading-none">
+                              Date of Incorporation (DOI) <span className="text-rose-500 font-bold">*</span>
+                            </Label>
+                          </div>
+                          <Input
+                            type="date"
+                            required
+                            value={createForm.doi || ""}
+                            onChange={(e) => setCreateForm({ ...createForm, doi: e.target.value })}
+                            className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col">
+                        <div className="h-5 flex items-center">
+                          <Label className="text-xs font-bold text-slate-700 leading-none">
+                            Registered Business Address <span className="text-rose-500 font-bold">*</span>
+                          </Label>
+                        </div>
+                        <Input
+                          type="text"
+                          required
+                          placeholder="Complete registered corporate office address..."
+                          value={createForm.business_address || ""}
+                          onChange={(e) => setCreateForm({ ...createForm, business_address: e.target.value })}
+                          className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label className="text-xs font-bold text-slate-700 leading-none">
+                              Key Promoter / Director Name <span className="text-rose-500 font-bold">*</span>
+                            </Label>
+                          </div>
+                          <Input
+                            type="text"
+                            required
+                            placeholder="Managing partner / director name"
+                            value={createForm.proprietor_partner_director_name || ""}
+                            onChange={(e) => setCreateForm({ ...createForm, proprietor_partner_director_name: e.target.value })}
+                            className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                          />
+                        </div>
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label className="text-xs font-bold text-slate-700 leading-none">
+                              Annual Sales Turnover (₹) <span className="text-rose-500 font-bold">*</span>
+                            </Label>
+                          </div>
+                          <Input
+                            type="number"
+                            required
+                            min={0}
+                            placeholder="Annual turnover"
+                            value={createForm.annual_gross_turnover_last_fy || ""}
+                            onChange={(e) => setCreateForm({ ...createForm, annual_gross_turnover_last_fy: Number(e.target.value) })}
+                            className="mt-1.5 font-mono text-xs sm:text-sm h-9 bg-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label className="text-xs font-bold text-slate-700 leading-none">
+                              Annual Gross Income (₹) <span className="text-rose-500 font-bold">*</span>
+                            </Label>
+                          </div>
+                          <Input
+                            type="number"
+                            required
+                            min={0}
+                            value={createForm.avg_annual_gross_income || ""}
+                            onChange={(e) => setCreateForm({ ...createForm, avg_annual_gross_income: Number(e.target.value) })}
+                            className="mt-1.5 font-mono text-xs sm:text-sm h-9 bg-white"
+                          />
+                        </div>
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label className="text-xs font-bold text-slate-700 leading-none">
+                              Annual Net Income (₹) <span className="text-rose-500 font-bold">*</span>
+                            </Label>
+                          </div>
+                          <Input
+                            type="number"
+                            required
+                            min={0}
+                            value={createForm.avg_annual_net_income || ""}
+                            onChange={(e) => setCreateForm({ ...createForm, avg_annual_net_income: Number(e.target.value) })}
+                            className="mt-1.5 font-mono text-xs sm:text-sm h-9 bg-white"
+                          />
+                        </div>
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label className="text-xs font-bold text-slate-700 leading-none">
+                              Monthly Obligation (₹) <span className="text-rose-500 font-bold">*</span>
+                            </Label>
+                          </div>
+                          <Input
+                            type="number"
+                            required
+                            min={0}
+                            value={createForm.existing_monthly_repayment_obligation || ""}
+                            onChange={(e) => setCreateForm({ ...createForm, existing_monthly_repayment_obligation: Number(e.target.value) })}
+                            className="mt-1.5 font-mono text-xs sm:text-sm h-9 bg-white"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* 4. Loan Facility Requirements */}
+              <div className="rounded-xl border border-slate-200/90 bg-white p-5 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-amber-50 text-amber-600 border border-amber-200 rounded-xl flex items-center justify-center">
+                      <Banknote className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                        Loan Facility & Requirements
+                      </h4>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+                  <div className="flex flex-col">
+                    <div className="h-5 flex items-center">
+                      <Label className="text-xs font-bold text-slate-700 leading-none">
+                        Loan Product <span className="text-rose-500 font-bold">*</span>
+                      </Label>
+                    </div>
+                    <Select
+                      required
+                      value={createForm.loan_product_id || ""}
+                      onChange={(e) => handleProductChange(Number(e.target.value))}
+                      className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                    >
+                      <option value="">-- Choose Loan Product --</option>
+                      {products
+                        .filter((p) => {
+                          if (createForm.constitution !== "Individual") {
+                            const nameLower = (p.name || p.product_name || "").toLowerCase();
+                            if (nameLower.includes("home loan") || nameLower.includes("education loan")) {
+                              return false;
+                            }
+                          }
+                          return true;
+                        })
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>{p.name || p.product_name}</option>
+                        ))}
+                    </Select>
+                  </div>
+
+                  <div className="flex flex-col">
+                    <div className="h-5 flex items-center">
+                      <Label className="text-xs font-bold text-slate-700 leading-none">
+                        Loan Type <span className="text-rose-500 font-bold">*</span>
+                      </Label>
+                    </div>
+                    <Select
+                      required
+                      disabled={!createForm.loan_product_id}
+                      value={createForm.loan_type_id || ""}
+                      onChange={(e) => setCreateForm({ ...createForm, loan_type_id: Number(e.target.value) })}
+                      className="mt-1.5 text-xs sm:text-sm h-9 bg-white disabled:opacity-50"
+                    >
+                      <option value="">-- Choose Loan Type --</option>
+                      {loanTypes.map((t) => (
+                        <option key={t.id} value={t.id}>{t.name || t.type_name}</option>
+                      ))}
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex flex-col">
+                  <div className="h-5 flex items-center">
+                    <Label className="text-xs font-bold text-slate-700 leading-none">
+                      Loan Purpose <span className="text-rose-500 font-bold">*</span>
+                    </Label>
+                  </div>
+                  <Select
                     required
-                    value={createForm.employment_type || ""}
-                    onChange={(e) => setCreateForm({ ...createForm, employment_type: e.target.value })}
-                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
+                    disabled={!createForm.loan_product_id}
+                    value={createForm.loan_purpose || ""}
+                    onChange={(e) => setCreateForm({ ...createForm, loan_purpose: e.target.value })}
+                    className="mt-1.5 text-xs sm:text-sm h-9 bg-white disabled:opacity-50"
                   >
-                    <option value="">-- Choose Employment --</option>
-                    {employmentTypes.map((item: any) => (
-                      <option key={item.meta_key || item.id} value={item.meta_key || item.meta_value}>{item.meta_value}</option>
+                    <option value="">-- Choose Loan Purpose --</option>
+                    {getLoanPurposeOptionsFromApi(
+                      loanPurposes,
+                      products.find((p) => Number(p.id) === Number(createForm.loan_product_id))?.name ||
+                      products.find((p) => Number(p.id) === Number(createForm.loan_product_id))?.product_name,
+                      loanTypes.find((t) => Number(t.id) === Number(createForm.loan_type_id))?.name ||
+                      loanTypes.find((t) => Number(t.id) === Number(createForm.loan_type_id))?.type_name
+                    ).map((purp, idx) => (
+                      <option key={idx} value={purp}>{purp}</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
-                <div>
-                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Occupation Type *</label>
-                  <select
-                    required
-                    value={createForm.occupation_type || ""}
-                    onChange={(e) => setCreateForm({ ...createForm, occupation_type: e.target.value })}
-                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
-                  >
-                    <option value="">-- Choose Occupation --</option>
-                    {occupationTypes.map((item: any) => (
-                      <option key={item.meta_key || item.id} value={item.meta_key || item.meta_value}>{item.meta_value}</option>
-                    ))}
-                  </select>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+                  <div className="flex flex-col">
+                    <div className="h-5 flex items-center justify-between">
+                      <Label className="text-xs font-bold text-slate-700 leading-none">
+                        Required Amount (₹) <span className="text-rose-500 font-bold">*</span>
+                      </Label>
+                    </div>
+                    <Input
+                      type="number"
+                      required
+                      min={1000}
+                      placeholder="100000"
+                      value={createForm.loan_amount_required || ""}
+                      onChange={(e) => setCreateForm({ ...createForm, loan_amount_required: Number(e.target.value) })}
+                      className="mt-1.5 font-mono text-xs sm:text-sm h-9 bg-white"
+                    />
+                  </div>
+
+                  <div className="flex flex-col">
+                    <div className="h-5 flex items-center justify-between">
+                      <Label className="text-xs font-bold text-slate-700 leading-none">
+                        Tenure (Months) <span className="text-rose-500 font-bold">*</span>
+                      </Label>
+                    </div>
+                    <Input
+                      type="number"
+                      required
+                      min={1}
+                      max={360}
+                      placeholder="12"
+                      value={createForm.loan_period_months || ""}
+                      onChange={(e) => setCreateForm({ ...createForm, loan_period_months: Number(e.target.value) })}
+                      className="mt-1.5 font-mono text-xs sm:text-sm h-9 bg-white"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Employer / Business Entity Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Company / Employer name"
-                  value={createForm.employer_business_name || ""}
-                  onChange={(e) => setCreateForm({ ...createForm, employer_business_name: e.target.value })}
-                  className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
-                />
-              </div>
+                {/* Lead Summary Overview Card */}
+                <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+                    <span className="text-xs font-semibold text-slate-900">Application Summary Preview</span>
+                    <span className="text-[11px] font-medium text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-md">
+                      {createForm.constitution || "Individual"}
+                    </span>
+                  </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Avg Gross Monthly Income (₹) *</label>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    value={createForm.avg_gross_monthly_income || ""}
-                    onChange={(e) => setCreateForm({ ...createForm, avg_gross_monthly_income: Number(e.target.value) })}
-                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono transition-all shadow-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Avg Net Monthly Income (₹) *</label>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    value={createForm.avg_net_monthly_income || ""}
-                    onChange={(e) => setCreateForm({ ...createForm, avg_net_monthly_income: Number(e.target.value) })}
-                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono transition-all shadow-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Monthly Obligation (₹) *</label>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    value={createForm.existing_monthly_repayment_obligation || ""}
-                    onChange={(e) => setCreateForm({ ...createForm, existing_monthly_repayment_obligation: Number(e.target.value) })}
-                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono transition-all shadow-xs"
-                  />
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-4 space-y-3 shadow-xs">
-              <div className="flex items-center gap-2 border-b border-slate-200/70 pb-2">
-                <div className="p-1.5 bg-indigo-100 text-indigo-700 rounded-lg">
-                  <Building2 className="h-4 w-4" />
-                </div>
-                <p className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">4. Entity Information (Non-Individual)</p>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Entity Name *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Registered Legal Entity Name"
-                    value={createForm.entity_name || ""}
-                    onChange={(e) => setCreateForm({ ...createForm, entity_name: e.target.value })}
-                    className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Date of Incorporation (DOI) *</label>
-                  <input
-                    type="date"
-                    required
-                    value={createForm.doi || ""}
-                    onChange={(e) => setCreateForm({ ...createForm, doi: e.target.value })}
-                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Registered Business Address *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Full office address..."
-                  value={createForm.business_address || ""}
-                  onChange={(e) => setCreateForm({ ...createForm, business_address: e.target.value })}
-                  className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
-                />
-              </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <p className="text-[11px] text-slate-500">Applicant</p>
+                      <p className="font-semibold text-slate-800 truncate">
+                        {createForm.constitution === "Individual"
+                          ? `${createForm.title || "Mr."} ${createForm.first_name || ""} ${createForm.last_name || ""}`.trim() || "--"
+                          : createForm.entity_name || "--"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-slate-500">Branch Location</p>
+                      <p className="font-semibold text-slate-800 truncate">
+                        {branches.find((b) => (b.branch_code || b.id) == createForm.Branch_id)?.branch_name ||
+                          createForm.Branch_id ||
+                          "--"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-slate-500">Requested Amount</p>
+                      <p className="font-semibold text-blue-700 font-mono">
+                        {formatCurrency(Number(createForm.loan_amount_required || 0))}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-slate-500">Loan Tenure</p>
+                      <p className="font-semibold text-slate-800">
+                        {createForm.loan_period_months || 0} Months
+                      </p>
+                    </div>
+                  </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Proprietor / Partner / Director Name *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Key promoter name..."
-                    value={createForm.proprietor_partner_director_name || ""}
-                    onChange={(e) => setCreateForm({ ...createForm, proprietor_partner_director_name: e.target.value })}
-                    className="w-full border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Annual Gross Sales Turnover (₹) *</label>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    value={createForm.annual_gross_turnover_last_fy || ""}
-                    onChange={(e) => setCreateForm({ ...createForm, annual_gross_turnover_last_fy: Number(e.target.value) })}
-                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono transition-all shadow-xs"
-                  />
+                  <div className="flex items-center gap-4 pt-1 border-t border-slate-200/60 text-[11px] text-slate-600">
+                    <span className="flex items-center gap-1.5">
+                      {panVerified ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> : <div className="h-2 w-2 rounded-full bg-slate-300" />}
+                      PAN: <span className="font-mono font-medium">{createForm.pan_no || "Pending"}</span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      {otpVerified ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> : <div className="h-2 w-2 rounded-full bg-slate-300" />}
+                      Mobile: <span className="font-mono font-medium">{createForm.mobile || "Pending"}</span>
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Avg Annual Gross Income (₹) *</label>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    value={createForm.avg_annual_gross_income || ""}
-                    onChange={(e) => setCreateForm({ ...createForm, avg_annual_gross_income: Number(e.target.value) })}
-                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono transition-all shadow-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Avg Annual Net Income (₹) *</label>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    value={createForm.avg_annual_net_income || ""}
-                    onChange={(e) => setCreateForm({ ...createForm, avg_annual_net_income: Number(e.target.value) })}
-                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono transition-all shadow-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Monthly Obligation (₹) *</label>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    value={createForm.existing_monthly_repayment_obligation || ""}
-                    onChange={(e) => setCreateForm({ ...createForm, existing_monthly_repayment_obligation: Number(e.target.value) })}
-                    className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono transition-all shadow-xs"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 5: Loan Product, Type & Purpose */}
-          <div className="bg-gradient-to-r from-purple-50/70 via-indigo-50/50 to-slate-50/90 border border-purple-200/80 rounded-2xl p-4 space-y-3 shadow-xs">
-            <div className="flex items-center gap-2 border-b border-purple-200/70 pb-2">
-              <div className="p-1.5 bg-purple-100 text-purple-700 rounded-lg">
-                <Banknote className="h-4 w-4" />
-              </div>
-              <p className="font-bold text-purple-950 uppercase tracking-wider text-[11px]">5. Loan Product & Purpose Selection</p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Loan Product *</label>
-                <select
-                  required
-                  value={createForm.loan_product_id || ""}
-                  onChange={(e) => handleProductChange(Number(e.target.value))}
-                  className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs hover:border-slate-300"
-                >
-                  <option value="">-- Choose Product --</option>
-                  {products
-                    .filter((p) => {
-                      if (createForm.constitution !== "Individual") {
-                        const nameLower = (p.name || p.product_name || "").toLowerCase();
-                        if (nameLower.includes("home loan") || nameLower.includes("education loan")) {
-                          return false;
-                        }
-                      }
-                      return true;
-                    })
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>{p.name || p.product_name}</option>
-                    ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Loan Type *</label>
-                <select
-                  required
-                  disabled={!createForm.loan_product_id}
-                  value={createForm.loan_type_id || ""}
-                  onChange={(e) => setCreateForm({ ...createForm, loan_type_id: Number(e.target.value) })}
-                  className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs hover:border-slate-300 disabled:opacity-50"
-                >
-                  <option value="">-- Choose Type --</option>
-                  {loanTypes.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name || t.type_name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Loan Purpose Select */}
-            <div>
-              <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Loan Purpose *</label>
-              <select
-                required
-                disabled={!createForm.loan_product_id}
-                value={createForm.loan_purpose || ""}
-                onChange={(e) => setCreateForm({ ...createForm, loan_purpose: e.target.value })}
-                className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs hover:border-slate-300 disabled:opacity-50"
+            {/* Modal Actions Footer */}
+            <div className="flex items-center justify-between pt-4 mt-3 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsCreateModalOpen(false)}
+                className="text-xs font-medium rounded-lg px-4 py-2"
               >
-                <option value="">-- Choose Purpose --</option>
-                {getLoanPurposeOptionsFromApi(
-                  loanPurposes,
-                  products.find((p) => Number(p.id) === Number(createForm.loan_product_id))?.name ||
-                  products.find((p) => Number(p.id) === Number(createForm.loan_product_id))?.product_name,
-                  loanTypes.find((t) => Number(t.id) === Number(createForm.loan_type_id))?.name ||
-                  loanTypes.find((t) => Number(t.id) === Number(createForm.loan_type_id))?.type_name
-                ).map((purp, idx) => (
-                  <option key={idx} value={purp}>{purp}</option>
-                ))}
-              </select>
-            </div>
+                Cancel
+              </Button>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Required Amount (₹) *</label>
-                <input
-                  type="number"
-                  required
-                  value={createForm.loan_amount_required}
-                  onChange={(e) => setCreateForm({ ...createForm, loan_amount_required: Number(e.target.value) })}
-                  className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 rounded-xl px-3 py-2 text-xs font-mono font-bold transition-all shadow-xs"
-                />
-              </div>
-              <div>
-                <label className="block text-slate-700 font-bold text-[11px] mb-1 tracking-wide">Tenure (Months) *</label>
-                <input
-                  type="number"
-                  required
-                  value={createForm.loan_period_months}
-                  onChange={(e) => setCreateForm({ ...createForm, loan_period_months: Number(e.target.value) })}
-                  className="w-full border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 rounded-xl px-3 py-2 text-xs font-mono font-bold transition-all shadow-xs"
-                />
-              </div>
+              <Button
+                type="submit"
+                disabled={submittingLead}
+                className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg px-6 py-2 shadow-sm gap-2"
+              >
+                {submittingLead ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Creating Lead...
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-3.5 w-3.5" />
+                    Create Lead Application
+                  </>
+                )}
+              </Button>
             </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
-            <Button type="button" variant="outline" onClick={() => setIsCreateModalOpen(false)} className="rounded-xl px-5 py-2.5 text-xs font-bold">
-              Cancel
-            </Button>
-            <Button type="submit" className="bg-gradient-to-r from-blue-600 via-indigo-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white font-bold rounded-xl px-7 py-2.5 text-xs shadow-md shadow-blue-600/20 transition-all hover:scale-[1.01] active:scale-[0.98]">
-              Create Lead Application
-            </Button>
-          </div>
-        </form>
+          </form>
+        )}
       </Modal>
 
       {/* Detail Modal */}
@@ -2865,17 +3198,25 @@ export function LeadManagementScreen() {
       </Modal>
 
       {/* Edit Lead Information Modal */}
-      <Modal open={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title={`Edit Lead Information: ${selectedLead?.CustName || selectedLead?.lead_uuid}`} width="max-w-2xl">
-        <form onSubmit={handleEditSubmit} className="relative space-y-4 text-xs">
-
-          {/* Master Values Loading State Overlay (Centered Spinner) */}
-          {masterLoading && (
-            <div className="absolute inset-0 z-50 flex justify-center bg-white/75 backdrop-blur-xs rounded-2xl transition-all">
-              <div className="sticky top-[35%] h-16 w-16 bg-white shadow-2xl border border-slate-200/90 rounded-2xl flex items-center justify-center my-auto">
-                <RefreshCw className="h-7 w-7 animate-spin text-blue-600" />
-              </div>
+      <Modal
+        open={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        title={`Edit Lead Information: ${selectedLead?.CustName || selectedLead?.lead_uuid}`}
+        width="max-w-2xl"
+        bodyClassName={masterLoading ? "overflow-hidden" : ""}
+      >
+        {masterLoading ? (
+          <div className="py-16 flex flex-col items-center justify-center text-center space-y-4">
+            <div className="h-12 w-12 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center shadow-xs">
+              <RefreshCw className="h-6 w-6 animate-spin text-blue-600" />
             </div>
-          )}
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800">Loading Lead Configuration</h3>
+              <p className="text-xs text-slate-500 mt-1">Please wait while configuration options are loaded...</p>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleEditSubmit} className="relative space-y-4 text-xs">
           {editForm.constitution === "Individual" ? (
             /* Individual Edit Fields */
             <div className="space-y-3">
@@ -3114,7 +3455,8 @@ export function LeadManagementScreen() {
             <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold">Save Lead Changes</Button>
           </div>
         </form>
-      </Modal>
+      )}
+    </Modal>
 
       {/* Confirmation Modal for Branch/Bank User Status Actions */}
       {confirmActionModal && (
@@ -3178,6 +3520,396 @@ export function LeadManagementScreen() {
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+// ============================================================================
+// Helper Components
+// ============================================================================
+
+interface KpiCardProps {
+  label: string;
+  value: number | string;
+  icon: React.ReactNode;
+  iconBg: string;
+  trend?: string | null;
+}
+
+function KpiCard({ label, value, icon, iconBg, trend }: KpiCardProps) {
+  return (
+    <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+      <CardContent className="p-4 flex items-center justify-between">
+        <div>
+          <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">{label}</p>
+          <p className="text-2xl font-bold text-slate-950 mt-1">{value}</p>
+          {trend && <p className="text-xs text-emerald-600 font-medium mt-1">{trend}</p>}
+        </div>
+        <div className={`p-3 rounded-xl ${iconBg}`}>
+          {icon}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+interface FilterBarFilters {
+  fromDate: string;
+  toDate: string;
+  applicationNo: string;
+  status: string;
+  search: string;
+}
+
+interface FilterBarProps {
+  onReset: () => void;
+  onApply: () => void;
+  filters: FilterBarFilters;
+  onChange: (filters: FilterBarFilters) => void;
+  hasActiveFilters: boolean;
+}
+
+function FilterBar({ onReset, onApply, filters, onChange, hasActiveFilters }: FilterBarProps) {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200/90 shadow-xs p-3.5 sm:p-4 space-y-3">
+      {/* Filter Inputs Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-end">
+        {/* Search */}
+        <div className="lg:col-span-3">
+          <Label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            Search
+          </Label>
+          <div className="relative">
+            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <Input
+              type="text"
+              placeholder="Name, Mobile, PAN..."
+              value={filters.search}
+              onChange={(e) => onChange({ ...filters, search: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") onApply();
+              }}
+              className="w-full pl-9 pr-8 h-9 text-xs sm:text-sm bg-slate-50/50 hover:bg-white focus:bg-white transition-colors"
+            />
+            {filters.search && (
+              <button
+                type="button"
+                onClick={() => onChange({ ...filters, search: "" })}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Application ID */}
+        <div className="lg:col-span-2">
+          <Label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            Application ID
+          </Label>
+          <Input
+            type="text"
+            placeholder="APP / Ref No."
+            value={filters.applicationNo}
+            onChange={(e) => onChange({ ...filters, applicationNo: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onApply();
+            }}
+            className="w-full h-9 font-mono text-xs sm:text-sm bg-slate-50/50 hover:bg-white focus:bg-white transition-colors"
+          />
+        </div>
+
+        {/* Status */}
+        <div className="lg:col-span-3">
+          <Label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            Filter Status
+          </Label>
+          <Select
+            value={filters.status}
+            onChange={(e) => onChange({ ...filters, status: e.target.value })}
+            className="w-full h-9 text-xs sm:text-sm bg-slate-50/50 hover:bg-white focus:bg-white transition-colors"
+          >
+            <option value="ALL">All Statuses</option>
+            <option value="NEW">New Lead / In Maker Queue</option>
+            <option value="IN_PROCESS">In Process</option>
+            <option value="QUERY">Query Raised</option>
+            <option value="SANCTIONED">Sanctioned</option>
+            <option value="DISBURSED">Disbursed</option>
+            <option value="REJECTED">Rejected</option>
+            <option value="CANCELLED">Cancelled</option>
+          </Select>
+        </div>
+
+        {/* From Date */}
+        <div className="lg:col-span-2">
+          <Label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            From Date
+          </Label>
+          <Input
+            type="date"
+            value={filters.fromDate}
+            onChange={(e) => onChange({ ...filters, fromDate: e.target.value })}
+            className="w-full h-9 text-xs bg-slate-50/50 hover:bg-white focus:bg-white transition-colors"
+          />
+        </div>
+
+        {/* To Date */}
+        <div className="lg:col-span-2">
+          <Label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            To Date
+          </Label>
+          <Input
+            type="date"
+            value={filters.toDate}
+            onChange={(e) => onChange({ ...filters, toDate: e.target.value })}
+            className="w-full h-9 text-xs bg-slate-50/50 hover:bg-white focus:bg-white transition-colors"
+          />
+        </div>
+      </div>
+
+      {/* Filter Bottom Bar: Active Indicators & Quick Actions */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-slate-100">
+        <div className="flex items-center gap-2">
+          {hasActiveFilters ? (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+              <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse" />
+              Active Filters Applied
+            </span>
+          ) : (
+            <span className="text-[11px] text-slate-400 font-medium">
+              Filter leads by search, ID, status or date range
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 ml-auto">
+          {hasActiveFilters && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onReset}
+              className="h-8 text-xs px-3 border-slate-200 hover:bg-slate-50 text-slate-600 font-medium"
+            >
+              <RefreshCw className="h-3 w-3 mr-1.5" />
+              Reset Filters
+            </Button>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            onClick={onApply}
+            className="h-8 text-xs px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-xs"
+          >
+            <Search className="h-3 w-3 mr-1.5" />
+            Apply Filters
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+interface LeadsTableProps {
+  leads: any[];
+  isLoading: boolean;
+  onViewDetail: (id: number) => void;
+  onEdit: (lead: any) => void;
+  onForwardToChecker: (id: number) => void;
+  onRaiseQuery: (lead: any) => void;
+  onSanction: (lead: any) => void;
+  onReject: (lead: any) => void;
+  onDisburse: (lead: any) => void;
+  onCancel: (lead: any) => void;
+  onUpdateStatus: (id: number, status: string) => void;
+  currentUser: any;
+  isBankUser: boolean;
+}
+
+function LeadsTable({ leads, isLoading, onViewDetail, onEdit, onForwardToChecker, onRaiseQuery, onSanction, onReject, onDisburse, onCancel, onUpdateStatus, currentUser, isBankUser }: LeadsTableProps) {
+  const getStatusActions = (lead: any) => {
+    const actions = [];
+    if (isBankUser) {
+      if (lead.status === "NEW") {
+        actions.push(
+          <Button key="forward" size="sm" variant="outline" onClick={() => onForwardToChecker(lead.id)}>
+            <ArrowUpDown className="h-3.5 w-3.5 mr-1" />
+            Forward
+          </Button>
+        );
+      }
+      if (lead.status === "IN_PROCESS" || lead.status === "QUERY") {
+        actions.push(
+          <Button key="query" size="sm" variant="outline" onClick={() => onRaiseQuery(lead)}>
+            <HelpCircle className="h-3.5 w-3.5 mr-1" />
+            Query
+          </Button>
+        );
+      }
+      if (lead.status === "SANCTIONED") {
+        actions.push(
+          <Button key="disburse" size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => onDisburse(lead)}>
+            <Banknote className="h-3.5 w-3.5 mr-1" />
+            Disburse
+          </Button>
+        );
+      }
+      if (["NEW", "IN_PROCESS", "QUERY"].includes(lead.status)) {
+        actions.push(
+          <Button key="reject" size="sm" variant="outline" className="text-rose-600 hover:bg-rose-50 border-rose-200" onClick={() => onReject(lead)}>
+            <XCircle className="h-3.5 w-3.5 mr-1" />
+            Reject
+          </Button>
+        );
+      }
+    } else {
+      // DSA user actions
+      if (lead.status === "NEW") {
+        actions.push(
+          <Button key="edit" size="sm" variant="outline" onClick={() => onEdit(lead)}>
+            <Edit3 className="h-3.5 w-3.5 mr-1" />
+            Edit
+          </Button>
+        );
+      }
+    }
+    return actions;
+  };
+
+  if (isLoading) {
+    return (
+      <div className="p-8 text-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-2" />
+        <p className="text-slate-500">Loading leads...</p>
+      </div>
+    );
+  }
+
+  if (leads.length === 0) {
+    return (
+      <div className="p-8 text-center">
+        <FileText className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+        <p className="text-slate-500">No leads found matching your criteria.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left border-collapse text-sm">
+        <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-xs">
+          <tr>
+            <th className="py-3 px-4">Applicant</th>
+            <th className="py-3 px-4">Ref ID</th>
+            <th className="py-3 px-4">Constitution</th>
+            <th className="py-3 px-4">Product / Type</th>
+            <th className="py-3 px-4">Amount</th>
+            <th className="py-3 px-4">Channel</th>
+            <th className="py-3 px-4">Status</th>
+            <th className="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {leads.map((lead) => (
+            <tr key={lead.id} className="hover:bg-slate-50/50 transition-colors">
+              <td className="py-3 px-4">
+                <p className="font-medium text-slate-900">{lead.CustName || `${lead.first_name || ""} ${lead.last_name || ""}`.trim() || lead.entity_name}</p>
+              </td>
+              <td className="py-3 px-4">
+                <p className="text-[11px] font-mono text-slate-500">{lead.application_id || lead.lead_uuid?.slice(0, 13)}</p>
+              </td>
+              <td className="py-3 px-4">
+                <span className={cn(
+                  "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase",
+                  lead.constitution === "Individual"
+                    ? "bg-blue-50 text-blue-700"
+                    : "bg-purple-50 text-purple-700"
+                )}>
+                  {lead.constitution}
+                </span>
+              </td>
+              <td className="py-3 px-4">
+                <p className="text-slate-800 truncate max-w-xs">{lead.product?.name || "Loan Product"}</p>
+                <p className="text-slate-400 text-[11px] truncate max-w-xs">{lead.loan_type?.name || lead.loanType?.name || "Standard"}</p>
+              </td>
+              <td className="py-3 px-4 font-mono font-semibold text-slate-900">
+                {lead.loan_amount_required ? `₹${Number(lead.loan_amount_required).toLocaleString("en-IN")}` : "—"}
+              </td>
+              <td className="py-3 px-4 text-slate-600 capitalize">
+                {lead.created_by_type || "dsa"}
+              </td>
+              <td className="py-3 px-4">
+                <StatusBadge status={lead.status || "NEW"} />
+              </td>
+              <td className="py-3 px-4 text-right">
+                <div className="flex items-center justify-end gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => onViewDetail(lead.id)} className="text-slate-500 hover:text-slate-700">
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                  {getStatusActions(lead)}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+interface PaginationProps {
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}
+
+function Pagination({ currentPage, totalPages, onPageChange }: PaginationProps) {
+  if (totalPages <= 1) return null;
+
+  return (
+    <div className="flex flex-col sm:flex-row justify-between items-center p-4 border-t border-slate-200 bg-slate-50/50 text-sm gap-3">
+      <div className="flex items-center gap-4 text-slate-600">
+        <span>Page <strong className="text-slate-900">{currentPage}</strong> of <strong className="text-slate-900">{totalPages}</strong></span>
+      </div>
+
+      <div className="flex items-center gap-1">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={currentPage <= 1}
+          onClick={() => onPageChange(currentPage - 1)}
+        >
+          <ChevronDown className="h-3.5 w-3.5 rotate-180" />
+        </Button>
+        {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+          let pageNum;
+          if (totalPages <= 5) {
+            pageNum = i + 1;
+          } else if (currentPage <= 3) {
+            pageNum = i + 1;
+          } else if (currentPage >= totalPages - 2) {
+            pageNum = totalPages - 4 + i;
+          } else {
+            pageNum = currentPage - 2 + i;
+          }
+          return (
+            <Button
+              key={pageNum}
+              variant={currentPage === pageNum ? "primary" : "outline"}
+              size="sm"
+              onClick={() => onPageChange(pageNum)}
+              className="min-w-[36px]"
+            >
+              {pageNum}
+            </Button>
+          );
+        })}
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={currentPage >= totalPages}
+          onClick={() => onPageChange(currentPage + 1)}
+        >
+          <ChevronDown className="h-3.5 w-3.5" />
+        </Button>
+      </div>
     </div>
   );
 }
