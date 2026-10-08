@@ -2522,8 +2522,8 @@ export function DsaManagementPage() {
     <Modal
       description={
         callBackTarget
-          ? `Pull application #${callBackTarget.dsa_code || callBackTarget.code || callBackTarget.id} back to your stage. It will be reassigned and locked to you.`
-          : "Pull this application back to your stage."
+          ? ``
+          : ""
       }
       onClose={() => {
         setCallBackTarget(null);
@@ -2534,14 +2534,6 @@ export function DsaManagementPage() {
       title="Call Back to Your Desk"
     >
       <div className="space-y-4">
-        <div className="flex items-start gap-2.5 rounded-lg border border-sky-200 bg-sky-50 px-3.5 py-3 text-xs leading-relaxed text-sky-900">
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />
-          <p>
-            Only the exact authority who actioned this case at the previous
-            stage can call it back. Once returned, the case reappears on your
-            desk and becomes fully actionable again.
-          </p>
-        </div>
         <div className="space-y-1.5">
           <Label htmlFor="listCallBackReason">Reason for Call Back *</Label>
           <textarea

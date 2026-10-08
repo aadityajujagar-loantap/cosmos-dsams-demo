@@ -166,12 +166,35 @@ export function Select({
   name,
   id,
   placeholder,
+  searchable,
+  searchPlaceholder,
+  onOpenChange,
   ...props
-}: SelectHTMLAttributes<HTMLSelectElement> & { placeholder?: string; buttonClassName?: string }) {
+}: SelectHTMLAttributes<HTMLSelectElement> & {
+  placeholder?: string;
+  buttonClassName?: string;
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  onOpenChange?: (isOpen: boolean) => void;
+}) {
   const [isOpen, setIsOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const toggleOpen = () => {
+    if (disabled) return;
+    const next = !isOpen;
+    if (next && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      setOpenUpward(spaceBelow < 260 && spaceAbove > spaceBelow);
+    }
+    setIsOpen(next);
+    onOpenChange?.(next);
+  };
 
   const options = useMemo(() => {
     const list: { value: string; label: string }[] = [];
@@ -204,11 +227,14 @@ export function Select({
     return options.find((opt) => opt.value === stringVal) || options.find((opt) => opt.value === value) || (placeholder ? null : options[0]);
   }, [options, value, placeholder]);
 
+  const showSearch = searchable !== undefined ? searchable : options.length > 5;
+
   const filteredOptions = useMemo(() => {
     if (!searchQuery.trim()) return options;
-    const q = searchQuery.toLowerCase();
+    const q = searchQuery.toLowerCase().trim();
     return options.filter((opt) =>
-      opt.label.toLowerCase().includes(q)
+      opt.label.toLowerCase().includes(q) ||
+      opt.value.toLowerCase().includes(q)
     );
   }, [options, searchQuery]);
 
@@ -216,10 +242,16 @@ export function Select({
     function handleClickOutside(event: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
+        setSearchQuery("");
+        onOpenChange?.(false);
       }
     }
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsOpen(false);
+      if (event.key === "Escape") {
+        setIsOpen(false);
+        setSearchQuery("");
+        onOpenChange?.(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     if (isOpen) {
@@ -229,16 +261,16 @@ export function Select({
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen]);
+  }, [isOpen, onOpenChange]);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && showSearch) {
       const timer = setTimeout(() => {
         searchInputRef.current?.focus();
       }, 50);
       return () => clearTimeout(timer);
     }
-  }, [isOpen]);
+  }, [isOpen, showSearch]);
 
   const handleSelect = (selectedValue: string) => {
     if (onChange) {
@@ -258,6 +290,7 @@ export function Select({
     }
     setIsOpen(false);
     setSearchQuery("");
+    onOpenChange?.(false);
   };
 
   return (
@@ -278,7 +311,7 @@ export function Select({
       <button
         type="button"
         disabled={disabled}
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={toggleOpen}
         className={cn(
           "flex h-10 w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-900 shadow-2xs outline-none transition-all hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 disabled:pointer-events-none disabled:bg-slate-50 cursor-pointer text-left",
           isOpen && "border-blue-500 ring-2 ring-blue-500/20 shadow-xs",
@@ -291,14 +324,19 @@ export function Select({
         <ChevronDown
           className={cn(
             "h-4 w-4 text-slate-400 transition-transform duration-200 shrink-0",
-            isOpen && "rotate-180 text-blue-600"
+            isOpen && (openUpward ? "text-blue-600" : "rotate-180 text-blue-600")
           )}
         />
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 right-0 z-50 mt-1.5 flex max-h-64 w-full flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-xl ring-1 ring-black/5 animate-in fade-in slide-in-from-top-1 duration-150">
-          {options.length > 5 && (
+        <div
+          className={cn(
+            "absolute left-0 right-0 z-50 flex max-h-60 w-full flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-xl ring-1 ring-black/5 animate-in fade-in duration-150",
+            openUpward ? "bottom-full mb-1.5 slide-in-from-bottom-1" : "top-full mt-1.5 slide-in-from-top-1"
+          )}
+        >
+          {showSearch && (
             <div className="flex items-center border-b border-slate-100 bg-slate-50/80 px-3 py-1.5 sticky top-0 z-10 backdrop-blur-xs">
               <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
               <input
@@ -306,7 +344,7 @@ export function Select({
                 ref={searchInputRef}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search options..."
+                placeholder={searchPlaceholder || "Search options..."}
                 className="h-7 w-full bg-transparent px-2 text-xs text-slate-800 placeholder:text-slate-400 outline-none font-medium"
               />
               {searchQuery && (
