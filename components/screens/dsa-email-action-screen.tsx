@@ -387,7 +387,7 @@ export function DsaEmailActionScreen({ token }: DsaEmailActionScreenProps) {
                         Processing...
                       </>
                     ) : selectedAction === "RECOMMEND" ? (
-                      "Confirm & Submit Recommendation"
+                      "Confirm & Submit"
                     ) : (
                       "Confirm & Reject Application"
                     )}

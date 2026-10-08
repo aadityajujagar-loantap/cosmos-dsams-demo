@@ -2226,10 +2226,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       account_number: accountNumber,
       account_type: accountType,
       ifsc: ifsc.toUpperCase(),
-      reference_1_name: reference1Name,
-      reference_1_contact_no: reference1Contact,
-      reference_2_name: reference2Name,
-      reference_2_contact_no: reference2Contact,
     };
 
     // Type-specific fields — only send what belongs to the chosen DSA type
@@ -2244,6 +2240,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       // AgePolicy reads Dsa.age in preference to date_of_birth, so send the resolved
       // value (derived from DOB, or the manual entry when DOB is blank).
       if (resolvedAge) payload.age = Number(resolvedAge);
+      payload.reference_1_name = reference1Name;
+      payload.reference_1_contact_no = reference1Contact;
+      payload.reference_2_name = reference2Name;
+      payload.reference_2_contact_no = reference2Contact;
     } else {
       payload.entity_name = entityName;
       payload.constitution = constitution;
@@ -4429,7 +4429,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
               {/* SECTION 1: APPLICANT / ENTITY DETAILS */}
               <div>
                 <div className="bg-[#0f172a] text-white px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-t">
-                  SECTION 1: {dsaType === "INDIVIDUAL" ? "Applicant & Identity Details" : "Corporate & Business Entity Details"}
+                  SECTION 1: {dsaType === "INDIVIDUAL" ? "Applicant Details" : "Entity Details"}
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
@@ -4447,7 +4447,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           <tr>
                             <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">PAN Number:</td>
                             <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-mono font-bold text-slate-900">
-                              {pan} {panVerified && <span className="ml-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">ScoreMe Verified</span>}
+                              {pan}
                             </td>
                             <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Aadhaar Number:</td>
                             <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-mono text-slate-900">
@@ -4508,7 +4508,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           <tr>
                             <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Entity PAN Number:</td>
                             <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-mono font-bold text-slate-900">
-                              {pan} {panVerified && <span className="ml-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">ScoreMe Verified</span>}
+                              {pan}
                             </td>
                             <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">GST Registration:</td>
                             <td className="w-[25%] bg-white border border-slate-300 p-2.5 text-slate-900">
@@ -4553,7 +4553,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
               {/* SECTION 2: ADDRESS & PREMISES DETAILS */}
               <div>
                 <div className="bg-[#0f172a] text-white px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-t">
-                  SECTION 2: Address &amp; Operating Premises Details
+                  SECTION 2: Address Details
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
@@ -4640,16 +4640,26 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                 {dsaType === "INDIVIDUAL" ? (
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
+                      <thead>
+                        <tr className="bg-slate-100 text-slate-700 font-bold">
+                          <th className="border border-slate-300 p-2 text-center w-12">Sr.</th>
+                          <th className="border border-slate-300 p-2 text-left w-[20%]">Reference</th>
+                          <th className="border border-slate-300 p-2 text-left">Full Name</th>
+                          <th className="border border-slate-300 p-2 text-left w-[25%]">Mobile Number</th>
+                        </tr>
+                      </thead>
                       <tbody>
-                        <tr>
-                          <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Reference 1:</td>
-                          <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-semibold text-slate-900">
-                            {reference1Name} ({reference1Contact})
-                          </td>
-                          <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Reference 2:</td>
-                          <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-semibold text-slate-900">
-                            {reference2Name} ({reference2Contact})
-                          </td>
+                        <tr className="bg-white">
+                          <td className="border border-slate-300 p-2 text-slate-500 font-medium text-center w-12">1</td>
+                          <td className="border border-slate-300 p-2 font-semibold text-slate-800">Reference 1</td>
+                          <td className="border border-slate-300 p-2 font-bold text-slate-900">{reference1Name || "N/A"}</td>
+                          <td className="border border-slate-300 p-2 font-mono text-slate-800">{reference1Contact || "N/A"}</td>
+                        </tr>
+                        <tr className="bg-white">
+                          <td className="border border-slate-300 p-2 text-slate-500 font-medium text-center w-12">2</td>
+                          <td className="border border-slate-300 p-2 font-semibold text-slate-800">Reference 2</td>
+                          <td className="border border-slate-300 p-2 font-bold text-slate-900">{reference2Name || "N/A"}</td>
+                          <td className="border border-slate-300 p-2 font-mono text-slate-800">{reference2Contact || "N/A"}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -4660,10 +4670,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
                         <thead>
                           <tr className="bg-slate-100 text-slate-700 font-bold">
-                            <th className="border border-slate-300 p-2 text-left w-10">#</th>
+                            <th className="border border-slate-300 p-2 text-center w-12">Sr.</th>
                             <th className="border border-slate-300 p-2 text-left w-[20%]">Role / Designation</th>
-                            <th className="border border-slate-300 p-2 text-left w-[25%]">Full Name</th>
-                            <th className="border border-slate-300 p-2 text-left w-[15%]">Mobile</th>
+                            <th className="border border-slate-300 p-2 text-left">Full Name</th>
+                            <th className="border border-slate-300 p-2 text-left w-[16%]">Mobile</th>
                             <th className="border border-slate-300 p-2 text-left w-[15%]">PAN</th>
                             <th className="border border-slate-300 p-2 text-left w-[15%]">Aadhaar</th>
                           </tr>
@@ -4671,7 +4681,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         <tbody>
                           {stakeholders.map((s, idx) => (
                             <tr key={idx} className="bg-white">
-                              <td className="border border-slate-300 p-2 font-bold text-slate-600 text-center">{idx + 1}</td>
+                              <td className="border border-slate-300 p-2 font-bold text-slate-600 text-center w-12">{idx + 1}</td>
                               <td className="border border-slate-300 p-2 font-semibold text-slate-800">{s.stakeholder_type || "N/A"}</td>
                               <td className="border border-slate-300 p-2 font-bold text-slate-900">{s.name || "N/A"}</td>
                               <td className="border border-slate-300 p-2 font-mono text-slate-800">{s.mobile_no || "N/A"}</td>
@@ -4702,28 +4712,20 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
                     <thead>
                       <tr className="bg-slate-100 text-slate-700 font-bold">
-                        <th className="border border-slate-300 p-2 text-left w-10">#</th>
-                        <th className="border border-slate-300 p-2 text-left w-[40%]">Document Name</th>
-                        <th className="border border-slate-300 p-2 text-left w-[35%]">Attached File</th>
-                        <th className="border border-slate-300 p-2 text-left w-[15%]">File Size</th>
-                        <th className="border border-slate-300 p-2 text-center w-[10%]">Status</th>
+                        <th className="border border-slate-300 p-2 text-center w-12">Sr.</th>
+                        <th className="border border-slate-300 p-2 text-left">Document Name</th>
+                        <th className="border border-slate-300 p-2 text-center w-28">Status</th>
                       </tr>
                     </thead>
                     <tbody>
                       {Object.keys(uploadedDocs).length > 0 ? (
                         Object.entries(uploadedDocs).map(([key, item], idx) => (
                           <tr key={key} className="bg-white">
-                            <td className="border border-slate-300 p-2 text-slate-500 font-medium text-center">{idx + 1}</td>
+                            <td className="border border-slate-300 p-2 text-slate-500 font-medium text-center w-12">{idx + 1}</td>
                             <td className="border border-slate-300 p-2 font-bold text-slate-800">
                               {getDocDisplayLabel(key, currentDocList)}
                             </td>
-                            <td className="border border-slate-300 p-2 font-mono text-[11px] text-slate-800 truncate">
-                              {item.name}
-                            </td>
-                            <td className="border border-slate-300 p-2 font-mono text-[11px] text-slate-600">
-                              {item.size || "Attached"}
-                            </td>
-                            <td className="border border-slate-300 p-2 text-center">
+                            <td className="border border-slate-300 p-2 text-center w-28">
                               <span className="inline-flex items-center text-emerald-700 font-bold text-[11px]">
                                 <CheckCircle2 className="h-3.5 w-3.5 mr-0.5 text-emerald-600" /> Attached
                               </span>
@@ -4732,7 +4734,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={5} className="border border-slate-300 p-3 text-center text-slate-400 italic">
+                          <td colSpan={3} className="border border-slate-300 p-3 text-center text-slate-400 italic">
                             No documents attached yet
                           </td>
                         </tr>
@@ -4745,7 +4747,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
               {/* SECTION 6: DECLARATION & DPDP ACT CONSENT */}
               <div>
                 <div className="bg-[#0f172a] text-white px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-t">
-                  SECTION 6: Consent &amp; Declaration (Under Digital Personal Data Protection Act)
+                  SECTION 6: Consent &amp; Declaration
                 </div>
                 <div className="border border-slate-300 border-t-0 p-4 space-y-3 bg-white">
                   <p className="text-xs text-slate-700 leading-relaxed text-justify">

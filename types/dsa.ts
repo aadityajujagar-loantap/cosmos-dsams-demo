@@ -130,6 +130,8 @@ export interface Dsa {
   applicant_email?: string;
   agreement_status?: string;
   agreement_generated_at?: string | null;
+  agreement_approved_at?: string | null;
+  agreement_expires_at?: string | null;
   digital_acceptance_status?: string;
   digital_accepted_at?: string | null;
   latest_due_diligence_note?: DsaDueDiligenceNote | null;
@@ -203,7 +205,7 @@ export interface Dsa {
   }>;
 }
 
-export type DsaWorkBucket = "all" | "received" | "in_process" | "rejected" | "approved";
+export type DsaWorkBucket = "all" | "received" | "in_process" | "rejected" | "approved" | "active";
 
 /** Task 20C — candidate returned by GET /api/v1/dsa/{id}/eligible-users. */
 export interface DsaEligibleUser {
@@ -255,6 +257,11 @@ export const DSA_WORK_BUCKETS: {
     value: "approved",
     label: "Approved",
     description: "Applications that completed sanction and approval.",
+  },
+  {
+    value: "active",
+    label: "Active DSAs",
+    description: "DSAs with approved agreements and active operational status.",
   },
 ];
 

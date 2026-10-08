@@ -17,7 +17,7 @@ import React, {
   isValidElement,
 } from "react";
 
-import { cn } from "@/lib/utils";
+import { cn, formatStatusLabel } from "@/lib/utils";
 
 export function Button({
   className,
@@ -92,7 +92,8 @@ export function Badge({
 }
 
 export function StatusBadge({ status }: { status: string }) {
-  const normalized = status.toLowerCase();
+  const displayStatus = formatStatusLabel(status);
+  const normalized = displayStatus.toLowerCase();
   const tone =
     normalized.includes("active") ||
     normalized.includes("approved") ||
@@ -108,6 +109,7 @@ export function StatusBadge({ status }: { status: string }) {
           normalized.includes("progress") ||
           normalized.includes("draft") ||
           normalized.includes("hold") ||
+          normalized.includes("awaiting") ||
           normalized.includes("submitted")
         ? "amber"
         : normalized.includes("reject") ||
@@ -118,7 +120,7 @@ export function StatusBadge({ status }: { status: string }) {
             normalized.includes("critical")
           ? "rose"
           : "blue";
-  return <Badge tone={tone}>{status}</Badge>;
+  return <Badge tone={tone}>{displayStatus}</Badge>;
 }
 
 export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
