@@ -40,6 +40,8 @@ import {
   ChevronLeft,
   CreditCard,
   Smartphone,
+  ShieldCheck,
+  Briefcase,
 } from "lucide-react";
 import {
   fetchLeads,
@@ -67,9 +69,8 @@ import { PageHeader } from "@/components/module";
 import { Button, Card, CardContent, CardHeader, Modal, StatusBadge, Tabs, Input, Select, Label } from "@/components/ui/primitives";
 import { useMockStore } from "@/lib/store";
 import { useToast } from "@/components/ui/toast";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, parseDobToIso, calculateAgeFromDob, cn } from "@/lib/utils";
 import { getLoanPurposeOptionsFromApi } from "@/lib/loan-purpose";
-import { cn } from "@/lib/utils";
 
 function SearchableDsaSelect({
   dsaList,
@@ -111,12 +112,12 @@ function SearchableDsaSelect({
     <div className="relative" ref={dropdownRef}>
       <div
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full border rounded-xl px-3 py-2 text-xs font-medium cursor-pointer transition-all flex items-center justify-between bg-white shadow-xs ${
+        className={`w-full h-10 border rounded-lg px-3.5 text-sm font-medium cursor-pointer transition-all flex items-center justify-between bg-white shadow-2xs ${
           isOpen
-            ? "border-blue-500 ring-2 ring-blue-500/20"
+            ? "border-blue-500 ring-2 ring-blue-500/20 shadow-xs"
             : selectedCode
             ? "border-blue-400 text-slate-900 bg-blue-50/20 font-bold"
-            : "border-blue-200 text-slate-400 hover:border-blue-300"
+            : "border-slate-200 text-slate-500 hover:border-slate-300"
         }`}
       >
         <span className="truncate">
@@ -201,6 +202,72 @@ function SearchableDsaSelect({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function LeadDetailItem({
+  label,
+  value,
+  className,
+  subvalue,
+}: {
+  label: string;
+  value: React.ReactNode;
+  className?: string;
+  subvalue?: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-lg bg-slate-50/70 border border-slate-200/70 px-3.5 py-2.5 transition-colors hover:bg-slate-50/90",
+        className
+      )}
+    >
+      <p className="text-[10px] sm:text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+        {label}
+      </p>
+      <div className="mt-1 text-xs sm:text-sm font-semibold text-slate-900 break-words leading-relaxed">
+        {value || "—"}
+      </div>
+      {subvalue && <div className="mt-1">{subvalue}</div>}
+    </div>
+  );
+}
+
+function LeadSectionBlock({
+  icon: Icon,
+  iconColor = "text-blue-600",
+  iconBg = "bg-blue-50 border-blue-200/80",
+  title,
+  action,
+  children,
+  className,
+}: {
+  icon?: any;
+  iconColor?: string;
+  iconBg?: string;
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("rounded-xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-xs space-y-3.5", className)}>
+      <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div className="flex items-center gap-2.5">
+          {Icon && (
+            <div className={cn("p-1.5 rounded-lg border flex items-center justify-center shrink-0", iconBg, iconColor)}>
+              <Icon className="h-4 w-4" />
+            </div>
+          )}
+          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+            {title}
+          </h4>
+        </div>
+        {action}
+      </div>
+      {children}
     </div>
   );
 }
@@ -310,9 +377,11 @@ export function LeadManagementScreen() {
   const [genders, setGenders] = useState<any[]>([]);
   const [employmentTypes, setEmploymentTypes] = useState<any[]>([]);
   const [occupationTypes, setOccupationTypes] = useState<any[]>([]);
+  const [activeOccupationTypes, setActiveOccupationTypes] = useState<any[]>([]);
   const [deviationTypes, setDeviationTypes] = useState<any[]>([]);
   const [loanPurposes, setLoanPurposes] = useState<any[]>([]);
   const [dsaList, setDsaList] = useState<any[]>([]);
+  const [constitutions, setConstitutions] = useState<any[]>([]);
 
   // PAN Verification State
   const [verifyingPan, setVerifyingPan] = useState(false);
@@ -392,7 +461,7 @@ export function LeadManagementScreen() {
     if (masterLoaded || masterLoading) return;
     try {
       setMasterLoading(true);
-      const [prodRes, branchRes, titleRes, genderRes, empRes, occRes, devRes, purpRes, dsaRes] = await Promise.all([
+      const [prodRes, branchRes, titleRes, genderRes, empRes, occRes, devRes, purpRes, dsaRes, constRes] = await Promise.all([
         fetchLoanProducts(),
         fetchBranchesDropdown(),
         getMasterValues({ group: "title" }),
@@ -402,6 +471,7 @@ export function LeadManagementScreen() {
         getMasterValues({ group: "deviation_type" }),
         getMasterValues({ group: "loan_purpose" }),
         fetchDsasDropdown(),
+        getMasterValues({ group: "constitution" }),
       ]);
 
       const prods = prodRes?.data?.data || prodRes?.data || prodRes || [];
@@ -419,6 +489,9 @@ export function LeadManagementScreen() {
 
       const dsaItems = dsaRes?.data || dsaRes || [];
       setDsaList(Array.isArray(dsaItems) ? dsaItems : []);
+
+      const constItems = constRes?.data || constRes || [];
+      setConstitutions(Array.isArray(constItems) ? constItems : []);
 
       setMasterLoaded(true);
     } catch (err) {
@@ -503,7 +576,7 @@ const setFilters = (newFilters: {
       if (res?.status === "success") {
         setOtpSent(true);
         setOtpReferenceId(res.data?.reference_id || "mock-ref-id");
-        setOtpMessage(`OTP sent! (Dev Mock OTP: ${res.data?.mock_otp || "123456"})`);
+        setOtpMessage(`OTP sent!`);
       } else {
         setOtpMessage(res?.message || "Failed to send OTP");
       }
@@ -563,13 +636,9 @@ const setFilters = (newFilters: {
         let formattedDate = "";
         const rawDob = detailsData.dobOrDoi || detailsData.dob || detailsData.doi;
         if (rawDob) {
-          const d = new Date(rawDob);
-          if (!isNaN(d.getTime())) {
-            formattedDate = d.toISOString().split("T")[0];
-          } else {
-            formattedDate = rawDob;
-          }
+          formattedDate = parseDobToIso(String(rawDob));
         }
+        const calculatedAge = calculateAgeFromDob(formattedDate);
 
         let genderVal = (detailsData.gender || "MALE").toUpperCase();
         if (genderVal.startsWith("M")) genderVal = "MALE";
@@ -599,6 +668,7 @@ const setFilters = (newFilters: {
           entity_name: fullName || prev.entity_name,
           dob: formattedDate || prev.dob,
           doi: formattedDate || prev.doi,
+          age: calculatedAge ?? calculateAgeFromDob(prev.dob),
           gender: genderVal || prev.gender,
           address: fullAddress || prev.address,
           business_address: fullAddress || prev.business_address,
@@ -630,14 +700,50 @@ const setFilters = (newFilters: {
     loadLeadDataOnly(currentPage, perPage);
   }, [currentPage, perPage, activeTab]);
 
+  // Dynamically load mapped occupation types whenever employment_type changes
+  useEffect(() => {
+    const empType = createForm.employment_type;
+    if (!empType) {
+      setActiveOccupationTypes([]);
+      if (createForm.occupation_type) {
+        setCreateForm((prev) => ({ ...prev, occupation_type: "" }));
+      }
+      return;
+    }
+
+    getMasterValues({ group: "occupation_type", employment_type: empType })
+      .then((res) => {
+        const list = Array.isArray(res?.data || res) ? (res?.data || res) : [];
+        setActiveOccupationTypes(list);
+        setCreateForm((prev) => {
+          if (!prev.occupation_type) return prev;
+          const match = list.some((item: any) => item.meta_key === prev.occupation_type || item.meta_value === prev.occupation_type);
+          return match ? prev : { ...prev, occupation_type: "" };
+        });
+      })
+      .catch((err) => {
+        console.error("Failed to fetch mapped occupations:", err);
+      });
+  }, [createForm.employment_type]);
+
+  // Synchronize calculated age whenever createForm.dob changes
+  useEffect(() => {
+    const computedAge = calculateAgeFromDob(createForm.dob);
+    setCreateForm((prev) => {
+      if (prev.age === computedAge) return prev;
+      return { ...prev, age: computedAge };
+    });
+  }, [createForm.dob]);
+
   const handleProductChange = async (productId: number) => {
-    setCreateForm((prev) => ({ ...prev, loan_product_id: productId, loan_type_id: undefined }));
-    if (!productId) {
+    const pid = productId ? Number(productId) : undefined;
+    setCreateForm((prev) => ({ ...prev, loan_product_id: pid, loan_type_id: undefined }));
+    if (!pid) {
       setLoanTypes([]);
       return;
     }
     try {
-      const res = await fetchLoanTypesByProduct(productId);
+      const res = await fetchLoanTypesByProduct(pid);
       const types = res?.data || res || [];
       setLoanTypes(Array.isArray(types) ? types : []);
     } catch (err) {
@@ -1196,135 +1302,260 @@ const setFilters = (newFilters: {
       />
 
       {/* Table Content */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider">
+      <div className="rounded-xl border border-slate-200/90 bg-white shadow-xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead className="bg-slate-50/80 border-b border-slate-200/90 text-slate-500 font-bold uppercase tracking-wider text-[11px]">
+              <tr>
+                <th className="py-3.5 px-4 sm:px-5">Applicant / Ref ID</th>
+                <th className="py-3.5 px-4">Constitution</th>
+                <th className="py-3.5 px-4">Product & Type</th>
+                <th className="py-3.5 px-4">Required Amount</th>
+                <th className="py-3.5 px-4">Channel / Creator</th>
+                <th className="py-3.5 px-4 text-center">Status</th>
+                <th className="py-3.5 px-4 sm:px-5 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 font-medium">
+              {loading ? (
                 <tr>
-                  <th className="py-3 px-4">Applicant / Ref ID</th>
-                  <th className="py-3 px-4">Constitution</th>
-                  <th className="py-3 px-4">Product & Type</th>
-                  <th className="py-3 px-4">Required Amount</th>
-                  <th className="py-3 px-4">Channel / Creator</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+                  <td colSpan={7} className="py-14 text-center">
+                    <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
+                      <Loader2 className="h-7 w-7 text-blue-600 animate-spin mb-3" />
+                      <p className="text-xs font-medium text-slate-500">Loading lead applications...</p>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-medium">
-                {(activeTab === "all-leads" ? leads : makerQueue).length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-8 text-center text-slate-500">
-                      No lead applications found matching the selected filter criteria.
-                    </td>
-                  </tr>
-                ) : (
-                  (activeTab === "all-leads" ? leads : makerQueue).map((lead) => (
-                    <tr key={lead.id} className="hover:bg-slate-50/80 transition">
-                      <td className="py-3 px-4">
-                        <p className="font-bold text-slate-900">{lead.CustName || `${lead.first_name || ""} ${lead.last_name || ""}`.trim() || lead.entity_name}</p>
-                        <p className="text-[11px] font-mono text-slate-500">{lead.application_id || lead.lead_uuid?.slice(0, 13)}</p>
+              ) : (activeTab === "all-leads" ? leads : makerQueue).length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-14 text-center">
+                    <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
+                      <div className="h-12 w-12 rounded-2xl bg-slate-100/80 border border-slate-200/60 flex items-center justify-center text-slate-400 mb-3 shadow-2xs">
+                        <FileText className="h-6 w-6 stroke-[1.5]" />
+                      </div>
+                      <h3 className="text-sm font-bold text-slate-800">No lead applications found</h3>
+                      <p className="text-xs text-slate-500 mt-1 max-w-xs leading-relaxed">
+                        {!!(fromDateFilter || toDateFilter || applicationNoFilter || statusFilter !== "ALL" || search)
+                          ? "No leads match your active filters or search terms. Try clearing or adjusting them."
+                          : "No lead applications have been created yet."}
+                      </p>
+                      {!!(fromDateFilter || toDateFilter || applicationNoFilter || statusFilter !== "ALL" || search) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleResetFilters}
+                          className="mt-4 h-8 text-xs font-semibold rounded-lg border-slate-200 hover:bg-slate-50 text-slate-700 gap-1.5"
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" />
+                          Reset Filters
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                (activeTab === "all-leads" ? leads : makerQueue).map((lead) => {
+                  const applicantName = lead.CustName || `${lead.first_name || ""} ${lead.last_name || ""}`.trim() || lead.entity_name || "Applicant";
+                  const refId = lead.application_id || lead.lead_uuid?.slice(0, 13) || "—";
+
+                  const normStatus = getNormalizedStatus(lead.status);
+                  const statusConfig: Record<string, { label: string; bg: string; text: string; border: string; dot: string }> = {
+                    NEW: { label: lead.status || "NEW", bg: "bg-sky-50/80", text: "text-sky-700", border: "border-sky-200/80", dot: "bg-sky-500" },
+                    IN_PROCESS: { label: lead.status || "IN PROCESS", bg: "bg-amber-50/80", text: "text-amber-700", border: "border-amber-200/80", dot: "bg-amber-500" },
+                    QUERY: { label: lead.status || "QUERY", bg: "bg-purple-50/80", text: "text-purple-700", border: "border-purple-200/80", dot: "bg-purple-500" },
+                    SANCTIONED: { label: lead.status || "SANCTIONED", bg: "bg-emerald-50/80", text: "text-emerald-700", border: "border-emerald-200/80", dot: "bg-emerald-500" },
+                    DISBURSED: { label: lead.status || "DISBURSED", bg: "bg-teal-50/80", text: "text-teal-700", border: "border-teal-200/80", dot: "bg-teal-500" },
+                    REJECTED: { label: lead.status || "REJECTED", bg: "bg-rose-50/80", text: "text-rose-700", border: "border-rose-200/80", dot: "bg-rose-500" },
+                    CANCELLED: { label: lead.status || "CANCELLED", bg: "bg-slate-100/80", text: "text-slate-600", border: "border-slate-200/80", dot: "bg-slate-400" },
+                  };
+                  const sc = statusConfig[normStatus] || { label: lead.status || "NEW", bg: "bg-slate-100/80", text: "text-slate-700", border: "border-slate-200/80", dot: "bg-slate-400" };
+
+                  return (
+                    <tr key={lead.id} className="hover:bg-slate-50/70 transition-colors group">
+                      {/* Applicant / Ref ID */}
+                      <td className="py-3.5 px-4 sm:px-5">
+                        <button
+                          type="button"
+                          onClick={() => handleViewDetail(lead.id!)}
+                          className="font-bold text-slate-900 text-xs sm:text-sm hover:text-blue-600 transition-colors truncate block text-left leading-snug"
+                        >
+                          {applicantName}
+                        </button>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[11px] font-mono text-slate-400">#</span>
+                          <span className="text-[11px] font-mono text-slate-500 font-medium tracking-tight">
+                            {refId}
+                          </span>
+                        </div>
                       </td>
-                      <td className="py-3 px-4">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${lead.constitution === 'Individual' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>
-                          {lead.constitution}
+
+                      {/* Constitution */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase border",
+                            lead.constitution?.toLowerCase() === "individual"
+                              ? "bg-blue-50/70 border-blue-200/80 text-blue-700"
+                              : "bg-purple-50/70 border-purple-200/80 text-purple-700"
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "h-1.5 w-1.5 rounded-full",
+                              lead.constitution?.toLowerCase() === "individual" ? "bg-blue-500" : "bg-purple-500"
+                            )}
+                          />
+                          {lead.constitution || "Individual"}
                         </span>
                       </td>
-                      <td className="py-3 px-4">
-                        <p className="text-slate-800">{lead.product?.name || "Loan Product"}</p>
-                        <p className="text-slate-400 text-[11px]">{lead.loan_type?.name || lead.loanType?.name || "Standard"}</p>
+
+                      {/* Product & Type */}
+                      <td className="py-3.5 px-4">
+                        <p className="font-semibold text-slate-900 text-xs leading-snug">
+                          {lead.product?.name || "Loan Product"}
+                        </p>
+                        <p className="text-slate-500 text-[11px] mt-0.5 font-medium">
+                          {lead.loan_type?.name || lead.loanType?.name || "Standard"}
+                        </p>
                       </td>
-                      <td className="py-3 px-4 font-mono font-semibold text-slate-900">
-                        {formatCurrency(Number(lead.loan_amount_required || 0))}
+
+                      {/* Required Amount */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <span className="font-mono text-xs sm:text-sm font-bold text-slate-900 tracking-tight">
+                          {formatCurrency(Number(lead.loan_amount_required || 0))}
+                        </span>
                       </td>
-                      <td className="py-3 px-4 text-slate-600">
-                        <span className="capitalize font-semibold">{lead.created_by_type || "dsa"}</span>
+
+                      {/* Channel / Creator */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-slate-100/80 text-slate-700 border border-slate-200/70">
+                          {lead.created_by_type?.toLowerCase() === "dsa" ? (
+                            <Building2 className="h-3 w-3 text-slate-500" />
+                          ) : lead.created_by_type?.toLowerCase() === "branch" ? (
+                            <Briefcase className="h-3 w-3 text-slate-500" />
+                          ) : (
+                            <User className="h-3 w-3 text-slate-500" />
+                          )}
+                          <span className="capitalize font-semibold">{lead.created_by_type || "DSA"}</span>
+                        </span>
                       </td>
-                      <td className="py-3 px-4">
-                        <StatusBadge status={lead.status || "NEW"} />
+
+                      {/* Status */}
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                        <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide border uppercase", sc.bg, sc.text, sc.border)}>
+                          <span className={cn("h-1.5 w-1.5 rounded-full", sc.dot)} />
+                          {sc.label}
+                        </span>
                       </td>
-                      <td className="py-3 px-4 text-right space-x-2">
-                        <Button size="sm" variant="outline" onClick={() => handleViewDetail(lead.id!)}>
-                          <Eye className="h-3.5 w-3.5 mr-1" />
-                          View
-                        </Button>
-                        {isBankUser && lead.status === "NEW" && (
-                          <Button size="sm" onClick={() => handleForwardToChecker(lead.id!)}>
-                            Forward →
+
+                      {/* Actions */}
+                      <td className="py-3.5 px-4 sm:px-5 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleViewDetail(lead.id!)}
+                            className="h-8 px-3 text-xs font-semibold rounded-lg border-slate-200/90 text-slate-700 hover:bg-slate-50 hover:text-blue-600 hover:border-blue-200 shadow-2xs gap-1.5 transition-all"
+                          >
+                            <Eye className="h-3.5 w-3.5 text-slate-500" />
+                            <span>View</span>
                           </Button>
-                        )}
-                        {isBankUser && lead.status === "SANCTIONED" && (
-                          <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => openDisbursementModal(lead)}>
-                            Disburse
-                          </Button>
-                        )}
+                          {isBankUser && lead.status === "NEW" && (
+                            <Button
+                              size="sm"
+                              onClick={() => handleForwardToChecker(lead.id!)}
+                              className="h-8 px-3 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs gap-1.5 transition-all"
+                            >
+                              <span>Forward</span>
+                              <ChevronRight className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                          {isBankUser && lead.status === "SANCTIONED" && (
+                            <Button
+                              size="sm"
+                              className="h-8 px-3 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs gap-1.5 transition-all"
+                              onClick={() => openDisbursementModal(lead)}
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              <span>Disburse</span>
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
 
-          {/* Pagination Controls (Default 10) */}
-          <div className="flex flex-col sm:flex-row justify-between items-center p-4 border-t border-slate-200 bg-slate-50/50 text-xs gap-3">
-            <div className="flex items-center gap-4 text-slate-600">
-              <span>
-                Showing <strong className="text-slate-900">{totalLeadsCount === 0 ? 0 : (currentPage - 1) * perPage + 1}</strong> to{" "}
-                <strong className="text-slate-900">{Math.min(currentPage * perPage, totalLeadsCount)}</strong> of{" "}
-                <strong className="text-slate-900">{totalLeadsCount}</strong> leads
-              </span>
+        {/* Pagination Controls (Default 10) */}
+        <div className="flex flex-col sm:flex-row justify-between items-center px-4 sm:px-5 py-3.5 border-t border-slate-200/80 bg-slate-50/50 text-xs gap-3.5">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-slate-600">
+            <span className="font-medium">
+              Showing <strong className="font-bold text-slate-900">{totalLeadsCount === 0 ? 0 : (currentPage - 1) * perPage + 1}</strong> to{" "}
+              <strong className="font-bold text-slate-900">{Math.min(currentPage * perPage, totalLeadsCount)}</strong> of{" "}
+              <strong className="font-bold text-slate-900">{totalLeadsCount}</strong> leads
+            </span>
 
-              <div className="flex items-center gap-1.5">
-                <span>Per page:</span>
-                <select
-                  value={perPage}
-                  onChange={(e) => {
-                    setPerPage(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="border rounded px-2 py-1 bg-white focus:outline-none focus:border-blue-500 font-semibold"
-                >
-                  <option value={10}>10</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                </select>
-              </div>
-            </div>
+            <span className="text-slate-300 hidden sm:inline">•</span>
 
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage <= 1 || loading}
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              <span className="text-slate-500 font-medium">Per page:</span>
+              <Select
+                value={String(perPage)}
+                onChange={(e) => {
+                  setPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="w-20"
+                buttonClassName="h-8 text-xs font-bold px-2.5 rounded-lg"
               >
-                Previous
-              </Button>
-              <span className="px-3 py-1 font-semibold text-slate-700 bg-white border rounded">
-                Page {currentPage} of {totalPages || 1}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage >= totalPages || loading}
-                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-              >
-                Next
-              </Button>
+                <option value="10">10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </Select>
             </div>
           </div>
-        </CardContent>
-      </Card>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage <= 1 || loading}
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              className="h-8 px-2.5 sm:px-3 text-xs font-semibold rounded-lg border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 disabled:hover:bg-white shadow-2xs gap-1 transition-all"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Previous</span>
+            </Button>
+
+            <div className="flex items-center px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-700 shadow-2xs">
+              <span className="text-slate-400 font-normal mr-1">Page</span>
+              <span className="text-blue-600 font-bold">{currentPage}</span>
+              <span className="text-slate-300 mx-1.5">/</span>
+              <span className="text-slate-700 font-bold">{totalPages || 1}</span>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage >= totalPages || loading}
+              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+              className="h-8 px-2.5 sm:px-3 text-xs font-semibold rounded-lg border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 disabled:hover:bg-white shadow-2xs gap-1 transition-all"
+            >
+              <span className="hidden sm:inline">Next</span>
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      </div>
 
       {/* Share Link Modal (With DSA Partner Selector for Branch Users) */}
       <Modal open={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} title="Customer Self-Fill Application Link" width="max-w-md">
         <div className="space-y-4 text-xs">
-          <p className="text-xs text-slate-600 leading-relaxed">
-            Generate a secure 256-bit encrypted link to share with your customer. All leads submitted through this link will be automatically tagged with the selected DSA partner code.
-          </p>
-
           {/* DSA Selector for Branch User */}
           {isBankUser && (
             <div className="space-y-1.5 bg-blue-50/50 p-3.5 rounded-2xl border border-blue-100">
@@ -1339,9 +1570,6 @@ const setFilters = (newFilters: {
                   setShareableUrl(null);
                 }}
               />
-              <p className="text-[10px] text-blue-700 font-medium">
-                Mandatory parameter: Lead submissions require a valid empanelled DSA code.
-              </p>
             </div>
           )}
 
@@ -1350,23 +1578,20 @@ const setFilters = (newFilters: {
             <label className="block text-purple-950 font-bold uppercase tracking-wider text-[11px]">
               Pre-select Loan Product (Optional)
             </label>
-            <select
-              value={selectedShareProductId || ""}
+            <Select
+              value={selectedShareProductId ? String(selectedShareProductId) : ""}
               onChange={(e) => {
                 const val = e.target.value ? Number(e.target.value) : undefined;
                 setSelectedShareProductId(val);
                 setShareableUrl(null);
               }}
-              className="w-full border border-purple-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 rounded-xl px-3 py-2 text-xs font-medium transition-all shadow-xs"
+              buttonClassName="border-purple-200 focus:border-purple-500 focus:ring-purple-500/20 rounded-xl"
             >
               <option value="">-- Any Loan Product (Customer Selects) --</option>
               {products.map((p) => (
-                <option key={p.id} value={p.id}>{p.name || p.product_name}</option>
+                <option key={p.id} value={String(p.id)}>{p.name || p.product_name}</option>
               ))}
-            </select>
-            <p className="text-[10px] text-purple-700 font-medium">
-              When pre-selected, the product will be locked and non-changeable for the customer on the self-fill form.
-            </p>
+            </Select>
           </div>
 
           {!shareableUrl && (
@@ -1510,18 +1735,28 @@ const setFilters = (newFilters: {
                       </Label>
                     </div>
                     <Select
-                      value={createForm.constitution}
+                      value={createForm.constitution || "Individual"}
                       onChange={(e) => setCreateForm({ ...createForm, constitution: e.target.value as any })}
                       className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
                     >
-                      <option value="Individual">Individual</option>
-                      <option value="Proprietory">Proprietory Firm</option>
-                      <option value="Partnership">Partnership Firm</option>
-                      <option value="Limited Liability Partnership">Limited Liability Partnership (LLP)</option>
-                      <option value="Pvt. Ltd. Company">Pvt. Ltd. Company</option>
-                      <option value="Public Ltd. Company">Public Ltd. Company</option>
-                      <option value="Charitable Trust">Charitable Trust</option>
-                      <option value="Co-op. Society">Co-op. Society</option>
+                      {constitutions.length > 0 ? (
+                        constitutions.map((c: any) => (
+                          <option key={c.meta_key || c.id} value={c.meta_key || c.meta_value}>
+                            {c.meta_value}
+                          </option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="Individual">Individual</option>
+                          <option value="Proprietory">Proprietory Firm</option>
+                          <option value="Partnership">Partnership Firm</option>
+                          <option value="Limited Liability Partnership">Limited Liability Partnership (LLP)</option>
+                          <option value="Pvt. Ltd. Company">Pvt. Ltd. Company</option>
+                          <option value="Public Ltd. Company">Public Ltd. Company</option>
+                          <option value="Charitable Trust">Charitable Trust</option>
+                          <option value="Co-op. Society">Co-op. Society</option>
+                        </>
+                      )}
                     </Select>
                   </div>
                 </div>
@@ -1594,8 +1829,8 @@ const setFilters = (newFilters: {
                 </div>
 
                 {/* PAN Verification Widget */}
-                <div className="rounded-xl border border-blue-100 bg-blue-50/30 p-4 space-y-3">
-                  <div className="flex items-center justify-between border-b border-blue-100/70 pb-2">
+                <div className="rounded-xl border border-blue-100 bg-blue-50/30 p-5 space-y-4">
+                  <div className="flex items-center justify-between border-b border-blue-100/70 pb-3">
                     <span className="text-xs font-bold text-blue-950 uppercase tracking-wider">PAN Authentication</span>
                     {panVerified && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 border border-emerald-300">
@@ -1604,7 +1839,7 @@ const setFilters = (newFilters: {
                       </span>
                     )}
                   </div>
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2.5">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3">
                     <div className="flex-1 flex flex-col">
                       <div className="h-5 flex items-center">
                         <Label className="text-xs font-bold text-slate-700 leading-none">
@@ -1664,8 +1899,8 @@ const setFilters = (newFilters: {
                 </div>
 
                 {/* Mobile & Contact Widget */}
-                <div className="rounded-xl border border-blue-100 bg-blue-50/30 p-4 space-y-3">
-                  <div className="flex items-center justify-between border-b border-blue-100/70 pb-2">
+                <div className="rounded-xl border border-blue-100 bg-blue-50/30 p-5 space-y-5">
+                  <div className="flex items-center justify-between border-b border-blue-100/70 pb-3">
                     <span className="text-xs font-bold text-blue-950 uppercase tracking-wider">Contact & Mobile Verification</span>
                     {otpVerified && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 border border-emerald-300">
@@ -1674,14 +1909,14 @@ const setFilters = (newFilters: {
                       </span>
                     )}
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6 items-start">
                     <div className="flex flex-col">
                       <div className="h-5 flex items-center">
                         <Label className="text-xs font-bold text-slate-700 leading-none">
                           Mobile Number <span className="text-rose-500 font-bold">*</span>
                         </Label>
                       </div>
-                      <div className="flex gap-2 mt-1.5">
+                      <div className="flex gap-2.5 mt-1.5">
                         <Input
                           type="text"
                           required
@@ -1701,7 +1936,7 @@ const setFilters = (newFilters: {
                             type="button"
                             disabled={sendingOtp || (createForm.mobile || "").length !== 10}
                             onClick={handleSendOtp}
-                            className="h-9 px-3 text-xs bg-blue-600 hover:bg-blue-700 text-white font-medium shrink-0"
+                            className="h-9 px-3.5 text-xs bg-blue-600 hover:bg-blue-700 text-white font-medium shrink-0"
                           >
                             {sendingOtp ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Send OTP"}
                           </Button>
@@ -1725,27 +1960,38 @@ const setFilters = (newFilters: {
                   </div>
 
                   {otpSent && !otpVerified && (
-                    <div className="p-3 bg-white border border-blue-200 rounded-lg flex flex-col sm:flex-row items-center gap-2.5">
-                      <Input
-                        type="text"
-                        maxLength={6}
-                        placeholder="Enter 6-digit OTP"
-                        value={otpCode}
-                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
-                        className="font-mono text-center tracking-widest text-sm h-9 bg-slate-50 flex-1 w-full"
-                      />
-                      <Button
-                        type="button"
-                        disabled={verifyingOtp || otpCode.length !== 6}
-                        onClick={handleVerifyOtp}
-                        className="h-9 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium w-full sm:w-auto shrink-0"
-                      >
-                        {verifyingOtp ? "Verifying..." : "Verify OTP"}
-                      </Button>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6 items-center">
+                      <div className="flex gap-2.5">
+                        <Input
+                          type="text"
+                          maxLength={6}
+                          placeholder="Enter 6-digit OTP"
+                          value={otpCode}
+                          onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                          className="flex-1 font-mono text-center tracking-widest text-xs sm:text-sm h-9 bg-white"
+                        />
+                        <Button
+                          type="button"
+                          disabled={verifyingOtp || otpCode.length !== 6}
+                          onClick={handleVerifyOtp}
+                          className="h-9 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-md shrink-0 shadow-2xs"
+                        >
+                          {verifyingOtp ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Verify OTP"}
+                        </Button>
+                      </div>
+                      {otpMessage ? (
+                        <div className="flex items-center">
+                          <span className="text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg inline-flex items-center">
+                            {otpMessage}
+                          </span>
+                        </div>
+                      ) : (
+                        <div />
+                      )}
                     </div>
                   )}
-                  {otpMessage && !otpVerified && (
-                    <p className="text-xs text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200">
+                  {!otpSent && otpMessage && !otpVerified && (
+                    <p className="text-xs text-amber-800 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
                       {otpMessage}
                     </p>
                   )}
@@ -1767,12 +2013,11 @@ const setFilters = (newFilters: {
                 </div>
 
                 {createForm.constitution === "Individual" ? (
-                  <>
+                  <div className="space-y-5">
                     {/* Individual Demographics */}
-                    <div className="space-y-3.5">
-                      <div className="flex items-center gap-2">
+                    <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 sm:p-5 space-y-4">
+                      <div className="flex items-center justify-between border-b border-slate-200/60 pb-2.5">
                         <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Applicant Demographics</span>
-                        <div className="h-px flex-1 bg-slate-100" />
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-start">
@@ -1867,16 +2112,8 @@ const setFilters = (newFilters: {
                             value={createForm.dob || ""}
                             onChange={(e) => {
                               const dobVal = e.target.value;
-                              let ageVal = undefined;
-                              if (dobVal) {
-                                const birthDate = new Date(dobVal);
-                                const today = new Date();
-                                let age = today.getFullYear() - birthDate.getFullYear();
-                                const monthDiff = today.getMonth() - birthDate.getMonth();
-                                if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) age--;
-                                ageVal = age;
-                              }
-                              setCreateForm({ ...createForm, dob: dobVal, age: ageVal });
+                              const ageVal = calculateAgeFromDob(dobVal);
+                              setCreateForm((prev) => ({ ...prev, dob: dobVal, age: ageVal }));
                             }}
                             className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
                           />
@@ -1884,15 +2121,17 @@ const setFilters = (newFilters: {
                         <div className="flex flex-col">
                           <div className="h-5 flex items-center">
                             <Label className="text-xs font-bold text-slate-700 leading-none">
-                              Age (Calculated)
+                              Age
                             </Label>
                           </div>
-                          <div className="mt-1.5 h-9 border border-slate-200 rounded-lg px-3 bg-slate-50 font-mono text-slate-700 flex items-center justify-between text-xs sm:text-sm">
-                            <span>{createForm.age !== undefined ? `${createForm.age} Years` : "--"}</span>
-                            {createForm.age !== undefined && (
-                              <span className="bg-blue-100 text-blue-800 text-[10px] px-1.5 py-0.5 rounded font-semibold">Auto</span>
-                            )}
-                          </div>
+                          {(() => {
+                            const displayedAge = createForm.age ?? calculateAgeFromDob(createForm.dob);
+                            return (
+                              <div className="mt-1.5 h-9 border border-slate-200 rounded-lg px-3 bg-white font-mono text-slate-700 flex items-center justify-between text-xs sm:text-sm">
+                                <span>{displayedAge !== undefined ? `${displayedAge} Years` : "--"}</span>
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
 
@@ -1914,10 +2153,9 @@ const setFilters = (newFilters: {
                     </div>
 
                     {/* Employment & Financials */}
-                    <div className="space-y-3.5 pt-2">
-                      <div className="flex items-center gap-2">
+                    <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 sm:p-5 space-y-4">
+                      <div className="flex items-center justify-between border-b border-slate-200/60 pb-2.5">
                         <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Employment & Financial Profile</span>
-                        <div className="h-px flex-1 bg-slate-100" />
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
@@ -1947,12 +2185,15 @@ const setFilters = (newFilters: {
                           </div>
                           <Select
                             required
+                            disabled={!createForm.employment_type}
                             value={createForm.occupation_type || ""}
                             onChange={(e) => setCreateForm({ ...createForm, occupation_type: e.target.value })}
-                            className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                            className="mt-1.5 text-xs sm:text-sm h-9 bg-white disabled:opacity-50"
                           >
-                            <option value="">-- Choose Occupation --</option>
-                            {occupationTypes.map((item: any) => (
+                            <option value="">
+                              {!createForm.employment_type ? "-- Choose Employment First --" : "-- Choose Occupation --"}
+                            </option>
+                            {activeOccupationTypes.map((item: any) => (
                               <option key={item.meta_key || item.id} value={item.meta_key || item.meta_value}>{item.meta_value}</option>
                             ))}
                           </Select>
@@ -2026,14 +2267,13 @@ const setFilters = (newFilters: {
                         </div>
                       </div>
                     </div>
-                  </>
+                  </div>
                 ) : (
-                  <>
+                  <div className="space-y-5">
                     {/* Non-Individual Entity Details */}
-                    <div className="space-y-3.5">
-                      <div className="flex items-center gap-2">
+                    <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 sm:p-5 space-y-4">
+                      <div className="flex items-center justify-between border-b border-slate-200/60 pb-2.5">
                         <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Entity Information</span>
-                        <div className="h-px flex-1 bg-slate-100" />
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
@@ -2166,7 +2406,7 @@ const setFilters = (newFilters: {
                         </div>
                       </div>
                     </div>
-                  </>
+                  </div>
                 )}
               </div>
 
@@ -2194,7 +2434,7 @@ const setFilters = (newFilters: {
                     </div>
                     <Select
                       required
-                      value={createForm.loan_product_id || ""}
+                      value={createForm.loan_product_id !== undefined && createForm.loan_product_id !== null ? String(createForm.loan_product_id) : ""}
                       onChange={(e) => handleProductChange(Number(e.target.value))}
                       className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
                     >
@@ -2224,8 +2464,8 @@ const setFilters = (newFilters: {
                     <Select
                       required
                       disabled={!createForm.loan_product_id}
-                      value={createForm.loan_type_id || ""}
-                      onChange={(e) => setCreateForm({ ...createForm, loan_type_id: Number(e.target.value) })}
+                      value={createForm.loan_type_id !== undefined && createForm.loan_type_id !== null ? String(createForm.loan_type_id) : ""}
+                      onChange={(e) => setCreateForm({ ...createForm, loan_type_id: e.target.value ? Number(e.target.value) : undefined })}
                       className="mt-1.5 text-xs sm:text-sm h-9 bg-white disabled:opacity-50"
                     >
                       <option value="">-- Choose Loan Type --</option>
@@ -2285,23 +2525,6 @@ const setFilters = (newFilters: {
                       <Label className="text-xs font-bold text-slate-700 leading-none">
                         Tenure (Months) <span className="text-rose-500 font-bold">*</span>
                       </Label>
-                      <div className="flex gap-1">
-                        {[12, 24, 36, 60].map((t) => (
-                          <button
-                            key={t}
-                            type="button"
-                            onClick={() => setCreateForm({ ...createForm, loan_period_months: t })}
-                            className={cn(
-                              "text-[10px] font-mono px-1.5 py-0.5 rounded transition-all",
-                              createForm.loan_period_months === t
-                                ? "bg-blue-600 text-white font-bold"
-                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                            )}
-                          >
-                            {t}M
-                          </button>
-                        ))}
-                      </div>
                     </div>
                     <Input
                       type="number"
@@ -2405,77 +2628,59 @@ const setFilters = (newFilters: {
 
       {/* Detail Modal */}
       {selectedLead && (
-        <Modal open={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} title={`Lead Workstation: ${selectedLead.CustName || selectedLead.lead_uuid}`} width="max-w-4xl">
-          <div className="space-y-6 text-xs">
-            {/* Lead Summary */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-900 text-white p-4 rounded-xl shadow">
-              <div>
-                <p className="text-slate-400 text-[10px] uppercase tracking-wider font-semibold">Application Reference</p>
-                <p className="font-mono font-bold text-emerald-400 text-sm mt-0.5">{selectedLead.application_id || selectedLead.lead_uuid}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 text-[10px] uppercase tracking-wider font-semibold">Status</p>
-                <div className="mt-1"><StatusBadge status={selectedLead.status || "NEW"} /></div>
-              </div>
-              <div>
-                <p className="text-slate-400 text-[10px] uppercase tracking-wider font-semibold">Required Amount</p>
-                <p className="font-mono font-bold text-white text-sm mt-0.5">{formatCurrency(Number(selectedLead.loan_amount_required || 0))}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 text-[10px] uppercase tracking-wider font-semibold">Constitution</p>
-                <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                  {selectedLead.constitution || "Individual"}
-                </span>
-              </div>
-            </div>
-
-            {/* Sourcing Channel & DSA Partner Information */}
-            <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white p-4 rounded-xl border border-blue-800/80 shadow-md space-y-3">
-              <div className="flex items-center justify-between border-b border-blue-800/70 pb-2">
+        <Modal
+          open={isDetailModalOpen}
+          onClose={() => setIsDetailModalOpen(false)}
+          title={`Lead Details: ${selectedLead.CustName || selectedLead.lead_uuid}`}
+          description={``}
+          width="max-w-4xl"
+        >
+          <div className="space-y-4 text-xs">
+            {/* Quick Header Summary */}
+            <div className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-xs space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-slate-100">
                 <div className="flex items-center gap-2">
-                  <div className="p-1.5 bg-blue-500/20 text-blue-300 rounded-lg">
-                    <User className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-white uppercase tracking-wider text-[11px]">
-                      DSA Sourcing Partner Details
-                    </h4>
-                    <p className="text-[10px] text-blue-200/80 font-medium">
-                      Channel partner responsible for lead origination
-                    </p>
-                  </div>
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                    {selectedLead.CustName || `${selectedLead.first_name || ""} ${selectedLead.last_name || ""}`.trim() || selectedLead.lead_uuid}
+                  </h3>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-purple-50 text-purple-700 border border-purple-200">
+                    {selectedLead.constitution || "Individual"}
+                  </span>
                 </div>
-                <span className="bg-blue-500/20 text-blue-300 border border-blue-400/30 font-mono font-bold text-[10px] px-2.5 py-0.5 rounded-full">
-                  {selectedLead.DSACode || selectedLead.dsa_code || selectedLead.dsa?.dsa_code || selectedLead.dsa?.code || "DSA_N/A"}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[11px] font-medium text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-md border border-slate-200">
+                    REF: {selectedLead.application_id || selectedLead.lead_uuid}
+                  </span>
+                  <StatusBadge status={selectedLead.status || "NEW"} />
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-                <div>
-                  <p className="text-blue-300/80 text-[10px] uppercase font-semibold">DSA Agency / Name</p>
-                  <p className="font-bold text-white mt-0.5">
-                    {selectedLead.dsa?.entity_name ||
-                      (selectedLead.dsa ? `${selectedLead.dsa.first_name || ""} ${selectedLead.dsa.last_name || ""}`.trim() : null) ||
-                      selectedLead.dsa?.name ||
-                      "DSA Partner"}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="rounded-lg bg-slate-50/80 border border-slate-200/60 p-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Required Amount</p>
+                  <p className="font-mono font-bold text-slate-900 text-sm mt-0.5">
+                    {formatCurrency(Number(selectedLead.loan_amount_required || 0))}
                   </p>
                 </div>
-                <div>
-                  <p className="text-blue-300/80 text-[10px] uppercase font-semibold">DSA Code</p>
-                  <p className="font-mono font-bold text-emerald-400 mt-0.5">
-                    {selectedLead.DSACode || selectedLead.dsa_code || selectedLead.dsa?.dsa_code || selectedLead.dsa?.code || "N/A"}
+                <div className="rounded-lg bg-slate-50/80 border border-slate-200/60 p-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Product & Type</p>
+                  <p className="font-semibold text-slate-800 text-xs mt-0.5 truncate" title={`${selectedLead.product?.name || "Loan"} • ${selectedLead.loan_type?.name || selectedLead.loanType?.name || "Standard"}`}>
+                    {selectedLead.product?.name || "Loan"} • {selectedLead.loan_type?.name || selectedLead.loanType?.name || "Standard"}
                   </p>
                 </div>
-                <div>
-                  <p className="text-blue-300/80 text-[10px] uppercase font-semibold">DSA Contact Mobile</p>
-                  <p className="font-mono font-semibold text-slate-200 mt-0.5">
-                    {selectedLead.dsa?.mobile || selectedLead.dsa?.phone || "N/A"}
+                <div className="rounded-lg bg-slate-50/80 border border-slate-200/60 p-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Sourcing Partner</p>
+                  <p className="font-semibold text-slate-800 text-xs mt-0.5 truncate" title={selectedLead.dsa?.entity_name || selectedLead.dsa?.name || selectedLead.DSACode || "DSA Partner"}>
+                    {selectedLead.dsa?.entity_name || selectedLead.dsa?.name || "DSA Partner"}
+                    <span className="font-mono text-slate-500 text-[10px] ml-1">
+                      ({selectedLead.DSACode || selectedLead.dsa_code || selectedLead.dsa?.dsa_code || selectedLead.dsa?.code || "N/A"})
+                    </span>
                   </p>
                 </div>
-                <div>
-                  <p className="text-blue-300/80 text-[10px] uppercase font-semibold">DSA E-Mail</p>
-                  <p className="font-medium text-slate-200 mt-0.5 truncate">
-                    {selectedLead.dsa?.email || "N/A"}
+                <div className="rounded-lg bg-slate-50/80 border border-slate-200/60 p-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Branch Location</p>
+                  <p className="font-semibold text-slate-800 text-xs mt-0.5 truncate">
+                    {selectedLead.branch?.branch_name || selectedLead.Branch_id || "BR001"}
                   </p>
                 </div>
               </div>
@@ -2485,27 +2690,24 @@ const setFilters = (newFilters: {
             {(() => {
               const normStatus = getNormalizedStatus(selectedLead.status);
               return (
-                <div className="flex flex-wrap gap-2 items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="flex flex-wrap gap-2">
-                    {/* Action: Bank Maker / Bank User process lead when NEW */}
+                <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-slate-50 rounded-xl border border-slate-200/80">
+                  <div className="flex flex-wrap items-center gap-2">
                     {(isBankMaker || isBankUser) && normStatus === "NEW" && (
-                      <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white font-bold" onClick={() => handleProcessLead(selectedLead.id!)}>
+                      <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs" onClick={() => handleProcessLead(selectedLead.id!)}>
                         <Check className="h-3.5 w-3.5 mr-1" />
-                        Process Lead (In Process)
+                        Process Lead
                       </Button>
                     )}
 
-                    {/* Quick action: Raise Query (Bank User across all active statuses) */}
                     {isBankUser && !["DISBURSED", "REJECTED", "CANCELLED"].includes(normStatus) && (
-                      <Button size="sm" variant="outline" onClick={() => setIsQueryModalOpen(true)}>
-                        <HelpCircle className="h-3.5 w-3.5 mr-1 text-amber-600 font-semibold" />
+                      <Button size="sm" variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-50 text-xs font-semibold" onClick={() => setIsQueryModalOpen(true)}>
+                        <HelpCircle className="h-3.5 w-3.5 mr-1 text-amber-600" />
                         Raise Query
                       </Button>
                     )}
 
-                    {/* Quick action: Bank Checker sanction when IN_PROCESS */}
                     {isBankChecker && normStatus === "IN_PROCESS" && (
-                      <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold" onClick={() => {
+                      <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs" onClick={() => {
                         setSanctionAmount(selectedLead.loan_amount_required || 0);
                         setIsSanctionModalOpen(true);
                       }}>
@@ -2514,25 +2716,15 @@ const setFilters = (newFilters: {
                       </Button>
                     )}
 
-                    {/* Quick action: Reject Lead — ONLY for Bank Checker or DSA, NEVER for Maker */}
-                    {(isBankChecker || isDsa) && !isBankMaker && !["DISBURSED", "REJECTED", "CANCELLED"].includes(normStatus) && (
-                      <Button size="sm" className="bg-rose-600 hover:bg-rose-700 text-white font-semibold" onClick={() => setIsRejectModalOpen(true)}>
-                        <XCircle className="h-3.5 w-3.5 mr-1" />
-                        Reject Lead
-                      </Button>
-                    )}
-
-                    {/* Quick action: Bank Checker action when SANCTIONED */}
                     {isBankChecker && normStatus === "SANCTIONED" && (
-                      <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white" onClick={() => openDisbursementModal(selectedLead)}>
+                      <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs" onClick={() => openDisbursementModal(selectedLead)}>
                         <Banknote className="h-3.5 w-3.5 mr-1" />
-                        Manual Disburse
+                        Disburse Lead
                       </Button>
                     )}
 
-                    {/* Quick action: DSA Partner action when QUERY */}
                     {isDsa && normStatus === "QUERY" && (
-                      <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white" onClick={() => {
+                      <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-xs" onClick={() => {
                         const el = document.getElementById("query-thread-section");
                         if (el) el.scrollIntoView({ behavior: "smooth" });
                       }}>
@@ -2541,26 +2733,31 @@ const setFilters = (newFilters: {
                       </Button>
                     )}
 
-                    {/* Quick action: Edit Lead Info (when query raised or active lead) */}
                     {!["DISBURSED", "REJECTED", "CANCELLED"].includes(normStatus) && (
-                      <Button size="sm" variant="outline" className="text-blue-700 border-blue-300 hover:bg-blue-50 font-semibold" onClick={() => handleOpenEditModal(selectedLead)}>
-                        <Edit3 className="h-3.5 w-3.5 mr-1" />
-                        Edit Lead Info
+                      <Button size="sm" variant="outline" className="text-slate-700 border-slate-300 hover:bg-slate-100 text-xs font-medium" onClick={() => handleOpenEditModal(selectedLead)}>
+                        <Edit3 className="h-3.5 w-3.5 mr-1 text-slate-500" />
+                        Edit Lead
                       </Button>
                     )}
 
-                    {/* Quick action: Cancel Lead (when not terminal) */}
-                    {!["DISBURSED", "REJECTED", "CANCELLED"].includes(normStatus) && (
-                      <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setIsCancelModalOpen(true)}>
+                    {(isBankChecker || isDsa) && !isBankMaker && !["DISBURSED", "REJECTED", "CANCELLED"].includes(normStatus) && (
+                      <Button size="sm" variant="outline" className="border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-medium" onClick={() => setIsRejectModalOpen(true)}>
                         <XCircle className="h-3.5 w-3.5 mr-1" />
-                        Cancel Lead
+                        Reject
+                      </Button>
+                    )}
+
+                    {!["DISBURSED", "REJECTED", "CANCELLED"].includes(normStatus) && (
+                      <Button size="sm" variant="outline" className="border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-medium" onClick={() => setIsCancelModalOpen(true)}>
+                        <XCircle className="h-3.5 w-3.5 mr-1" />
+                        Cancel
                       </Button>
                     )}
                   </div>
 
-                  <Button size="sm" variant="outline" onClick={() => setShowRawJson(!showRawJson)} className="text-slate-600 border-slate-300">
-                    <FileText className="h-3.5 w-3.5 mr-1 text-blue-600" />
-                    {showRawJson ? "Hide API Verification JSON" : "View API Verification JSON"}
+                  <Button size="sm" variant="outline" onClick={() => setShowRawJson(!showRawJson)} className="text-slate-600 border-slate-300 hover:bg-white text-xs">
+                    <FileText className="h-3.5 w-3.5 mr-1 text-slate-500" />
+                    {showRawJson ? "Hide API Log" : "API Log"}
                   </Button>
                 </div>
               );
@@ -2570,7 +2767,7 @@ const setFilters = (newFilters: {
             {showRawJson && (
               <div className="bg-slate-950 text-slate-200 p-4 rounded-xl font-mono text-[11px] border border-slate-800 space-y-2">
                 <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                  <span className="text-emerald-400 font-bold uppercase tracking-wider">⚡ ScoreMe Advanced PAN API & OTP Verification Audit Log</span>
+                  <span className="text-emerald-400 font-bold uppercase tracking-wider">API Audit Log</span>
                   <span className="text-slate-500 text-[10px]">{selectedLead.created_at || new Date().toISOString()}</span>
                 </div>
                 <pre className="overflow-x-auto p-2 bg-slate-900 rounded text-emerald-300 leading-relaxed max-h-60">
@@ -2605,208 +2802,139 @@ const setFilters = (newFilters: {
               </div>
             )}
 
-            {/* SECTION 1: Customer Basic & Location Information */}
-            <div className="bg-slate-50/80 p-4 rounded-xl border space-y-3">
-              <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                <Building2 className="h-4 w-4 text-blue-600" />
-                1. Customer Basic & Branch Location Information
-              </h4>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-slate-700">
-                <div>
-                  <p className="text-slate-400 font-medium">Branch Code</p>
-                  <p className="font-bold text-slate-900 mt-0.5">{selectedLead.Branch_id || selectedLead.branch?.branch_name || "BR001"}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 font-medium">DSA Partner / Code</p>
-                  <p className="font-bold text-slate-900 font-mono mt-0.5">{selectedLead.DSACode || (selectedLead as any).dsa_code || selectedLead.dsa?.dsa_code || "N/A"}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 font-medium">City & State</p>
-                  <p className="font-bold text-slate-900 mt-0.5">{selectedLead.city || "Mumbai"}, {selectedLead.state || "Maharashtra"}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 font-medium">Pincode</p>
-                  <p className="font-bold text-slate-900 font-mono mt-0.5">{selectedLead.pincode || "400001"}</p>
-                </div>
+            {/* SECTION 1: Sourcing & Branch Information */}
+            <LeadSectionBlock icon={Building2} title="Sourcing & Branch Information">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <LeadDetailItem label="Branch Location" value={selectedLead.branch?.branch_name || selectedLead.Branch_id || "BR001"} />
+                <LeadDetailItem label="DSA Partner Code" value={selectedLead.DSACode || (selectedLead as any).dsa_code || selectedLead.dsa?.dsa_code || "N/A"} />
+                <LeadDetailItem label="City & State" value={`${selectedLead.city || "—"}, ${selectedLead.state || "—"}`} />
+                <LeadDetailItem label="Pincode" value={selectedLead.pincode || "—"} />
               </div>
-            </div>
+            </LeadSectionBlock>
 
-            {/* SECTION 2: Identity & Contact Verification (PAN & Mobile OTP) */}
-            <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200 space-y-3">
-              <h4 className="font-bold text-emerald-900 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                <User className="h-4 w-4 text-emerald-700" />
-                2. Identity & Contact Verification (Advanced PAN & OTP)
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-white p-3 rounded-lg border border-emerald-200">
-                  <p className="text-slate-500 font-medium">PAN Number</p>
-                  <p className="font-mono font-bold text-emerald-800 text-sm mt-0.5 uppercase">{selectedLead.pan_no || "N/A"}</p>
-                  <span className="inline-block mt-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
-                    ✓ Advanced PAN API Verified
-                  </span>
-                </div>
-                <div className="bg-white p-3 rounded-lg border border-emerald-200">
-                  <p className="text-slate-500 font-medium">Mobile Number</p>
-                  <p className="font-mono font-bold text-slate-900 text-sm mt-0.5">{selectedLead.mobile || "N/A"}</p>
-                  <span className="inline-block mt-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
-                    ✓ Mobile OTP Verified
-                  </span>
-                </div>
-                <div className="bg-white p-3 rounded-lg border border-emerald-200">
-                  <p className="text-slate-500 font-medium">E-Mail Address</p>
-                  <p className="font-bold text-slate-900 mt-0.5 truncate">{selectedLead.email || "N/A"}</p>
-                </div>
+            {/* SECTION 2: Identity & Contact Verification */}
+            <LeadSectionBlock
+              icon={CheckCircle2}
+              iconColor="text-emerald-600"
+              iconBg="bg-emerald-50 border-emerald-200/80"
+              title="Identity & Contact Verification"
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <LeadDetailItem
+                  label="PAN Number"
+                  value={<span className="font-mono uppercase font-bold tracking-wider">{selectedLead.pan_no || "N/A"}</span>}
+                  subvalue={
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full">
+                      <Check className="h-2.5 w-2.5" /> PAN Verified
+                    </span>
+                  }
+                />
+                <LeadDetailItem
+                  label="Mobile Number"
+                  value={<span className="font-mono">{selectedLead.mobile || "N/A"}</span>}
+                  subvalue={
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full">
+                      <Check className="h-2.5 w-2.5" /> OTP Verified
+                    </span>
+                  }
+                />
+                <LeadDetailItem
+                  label="Email Address"
+                  value={<span className="truncate block" title={selectedLead.email}>{selectedLead.email || "N/A"}</span>}
+                />
               </div>
-            </div>
+            </LeadSectionBlock>
 
-            {/* SECTION 3: Applicant / Entity Detailed Filled Values */}
+            {/* SECTION 3: Applicant Profile */}
             {selectedLead.constitution === "Individual" || !selectedLead.constitution ? (
-              <div className="bg-slate-50 p-4 rounded-xl border space-y-3">
-                <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">
-                  3. Individual Applicant Personal & Financial Profile
-                </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div>
-                    <p className="text-slate-400 font-medium">Full Applicant Name</p>
-                    <p className="font-bold text-slate-900 mt-0.5">
-                      {selectedLead.CustName || `${selectedLead.title || "MR"} ${selectedLead.first_name || ""} ${selectedLead.middle_name || ""} ${selectedLead.last_name || ""}`.trim()}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-slate-400 font-medium">Gender</p>
-                    <p className="font-bold text-slate-900 mt-0.5">{selectedLead.gender || "MALE"}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-400 font-medium">Date of Birth (DOB)</p>
-                    <p className="font-bold text-slate-900 mt-0.5">{selectedLead.dob ? formatDate(selectedLead.dob) : "N/A"}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-400 font-medium">Applicant Age</p>
-                    <p className="font-bold text-slate-900 mt-0.5">{selectedLead.age !== undefined ? `${selectedLead.age} Years` : "N/A"}</p>
-                  </div>
+              <LeadSectionBlock icon={User} title="Individual Applicant Profile">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <LeadDetailItem
+                    label="Applicant Name"
+                    value={selectedLead.CustName || `${selectedLead.title || ""} ${selectedLead.first_name || ""} ${selectedLead.middle_name || ""} ${selectedLead.last_name || ""}`.trim()}
+                  />
+                  <LeadDetailItem label="Gender" value={selectedLead.gender || "MALE"} />
+                  <LeadDetailItem label="Date of Birth" value={selectedLead.dob ? formatDate(selectedLead.dob) : "N/A"} />
+                  <LeadDetailItem label="Age" value={selectedLead.age !== undefined ? `${selectedLead.age} Years` : "N/A"} />
+                  <LeadDetailItem className="sm:col-span-2" label="Residential Address" value={selectedLead.address || "N/A"} />
+                  <LeadDetailItem label="Employer / Business Name" value={selectedLead.employer_business_name || "N/A"} />
+                  <LeadDetailItem label="Employment Type" value={selectedLead.employment_type || "Salaried"} />
+                  <LeadDetailItem
+                    label="Gross Monthly Income"
+                    value={<span className="font-mono font-bold text-emerald-600">{formatCurrency(Number(selectedLead.avg_gross_monthly_income || 0))}</span>}
+                  />
+                  <LeadDetailItem
+                    label="Net Monthly Income"
+                    value={<span className="font-mono font-bold text-emerald-600">{formatCurrency(Number(selectedLead.avg_net_monthly_income || 0))}</span>}
+                  />
+                  <LeadDetailItem
+                    className="sm:col-span-2"
+                    label="Monthly Obligation"
+                    value={<span className="font-mono font-bold text-amber-600">{formatCurrency(Number(selectedLead.existing_monthly_repayment_obligation || 0))}</span>}
+                  />
                 </div>
-
-                <div className="border-t border-slate-200 pt-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-slate-400 font-medium">Residential Address</p>
-                    <p className="font-medium text-slate-800 mt-0.5">{selectedLead.address || "N/A"}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-400 font-medium">Employer / Business Entity Name</p>
-                    <p className="font-bold text-slate-900 mt-0.5">{selectedLead.employer_business_name || "N/A"}</p>
-                  </div>
-                </div>
-
-                <div className="border-t border-slate-200 pt-3 grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div>
-                    <p className="text-slate-400 font-medium">Employment Type</p>
-                    <p className="font-bold text-slate-800 mt-0.5">{selectedLead.employment_type || "Salaried"}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-400 font-medium">Avg Gross Monthly Income</p>
-                    <p className="font-mono font-bold text-emerald-700 mt-0.5">{formatCurrency(Number(selectedLead.avg_gross_monthly_income || 0))}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-400 font-medium">Avg Net Monthly Income</p>
-                    <p className="font-mono font-bold text-emerald-700 mt-0.5">{formatCurrency(Number(selectedLead.avg_net_monthly_income || 0))}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-400 font-medium">Monthly Obligation</p>
-                    <p className="font-mono font-bold text-amber-700 mt-0.5">{formatCurrency(Number(selectedLead.existing_monthly_repayment_obligation || 0))}</p>
-                  </div>
-                </div>
-              </div>
+              </LeadSectionBlock>
             ) : (
-              <div className="bg-purple-50/60 p-4 rounded-xl border border-purple-200 space-y-3">
-                <h4 className="font-bold text-purple-900 uppercase tracking-wider text-[11px]">
-                  3. Non-Individual Business Entity & Financial Profile
-                </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div>
-                    <p className="text-purple-700 font-medium">Entity Name</p>
-                    <p className="font-bold text-purple-950 mt-0.5">{selectedLead.entity_name || selectedLead.CustName || "N/A"}</p>
-                  </div>
-                  <div>
-                    <p className="text-purple-700 font-medium">Date of Incorporation (DOI)</p>
-                    <p className="font-bold text-purple-950 mt-0.5">{selectedLead.doi ? formatDate(selectedLead.doi) : "N/A"}</p>
-                  </div>
-                  <div>
-                    <p className="text-purple-700 font-medium">Promoter / Partner / Director</p>
-                    <p className="font-bold text-purple-950 mt-0.5">{selectedLead.proprietor_partner_director_name || "N/A"}</p>
-                  </div>
-                  <div>
-                    <p className="text-purple-700 font-medium">Business Address</p>
-                    <p className="font-medium text-purple-950 mt-0.5 truncate">{selectedLead.business_address || "N/A"}</p>
-                  </div>
+              <LeadSectionBlock
+                icon={Building2}
+                iconColor="text-purple-600"
+                iconBg="bg-purple-50 border-purple-200/80"
+                title="Business Entity Profile"
+              >
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <LeadDetailItem label="Entity Name" value={selectedLead.entity_name || selectedLead.CustName || "N/A"} />
+                  <LeadDetailItem label="Date of Incorporation" value={selectedLead.doi ? formatDate(selectedLead.doi) : "N/A"} />
+                  <LeadDetailItem label="Promoter / Director" value={selectedLead.proprietor_partner_director_name || "N/A"} />
+                  <LeadDetailItem label="Business Address" value={selectedLead.business_address || "N/A"} />
+                  <LeadDetailItem
+                    label="Annual Turnover (Last FY)"
+                    value={<span className="font-mono font-bold text-indigo-600">{formatCurrency(Number(selectedLead.annual_gross_turnover_last_fy || 0))}</span>}
+                  />
+                  <LeadDetailItem
+                    label="Avg Annual Gross Income"
+                    value={<span className="font-mono font-bold text-emerald-600">{formatCurrency(Number(selectedLead.avg_annual_gross_income || 0))}</span>}
+                  />
+                  <LeadDetailItem
+                    label="Avg Annual Net Income"
+                    value={<span className="font-mono font-bold text-emerald-600">{formatCurrency(Number(selectedLead.avg_annual_net_income || 0))}</span>}
+                  />
+                  <LeadDetailItem
+                    label="Monthly Obligation"
+                    value={<span className="font-mono font-bold text-amber-600">{formatCurrency(Number(selectedLead.existing_monthly_repayment_obligation || 0))}</span>}
+                  />
                 </div>
-
-                <div className="border-t border-purple-200 pt-3 grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div>
-                    <p className="text-purple-700 font-medium">Annual Sales Turnover Last FY</p>
-                    <p className="font-mono font-bold text-indigo-700 mt-0.5">{formatCurrency(Number(selectedLead.annual_gross_turnover_last_fy || 0))}</p>
-                  </div>
-                  <div>
-                    <p className="text-purple-700 font-medium">Avg Annual Gross Income</p>
-                    <p className="font-mono font-bold text-emerald-700 mt-0.5">{formatCurrency(Number(selectedLead.avg_annual_gross_income || 0))}</p>
-                  </div>
-                  <div>
-                    <p className="text-purple-700 font-medium">Avg Annual Net Income</p>
-                    <p className="font-mono font-bold text-emerald-700 mt-0.5">{formatCurrency(Number(selectedLead.avg_annual_net_income || 0))}</p>
-                  </div>
-                  <div>
-                    <p className="text-purple-700 font-medium">Monthly Obligation</p>
-                    <p className="font-mono font-bold text-amber-700 mt-0.5">{formatCurrency(Number(selectedLead.existing_monthly_repayment_obligation || 0))}</p>
-                  </div>
-                </div>
-              </div>
+              </LeadSectionBlock>
             )}
 
-            {/* SECTION 4: Loan Product, Tenure & Application Link */}
-            <div className="bg-slate-50 p-4 rounded-xl border space-y-3">
-              <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">
-                4. Loan Product & Requirement Details
-              </h4>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div>
-                  <p className="text-slate-400 font-medium">Loan Product</p>
-                  <p className="font-bold text-slate-900 mt-0.5">{selectedLead.product?.name || "Loan Product"}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 font-medium">Loan Type</p>
-                  <p className="font-bold text-slate-900 mt-0.5">{selectedLead.loan_type?.name || selectedLead.loanType?.name || "Standard"}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 font-medium">Loan Purpose</p>
-                  <p className="font-bold text-emerald-800 mt-0.5">{selectedLead.loan_purpose || "Not Specified"}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 font-medium">Loan Amount Required</p>
-                  <p className="font-mono font-bold text-slate-900 mt-0.5">{formatCurrency(Number(selectedLead.loan_amount_required || 0))}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 font-medium">Tenure</p>
-                  <p className="font-mono font-bold text-slate-900 mt-0.5">{selectedLead.loan_period_months} Months</p>
-                </div>
+            {/* SECTION 4: Loan Requirements */}
+            <LeadSectionBlock icon={CreditCard} title="Loan Requirements">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <LeadDetailItem label="Loan Product" value={selectedLead.product?.name || "Loan Product"} />
+                <LeadDetailItem label="Loan Type" value={selectedLead.loan_type?.name || selectedLead.loanType?.name || "Standard"} />
+                <LeadDetailItem
+                  label="Required Amount"
+                  value={<span className="font-mono font-bold text-slate-900">{formatCurrency(Number(selectedLead.loan_amount_required || 0))}</span>}
+                />
+                <LeadDetailItem
+                  label="Tenure"
+                  value={<span className="font-mono">{selectedLead.loan_period_months} Months</span>}
+                />
+                <LeadDetailItem className="sm:col-span-4" label="Loan Purpose" value={selectedLead.loan_purpose || "Not Specified"} />
               </div>
 
-              {selectedLead.application_link && (
-                <div className="border-t border-slate-200 pt-3 flex items-center justify-between gap-2">
-                  <div className="flex-1">
-                    <p className="text-slate-500 font-medium">Customer Self-Fill Portal Link</p>
-                    <input
-                      type="text"
-                      readOnly
-                      value={selectedLead.application_link}
-                      className="w-full bg-white border rounded px-2 py-1 font-mono text-[11px] text-slate-700 mt-1 select-all"
-                    />
+              {selectedLead.application_link && selectedLead.application_link !== "NA" && (
+                <div className="rounded-lg bg-blue-50/60 border border-blue-100 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-blue-900">Customer Self-Fill Portal Link</p>
+                    <p className="font-mono text-xs text-blue-700 truncate mt-0.5 select-all">{selectedLead.application_link}</p>
                   </div>
                   <Button
                     size="sm"
                     variant="outline"
-                    className="mt-4"
+                    className="bg-white hover:bg-blue-50 text-blue-700 border-blue-200 text-xs shrink-0 font-medium"
                     onClick={() => {
                       navigator.clipboard.writeText(selectedLead.application_link!);
-                      toast({ title: "Copied!", description: "Link copied to clipboard.", variant: "success" });
+                      toast({ title: "Copied!", description: "Portal link copied to clipboard.", variant: "success" });
                     }}
                   >
                     <Copy className="h-3.5 w-3.5 mr-1" />
@@ -2814,274 +2942,368 @@ const setFilters = (newFilters: {
                   </Button>
                 </div>
               )}
-            </div>
+            </LeadSectionBlock>
 
-            {/* SECTION 5: Sanction & Disbursement Details (if applicable) */}
+            {/* SECTION 5: Sanction & Disbursement Summary */}
             {(selectedLead.sanction_amount || selectedLead.disbursed_amount || (selectedLead.facilities && selectedLead.facilities.length > 0)) && (
-              <div className="bg-indigo-50/60 p-4 rounded-xl border border-indigo-200 space-y-3">
-                <h4 className="font-bold text-indigo-950 uppercase tracking-wider text-[11px]">
-                  5. Sanction & Disbursement Summary
-                </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div>
-                    <p className="text-indigo-700 font-medium">Sanction Amount</p>
-                    <p className="font-mono font-bold text-emerald-800 text-sm mt-0.5">{formatCurrency(Number(selectedLead.sanction_amount || 0))}</p>
-                  </div>
-                  <div>
-                    <p className="text-indigo-700 font-medium">Sanction Letter No.</p>
-                    <p className="font-mono font-bold text-slate-900 mt-0.5">{selectedLead.sanction_letter_no || "N/A"}</p>
-                  </div>
-                  <div>
-                    <p className="text-indigo-700 font-medium">Total Disbursed Amount</p>
-                    <p className="font-mono font-bold text-indigo-900 text-sm mt-0.5">{formatCurrency(Number(selectedLead.disbursed_amount || 0))}</p>
-                  </div>
-                  <div>
-                    <p className="text-indigo-700 font-medium">Disbursement Date</p>
-                    <p className="font-bold text-slate-900 mt-0.5">{selectedLead.disbursement_date ? formatDate(selectedLead.disbursement_date) : "N/A"}</p>
-                  </div>
+              <LeadSectionBlock
+                icon={FileCheck}
+                iconColor="text-indigo-600"
+                iconBg="bg-indigo-50 border-indigo-200/80"
+                title="Sanction & Disbursement Summary"
+              >
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <LeadDetailItem
+                    label="Sanction Amount"
+                    value={<span className="font-mono font-bold text-emerald-600">{formatCurrency(Number(selectedLead.sanction_amount || 0))}</span>}
+                  />
+                  <LeadDetailItem label="Sanction Letter No" value={<span className="font-mono">{selectedLead.sanction_letter_no || "N/A"}</span>} />
+                  <LeadDetailItem
+                    label="Total Disbursed"
+                    value={<span className="font-mono font-bold text-indigo-700">{formatCurrency(Number(selectedLead.disbursed_amount || 0))}</span>}
+                  />
+                  <LeadDetailItem label="Disbursement Date" value={selectedLead.disbursement_date ? formatDate(selectedLead.disbursement_date) : "N/A"} />
                 </div>
 
-                {/* Facilities breakdown */}
                 {selectedLead.facilities && selectedLead.facilities.length > 0 && (
-                  <div className="border-t border-indigo-200 pt-3">
-                    <p className="font-bold text-indigo-900 text-[11px] mb-2">Disbursed Facility Breakdown</p>
-                    <table className="w-full bg-white border border-indigo-100 text-left">
-                      <thead className="bg-indigo-100/60 text-indigo-950 font-bold uppercase text-[10px]">
-                        <tr>
-                          <th className="p-2">Facility Type</th>
-                          <th className="p-2">Sanctioned</th>
-                          <th className="p-2">Disbursed</th>
-                          <th className="p-2">Account No.</th>
-                          <th className="p-2">Deviation</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-indigo-50 font-medium">
-                        {selectedLead.facilities.map((f, i) => (
-                          <tr key={i}>
-                            <td className="p-2 uppercase">{f.facility_type}</td>
-                            <td className="p-2 font-mono">{formatCurrency(Number(f.sanctioned_amount || 0))}</td>
-                            <td className="p-2 font-mono font-bold text-indigo-800">{formatCurrency(Number(f.disbursed_amount || 0))}</td>
-                            <td className="p-2 font-mono">{f.loan_account_no || "N/A"}</td>
-                            <td className="p-2">
-                              {f.has_deviation ? (
-                                <span className="text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded font-bold text-[10px]">
-                                  {f.deviation_type || "Yes"}
-                                </span>
-                              ) : (
-                                <span className="text-slate-400">None</span>
-                              )}
-                            </td>
+                  <div className="pt-2">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-2">Disbursed Facility Breakdown</p>
+                    <div className="rounded-lg border border-slate-200 overflow-hidden">
+                      <table className="w-full bg-white text-left text-xs">
+                        <thead className="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] border-b border-slate-200">
+                          <tr>
+                            <th className="p-2.5">Facility Type</th>
+                            <th className="p-2.5">Sanctioned</th>
+                            <th className="p-2.5">Disbursed</th>
+                            <th className="p-2.5">Account No.</th>
+                            <th className="p-2.5">Deviation</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-medium">
+                          {selectedLead.facilities.map((f, i) => (
+                            <tr key={i} className="hover:bg-slate-50/50">
+                              <td className="p-2.5 uppercase">{f.facility_type}</td>
+                              <td className="p-2.5 font-mono">{formatCurrency(Number(f.sanctioned_amount || 0))}</td>
+                              <td className="p-2.5 font-mono font-bold text-indigo-700">{formatCurrency(Number(f.disbursed_amount || 0))}</td>
+                              <td className="p-2.5 font-mono text-slate-600">{f.loan_account_no || "N/A"}</td>
+                              <td className="p-2.5">
+                                {f.has_deviation ? (
+                                  <span className="text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-bold text-[10px]">
+                                    {f.deviation_type || "Yes"}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400">None</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
-              </div>
+              </LeadSectionBlock>
             )}
 
-            {/* Queries Thread */}
-            <div id="query-thread-section" className="space-y-3 border-t pt-4">
-              <h4 className="font-bold text-slate-800 flex items-center gap-1.5">
-                <HelpCircle className="h-4 w-4 text-amber-600" />
-                Queries & Communication Thread
-              </h4>
-              {selectedLead.queries && selectedLead.queries.length > 0 ? (
-                selectedLead.queries.map((q) => (
-                  <div key={q.id} className="p-3 bg-slate-50 border rounded-lg space-y-2">
-                    <div className="flex justify-between font-semibold">
-                      <span className="text-amber-600 uppercase">Type: {q.query_type}</span>
-                      <StatusBadge status={q.status} />
-                    </div>
-                    <p className="text-slate-800">Q: {q.query_text}</p>
-                    {q.response_text ? (
-                      <p className="text-emerald-700 bg-emerald-50 p-2 rounded border border-emerald-100 font-medium">
-                        A: {q.response_text}
-                      </p>
-                    ) : (
-                      <div className="pt-2 flex gap-2">
-                        <input
-                          type="text"
-                          placeholder="Type query response..."
-                          className="flex-1 border rounded px-2 py-1 bg-white"
-                          onChange={(e) => setResponseText(e.target.value)}
-                        />
-                        <Button size="sm" onClick={(e) => {
-                          setActiveQueryId(q.id);
-                          handleRespondQuerySubmit(e);
-                        }}>
-                          Respond
-                        </Button>
+            {/* SECTION 6: Queries & Communication */}
+            <LeadSectionBlock
+              icon={HelpCircle}
+              iconColor="text-amber-600"
+              iconBg="bg-amber-50 border-amber-200/80"
+              title="Queries & Communication"
+            >
+              <div id="query-thread-section" className="space-y-3">
+                {selectedLead.queries && selectedLead.queries.length > 0 ? (
+                  selectedLead.queries.map((q) => (
+                    <div key={q.id} className="p-3 bg-slate-50 rounded-lg border border-slate-200/70 space-y-2">
+                      <div className="flex items-center justify-between text-xs font-semibold">
+                        <span className="text-amber-700 uppercase tracking-wide text-[11px] font-bold">Type: {q.query_type}</span>
+                        <StatusBadge status={q.status} />
                       </div>
-                    )}
-                  </div>
-                ))
-              ) : (
-                <p className="text-slate-400 italic">No queries raised on this lead.</p>
-              )}
-            </div>
+                      <p className="text-xs text-slate-800 font-medium">Q: {q.query_text}</p>
+                      {q.response_text ? (
+                        <p className="text-xs text-emerald-800 bg-emerald-50/80 p-2.5 rounded-md border border-emerald-200 font-medium">
+                          A: {q.response_text}
+                        </p>
+                      ) : (
+                        <div className="pt-1 flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Type query response..."
+                            className="flex-1 border border-slate-200 rounded-md px-2.5 py-1 text-xs bg-white focus:outline-blue-500"
+                            onChange={(e) => setResponseText(e.target.value)}
+                          />
+                          <Button size="sm" onClick={(e) => {
+                            setActiveQueryId(q.id);
+                            handleRespondQuerySubmit(e);
+                          }}>
+                            Respond
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-slate-400 italic py-1">No queries raised on this lead.</p>
+                )}
+              </div>
+            </LeadSectionBlock>
 
-            {/* Status Audit History Log (Req #30) */}
-            <div className="space-y-3 border-t pt-4">
-              <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                <Layers className="h-4 w-4 text-purple-600" />
-                Status Audit History Log (Req #30)
-              </h4>
+            {/* SECTION 7: Status Audit Trail */}
+            <LeadSectionBlock icon={Clock} title="Status Audit Trail">
               {selectedLead.status_histories && selectedLead.status_histories.length > 0 ? (
-                <div className="bg-slate-50 border rounded-xl overflow-hidden text-[11px]">
-                  <table className="w-full text-left border-collapse">
-                    <thead className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] border-b">
+                <div className="rounded-lg border border-slate-200 overflow-hidden">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] border-b border-slate-200">
                       <tr>
-                        <th className="p-2">Date & Time</th>
-                        <th className="p-2">Old Status</th>
-                        <th className="p-2">New Status</th>
-                        <th className="p-2">Role</th>
-                        <th className="p-2">Remarks / Reason</th>
+                        <th className="p-2.5">Date & Time</th>
+                        <th className="p-2.5">Old Status</th>
+                        <th className="p-2.5">New Status</th>
+                        <th className="p-2.5">Role</th>
+                        <th className="p-2.5">Remarks / Reason</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200">
+                    <tbody className="divide-y divide-slate-100 font-medium">
                       {selectedLead.status_histories.map((sh, idx) => (
-                        <tr key={idx} className="hover:bg-slate-100/60 font-medium">
-                          <td className="p-2 font-mono text-slate-600">{new Date(sh.created_at).toLocaleString()}</td>
-                          <td className="p-2"><StatusBadge status={sh.old_status || "INITIAL"} /></td>
-                          <td className="p-2"><StatusBadge status={sh.new_status} /></td>
-                          <td className="p-2 font-bold uppercase text-purple-700">{sh.action_by_type || "SYSTEM"}</td>
-                          <td className="p-2 text-slate-800">{sh.remarks || "-"}</td>
+                        <tr key={idx} className="hover:bg-slate-50/50">
+                          <td className="p-2.5 font-mono text-slate-600 text-[11px]">{new Date(sh.created_at).toLocaleString()}</td>
+                          <td className="p-2.5"><StatusBadge status={sh.old_status || "INITIAL"} /></td>
+                          <td className="p-2.5"><StatusBadge status={sh.new_status} /></td>
+                          <td className="p-2.5 font-bold uppercase text-purple-700 text-[11px]">{sh.action_by_type || "SYSTEM"}</td>
+                          <td className="p-2.5 text-slate-700">{sh.remarks || "—"}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               ) : (
-                <p className="text-slate-400 italic text-[11px]">No status history recorded yet.</p>
+                <p className="text-xs text-slate-400 italic py-1">No status history recorded yet.</p>
               )}
-            </div>
+            </LeadSectionBlock>
           </div>
         </Modal>
       )}
 
       {/* Query Modal */}
       <Modal open={isQueryModalOpen} onClose={() => setIsQueryModalOpen(false)} title="Raise Query on Lead">
-        <form onSubmit={handleRaiseQuerySubmit} className="space-y-4 text-xs">
+        <form onSubmit={handleRaiseQuerySubmit} className="space-y-4 text-sm">
+          <div className="flex items-center gap-3 p-3.5 rounded-xl border border-amber-200/80 bg-amber-50/70 text-amber-900">
+            <div className="p-2 bg-amber-100 rounded-lg text-amber-700 shrink-0">
+              <HelpCircle className="h-5 w-5" />
+            </div>
+            <p className="font-bold text-sm sm:text-base text-amber-950">Raise Application Query</p>
+          </div>
+
           <div>
-            <label className="block text-slate-600 font-semibold mb-1">Query Type</label>
-            <select value={queryType} onChange={(e) => setQueryType(e.target.value)} className="w-full border rounded p-2">
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+              Query Type
+            </label>
+            <Select
+              value={queryType}
+              onChange={(e) => setQueryType(e.target.value)}
+              buttonClassName="focus:border-amber-500 focus:ring-amber-500/20"
+            >
               <option value="clarification">Clarification</option>
               <option value="document">Document Missing</option>
               <option value="deviation">Deviation Query</option>
-            </select>
+            </Select>
           </div>
+
           <div>
-            <label className="block text-slate-600 font-semibold mb-1">Query Text *</label>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+              Query Text *
+            </label>
             <textarea
               required
               rows={3}
               value={queryText}
               onChange={(e) => setQueryText(e.target.value)}
-              className="w-full border rounded p-2"
-              placeholder="Enter detailed query..."
+              className="w-full rounded-lg border border-slate-200 bg-white p-3.5 text-sm text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all resize-none min-h-[96px]"
+              placeholder="Enter detailed query description or missing document requirements..."
             />
           </div>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setIsQueryModalOpen(false)}>Cancel</Button>
-            <Button type="submit">Submit Query</Button>
+
+          <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200/80">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsQueryModalOpen(false)}
+              className="h-10 px-4.5 text-sm font-semibold rounded-lg border-slate-200 hover:bg-slate-50 text-slate-700 shadow-2xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              className="h-10 px-5 text-sm font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs gap-2"
+            >
+              <Send className="h-4 w-4" />
+              <span>Submit Query</span>
+            </Button>
           </div>
         </form>
       </Modal>
 
       {/* Sanction Modal */}
-      <Modal open={isSanctionModalOpen} onClose={() => setIsSanctionModalOpen(false)} title="Sanction Lead">
-        <form onSubmit={handleSanctionSubmit} className="space-y-4 text-xs">
-          <div>
-            <label className="block text-slate-600 font-semibold mb-1">Sanction Amount (₹) *</label>
-            <input
-              type="number"
-              required
-              value={sanctionAmount}
-              onChange={(e) => setSanctionAmount(Number(e.target.value))}
-              className="w-full border rounded p-2 font-mono"
-            />
+      <Modal open={isSanctionModalOpen} onClose={() => setIsSanctionModalOpen(false)} title="Sanction Lead Application">
+        <form onSubmit={handleSanctionSubmit} className="space-y-4 text-sm">
+          <div className="flex items-center gap-3 p-3.5 rounded-xl border border-emerald-200/80 bg-emerald-50/70 text-emerald-900">
+            <div className="p-2 bg-emerald-100 rounded-lg text-emerald-700 shrink-0">
+              <Banknote className="h-5 w-5" />
+            </div>
+            <p className="font-bold text-sm sm:text-base text-emerald-950">Sanction Approval</p>
           </div>
-          <div>
-            <label className="block text-slate-600 font-semibold mb-1">Sanction Letter Number</label>
-            <input
-              type="text"
-              placeholder="e.g. SL-2026-9081"
-              value={sanctionLetterNo}
-              onChange={(e) => setSanctionLetterNo(e.target.value)}
-              className="w-full border rounded p-2 font-mono"
-            />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Sanction Amount (₹) *
+              </label>
+              <input
+                type="number"
+                required
+                value={sanctionAmount}
+                onChange={(e) => setSanctionAmount(Number(e.target.value))}
+                className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-bold font-mono text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Sanction Letter Number
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. SL-2026-9081"
+                value={sanctionLetterNo}
+                onChange={(e) => setSanctionLetterNo(e.target.value)}
+                className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold font-mono text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+              />
+            </div>
           </div>
+
           <div>
-            <label className="block text-slate-600 font-semibold mb-1">Sanction Remarks</label>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+              Sanction Remarks
+            </label>
             <textarea
               rows={2}
               value={sanctionRemarks}
               onChange={(e) => setSanctionRemarks(e.target.value)}
-              className="w-full border rounded p-2"
+              placeholder="Add optional sanction notes or credit committee conditions..."
+              className="w-full rounded-lg border border-slate-200 bg-white p-3.5 text-sm text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all resize-none min-h-[80px]"
             />
           </div>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setIsSanctionModalOpen(false)}>Cancel</Button>
-            <Button type="submit" className="bg-emerald-600 text-white">Confirm Sanction</Button>
+
+          <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200/80">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsSanctionModalOpen(false)}
+              className="h-10 px-4.5 text-sm font-semibold rounded-lg border-slate-200 hover:bg-slate-50 text-slate-700 shadow-2xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              className="h-10 px-5 text-sm font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs gap-2"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              <span>Confirm Sanction</span>
+            </Button>
           </div>
         </form>
       </Modal>
 
       {/* Reject Modal */}
-      <Modal open={isRejectModalOpen} onClose={() => setIsRejectModalOpen(false)} title="Reject Lead">
-        <form onSubmit={handleRejectSubmit} className="space-y-4 text-xs">
+      <Modal open={isRejectModalOpen} onClose={() => setIsRejectModalOpen(false)} title="Reject Lead Application">
+        <form onSubmit={handleRejectSubmit} className="space-y-4 text-sm">
+          <div className="flex items-center gap-3 p-3.5 rounded-xl border border-rose-200/80 bg-rose-50/70 text-rose-900">
+            <div className="p-2 bg-rose-100 rounded-lg text-rose-700 shrink-0">
+              <XCircle className="h-5 w-5" />
+            </div>
+            <p className="font-bold text-sm sm:text-base text-rose-950">Reject Application</p>
+          </div>
+
           <div>
-            <label className="block text-slate-600 font-semibold mb-1">Rejection Reason *</label>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+              Rejection Reason *
+            </label>
             <textarea
               required
               rows={3}
               value={rejectionReason}
               onChange={(e) => setRejectionReason(e.target.value)}
-              className="w-full border rounded p-2"
+              placeholder="Enter detailed reason for rejection (e.g. CIBIL score below policy cutoff, fraud flag, documentation mismatch)..."
+              className="w-full rounded-lg border border-slate-200 bg-white p-3.5 text-sm text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all resize-none min-h-[96px]"
             />
           </div>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setIsRejectModalOpen(false)}>Cancel</Button>
-            <Button type="submit" className="bg-red-600 text-white">Reject Lead</Button>
+
+          <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200/80">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsRejectModalOpen(false)}
+              className="h-10 px-4.5 text-sm font-semibold rounded-lg border-slate-200 hover:bg-slate-50 text-slate-700 shadow-2xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              className="h-10 px-5 text-sm font-semibold rounded-lg bg-rose-600 hover:bg-rose-700 text-white shadow-xs gap-2"
+            >
+              <XCircle className="h-4 w-4" />
+              <span>Reject Lead</span>
+            </Button>
           </div>
         </form>
       </Modal>
 
       {/* Manual Disbursement Modal */}
       <Modal open={isDisburseModalOpen} onClose={() => setIsDisburseModalOpen(false)} title="Mark Lead Disbursement" width="max-w-xl">
-        <form onSubmit={handleDisburseSubmit} className="space-y-4 text-xs">
-          <div className="grid grid-cols-2 gap-4">
+        <form onSubmit={handleDisburseSubmit} className="space-y-4 text-sm">
+          <div className="flex items-center gap-3 p-3.5 rounded-xl border border-emerald-200/80 bg-emerald-50/70 text-emerald-900">
+            <div className="p-2 bg-emerald-100 rounded-lg text-emerald-700 shrink-0">
+              <Banknote className="h-5 w-5" />
+            </div>
+            <p className="font-bold text-sm sm:text-base text-emerald-950">Loan Disbursement Confirmation</p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-slate-700 font-semibold mb-1">Disbursement Date * (DD/MM/YYYY)</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Disbursement Date *
+              </label>
               <input
                 type="date"
                 required
                 value={disbursementDate}
                 onChange={(e) => setDisbursementDate(e.target.value)}
-                className="w-full border rounded p-2 focus:ring-1 focus:ring-emerald-500"
+                className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all cursor-pointer"
               />
             </div>
 
             <div>
-              <label className="block text-slate-700 font-semibold mb-1">Disbursed Amount (₹) *</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                Disbursed Amount (₹) *
+              </label>
               <input
                 type="number"
                 required
                 min={1}
                 value={disbursedAmount}
                 onChange={(e) => setDisbursedAmount(e.target.value)}
-                className="w-full border rounded p-2 font-mono focus:ring-1 focus:ring-emerald-500"
+                className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-bold font-mono text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-slate-700 font-semibold mb-1">Loan Account No. * (Numeric, min 8 digits)</label>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+              Loan Account No. * (Numeric, min 8 digits)
+            </label>
             <input
               type="text"
               required
-              placeholder="Enter CBS Loan Account Number (e.g. 10023456789)"
+              placeholder="Loan Account Number (e.g. 10023456789)"
               value={loanAccountNo}
               onChange={(e) => {
                 const val = e.target.value.replace(/\D/g, "");
@@ -3090,73 +3312,119 @@ const setFilters = (newFilters: {
                   setLoanAccountError(null);
                 }
               }}
-              className={`w-full border rounded p-2 font-mono ${loanAccountError ? "border-red-500 focus:ring-red-500" : "focus:ring-emerald-500"}`}
+              className={cn(
+                "w-full h-10 rounded-lg border bg-white px-3.5 text-sm font-bold font-mono text-slate-900 shadow-2xs transition-all",
+                loanAccountError
+                  ? "border-rose-400 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
+                  : "border-slate-200 hover:border-slate-300 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              )}
             />
-            {loanAccountError && <p className="text-red-500 text-[11px] mt-1">{loanAccountError}</p>}
+            {loanAccountError && <p className="text-rose-600 font-semibold text-xs mt-1.5">{loanAccountError}</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-4 bg-amber-50/60 p-3 rounded-lg border border-amber-200">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-amber-50/60 p-4 rounded-xl border border-amber-200/80">
             <div>
-              <label className="block text-amber-900 font-semibold mb-1">Loan sanctioned with deviation? *</label>
-              <select
+              <label className="block text-xs font-bold text-amber-900 uppercase tracking-wider mb-2">
+                Sanctioned with deviation? *
+              </label>
+              <Select
                 value={hasDeviation}
                 onChange={(e) => {
                   setHasDeviation(e.target.value);
                   if (e.target.value === "No") setDeviationType("");
                 }}
-                className="w-full border rounded p-2 bg-white"
+                buttonClassName="border-amber-200 focus:border-amber-500 focus:ring-amber-500/20"
               >
                 <option value="No">No</option>
                 <option value="Yes">Yes</option>
-              </select>
+              </Select>
             </div>
 
             {hasDeviation === "Yes" && (
               <div>
-                <label className="block text-amber-900 font-semibold mb-1">Deviation Type *</label>
-                <select
+                <label className="block text-xs font-bold text-amber-900 uppercase tracking-wider mb-2">
+                  Deviation Type *
+                </label>
+                <Select
                   value={deviationType}
                   required={hasDeviation === "Yes"}
                   onChange={(e) => setDeviationType(e.target.value)}
-                  className="w-full border rounded p-2 bg-white"
+                  buttonClassName="border-amber-200 focus:border-amber-500 focus:ring-amber-500/20"
                 >
                   <option value="">-- Select Deviation Type --</option>
                   <option value="Non-Financial">Non-Financial</option>
                   <option value="Allowed Financial">Allowed Financial</option>
                   <option value="Not-allowed Financial">Not-allowed Financial</option>
-                </select>
+                </Select>
               </div>
             )}
           </div>
 
-          <div className="flex justify-end gap-2 pt-3 border-t">
-            <Button type="button" variant="outline" onClick={() => setIsDisburseModalOpen(false)}>Cancel</Button>
-            <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white">Confirm Disbursement</Button>
+          <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200/80">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsDisburseModalOpen(false)}
+              className="h-10 px-4.5 text-sm font-semibold rounded-lg border-slate-200 hover:bg-slate-50 text-slate-700 shadow-2xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              className="h-10 px-5 text-sm font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs gap-2"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              <span>Confirm Disbursement</span>
+            </Button>
           </div>
         </form>
       </Modal>
 
       {/* Cancel Lead Modal */}
       <Modal open={isCancelModalOpen} onClose={() => setIsCancelModalOpen(false)} title="Cancel Lead Application">
-        <form onSubmit={handleCancelSubmit} className="space-y-4 text-xs">
+        <form onSubmit={handleCancelSubmit} className="space-y-4 text-sm">
+          <div className="flex items-center gap-3 p-3.5 rounded-xl border border-rose-200/80 bg-rose-50/70 text-rose-900">
+            <div className="p-2 bg-rose-100 rounded-lg text-rose-700 shrink-0">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <p className="font-bold text-sm sm:text-base text-rose-950">Cancel Lead Application</p>
+          </div>
+
           <div>
-            <label className="block text-slate-600 font-semibold mb-1">Cancellation Reason *</label>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+              Cancellation Reason *
+            </label>
             <textarea
               required
               rows={3}
               value={cancellationReason}
               onChange={(e) => setCancellationReason(e.target.value)}
-              placeholder="Enter reason for cancelling this lead..."
-              className="w-full border rounded p-2 focus:outline-none focus:border-red-500"
+              placeholder="Enter reason for cancelling this lead (e.g. Customer requested withdrawal, duplicate application)..."
+              className="w-full rounded-lg border border-slate-200 bg-white p-3.5 text-sm text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all resize-none min-h-[96px]"
             />
           </div>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setIsCancelModalOpen(false)}>Back</Button>
-            <Button type="submit" className="bg-red-600 hover:bg-red-700 text-white">Confirm Cancellation</Button>
+
+          <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200/80">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsCancelModalOpen(false)}
+              className="h-10 px-4.5 text-sm font-semibold rounded-lg border-slate-200 hover:bg-slate-50 text-slate-700 shadow-2xs"
+            >
+              Back
+            </Button>
+            <Button
+              type="submit"
+              className="h-10 px-5 text-sm font-semibold rounded-lg bg-rose-600 hover:bg-rose-700 text-white shadow-xs gap-2"
+            >
+              <AlertTriangle className="h-4 w-4" />
+              <span>Confirm Cancellation</span>
+            </Button>
           </div>
         </form>
       </Modal>
 
+      {/* Edit Lead Information Modal */}
       <Modal
         open={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
@@ -3175,226 +3443,291 @@ const setFilters = (newFilters: {
             </div>
           </div>
         ) : (
-          <form onSubmit={handleEditSubmit} className="relative space-y-4 text-xs">
+          <form onSubmit={handleEditSubmit} className="relative space-y-4 text-sm">
           {editForm.constitution === "Individual" ? (
             /* Individual Edit Fields */
-            <div className="space-y-3">
-              <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] border-b pb-1">Individual Applicant Details</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-4 sm:p-5 space-y-4">
+              <div className="flex items-center gap-2.5 pb-3 border-b border-slate-200/70">
+                <div className="p-2 rounded-lg bg-blue-50 border border-blue-200/80 text-blue-600 shrink-0">
+                  <User className="h-4.5 w-4.5" />
+                </div>
+                <h4 className="font-bold text-slate-800 uppercase tracking-wider text-xs sm:text-sm">
+                  Individual Applicant Details
+                </h4>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                 <div>
-                  <label className="block text-slate-600 mb-1 font-semibold">First Name *</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    First Name *
+                  </label>
                   <input
                     type="text"
                     required
                     value={editForm.first_name || ""}
                     onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
-                    className="w-full border rounded p-2"
+                    className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 mb-1 font-semibold">Middle Name</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Middle Name
+                  </label>
                   <input
                     type="text"
                     value={editForm.middle_name || ""}
                     onChange={(e) => setEditForm({ ...editForm, middle_name: e.target.value })}
-                    className="w-full border rounded p-2"
+                    className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 mb-1 font-semibold">Last Name *</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Last Name *
+                  </label>
                   <input
                     type="text"
                     required
                     value={editForm.last_name || ""}
                     onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
-                    className="w-full border rounded p-2"
+                    className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                 <div>
-                  <label className="block text-slate-600 mb-1 font-semibold">Mobile Number *</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Mobile Number *
+                  </label>
                   <input
                     type="text"
                     required
                     maxLength={10}
                     value={editForm.mobile || ""}
                     onChange={(e) => setEditForm({ ...editForm, mobile: e.target.value })}
-                    className="w-full border rounded p-2 font-mono"
+                    className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-bold font-mono text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 mb-1 font-semibold">Email Address</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Email Address
+                  </label>
                   <input
                     type="email"
                     value={editForm.email || ""}
                     onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                    className="w-full border rounded p-2"
+                    className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 mb-1 font-semibold">Date of Birth (DOB)</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Date of Birth (DOB)
+                  </label>
                   <input
                     type="date"
                     value={editForm.dob || ""}
                     onChange={(e) => setEditForm({ ...editForm, dob: e.target.value })}
-                    className="w-full border rounded p-2"
+                    className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-slate-600 mb-1 font-semibold">Residential Address</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Residential Address
+                </label>
                 <textarea
                   rows={2}
                   value={editForm.address || ""}
                   onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
-                  className="w-full border rounded p-2"
+                  placeholder="Enter full street address, apartment/flat number..."
+                  className="w-full rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none min-h-[64px]"
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                 <div>
-                  <label className="block text-slate-600 mb-1 font-semibold">Employment Type</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Employment Type
+                  </label>
                   <input
                     type="text"
                     value={editForm.employment_type || ""}
                     onChange={(e) => setEditForm({ ...editForm, employment_type: e.target.value })}
-                    className="w-full border rounded p-2"
+                    className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                     placeholder="SALARIED / SELF_EMPLOYED"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 mb-1 font-semibold">Gross Monthly Income (₹)</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Gross Monthly Income (₹)
+                  </label>
                   <input
                     type="number"
                     value={editForm.avg_gross_monthly_income || ""}
                     onChange={(e) => setEditForm({ ...editForm, avg_gross_monthly_income: Number(e.target.value) })}
-                    className="w-full border rounded p-2 font-mono"
+                    className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-bold font-mono text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 mb-1 font-semibold">Net Monthly Income (₹)</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Net Monthly Income (₹)
+                  </label>
                   <input
                     type="number"
                     value={editForm.avg_net_monthly_income || ""}
                     onChange={(e) => setEditForm({ ...editForm, avg_net_monthly_income: Number(e.target.value) })}
-                    className="w-full border rounded p-2 font-mono"
+                    className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-bold font-mono text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                   />
                 </div>
               </div>
             </div>
           ) : (
             /* Non-Individual Edit Fields */
-            <div className="space-y-3">
-              <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] border-b pb-1">Non-Individual Entity Details</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-4 sm:p-5 space-y-4">
+              <div className="flex items-center gap-2.5 pb-3 border-b border-slate-200/70">
+                <div className="p-2 rounded-lg bg-purple-50 border border-purple-200/80 text-purple-600 shrink-0">
+                  <Building2 className="h-4.5 w-4.5" />
+                </div>
+                <h4 className="font-bold text-slate-800 uppercase tracking-wider text-xs sm:text-sm">
+                  Non-Individual Entity Details
+                </h4>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-slate-600 mb-1 font-semibold">Entity Name *</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Entity Name *
+                  </label>
                   <input
                     type="text"
                     required
                     value={editForm.entity_name || ""}
                     onChange={(e) => setEditForm({ ...editForm, entity_name: e.target.value })}
-                    className="w-full border rounded p-2"
+                    className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 mb-1 font-semibold">Proprietor / Partner / Director</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Proprietor / Partner / Director
+                  </label>
                   <input
                     type="text"
                     value={editForm.proprietor_partner_director_name || ""}
                     onChange={(e) => setEditForm({ ...editForm, proprietor_partner_director_name: e.target.value })}
-                    className="w-full border rounded p-2"
+                    className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                 <div>
-                  <label className="block text-slate-600 mb-1 font-semibold">Mobile Number *</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Mobile Number *
+                  </label>
                   <input
                     type="text"
                     required
                     maxLength={10}
                     value={editForm.mobile || ""}
                     onChange={(e) => setEditForm({ ...editForm, mobile: e.target.value })}
-                    className="w-full border rounded p-2 font-mono"
+                    className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-bold font-mono text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 mb-1 font-semibold">Email Address</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Email Address
+                  </label>
                   <input
                     type="email"
                     value={editForm.email || ""}
                     onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                    className="w-full border rounded p-2"
+                    className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 mb-1 font-semibold">Date of Incorporation (DOI)</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Date of Incorporation (DOI)
+                  </label>
                   <input
                     type="date"
                     value={editForm.doi || ""}
                     onChange={(e) => setEditForm({ ...editForm, doi: e.target.value })}
-                    className="w-full border rounded p-2"
+                    className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-slate-600 mb-1 font-semibold">Registered Business Address</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Registered Business Address
+                </label>
                 <textarea
                   rows={2}
                   value={editForm.business_address || ""}
                   onChange={(e) => setEditForm({ ...editForm, business_address: e.target.value })}
-                  className="w-full border rounded p-2"
+                  placeholder="Enter registered corporate office or operating business address..."
+                  className="w-full rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none min-h-[64px]"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-600 mb-1 font-semibold">Annual Gross Turnover (₹)</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Annual Gross Turnover (₹)
+                </label>
                 <input
                   type="number"
                   value={editForm.annual_gross_turnover_last_fy || ""}
                   onChange={(e) => setEditForm({ ...editForm, annual_gross_turnover_last_fy: Number(e.target.value) })}
-                  className="w-full border rounded p-2 font-mono"
+                  className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-bold font-mono text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                 />
               </div>
             </div>
           )}
 
           {/* Loan Requirement Edit Fields */}
-          <div className="space-y-3 pt-2 border-t">
-            <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">Loan Requirement Details</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-4 sm:p-5 space-y-4">
+            <div className="flex items-center gap-2.5 pb-3 border-b border-slate-200/70">
+              <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200/80 text-emerald-600 shrink-0">
+                <Banknote className="h-4.5 w-4.5" />
+              </div>
+              <h4 className="font-bold text-slate-800 uppercase tracking-wider text-xs sm:text-sm">
+                Loan Requirement Details
+              </h4>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
               <div>
-                <label className="block text-slate-600 mb-1 font-semibold">Loan Amount Required (₹) *</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Loan Amount Required (₹) *
+                </label>
                 <input
                   type="number"
                   required
                   value={editForm.loan_amount_required || ""}
                   onChange={(e) => setEditForm({ ...editForm, loan_amount_required: Number(e.target.value) })}
-                  className="w-full border rounded p-2 font-mono"
+                  className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-bold font-mono text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
                 />
               </div>
               <div>
-                <label className="block text-slate-600 mb-1 font-semibold">Loan Period (Months) *</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Loan Period (Months) *
+                </label>
                 <input
                   type="number"
                   required
                   value={editForm.loan_period_months || ""}
                   onChange={(e) => setEditForm({ ...editForm, loan_period_months: Number(e.target.value) })}
-                  className="w-full border rounded p-2 font-mono"
+                  className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-bold font-mono text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                 />
               </div>
               <div>
-                <label className="block text-slate-600 mb-1 font-semibold">Loan Purpose</label>
-                <select
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Loan Purpose
+                </label>
+                <Select
                   value={editForm.loan_purpose || ""}
                   onChange={(e) => setEditForm({ ...editForm, loan_purpose: e.target.value })}
-                  className="w-full border rounded p-2 bg-white"
                 >
                   <option value="">-- Select Purpose --</option>
                   {getLoanPurposeOptionsFromApi(
@@ -3404,14 +3737,27 @@ const setFilters = (newFilters: {
                   ).map((purp, idx) => (
                     <option key={idx} value={purp}>{purp}</option>
                   ))}
-                </select>
+                </Select>
               </div>
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-3 border-t">
-            <Button type="button" variant="outline" onClick={() => setIsEditModalOpen(false)}>Cancel</Button>
-            <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold">Save Lead Changes</Button>
+          <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200/80">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsEditModalOpen(false)}
+              className="h-10 px-4.5 text-sm font-semibold rounded-lg border-slate-200 hover:bg-slate-50 text-slate-700 shadow-2xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              className="h-10 px-5 text-sm font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs gap-2"
+            >
+              <Check className="h-4 w-4" />
+              <span>Save Lead Changes</span>
+            </Button>
           </div>
         </form>
       )}
@@ -3424,35 +3770,79 @@ const setFilters = (newFilters: {
           onClose={() => setConfirmActionModal(null)}
           title={confirmActionModal.title || "Confirm Action"}
         >
-          <div className="space-y-5 text-slate-800 text-xs py-2">
-            <div className="flex items-center gap-3.5 bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-xs">
+          <div className="space-y-4 text-slate-800 text-xs py-1">
+            <div
+              className={cn(
+                "flex items-start gap-3.5 p-4 rounded-xl border transition-all",
+                confirmActionModal.variant === "emerald"
+                  ? "bg-emerald-50/70 border-emerald-200/90"
+                  : confirmActionModal.variant === "red"
+                  ? "bg-rose-50/70 border-rose-200/90"
+                  : confirmActionModal.variant === "amber"
+                  ? "bg-amber-50/70 border-amber-200/90"
+                  : "bg-blue-50/70 border-blue-200/90"
+              )}
+            >
               <div
-                className={`p-3 rounded-xl text-white font-bold shrink-0 ${
+                className={cn(
+                  "p-2 rounded-xl shrink-0 border shadow-2xs",
                   confirmActionModal.variant === "emerald"
-                    ? "bg-emerald-600 shadow-md shadow-emerald-600/20"
+                    ? "bg-emerald-100/80 text-emerald-700 border-emerald-200"
                     : confirmActionModal.variant === "red"
-                    ? "bg-red-600 shadow-md shadow-red-600/20"
+                    ? "bg-rose-100/80 text-rose-700 border-rose-200"
                     : confirmActionModal.variant === "amber"
-                    ? "bg-amber-600 shadow-md shadow-amber-600/20"
-                    : "bg-blue-600 shadow-md shadow-blue-600/20"
-                }`}
+                    ? "bg-amber-100/80 text-amber-700 border-amber-200"
+                    : "bg-blue-100/80 text-blue-700 border-blue-200"
+                )}
               >
-                <AlertTriangle className="h-6 w-6" />
+                {confirmActionModal.variant === "emerald" ? (
+                  <CheckCircle2 className="h-5 w-5" />
+                ) : confirmActionModal.variant === "red" ? (
+                  <AlertTriangle className="h-5 w-5" />
+                ) : confirmActionModal.variant === "amber" ? (
+                  <AlertTriangle className="h-5 w-5" />
+                ) : (
+                  <CheckCircle2 className="h-5 w-5" />
+                )}
               </div>
-              <div>
-                <h4 className="font-bold text-slate-900 text-sm">Action Confirmation</h4>
-                <p className="text-slate-600 mt-0.5 font-medium leading-relaxed text-xs">
+              <div className="min-w-0">
+                <h4
+                  className={cn(
+                    "font-bold text-sm",
+                    confirmActionModal.variant === "emerald"
+                      ? "text-emerald-950"
+                      : confirmActionModal.variant === "red"
+                      ? "text-rose-950"
+                      : confirmActionModal.variant === "amber"
+                      ? "text-amber-950"
+                      : "text-blue-950"
+                  )}
+                >
+                  {confirmActionModal.title || "Action Confirmation"}
+                </h4>
+                <p
+                  className={cn(
+                    "mt-1 text-xs font-medium leading-relaxed",
+                    confirmActionModal.variant === "emerald"
+                      ? "text-emerald-800"
+                      : confirmActionModal.variant === "red"
+                      ? "text-rose-800"
+                      : confirmActionModal.variant === "amber"
+                      ? "text-amber-800"
+                      : "text-blue-800"
+                  )}
+                >
                   {confirmActionModal.message || "Do you want to perform this action?"}
                 </p>
               </div>
             </div>
 
-            <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-200">
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200/80">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => setConfirmActionModal(null)}
-                className="rounded-xl px-4 py-2 text-xs font-bold"
+                className="h-9 px-4 text-xs font-semibold rounded-lg border-slate-200 hover:bg-slate-50 text-slate-700 shadow-2xs"
               >
                 No, Cancel
               </Button>
@@ -3463,17 +3853,18 @@ const setFilters = (newFilters: {
                   setConfirmActionModal(null);
                   action();
                 }}
-                className={`rounded-xl px-5 py-2 text-xs font-bold text-white shadow-md transition-all ${
+                className={cn(
+                  "h-9 px-4 text-xs font-semibold rounded-lg text-white shadow-xs transition-all gap-1.5",
                   confirmActionModal.variant === "emerald"
-                    ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20"
+                    ? "bg-emerald-600 hover:bg-emerald-700"
                     : confirmActionModal.variant === "red"
-                    ? "bg-red-600 hover:bg-red-700 shadow-red-600/20"
+                    ? "bg-rose-600 hover:bg-rose-700"
                     : confirmActionModal.variant === "amber"
-                    ? "bg-amber-600 hover:bg-amber-700 shadow-amber-600/20"
-                    : "bg-blue-600 hover:bg-blue-700 shadow-blue-600/20"
-                }`}
+                    ? "bg-amber-600 hover:bg-amber-700"
+                    : "bg-blue-600 hover:bg-blue-700"
+                )}
               >
-                {confirmActionModal.confirmLabel || "Yes, Proceed"}
+                <span>{confirmActionModal.confirmLabel || "Yes, Proceed"}</span>
               </Button>
             </div>
           </div>
@@ -3546,7 +3937,7 @@ function FilterBar({ onReset, onApply, filters, onChange, hasActiveFilters }: Fi
               onKeyDown={(e) => {
                 if (e.key === "Enter") onApply();
               }}
-              className="w-full pl-9 pr-8 h-9 text-xs sm:text-sm bg-slate-50/50 hover:bg-white focus:bg-white transition-colors"
+              className="w-full !pl-10 pr-8 h-9 text-xs sm:text-sm bg-slate-50/50 hover:bg-white focus:bg-white transition-colors"
             />
             {filters.search && (
               <button

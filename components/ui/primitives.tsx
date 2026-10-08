@@ -1,6 +1,6 @@
 "use client";
 
-import { X, ChevronDown, Search } from "lucide-react";
+import { X, ChevronDown, Search, Check } from "lucide-react";
 import React, {
   ButtonHTMLAttributes,
   HTMLAttributes,
@@ -125,7 +125,7 @@ export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElem
   return (
     <input
       className={cn(
-        "h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100",
+        "h-9 w-full rounded-md border border-slate-200 bg-white pl-3 pr-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100",
         props.type === "date" && "cursor-pointer",
         className,
       )}
@@ -156,6 +156,7 @@ export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTex
 
 export function Select({
   className,
+  buttonClassName,
   children,
   onChange,
   value,
@@ -164,7 +165,7 @@ export function Select({
   id,
   placeholder,
   ...props
-}: SelectHTMLAttributes<HTMLSelectElement> & { placeholder?: string }) {
+}: SelectHTMLAttributes<HTMLSelectElement> & { placeholder?: string; buttonClassName?: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
@@ -172,27 +173,34 @@ export function Select({
 
   const options = useMemo(() => {
     const list: { value: string; label: string }[] = [];
-    Children.forEach(children, (child) => {
-      if (isValidElement(child) && child.type === "option") {
-        const props = child.props as any;
-        let label = "";
-        if (Array.isArray(props.children)) {
-          label = props.children.map((c: any) => (typeof c === "object" ? "" : String(c ?? ""))).join("");
-        } else {
-          label = String(props.children ?? props.value ?? "");
+    const extractOptions = (nodes: ReactNode) => {
+      Children.forEach(nodes, (child) => {
+        if (!isValidElement(child)) return;
+        if (child.type === "option") {
+          const props = child.props as any;
+          let label = "";
+          if (Array.isArray(props.children)) {
+            label = props.children.map((c: any) => (typeof c === "object" ? "" : String(c ?? ""))).join("");
+          } else {
+            label = String(props.children ?? props.value ?? "");
+          }
+          list.push({
+            value: String(props.value ?? ""),
+            label: label.trim(),
+          });
+        } else if ((child.props as any)?.children) {
+          extractOptions((child.props as any).children);
         }
-        list.push({
-          value: String(props.value ?? ""),
-          label: label.trim(),
-        });
-      }
-    });
+      });
+    };
+    extractOptions(children);
     return list;
   }, [children]);
 
   const selectedOption = useMemo(() => {
-    return options.find((opt) => opt.value === value) || options[0];
-  }, [options, value]);
+    const stringVal = value !== undefined && value !== null ? String(value) : "";
+    return options.find((opt) => opt.value === stringVal) || options.find((opt) => opt.value === value) || (placeholder ? null : options[0]);
+  }, [options, value, placeholder]);
 
   const filteredOptions = useMemo(() => {
     if (!searchQuery.trim()) return options;
@@ -208,9 +216,18 @@ export function Select({
         setIsOpen(false);
       }
     }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsOpen(false);
+    };
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+    if (isOpen) {
+      document.addEventListener("keydown", handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -261,64 +278,72 @@ export function Select({
         disabled={disabled}
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          "flex h-9 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:opacity-50 disabled:pointer-events-none disabled:bg-slate-50",
-          isOpen && "border-blue-500 ring-2 ring-blue-100"
+          "flex h-10 w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-900 shadow-2xs outline-none transition-all hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 disabled:pointer-events-none disabled:bg-slate-50 cursor-pointer text-left",
+          isOpen && "border-blue-500 ring-2 ring-blue-500/20 shadow-xs",
+          buttonClassName
         )}
       >
-        <span className="truncate">{selectedOption?.label || placeholder || "Select..."}</span>
+        <span className={cn("truncate pr-2", (!selectedOption || selectedOption.value === "") && "text-slate-500 font-normal")}>
+          {selectedOption?.label || placeholder || "Select..."}
+        </span>
         <ChevronDown
           className={cn(
-            "h-4 w-4 text-slate-400 transition-transform duration-200",
-            isOpen && "rotate-180"
+            "h-4 w-4 text-slate-400 transition-transform duration-200 shrink-0",
+            isOpen && "rotate-180 text-blue-600"
           )}
         />
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 right-0 z-50 mt-1 flex max-h-60 w-full flex-col overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg animate-in fade-in slide-in-from-top-1 duration-100">
-          <div className="flex items-center border-b border-slate-100 bg-slate-50 px-2.5">
-            <Search className="h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              ref={searchInputRef}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search..."
-              className="h-8 w-full bg-transparent px-2 text-sm text-slate-800 placeholder:text-slate-400 outline-none"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="rounded-full p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            )}
-          </div>
-          <div className="flex-1 overflow-y-auto py-1">
+        <div className="absolute left-0 right-0 z-50 mt-1.5 flex max-h-64 w-full flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-xl ring-1 ring-black/5 animate-in fade-in slide-in-from-top-1 duration-150">
+          {options.length > 5 && (
+            <div className="flex items-center border-b border-slate-100 bg-slate-50/80 px-3 py-1.5 sticky top-0 z-10 backdrop-blur-xs">
+              <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+              <input
+                type="text"
+                ref={searchInputRef}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search options..."
+                className="h-7 w-full bg-transparent px-2 text-xs text-slate-800 placeholder:text-slate-400 outline-none font-medium"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="rounded-md p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          )}
+          <div className="flex-1 overflow-y-auto p-1 space-y-0.5 max-h-56">
             {filteredOptions.length > 0 ? (
               filteredOptions.map((opt) => {
-                const isSelected = opt.value === value;
+                const isSelected =
+                  opt.value === (value !== undefined && value !== null ? String(value) : "") ||
+                  opt.value === value;
                 return (
                   <button
                     key={opt.value}
                     type="button"
                     onClick={() => handleSelect(opt.value)}
                     className={cn(
-                      "flex w-full items-center px-3 py-2 text-left text-sm transition-colors hover:bg-slate-50",
+                      "flex w-full items-center justify-between px-3 py-2 text-left text-xs sm:text-sm rounded-lg transition-all cursor-pointer",
                       isSelected
-                        ? "bg-blue-50 font-medium text-blue-700"
-                        : "text-slate-700"
+                        ? "bg-blue-50/90 font-bold text-blue-700 shadow-2xs"
+                        : "text-slate-700 font-medium hover:bg-slate-50 hover:text-slate-900"
                     )}
                   >
                     <span className="truncate">{opt.label}</span>
+                    {isSelected && <Check className="h-4 w-4 text-blue-600 shrink-0 ml-2" />}
                   </button>
                 );
               })
             ) : (
-              <div className="px-3 py-2.5 text-center text-xs text-slate-400">
-                No options found
+              <div className="px-3 py-4 text-center text-xs text-slate-400 font-medium">
+                No matching options found
               </div>
             )}
           </div>
