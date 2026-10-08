@@ -2061,9 +2061,13 @@ export const fetchLoanTypesByProduct = async (productId: number | string): Promi
   return request<any>(`/loan-types/${productId}`, { method: "GET" });
 };
 
-export const getMasterValues = async (params: { group?: string; call_type?: string }): Promise<any> => {
+export const getMasterValues = async (params: { group?: string; call_type?: string; employment_type?: string }): Promise<any> => {
   const group = params.group || params.call_type;
-  return request<any>(`/master-values/dropdown?call_type=${encodeURIComponent(group || '')}`, { method: "GET" });
+  let url = `/master-values/dropdown?call_type=${encodeURIComponent(group || '')}`;
+  if (params.employment_type) {
+    url += `&employment_type=${encodeURIComponent(params.employment_type)}`;
+  }
+  return request<any>(url, { method: "GET" });
 };
 
 export const verifyPanAdvance = async (pan: string): Promise<any> => {

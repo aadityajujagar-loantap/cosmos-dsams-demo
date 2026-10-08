@@ -23,8 +23,17 @@ import {
 import { fetchPublicTokenInfo, submitCustomerLeadPublic, sendLeadOtp, verifyLeadOtp, LeadData } from '@/apis/lead';
 import { fetchLoanProducts, fetchLoanTypesByProduct, getMasterValues, verifyPanAdvance, fetchBranchesDropdown } from '@/apis/admin';
 import { getLoanPurposeOptionsFromApi } from '@/lib/loan-purpose';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, parseDobToIso, calculateAgeFromDob } from '@/lib/utils';
 import { withBasePath } from '@/lib/base-path';
+import {
+  Button,
+  Card,
+  CardContent,
+  Input,
+  Label,
+  Select,
+  Textarea,
+} from '@/components/ui/primitives';
 
 export default function CustomerSelfFillPage() {
   const params = useParams();
@@ -60,6 +69,7 @@ export default function CustomerSelfFillPage() {
   const [employmentTypes, setEmploymentTypes] = useState<any[]>([]);
   const [occupationTypes, setOccupationTypes] = useState<any[]>([]);
   const [loanPurposes, setLoanPurposes] = useState<any[]>([]);
+  const [constitutions, setConstitutions] = useState<any[]>([]);
   const [lockedProductId, setLockedProductId] = useState<number | null>(null);
 
   // Form State
@@ -107,7 +117,7 @@ export default function CustomerSelfFillPage() {
     const init = async () => {
       try {
         setLoading(true);
-        const [tokenRes, prodRes, branchRes, titleRes, genderRes, empRes, occRes, purpRes] = await Promise.all([
+        const [tokenRes, prodRes, branchRes, titleRes, genderRes, empRes, occRes, purpRes, constRes] = await Promise.all([
           fetchPublicTokenInfo(token),
           fetchLoanProducts(),
           fetchBranchesDropdown(),
@@ -116,7 +126,11 @@ export default function CustomerSelfFillPage() {
           getMasterValues({ group: 'employment_type' }),
           getMasterValues({ group: 'occupation_type' }),
           getMasterValues({ group: 'loan_purpose' }),
+          getMasterValues({ group: 'constitution' }),
         ]);
+
+        const constItems = constRes?.data || constRes || [];
+        setConstitutions(Array.isArray(constItems) ? constItems : []);
 
         if (tokenRes?.status === 'success') {
           setTokenInfo(tokenRes.data);
@@ -175,24 +189,48 @@ export default function CustomerSelfFillPage() {
     }
   };
 
+  useEffect(() => {
+    const empType = formData.employment_type;
+    if (!empType) {
+      setOccupationTypes([]);
+      if (formData.occupation_type) {
+        setFormData((prev) => ({ ...prev, occupation_type: '' }));
+      }
+      return;
+    }
+
+    getMasterValues({ group: 'occupation_type', employment_type: empType })
+      .then((res) => {
+        const list = Array.isArray(res?.data || res) ? (res?.data || res) : [];
+        setOccupationTypes(list);
+        setFormData((prev) => {
+          if (!prev.occupation_type) return prev;
+          const match = list.some((item: any) => item.meta_key === prev.occupation_type || item.meta_value === prev.occupation_type);
+          return match ? prev : { ...prev, occupation_type: '' };
+        });
+      })
+      .catch((err) => {
+        console.error('Failed to load mapped occupation types', err);
+      });
+  }, [formData.employment_type]);
+
   const handleChange = (field: string, value: any) => {
     setFormData((prev) => {
       const updated = { ...prev, [field]: value };
-      if (field === 'dob' && value) {
-        const birthDate = new Date(value);
-        if (!isNaN(birthDate.getTime())) {
-          const today = new Date();
-          let calculatedAge = today.getFullYear() - birthDate.getFullYear();
-          const monthDiff = today.getMonth() - birthDate.getMonth();
-          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-            calculatedAge--;
-          }
-          updated.age = calculatedAge;
-        }
+      if (field === 'dob') {
+        updated.age = calculateAgeFromDob(value);
       }
       return updated;
     });
   };
+
+  useEffect(() => {
+    const computedAge = calculateAgeFromDob(formData.dob);
+    setFormData((prev) => {
+      if (prev.age === computedAge) return prev;
+      return { ...prev, age: computedAge };
+    });
+  }, [formData.dob]);
 
   // PAN Verification Handler
   const handleVerifyPan = async () => {
@@ -222,22 +260,11 @@ export default function CustomerSelfFillPage() {
 
         // DOB / DOI formatting
         let formattedDate = '';
-        let calculatedAge = formData.age;
         const rawDob = detailsData.dobOrDoi || detailsData.dob || detailsData.doi;
         if (rawDob) {
-          const d = new Date(rawDob);
-          if (!isNaN(d.getTime())) {
-            formattedDate = d.toISOString().split('T')[0];
-            const today = new Date();
-            calculatedAge = today.getFullYear() - d.getFullYear();
-            const m = today.getMonth() - d.getMonth();
-            if (m < 0 || (m === 0 && today.getDate() < d.getDate())) {
-              calculatedAge--;
-            }
-          } else {
-            formattedDate = rawDob;
-          }
+          formattedDate = parseDobToIso(String(rawDob));
         }
+        const calculatedAge = calculateAgeFromDob(formattedDate);
 
         let genderVal = (detailsData.gender || 'MALE').toUpperCase();
         if (genderVal.startsWith('M')) genderVal = 'MALE';
@@ -267,7 +294,7 @@ export default function CustomerSelfFillPage() {
           entity_name: fullName || prev.entity_name,
           dob: formattedDate || prev.dob,
           doi: formattedDate || prev.doi,
-          age: calculatedAge,
+          age: calculatedAge ?? calculateAgeFromDob(prev.dob),
           gender: genderVal || prev.gender,
           address: fullAddress || prev.address,
           business_address: fullAddress || prev.business_address,
@@ -438,31 +465,28 @@ export default function CustomerSelfFillPage() {
               unoptimized
             />
           </div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-            <ShieldCheck className="h-3.5 w-3.5" /> 256-Bit SSL Encrypted
-          </div>
+        
         </div>
 
-        <div className="max-w-lg w-full bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-2xl space-y-6 mt-16">
-          <div className="w-16 h-16 bg-gradient-to-tr from-emerald-600 to-teal-500 text-white rounded-2xl flex items-center justify-center mx-auto shadow-lg shadow-emerald-600/20">
+        <div className="max-w-lg w-full bg-white border border-slate-200 rounded-2xl p-8 text-center shadow-lg space-y-6 mt-16">
+          <div className="w-16 h-16 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
             <CheckCircle2 className="h-9 w-9" />
           </div>
 
           <div>
-            <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] uppercase font-bold px-3.5 py-1 rounded-full tracking-wider">
+            <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] uppercase font-bold px-3 py-1 rounded-full tracking-wider">
               Application Submitted
             </span>
-            <h2 className="text-2xl font-black text-slate-900 mt-3">Loan Request Registered</h2>
-            <p className="text-slate-600 text-xs mt-2">
+            <p className="text-slate-600 text-xs mt-4">
               Thank you! Your loan application has been registered via referral partner{' '}
-              <span className="font-bold text-indigo-700">{tokenInfo?.dsa?.name || 'DSA Partner'}</span>.
+              <span className="font-bold text-blue-700">{tokenInfo?.dsa?.name || 'DSA Partner'}</span>.
             </p>
           </div>
 
-          <div className="bg-slate-50 rounded-2xl p-4 text-left border border-slate-200 space-y-3 font-mono text-xs shadow-xs">
+          <div className="bg-slate-50 rounded-xl p-4 text-left border border-slate-200 space-y-3 font-mono text-xs">
             <div className="flex justify-between items-center border-b border-slate-200 pb-2">
               <span className="text-slate-500 font-sans">Application Reference</span>
-              <span className="text-indigo-700 font-bold tracking-wider">{success.application_id || success.lead_uuid}</span>
+              <span className="text-blue-700 font-bold tracking-wider">{success.application_id || success.lead_uuid}</span>
             </div>
             <div className="flex justify-between items-center border-b border-slate-200 pb-2">
               <span className="text-slate-500 font-sans">Status</span>
@@ -475,48 +499,35 @@ export default function CustomerSelfFillPage() {
               <span className="text-slate-700 font-sans text-[11px]">{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
             </div>
           </div>
-
-          <div className="bg-indigo-50/60 p-4 rounded-2xl border border-indigo-100 text-left space-y-2 text-xs">
-            <p className="font-bold text-slate-900 flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-indigo-600" />
-              What Happens Next?
-            </p>
-            <ul className="text-slate-600 text-[11px] space-y-1.5 list-disc list-inside">
-              <li>Our Bank Processing Team will review your application details.</li>
-              <li>You will receive SMS/E-mail updates on your registered mobile number.</li>
-            </ul>
-          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-16">
+    <div className="min-h-screen bg-slate-50/60 text-slate-900 font-sans pb-16">
       
       {/* Cosmos Official Brand Top Bar */}
-      <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs px-4 sm:px-8 py-3.5">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs px-4 sm:px-8 py-3">
+        <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Image
               src={withBasePath('/logo-dsasm-cosmos.png')}
               alt="Cosmos Co-operative Bank Logo"
               width={708}
               height={118}
-              className="h-9 sm:h-10 w-auto object-contain"
+              className="h-8 sm:h-9 w-auto object-contain"
               priority
               unoptimized
             />
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200">
-              <Lock className="h-3.5 w-3.5" /> 256-Bit SSL Encrypted
-            </div>
+            
             {tokenInfo?.dsa && (
               <div className="text-right">
                 <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider">Channel Code</span>
-                <span className="font-mono text-xs font-extrabold text-indigo-900 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-md">
+                <span className="font-mono text-xs font-extrabold text-blue-900 bg-blue-50 border border-blue-100 px-2.5 py-0.5 rounded-md">
                   {tokenInfo.dsa.dsa_code || 'DSA_PARTNER'}
                 </span>
               </div>
@@ -525,785 +536,861 @@ export default function CustomerSelfFillPage() {
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto pt-6 sm:pt-8 px-4 sm:px-6">
+      <main className="max-w-5xl mx-auto pt-3 sm:pt-4 px-4 sm:px-6">
         
-        {/* Hero Banner Card (Matches Indigo Theme) */}
-        <div className="bg-gradient-to-tr from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden mb-6">
-          <div className="absolute -top-24 -left-24 w-72 h-72 bg-indigo-600/30 rounded-full blur-3xl" />
-          <div className="absolute -bottom-24 -right-24 w-72 h-72 bg-sky-500/20 rounded-full blur-3xl" />
-
-          <div className="relative z-10 space-y-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="bg-white/10 border border-white/20 backdrop-blur-md text-white font-bold text-[10px] px-3 py-1 rounded-full uppercase tracking-wider">
-                Official DSA Lead Portal
-              </span>
-              <span className="text-xs text-slate-300">
-                Referred by Partner: <strong className="text-sky-300">{tokenInfo?.dsa?.name || 'Empowered DSA Partner'}</strong>
-              </span>
-            </div>
-
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight leading-snug">
-              Customer Loan <span className="text-sky-300">Application Portal</span>
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
-              Complete your digital loan request in simple steps. Enjoy instant identity auto-fill via official PAN verification and direct Cosmos Bank processing.
-            </p>
-
-            <div className="flex flex-wrap items-center gap-4 pt-2 text-[11px] text-slate-300 border-t border-slate-800/80">
-              <div className="flex items-center gap-1.5 font-medium">
-                <CheckCircle className="h-3.5 w-3.5 text-sky-400" /> Instant PAN Auto-Fill
-              </div>
-              <div className="flex items-center gap-1.5 font-medium">
-                <CheckCircle className="h-3.5 w-3.5 text-emerald-400" /> Mobile OTP Verification
-              </div>
-              <div className="flex items-center gap-1.5 font-medium">
-                <CheckCircle className="h-3.5 w-3.5 text-indigo-400" /> Direct Bank Branch Routing
-              </div>
-            </div>
-          </div>
+        {/* Page Title Header */}
+        <div className="mb-3 text-center">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
+            Customer Loan <span className="text-blue-600">Application</span>
+          </h1>
         </div>
 
         {/* Global Error Banner */}
         {error && (
-          <div className="mb-6 bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-2xl text-xs font-semibold flex items-center gap-3 shadow-xs">
+          <div className="mb-6 bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl text-xs font-semibold flex items-center gap-3 shadow-xs">
             <AlertTriangle className="h-5 w-5 text-rose-600 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
         {/* Main Application Form Container */}
-        <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-10 shadow-xl space-y-8">
-          <form onSubmit={handleSubmit} className="space-y-8">
-            
-            {/* SECTION 1: Branch Location & Constitution */}
-            <div className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xs">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100">
-                    <Building2 className="h-4 w-4" />
+        <Card className="border-slate-200 shadow-sm bg-white rounded-2xl overflow-hidden">
+          <CardContent className="p-6 sm:p-8">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              
+              {/* SECTION 1: Branch Location & Constitution */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-blue-50 text-blue-600 rounded-xl border border-blue-100 flex items-center justify-center">
+                      <Building2 className="h-4 w-4" />
+                    </div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                      1. Preferred Branch Location & Constitution
+                    </h3>
                   </div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                    1. Preferred Branch Location & Constitution
-                  </h3>
-                </div>
-                <span className="text-[10px] text-slate-400 font-bold uppercase">Step 1 of 5</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">
-                    Select Preferred Branch *
-                  </label>
-                  <select
-                    required
-                    value={formData.Branch_id || ''}
-                    onChange={(e) => handleChange('Branch_id', e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 transition-all font-medium shadow-xs"
-                  >
-                    <option value="">-- Select Preferred Cosmos Branch --</option>
-                    {branches.map((b) => (
-                      <option key={b.branch_code || b.id} value={b.branch_code || b.id}>
-                        {b.branch_name || b.name} ({b.branch_code || b.code})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">
-                    Constitution Type *
-                  </label>
-                  <select
-                    required
-                    value={formData.constitution || 'Individual'}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      const isInd = (val === 'Individual' || val === 'Individual Applicant');
-                      setConstitution(isInd ? 'Individual' : (val as any));
-                      handleChange('constitution', val);
-                    }}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 transition-all font-medium shadow-xs"
-                  >
-                    <option value="Individual">Individual Applicant</option>
-                    <option value="Proprietory">Proprietory Firm</option>
-                    <option value="Partnership">Partnership Firm</option>
-                    <option value="Limited Liability Partnership">Limited Liability Partnership (LLP)</option>
-                    <option value="Pvt. Ltd. Company">Pvt. Ltd. Company</option>
-                    <option value="Public Ltd. Company">Public Ltd. Company</option>
-                    <option value="Charitable Trust">Charitable Trust</option>
-                    <option value="Co-op. Society">Co-op. Society</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Pincode *</label>
-                  <input
-                    type="text"
-                    required
-                    maxLength={6}
-                    placeholder="e.g. 400001"
-                    value={formData.pincode || ''}
-                    onChange={(e) => handleChange('pincode', e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 font-mono focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 transition-all shadow-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">City *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="City"
-                    value={formData.city || ''}
-                    onChange={(e) => handleChange('city', e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 transition-all font-medium shadow-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">State *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="State"
-                    value={formData.state || ''}
-                    onChange={(e) => handleChange('state', e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 transition-all font-medium shadow-xs"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* SECTION 2: Identity & PAN Verification */}
-            <div className="bg-emerald-50/50 border border-emerald-200 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xs">
-              <div className="flex items-center justify-between border-b border-emerald-200/80 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2 bg-emerald-100 text-emerald-700 rounded-xl border border-emerald-200">
-                    <ShieldCheck className="h-4 w-4" />
-                  </div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-950">
-                    2. Instant Identity Verification (PAN API)
-                  </h3>
-                </div>
-                {panVerified && (
-                  <span className="bg-emerald-600 text-white font-bold text-[10px] px-2.5 py-0.5 rounded-full shadow-xs">
-                    ✓ Verified
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider bg-white px-2 py-0.5 rounded border border-slate-200">
+                    Step 1 of 5
                   </span>
-                )}
-              </div>
-
-              <div className="space-y-3">
-                <label className="block text-slate-700 font-bold text-xs uppercase tracking-wider">
-                  {constitution === 'Individual' ? 'Individual PAN Number *' : 'Entity PAN Number *'}
-                </label>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <input
-                    type="text"
-                    required
-                    maxLength={10}
-                    placeholder="ABCDE1234F"
-                    value={formData.pan_no || ''}
-                    onChange={(e) => {
-                      handleChange('pan_no', e.target.value.toUpperCase());
-                      setPanVerified(false);
-                      setPanMessage(null);
-                    }}
-                    className="flex-1 bg-white border border-emerald-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-mono font-bold shadow-xs"
-                  />
-                  <button
-                    type="button"
-                    disabled={verifyingPan || (formData.pan_no || '').length !== 10}
-                    onClick={handleVerifyPan}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-md shadow-indigo-600/20 flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    {verifyingPan ? (
-                      <>
-                        <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Verifying...
-                      </>
-                    ) : (
-                      <>
-                        <ShieldCheck className="h-3.5 w-3.5" /> Verify & Auto-Fill
-                      </>
-                    )}
-                  </button>
                 </div>
 
-                {panMessage && (
-                  <p className={`text-xs p-3 rounded-xl border font-medium ${panVerified ? 'bg-emerald-100/70 border-emerald-300 text-emerald-900' : 'bg-amber-100/70 border-amber-300 text-amber-900'}`}>
-                    {panMessage}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* SECTION 3: Mobile OTP Authentication */}
-            <div className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xs">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100">
-                    <Smartphone className="h-4 w-4" />
-                  </div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                    3. Mobile OTP Authentication
-                  </h3>
-                </div>
-                <span className="text-[10px] text-slate-400 font-bold uppercase">Step 3 of 5</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Mobile Number *</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="flex flex-col">
+                    <Label htmlFor="branch_select" className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Select Preferred Branch *
+                    </Label>
+                    <Select
+                      id="branch_select"
                       required
-                      maxLength={10}
-                      placeholder="10-digit mobile"
-                      disabled={otpVerified}
-                      value={formData.mobile || ''}
+                      value={formData.Branch_id || ''}
+                      onChange={(e) => handleChange('Branch_id', e.target.value)}
+                      placeholder="-- Select Preferred Cosmos Branch --"
+                    >
+                      <option value="">-- Select Preferred Cosmos Branch --</option>
+                      {branches.map((b) => (
+                        <option key={b.branch_code || b.id} value={b.branch_code || b.id}>
+                          {b.branch_name || b.name} ({b.branch_code || b.code})
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+
+                  <div className="flex flex-col">
+                    <Label htmlFor="constitution_select" className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Constitution Type *
+                    </Label>
+                    <Select
+                      id="constitution_select"
+                      required
+                      value={formData.constitution || 'Individual'}
                       onChange={(e) => {
-                        handleChange('mobile', e.target.value);
-                        setOtpSent(false);
-                        setOtpVerified(false);
+                        const val = e.target.value;
+                        const isInd = (val === 'Individual' || val === 'Individual Applicant');
+                        setConstitution(isInd ? 'Individual' : (val as any));
+                        handleChange('constitution', val);
                       }}
-                      className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 font-mono focus:outline-none focus:border-indigo-600 shadow-xs disabled:opacity-60"
-                    />
-                    {!otpVerified && (
-                      <button
-                        type="button"
-                        disabled={sendingOtp || (formData.mobile || '').length !== 10}
-                        onClick={handleSendOtp}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-md shadow-indigo-600/20 disabled:opacity-50"
-                      >
-                        {sendingOtp ? 'Sending...' : 'Send OTP'}
-                      </button>
-                    )}
+                      placeholder="-- Select Constitution Type --"
+                    >
+                      {constitutions.length > 0 ? (
+                        constitutions.map((c: any) => (
+                          <option key={c.meta_key || c.id} value={c.meta_key || c.meta_value}>
+                            {c.meta_value}
+                          </option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="Individual">Individual</option>
+                          <option value="Proprietory">Proprietory Firm</option>
+                          <option value="Partnership">Partnership Firm</option>
+                          <option value="Limited Liability Partnership">Limited Liability Partnership (LLP)</option>
+                          <option value="Pvt. Ltd. Company">Pvt. Ltd. Company</option>
+                          <option value="Public Ltd. Company">Public Ltd. Company</option>
+                          <option value="Charitable Trust">Charitable Trust</option>
+                          <option value="Co-op. Society">Co-op. Society</option>
+                        </>
+                      )}
+                    </Select>
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">E-Mail Address *</label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="email@domain.com"
-                    value={formData.email || ''}
-                    onChange={(e) => handleChange('email', e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 transition-all font-medium shadow-xs"
-                  />
-                </div>
-              </div>
-
-              {/* OTP Code Entry Card */}
-              {otpSent && !otpVerified && (
-                <div className="border-t border-slate-200 pt-4 space-y-3">
-                  <div className="flex flex-col sm:flex-row items-center gap-3">
-                    <input
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="flex flex-col">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Pincode *
+                    </Label>
+                    <Input
                       type="text"
+                      required
                       maxLength={6}
-                      placeholder="Enter 6-digit OTP (e.g. 123456)"
-                      value={otpCode}
-                      onChange={(e) => setOtpCode(e.target.value)}
-                      className="w-full sm:w-64 bg-white border border-indigo-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 font-mono tracking-widest text-center focus:outline-none focus:border-indigo-600 font-bold shadow-xs"
+                      placeholder="e.g. 400001"
+                      value={formData.pincode || ''}
+                      onChange={(e) => handleChange('pincode', e.target.value)}
+                      className="h-10 text-sm font-mono"
                     />
-                    <button
-                      type="button"
-                      disabled={verifyingOtp || otpCode.length !== 6}
-                      onClick={handleVerifyOtp}
-                      className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-6 py-2.5 rounded-xl transition-all shadow-md shadow-emerald-600/20 disabled:opacity-50"
-                    >
-                      {verifyingOtp ? 'Verifying...' : 'Verify OTP'}
-                    </button>
+                  </div>
+                  <div className="flex flex-col">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      City *
+                    </Label>
+                    <Input
+                      type="text"
+                      required
+                      placeholder="City"
+                      value={formData.city || ''}
+                      onChange={(e) => handleChange('city', e.target.value)}
+                      className="h-10 text-sm"
+                    />
+                  </div>
+                  <div className="flex flex-col">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      State *
+                    </Label>
+                    <Input
+                      type="text"
+                      required
+                      placeholder="State"
+                      value={formData.state || ''}
+                      onChange={(e) => handleChange('state', e.target.value)}
+                      className="h-10 text-sm"
+                    />
                   </div>
                 </div>
-              )}
+              </div>
 
-              {otpVerified && (
-                <div className="bg-emerald-100/70 border border-emerald-300 text-emerald-900 p-3 rounded-xl text-xs font-bold flex items-center gap-2">
-                  <Check className="h-4 w-4 text-emerald-700" />
-                  <span>Mobile Number Verified Successfully</span>
-                </div>
-              )}
-
-              {otpMessage && !otpVerified && (
-                <p className="text-xs text-amber-900 bg-amber-100/70 border border-amber-300 p-2.5 rounded-xl font-medium">
-                  {otpMessage}
-                </p>
-              )}
-            </div>
-
-            {/* SECTION 4: Applicant Details (Individual vs Non-Individual) */}
-            {constitution === 'Individual' ? (
-              <div className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xs">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              {/* SECTION 2: Identity & PAN Verification */}
+              <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/20 p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-emerald-200/60 pb-3">
                   <div className="flex items-center gap-2.5">
-                    <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100">
-                      <User className="h-4 w-4" />
+                    <div className="p-2 bg-emerald-100 text-emerald-700 rounded-xl border border-emerald-200 flex items-center justify-center">
+                      <ShieldCheck className="h-4 w-4" />
                     </div>
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                      4. Personal & Income Profile
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-950">
+                      2. Instant Identity Verification (PAN API)
                     </h3>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">Step 4 of 5</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Title *</label>
-                    <select
-                      value={formData.title || 'MR'}
-                      onChange={(e) => handleChange('title', e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium shadow-xs"
-                    >
-                      {titles.length > 0 ? (
-                        titles.map((t: any) => (
-                          <option key={t.meta_key || t.id} value={t.meta_key || t.meta_value}>
-                            {t.meta_value}
-                          </option>
-                        ))
-                      ) : (
-                        <>
-                          <option value="MR">Mr.</option>
-                          <option value="MRS">Mrs.</option>
-                          <option value="MS">Ms.</option>
-                          <option value="DR">Dr.</option>
-                        </>
-                      )}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">First Name *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="First Name"
-                      value={formData.first_name || ''}
-                      onChange={(e) => handleChange('first_name', e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium shadow-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Middle Name</label>
-                    <input
-                      type="text"
-                      placeholder="Middle Name"
-                      value={formData.middle_name || ''}
-                      onChange={(e) => handleChange('middle_name', e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium shadow-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Last Name *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Last Name"
-                      value={formData.last_name || ''}
-                      onChange={(e) => handleChange('last_name', e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium shadow-xs"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Gender *</label>
-                    <select
-                      value={formData.gender || 'MALE'}
-                      onChange={(e) => handleChange('gender', e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium shadow-xs"
-                    >
-                      {genders.length > 0 ? (
-                        genders.map((g: any) => (
-                          <option key={g.meta_key || g.id} value={g.meta_key || g.meta_value}>
-                            {g.meta_value}
-                          </option>
-                        ))
-                      ) : (
-                        <>
-                          <option value="MALE">Male</option>
-                          <option value="FEMALE">Female</option>
-                          <option value="TRANSGENDER">Transgender</option>
-                        </>
-                      )}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Date of Birth (DOB) *</label>
-                    <input
-                      type="date"
-                      required
-                      value={formData.dob || ''}
-                      onChange={(e) => handleChange('dob', e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium shadow-xs"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Calculated Age</label>
-                    <div className="w-full bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-indigo-900 font-bold font-mono flex items-center justify-between">
-                      <span>{formData.age !== undefined ? `${formData.age} Years` : '--'}</span>
-                      {formData.age !== undefined && (
-                        <span className="bg-indigo-100 text-indigo-800 text-[10px] px-2 py-0.5 rounded font-bold">Auto</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Residential Address *</label>
-                  <textarea
-                    rows={2}
-                    required
-                    value={formData.address || ''}
-                    onChange={(e) => handleChange('address', e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium shadow-xs"
-                    placeholder="Full residence address..."
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Employment Type *</label>
-                    <select
-                      required
-                      value={formData.employment_type || ''}
-                      onChange={(e) => handleChange('employment_type', e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium shadow-xs"
-                    >
-                      <option value="">-- Select Employment Type --</option>
-                      {employmentTypes.map((item: any) => (
-                        <option key={item.meta_key || item.id} value={item.meta_key || item.meta_value}>
-                          {item.meta_value}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Occupation Type *</label>
-                    <select
-                      required
-                      value={formData.occupation_type || ''}
-                      onChange={(e) => handleChange('occupation_type', e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium shadow-xs"
-                    >
-                      <option value="">-- Select Occupation Type --</option>
-                      {occupationTypes.map((item: any) => (
-                        <option key={item.meta_key || item.id} value={item.meta_key || item.meta_value}>
-                          {item.meta_value}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Employer / Business Entity Name *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Company / Employer name"
-                    value={formData.employer_business_name || ''}
-                    onChange={(e) => handleChange('employer_business_name', e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium shadow-xs"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Avg Gross Monthly Income (₹) *</label>
-                    <input
-                      type="number"
-                      required
-                      min={0}
-                      value={formData.avg_gross_monthly_income || ''}
-                      onChange={(e) => handleChange('avg_gross_monthly_income', e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-mono font-bold shadow-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Avg Net Monthly Income (₹) *</label>
-                    <input
-                      type="number"
-                      required
-                      min={0}
-                      value={formData.avg_net_monthly_income || ''}
-                      onChange={(e) => handleChange('avg_net_monthly_income', e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-mono font-bold shadow-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Monthly Obligation (₹) *</label>
-                    <input
-                      type="number"
-                      required
-                      min={0}
-                      value={formData.existing_monthly_repayment_obligation || ''}
-                      onChange={(e) => handleChange('existing_monthly_repayment_obligation', e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-mono font-bold shadow-xs"
-                    />
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xs">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100">
-                      <Building className="h-4 w-4" />
-                    </div>
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                      4. Entity Profile (Non-Individual)
-                    </h3>
-                  </div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">Step 4 of 5</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Entity Name *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Registered Legal Entity Name"
-                      value={formData.entity_name || ''}
-                      onChange={(e) => handleChange('entity_name', e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium shadow-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Date of Incorporation (DOI) *</label>
-                    <input
-                      type="date"
-                      required
-                      value={formData.doi || ''}
-                      onChange={(e) => handleChange('doi', e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium shadow-xs"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Business Address *</label>
-                  <textarea
-                    rows={2}
-                    required
-                    placeholder="Full office address..."
-                    value={formData.business_address || ''}
-                    onChange={(e) => handleChange('business_address', e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium shadow-xs"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Proprietor / Partner / Director Name *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Key promoter name"
-                      value={formData.proprietor_partner_director_name || ''}
-                      onChange={(e) => handleChange('proprietor_partner_director_name', e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium shadow-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Annual Gross Turnover Last FY (₹) *</label>
-                    <input
-                      type="number"
-                      required
-                      min={0}
-                      value={formData.annual_gross_turnover_last_fy || ''}
-                      onChange={(e) => handleChange('annual_gross_turnover_last_fy', e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-mono font-bold shadow-xs"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Avg Annual Gross Income (₹) *</label>
-                    <input
-                      type="number"
-                      required
-                      min={0}
-                      value={formData.avg_annual_gross_income || ''}
-                      onChange={(e) => handleChange('avg_annual_gross_income', e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-mono font-bold shadow-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Avg Annual Net Income (₹) *</label>
-                    <input
-                      type="number"
-                      required
-                      min={0}
-                      value={formData.avg_annual_net_income || ''}
-                      onChange={(e) => handleChange('avg_annual_net_income', e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-mono font-bold shadow-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Monthly Obligation (₹) *</label>
-                    <input
-                      type="number"
-                      required
-                      min={0}
-                      value={formData.existing_monthly_repayment_obligation || ''}
-                      onChange={(e) => handleChange('existing_monthly_repayment_obligation', e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-mono font-bold shadow-xs"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* SECTION 5: Loan Requirements */}
-            <div className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xs">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100">
-                    <Banknote className="h-4 w-4" />
-                  </div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                    5. Loan Requirement & Product Scheme
-                  </h3>
-                </div>
-                <span className="text-[10px] text-slate-400 font-bold uppercase">Step 5 of 5</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-slate-700 font-bold uppercase tracking-wider text-[11px]">Loan Product *</label>
-                    {lockedProductId && (
-                      <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded flex items-center gap-1">
-                        <Lock className="w-3 h-3" /> Pre-selected
-                      </span>
-                    )}
-                  </div>
-                  <select
-                    required
-                    disabled={Boolean(lockedProductId)}
-                    value={formData.loan_product_id || ''}
-                    onChange={(e) => handleProductChange(Number(e.target.value))}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 font-medium shadow-xs disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed"
-                  >
-                    <option value="">-- Select Loan Product --</option>
-                    {products
-                      .filter((p) => {
-                        if (constitution !== 'Individual') {
-                          const nameLower = (p.name || p.product_name || '').toLowerCase();
-                          if (nameLower.includes('home loan') || nameLower.includes('education loan')) {
-                            return false;
-                          }
-                        }
-                        return true;
-                      })
-                      .map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name || p.product_name}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Loan Type *</label>
-                  <select
-                    required
-                    disabled={!formData.loan_product_id}
-                    value={formData.loan_type_id || ''}
-                    onChange={(e) => handleChange('loan_type_id', Number(e.target.value))}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 disabled:opacity-50 font-medium shadow-xs"
-                  >
-                    <option value="">-- Select Loan Type --</option>
-                    {loanTypes.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name || t.type_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Loan Purpose *</label>
-                  <select
-                    required
-                    disabled={!formData.loan_product_id}
-                    value={formData.loan_purpose || ''}
-                    onChange={(e) => handleChange('loan_purpose', e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 disabled:opacity-50 font-medium shadow-xs"
-                  >
-                    <option value="">-- Select Purpose --</option>
-                    {getLoanPurposeOptionsFromApi(
-                      loanPurposes,
-                      products.find((p) => Number(p.id) === Number(formData.loan_product_id))?.name ||
-                      products.find((p) => Number(p.id) === Number(formData.loan_product_id))?.product_name,
-                      loanTypes.find((t) => Number(t.id) === Number(formData.loan_type_id))?.name ||
-                      loanTypes.find((t) => Number(t.id) === Number(formData.loan_type_id))?.type_name
-                    ).map((purp, idx) => (
-                      <option key={idx} value={purp}>{purp}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">
-                    Loan Amount Required (₹) *
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min={1000}
-                    placeholder="e.g. 500000"
-                    value={formData.loan_amount_required || ''}
-                    onChange={(e) => handleChange('loan_amount_required', e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-indigo-600 font-mono font-bold shadow-xs"
-                  />
-                  {formData.loan_amount_required && Number(formData.loan_amount_required) > 0 && (
-                    <p className="text-[11px] text-indigo-700 font-mono mt-1 font-bold">
-                      Amount: {formatCurrency(Number(formData.loan_amount_required))}
-                    </p>
+                  {panVerified ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-300">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Verified
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider bg-white px-2 py-0.5 rounded border border-slate-200">
+                      Step 2 of 5
+                    </span>
                   )}
                 </div>
 
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1.5 uppercase tracking-wider text-[11px]">Loan Period (Months) *</label>
-                  <input
-                    type="number"
-                    required
-                    min={1}
-                    max={360}
-                    value={formData.loan_period_months || 12}
-                    onChange={(e) => handleChange('loan_period_months', e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-indigo-600 font-mono font-bold shadow-xs"
-                  />
+                <div className="space-y-3">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                    {constitution === 'Individual' ? 'Individual PAN Number *' : 'Entity PAN Number *'}
+                  </Label>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Input
+                      type="text"
+                      required
+                      maxLength={10}
+                      placeholder="ABCDE1234F"
+                      value={formData.pan_no || ''}
+                      onChange={(e) => {
+                        handleChange('pan_no', e.target.value.toUpperCase());
+                        setPanVerified(false);
+                        setPanMessage(null);
+                      }}
+                      className="flex-1 h-10 uppercase tracking-wider font-mono font-bold text-sm bg-white border-emerald-300 focus:border-emerald-600"
+                    />
+                    <Button
+                      type="button"
+                      disabled={verifyingPan || (formData.pan_no || '').length !== 10}
+                      onClick={handleVerifyPan}
+                      className="h-10 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-5 rounded-lg transition-all shadow-sm flex items-center justify-center gap-2 shrink-0 disabled:opacity-50"
+                    >
+                      {verifyingPan ? (
+                        <>
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Verifying...
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck className="h-3.5 w-3.5" /> Verify & Auto-Fill
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  {panMessage && (
+                    <div className={`text-xs p-3 rounded-xl border font-medium flex items-center gap-2 ${panVerified ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-200 text-amber-900'}`}>
+                      {panVerified ? <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" /> : <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />}
+                      <span>{panMessage}</span>
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
 
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={submitting || !otpVerified}
-              className="w-full bg-gradient-to-r from-indigo-600 via-indigo-700 to-blue-700 hover:from-indigo-500 hover:to-blue-600 text-white font-extrabold text-sm py-4 px-6 rounded-2xl shadow-lg shadow-indigo-600/25 transition-all hover:scale-[1.005] active:scale-[0.995] flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-            >
-              {submitting ? (
-                <>
-                  <RefreshCw className="h-4 w-4 animate-spin" /> Submitting Application...
-                </>
+              {/* SECTION 3: Mobile OTP Authentication */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-purple-50 text-purple-600 rounded-xl border border-purple-100 flex items-center justify-center">
+                      <Smartphone className="h-4 w-4" />
+                    </div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                      3. Mobile OTP Authentication
+                    </h3>
+                  </div>
+                  {otpVerified ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-300">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Verified
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider bg-white px-2 py-0.5 rounded border border-slate-200">
+                      Step 3 of 5
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="flex flex-col">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Mobile Number *
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="text"
+                        required
+                        maxLength={10}
+                        placeholder="10-digit mobile"
+                        disabled={otpVerified}
+                        value={formData.mobile || ''}
+                        onChange={(e) => {
+                          handleChange('mobile', e.target.value.replace(/\D/g, ''));
+                          setOtpSent(false);
+                          setOtpVerified(false);
+                        }}
+                        className="flex-1 h-10 text-sm font-mono"
+                      />
+                      {!otpVerified && (
+                        <Button
+                          type="button"
+                          disabled={sendingOtp || (formData.mobile || '').length !== 10}
+                          onClick={handleSendOtp}
+                          className="h-10 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 rounded-lg shadow-sm shrink-0 disabled:opacity-50"
+                        >
+                          {sendingOtp ? 'Sending...' : 'Send OTP'}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      E-Mail Address *
+                    </Label>
+                    <Input
+                      type="email"
+                      required
+                      placeholder="email@domain.com"
+                      value={formData.email || ''}
+                      onChange={(e) => handleChange('email', e.target.value)}
+                      className="h-10 text-sm"
+                    />
+                  </div>
+                </div>
+
+                {/* OTP Code Entry Card */}
+                {otpSent && !otpVerified && (
+                  <div className="rounded-xl border border-blue-200/80 bg-blue-50/40 p-4 space-y-3">
+                    <div className="flex items-center justify-between border-b border-blue-100 pb-2">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-blue-950">
+                        <Sparkles className="h-3.5 w-3.5 text-blue-600" />
+                        Enter 6-Digit OTP sent to +91 {formData.mobile}
+                      </div>
+                      <span className="text-[10px] text-blue-600 font-medium">Valid for 10 minutes</span>
+                    </div>
+                    <div className="flex flex-col sm:flex-row items-center gap-3">
+                      <Input
+                        type="text"
+                        maxLength={6}
+                        placeholder="• • • • • •"
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        className="w-full sm:w-48 text-center font-mono tracking-[0.3em] font-bold text-base h-10 bg-white"
+                      />
+                      <Button
+                        type="button"
+                        disabled={verifyingOtp || otpCode.length !== 6}
+                        onClick={handleVerifyOtp}
+                        className="w-full sm:w-auto h-10 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-6 rounded-lg shadow-sm disabled:opacity-50"
+                      >
+                        {verifyingOtp ? (
+                          <>
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" /> Verifying...
+                          </>
+                        ) : (
+                          'Verify OTP'
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {otpVerified && (
+                  <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-xl text-xs font-bold flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <span>Mobile Number Verified Successfully</span>
+                  </div>
+                )}
+
+                {otpMessage && !otpVerified && (
+                  <div className="text-xs text-amber-900 bg-amber-50 border border-amber-200 p-3 rounded-xl font-medium flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                    <span>{otpMessage}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* SECTION 4: Applicant Details (Individual vs Non-Individual) */}
+              {constitution === 'Individual' ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-5 space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 bg-blue-50 text-blue-600 rounded-xl border border-blue-100 flex items-center justify-center">
+                        <User className="h-4 w-4" />
+                      </div>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                        4. Personal & Income Profile
+                      </h3>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider bg-white px-2 py-0.5 rounded border border-slate-200">
+                      Step 4 of 5
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                    <div className="flex flex-col">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Title *
+                      </Label>
+                      <Select
+                        value={formData.title || 'MR'}
+                        onChange={(e) => handleChange('title', e.target.value)}
+                      >
+                        {titles.length > 0 ? (
+                          titles.map((t: any) => (
+                            <option key={t.meta_key || t.id} value={t.meta_key || t.meta_value}>
+                              {t.meta_value}
+                            </option>
+                          ))
+                        ) : (
+                          <>
+                            <option value="MR">Mr.</option>
+                            <option value="MRS">Mrs.</option>
+                            <option value="MS">Ms.</option>
+                            <option value="DR">Dr.</option>
+                          </>
+                        )}
+                      </Select>
+                    </div>
+                    <div className="flex flex-col">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        First Name *
+                      </Label>
+                      <Input
+                        type="text"
+                        required
+                        placeholder="First Name"
+                        value={formData.first_name || ''}
+                        onChange={(e) => handleChange('first_name', e.target.value)}
+                        className="h-10 text-sm"
+                      />
+                    </div>
+                    <div className="flex flex-col">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Middle Name
+                      </Label>
+                      <Input
+                        type="text"
+                        placeholder="Middle Name"
+                        value={formData.middle_name || ''}
+                        onChange={(e) => handleChange('middle_name', e.target.value)}
+                        className="h-10 text-sm"
+                      />
+                    </div>
+                    <div className="flex flex-col">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Last Name *
+                      </Label>
+                      <Input
+                        type="text"
+                        required
+                        placeholder="Last Name"
+                        value={formData.last_name || ''}
+                        onChange={(e) => handleChange('last_name', e.target.value)}
+                        className="h-10 text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="flex flex-col">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Gender *
+                      </Label>
+                      <Select
+                        value={formData.gender || 'MALE'}
+                        onChange={(e) => handleChange('gender', e.target.value)}
+                      >
+                        {genders.length > 0 ? (
+                          genders.map((g: any) => (
+                            <option key={g.meta_key || g.id} value={g.meta_key || g.meta_value}>
+                              {g.meta_value}
+                            </option>
+                          ))
+                        ) : (
+                          <>
+                            <option value="MALE">Male</option>
+                            <option value="FEMALE">Female</option>
+                            <option value="TRANSGENDER">Transgender</option>
+                          </>
+                        )}
+                      </Select>
+                    </div>
+
+                    <div className="flex flex-col">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Date of Birth (DOB) *
+                      </Label>
+                      <Input
+                        type="date"
+                        required
+                        value={formData.dob || ''}
+                        onChange={(e) => handleChange('dob', e.target.value)}
+                        className="h-10 text-sm"
+                      />
+                    </div>
+
+                    <div className="flex flex-col">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Age
+                      </Label>
+                      {(() => {
+                        const displayedAge = formData.age ?? calculateAgeFromDob(formData.dob);
+                        return (
+                          <div className="w-full h-10 bg-slate-100 border border-slate-200 rounded-lg px-3 text-sm text-blue-900 font-bold font-mono flex items-center justify-between">
+                            <span>{displayedAge !== undefined ? `${displayedAge} Years` : '--'}</span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Residential Address *
+                    </Label>
+                    <Textarea
+                      rows={2}
+                      required
+                      value={formData.address || ''}
+                      onChange={(e) => handleChange('address', e.target.value)}
+                      className="text-sm"
+                      placeholder="Full residence address..."
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="flex flex-col">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Employment Type *
+                      </Label>
+                      <Select
+                        required
+                        value={formData.employment_type || ''}
+                        onChange={(e) => handleChange('employment_type', e.target.value)}
+                        placeholder="-- Select Employment Type --"
+                      >
+                        <option value="">-- Select Employment Type --</option>
+                        {employmentTypes.map((item: any) => (
+                          <option key={item.meta_key || item.id} value={item.meta_key || item.meta_value}>
+                            {item.meta_value}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                    <div className="flex flex-col">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Occupation Type *
+                      </Label>
+                      <Select
+                        required
+                        disabled={!formData.employment_type}
+                        value={formData.occupation_type || ''}
+                        onChange={(e) => handleChange('occupation_type', e.target.value)}
+                        placeholder={!formData.employment_type ? '-- Select Employment Type First --' : '-- Select Occupation Type --'}
+                      >
+                        <option value="">{!formData.employment_type ? '-- Select Employment Type First --' : '-- Select Occupation Type --'}</option>
+                        {occupationTypes.map((item: any) => (
+                          <option key={item.meta_key || item.id} value={item.meta_key || item.meta_value}>
+                            {item.meta_value}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Employer / Business Entity Name *
+                    </Label>
+                    <Input
+                      type="text"
+                      required
+                      placeholder="Company / Employer name"
+                      value={formData.employer_business_name || ''}
+                      onChange={(e) => handleChange('employer_business_name', e.target.value)}
+                      className="h-10 text-sm"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="flex flex-col">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Avg Gross Monthly Income (₹) *
+                      </Label>
+                      <Input
+                        type="number"
+                        required
+                        min={0}
+                        value={formData.avg_gross_monthly_income || ''}
+                        onChange={(e) => handleChange('avg_gross_monthly_income', e.target.value)}
+                        className="h-10 text-sm font-mono font-bold"
+                      />
+                    </div>
+                    <div className="flex flex-col">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Avg Net Monthly Income (₹) *
+                      </Label>
+                      <Input
+                        type="number"
+                        required
+                        min={0}
+                        value={formData.avg_net_monthly_income || ''}
+                        onChange={(e) => handleChange('avg_net_monthly_income', e.target.value)}
+                        className="h-10 text-sm font-mono font-bold"
+                      />
+                    </div>
+                    <div className="flex flex-col">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Monthly Obligation (₹) *
+                      </Label>
+                      <Input
+                        type="number"
+                        required
+                        min={0}
+                        value={formData.existing_monthly_repayment_obligation || ''}
+                        onChange={(e) => handleChange('existing_monthly_repayment_obligation', e.target.value)}
+                        className="h-10 text-sm font-mono font-bold"
+                      />
+                    </div>
+                  </div>
+                </div>
               ) : (
-                <>
-                  Submit Loan Application <ChevronRight className="h-4 w-4" />
-                </>
+                <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-5 space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 bg-blue-50 text-blue-600 rounded-xl border border-blue-100 flex items-center justify-center">
+                        <Building className="h-4 w-4" />
+                      </div>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                        4. Entity Profile (Non-Individual)
+                      </h3>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider bg-white px-2 py-0.5 rounded border border-slate-200">
+                      Step 4 of 5
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="flex flex-col">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Entity Name *
+                      </Label>
+                      <Input
+                        type="text"
+                        required
+                        placeholder="Registered Legal Entity Name"
+                        value={formData.entity_name || ''}
+                        onChange={(e) => handleChange('entity_name', e.target.value)}
+                        className="h-10 text-sm"
+                      />
+                    </div>
+                    <div className="flex flex-col">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Date of Incorporation (DOI) *
+                      </Label>
+                      <Input
+                        type="date"
+                        required
+                        value={formData.doi || ''}
+                        onChange={(e) => handleChange('doi', e.target.value)}
+                        className="h-10 text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Business Address *
+                    </Label>
+                    <Textarea
+                      rows={2}
+                      required
+                      placeholder="Full office address..."
+                      value={formData.business_address || ''}
+                      onChange={(e) => handleChange('business_address', e.target.value)}
+                      className="text-sm"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="flex flex-col">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Proprietor / Partner / Director Name *
+                      </Label>
+                      <Input
+                        type="text"
+                        required
+                        placeholder="Key promoter name"
+                        value={formData.proprietor_partner_director_name || ''}
+                        onChange={(e) => handleChange('proprietor_partner_director_name', e.target.value)}
+                        className="h-10 text-sm"
+                      />
+                    </div>
+                    <div className="flex flex-col">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Annual Gross Turnover Last FY (₹) *
+                      </Label>
+                      <Input
+                        type="number"
+                        required
+                        min={0}
+                        value={formData.annual_gross_turnover_last_fy || ''}
+                        onChange={(e) => handleChange('annual_gross_turnover_last_fy', e.target.value)}
+                        className="h-10 text-sm font-mono font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="flex flex-col">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Avg Annual Gross Income (₹) *
+                      </Label>
+                      <Input
+                        type="number"
+                        required
+                        min={0}
+                        value={formData.avg_annual_gross_income || ''}
+                        onChange={(e) => handleChange('avg_annual_gross_income', e.target.value)}
+                        className="h-10 text-sm font-mono font-bold"
+                      />
+                    </div>
+                    <div className="flex flex-col">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Avg Annual Net Income (₹) *
+                      </Label>
+                      <Input
+                        type="number"
+                        required
+                        min={0}
+                        value={formData.avg_annual_net_income || ''}
+                        onChange={(e) => handleChange('avg_annual_net_income', e.target.value)}
+                        className="h-10 text-sm font-mono font-bold"
+                      />
+                    </div>
+                    <div className="flex flex-col">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Monthly Obligation (₹) *
+                      </Label>
+                      <Input
+                        type="number"
+                        required
+                        min={0}
+                        value={formData.existing_monthly_repayment_obligation || ''}
+                        onChange={(e) => handleChange('existing_monthly_repayment_obligation', e.target.value)}
+                        className="h-10 text-sm font-mono font-bold"
+                      />
+                    </div>
+                  </div>
+                </div>
               )}
-            </button>
-          </form>
-        </div>
+
+              {/* SECTION 5: Loan Requirements */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-blue-50 text-blue-600 rounded-xl border border-blue-100 flex items-center justify-center">
+                      <Banknote className="h-4 w-4" />
+                    </div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                      5. Loan Requirement & Product Scheme
+                    </h3>
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider bg-white px-2 py-0.5 rounded border border-slate-200">
+                    Step 5 of 5
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="flex flex-col">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Loan Product *
+                    </Label>
+                    <Select
+                      required
+                      disabled={Boolean(lockedProductId)}
+                      value={formData.loan_product_id ? String(formData.loan_product_id) : ''}
+                      onChange={(e) => handleProductChange(Number(e.target.value))}
+                      placeholder="-- Select Loan Product --"
+                    >
+                      <option value="">-- Select Loan Product --</option>
+                      {products
+                        .filter((p) => {
+                          if (constitution !== 'Individual') {
+                            const nameLower = (p.name || p.product_name || '').toLowerCase();
+                            if (nameLower.includes('home loan') || nameLower.includes('education loan')) {
+                              return false;
+                            }
+                          }
+                          return true;
+                        })
+                        .map((p) => (
+                          <option key={p.id} value={String(p.id)}>
+                            {p.name || p.product_name}
+                          </option>
+                        ))}
+                    </Select>
+                  </div>
+
+                  <div className="flex flex-col">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Loan Type *
+                    </Label>
+                    <Select
+                      required
+                      disabled={!formData.loan_product_id}
+                      value={formData.loan_type_id ? String(formData.loan_type_id) : ''}
+                      onChange={(e) => handleChange('loan_type_id', Number(e.target.value))}
+                      placeholder="-- Select Loan Type --"
+                    >
+                      <option value="">-- Select Loan Type --</option>
+                      {loanTypes.map((t) => (
+                        <option key={t.id} value={String(t.id)}>
+                          {t.name || t.type_name}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+
+                  <div className="flex flex-col">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Loan Purpose *
+                    </Label>
+                    <Select
+                      required
+                      disabled={!formData.loan_product_id}
+                      value={formData.loan_purpose || ''}
+                      onChange={(e) => handleChange('loan_purpose', e.target.value)}
+                      placeholder="-- Select Purpose --"
+                    >
+                      <option value="">-- Select Purpose --</option>
+                      {getLoanPurposeOptionsFromApi(
+                        loanPurposes,
+                        products.find((p) => Number(p.id) === Number(formData.loan_product_id))?.name ||
+                        products.find((p) => Number(p.id) === Number(formData.loan_product_id))?.product_name,
+                        loanTypes.find((t) => Number(t.id) === Number(formData.loan_type_id))?.name ||
+                        loanTypes.find((t) => Number(t.id) === Number(formData.loan_type_id))?.type_name
+                      ).map((purp, idx) => (
+                        <option key={idx} value={purp}>{purp}</option>
+                      ))}
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="flex flex-col">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Loan Amount Required (₹) *
+                    </Label>
+                    <Input
+                      type="number"
+                      required
+                      min={1000}
+                      placeholder="e.g. 500000"
+                      value={formData.loan_amount_required || ''}
+                      onChange={(e) => handleChange('loan_amount_required', e.target.value)}
+                      className="h-10 text-sm font-mono font-bold"
+                    />
+                    {formData.loan_amount_required && Number(formData.loan_amount_required) > 0 && (
+                      <p className="text-[11px] text-blue-700 font-mono mt-1 font-bold">
+                        Amount: {formatCurrency(Number(formData.loan_amount_required))}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Loan Period (Months) *
+                    </Label>
+                    <Input
+                      type="number"
+                      required
+                      min={1}
+                      max={360}
+                      value={formData.loan_period_months || 12}
+                      onChange={(e) => handleChange('loan_period_months', e.target.value)}
+                      className="h-10 text-sm font-mono font-bold"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Submit Button */}
+              <Button
+                type="submit"
+                disabled={submitting || !otpVerified}
+                className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-md shadow-blue-600/20 transition-all hover:shadow-lg active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {submitting ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" /> Submitting Application...
+                  </>
+                ) : (
+                  <>
+                    Submit Loan Application <ChevronRight className="h-4 w-4" />
+                  </>
+                )}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </main>
     </div>
   );
