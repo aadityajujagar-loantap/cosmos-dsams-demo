@@ -851,9 +851,6 @@ const setFilters = (newFilters: {
     setSelectedShareProductId(undefined);
     setIsShareModalOpen(true);
     loadStaticMasterData();
-    if (isDsa) {
-      handleGenerateLink();
-    }
   };
 
   const handleGenerateLink = async (dsaCodeToUse?: string) => {
@@ -1624,7 +1621,7 @@ const setFilters = (newFilters: {
             {!shareableUrl && (
               <Button
                 type="button"
-                disabled={generatingLink || (isBankUser && !selectedShareDsaCode)}
+                disabled={generatingLink || (isBankUser && !selectedShareDsaCode) || !selectedShareProductId}
                 onClick={() => handleGenerateLink(selectedShareDsaCode)}
                 className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl h-11 text-sm shadow-md shadow-blue-600/20 disabled:opacity-50 gap-2.5"
               >
@@ -3293,7 +3290,7 @@ const setFilters = (newFilters: {
       </Modal>
 
       {/* Manual Disbursement Modal */}
-      <Modal open={isDisburseModalOpen} onClose={() => setIsDisburseModalOpen(false)} title="Mark Lead Disbursement" width="max-w-xl">
+      <Modal open={isDisburseModalOpen} onClose={() => setIsDisburseModalOpen(false)} title="Mark Lead Disbursement" width="max-w-xl" className="overflow-visible\">
         <form onSubmit={handleDisburseSubmit} className="space-y-4 text-sm">
           <div className="flex items-center gap-3 p-3.5 rounded-xl border border-emerald-200/80 bg-emerald-50/70 text-emerald-900">
             <div className="p-2 bg-emerald-100 rounded-lg text-emerald-700 shrink-0">
@@ -4298,4 +4295,5 @@ function Pagination({ currentPage, totalPages, onPageChange }: PaginationProps) 
     </div>
   );
 }
+
 

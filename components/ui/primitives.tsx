@@ -512,12 +512,14 @@ export function Drawer({
   title,
   description,
   onClose,
+  className,
 }: {
   children: ReactNode;
   open: boolean;
   title: string;
   description?: string;
   onClose: () => void;
+  className?: string;
 }) {
   useEffect(() => {
     if (!open) return;

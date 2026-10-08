@@ -71,7 +71,9 @@ export const authApi = {
     captcha_key: string;
     captcha_value: string;
   }): Promise<{
-    token: string;
+    token?: string;
+    reference_id?: string;
+    mobile_hint?: string;
     user: {
       id: number;
       name: string;

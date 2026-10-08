@@ -153,6 +153,16 @@ export default function LoginPage() {
         captcha_key: captchaKey,
         captcha_value: captcha,
       });
+      // If OTP flow
+      if (response.reference_id) {
+        setOtpRefId(response.reference_id);
+        setMobileHint(response.mobile_hint ?? "");
+        setStep("otp");
+        setOtpDigits(EMPTY_OTP);
+        setPassword("");
+        setError("");
+        return;
+      }
 
       if (response && response.token) {
         // Role must come from server-attested facts, never from guessing on the email or
