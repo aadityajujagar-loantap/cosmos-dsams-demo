@@ -219,8 +219,12 @@ export function isCheckerLoggedIn(): boolean {
 export function formatStatusLabel(status: string, isChecker?: boolean): string {
   if (!status) return "";
   const norm = status.trim().toLowerCase();
-  if (norm === "awaiting_agreement_generate") {
-    return "Awaiting Agreement Generate";
+  if (
+    norm === "awaiting_agreement_generate" ||
+    norm === "awaiting agreement generate" ||
+    norm === "awaiting_agreement_generation"
+  ) {
+    return "Awaiting Agreement Generation";
   }
   const checker = isChecker !== undefined ? isChecker : isCheckerLoggedIn();
   if (checker) {

@@ -435,7 +435,7 @@ export function ActiveDsasPage() {
                       </td>
 
                       {/* Operational Status */}
-                      <td className="p-4">
+                      <td className="p-4 whitespace-nowrap">
                         <StatusBadge status="ACTIVE" />
                       </td>
 
