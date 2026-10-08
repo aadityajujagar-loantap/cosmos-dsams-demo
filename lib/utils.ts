@@ -235,3 +235,46 @@ export function formatStatusLabel(status: string, isChecker?: boolean): string {
   }
   return status;
 }
+
+export function getDsaDisplayStatus(dsa: any): string {
+  if (!dsa) return "";
+  const agreementStatus = String(dsa.agreement_status || "").toUpperCase();
+  const operationalStatus = String(dsa.operational_status || "").toUpperCase();
+  const onboardingStatus = String(
+    dsa.onboarding_status || dsa.status || "",
+  ).toUpperCase();
+
+  // ONLY show ACTIVE status when agreement is verified by Checker AND operational_status is ACTIVE
+  if (agreementStatus === "SIGNED_VERIFIED" && operationalStatus === "ACTIVE") {
+    return "ACTIVE";
+  }
+
+  // Right after L7 approval or when onboarding is approved:
+  if (
+    onboardingStatus === "APPROVED" ||
+    onboardingStatus === "AGREEMENT_COMPLETED" ||
+    onboardingStatus === "AWAITING_AGREEMENT_GENERATE" ||
+    agreementStatus === "AWAITING_AGREEMENT_GENERATE"
+  ) {
+    if (agreementStatus === "SIGNED_VERIFIED" && operationalStatus === "ACTIVE") {
+      return "ACTIVE";
+    }
+    if (agreementStatus === "SIGNED_UPLOADED") {
+      return "Awaiting Agreement Verification";
+    }
+    if (
+      agreementStatus === "GENERATED" ||
+      agreementStatus === "SENT" ||
+      agreementStatus === "SIGNED_UPLOAD_PENDING"
+    ) {
+      return "Agreement Generated";
+    }
+    return "awaiting_agreement_generate";
+  }
+
+  if (onboardingStatus === "AWAITING_AGREEMENT_GENERATE") {
+    return "awaiting_agreement_generate";
+  }
+
+  return onboardingStatus || "PENDING";
+}

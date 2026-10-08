@@ -119,46 +119,10 @@ import {
   isCheckerLoggedIn,
   makeId,
   percent,
+  getDsaDisplayStatus,
 } from "@/lib/utils";
 
-export function getDsaDisplayStatus(dsa: any): string {
-  if (!dsa) return "";
-  const agreementStatus = String(dsa.agreement_status || "").toUpperCase();
-  const operationalStatus = String(dsa.operational_status || "").toUpperCase();
-  const onboardingStatus = String(
-    dsa.onboarding_status || dsa.status || "",
-  ).toUpperCase();
-
-  // ONLY show ACTIVE status when agreement is verified by Checker AND operational_status is ACTIVE
-  if (agreementStatus === "SIGNED_VERIFIED" && operationalStatus === "ACTIVE") {
-    return "ACTIVE";
-  }
-
-  // Right after L7 approval or when onboarding is approved:
-  if (
-    onboardingStatus === "APPROVED" ||
-    onboardingStatus === "AGREEMENT_COMPLETED" ||
-    onboardingStatus === "AWAITING_AGREEMENT_GENERATE" ||
-    agreementStatus === "AWAITING_AGREEMENT_GENERATE"
-  ) {
-    if (agreementStatus === "SIGNED_VERIFIED" && operationalStatus === "ACTIVE") {
-      return "ACTIVE";
-    }
-    if (agreementStatus === "SIGNED_UPLOADED") {
-      return "Awaiting Agreement Verification";
-    }
-    if (agreementStatus === "GENERATED" || agreementStatus === "SENT") {
-      return "Agreement Generated";
-    }
-    return "awaiting_agreement_generate";
-  }
-
-  if (onboardingStatus === "AWAITING_AGREEMENT_GENERATE") {
-    return "awaiting_agreement_generate";
-  }
-
-  return onboardingStatus || "PENDING";
-}
+export { getDsaDisplayStatus };
 
 export function isJsonLike(val: any): boolean {
   if (val === null || val === undefined) return false;
@@ -13450,64 +13414,17 @@ const resolveStageStatus = (
         }
         description={
           verifyingAgreementAction === "APPROVE"
-            ? "Branch Checker verification of the scanned physical copy uploaded by the Maker or Checker. Approving activates the DSA partner atomically."
-            : "Branch Checker rejection of the scanned copy. The copy is marked failed and must be re-uploaded by the Branch Maker or Branch Checker."
+            ? ""
+            : ""
         }
         width="max-w-lg"
       >
         <div className="space-y-4">
-          <div
-            className={cn(
-              "rounded-lg p-3.5 border text-xs leading-relaxed",
-              verifyingAgreementAction === "APPROVE"
-                ? "bg-emerald-50 border-emerald-200 text-emerald-950"
-                : "bg-rose-50 border-rose-200 text-rose-950",
-            )}
-          >
-            <div className="flex items-center gap-2 font-bold mb-1">
-              {verifyingAgreementAction === "APPROVE" ? (
-                <>
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  <span>Approval &amp; Atomic Partner Activation</span>
-                </>
-              ) : (
-                <>
-                  <AlertCircle className="h-4 w-4 text-rose-600" />
-                  <span>Rejection &amp; Correction Required</span>
-                </>
-              )}
-            </div>
-            {verifyingAgreementAction === "APPROVE" ? (
-              <ul className="list-disc pl-4 space-y-0.5">
-                <li>
-                  Agreement status set to SIGNED_VERIFIED and scanned copy
-                  upload permanently locked.
-                </li>
-                <li>
-                  Partner {dsa?.dsa_code || dsa?.name} activated
-                  (operational_status = ACTIVE); temporary portal credentials
-                  emailed to{" "}
-                  {dsa?.applicant_email || dsa?.email || "the registered email"}.
-                </li>
-                <li>1-year agreement validity recorded from approval date.</li>
-              </ul>
-            ) : (
-              <ul className="list-disc pl-4 space-y-0.5">
-                <li>Scanned copy marked failed with your remarks recorded.</li>
-                <li>Partner stays NOT_ACTIVE until a valid copy is approved.</li>
-                <li>
-                  Branch Maker or Branch Checker must upload a corrected scanned
-                  copy before re-approval.
-                </li>
-              </ul>
-            )}
-          </div>
-
           <Field>
             <Label htmlFor="agreementRemarks">
               {verifyingAgreementAction === "APPROVE"
-                ? "Checking Remarks (Optional)"
-                : "Rejection Reason & Remarks (Mandatory)"}
+                ? "Checking Remarks"
+                : "Rejection Reason & Remarks *"}
             </Label>
             <textarea
               id="agreementRemarks"
