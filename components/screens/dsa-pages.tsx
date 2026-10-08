@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   BadgeIndianRupee,
   Check,
+  Copy,
   ClipboardList,
   Download,
   ExternalLink,
@@ -157,6 +158,103 @@ export function getDsaDisplayStatus(dsa: any): string {
   }
 
   return onboardingStatus || "PENDING";
+}
+
+export function isJsonLike(val: any): boolean {
+  if (val === null || val === undefined) return false;
+  if (typeof val === "object") return true;
+  if (typeof val === "string") {
+    const trimmed = val.trim();
+    if (
+      (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+      (trimmed.startsWith("[") && trimmed.endsWith("]"))
+    ) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return typeof parsed === "object" && parsed !== null;
+      } catch {
+        return false;
+      }
+    }
+  }
+  return false;
+}
+
+export function L7JsonDataViewer({
+  data,
+  label,
+  maxHeight = "max-h-72",
+}: {
+  data: any;
+  label?: string;
+  maxHeight?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const formatted = useMemo(() => {
+    try {
+      if (typeof data === "object" && data !== null) {
+        return JSON.stringify(data, null, 2);
+      }
+      if (typeof data === "string") {
+        const trimmed = data.trim();
+        if (
+          (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+          (trimmed.startsWith("[") && trimmed.endsWith("]"))
+        ) {
+          const parsed = JSON.parse(trimmed);
+          return JSON.stringify(parsed, null, 2);
+        }
+        return data;
+      }
+      return String(data ?? "");
+    } catch {
+      return String(data ?? "");
+    }
+  }, [data]);
+
+  const handleCopy = () => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(formatted);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-950 overflow-hidden shadow-xs my-1 w-full text-left">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-slate-900 border-b border-slate-800 text-[10px] font-mono text-slate-400">
+        <span className="flex items-center gap-1.5 font-semibold text-slate-300">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+          {label || "JSON Data"}
+        </span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-slate-800 text-[10px]"
+        >
+          {copied ? (
+            <>
+              <Check className="h-3 w-3 text-emerald-400" />
+              <span className="text-emerald-400 font-semibold">Copied!</span>
+            </>
+          ) : (
+            <>
+              <Copy className="h-3 w-3" />
+              <span>Copy</span>
+            </>
+          )}
+        </button>
+      </div>
+      <pre
+        className={cn(
+          "p-3 text-[11px] font-mono text-emerald-400 overflow-x-auto leading-relaxed whitespace-pre font-medium selection:bg-slate-800 scrollbar-subtle",
+          maxHeight,
+        )}
+      >
+        {formatted}
+      </pre>
+    </div>
+  );
 }
 
 const businessTypes: BusinessType[] = [
@@ -11484,10 +11582,22 @@ const resolveStageStatus = (
                       <tbody className="divide-y divide-amber-100 text-slate-800">
                         {deviationsList.map((dev: any, i: number) => (
                           <tr key={i}>
-                            <td className="px-3 py-2.5 font-medium text-slate-900">{dev.rule_name || dev.rule_code}</td>
-                            <td className="px-3 py-2.5 font-mono text-amber-900">{String(dev.actual_value ?? dev.value ?? "—")}</td>
-                            <td className="px-3 py-2.5 font-mono text-slate-600">{String(dev.threshold ?? dev.policy_value ?? "—")}</td>
-                            <td className="px-3 py-2.5 text-slate-700">{dev.justification || "Reviewed"}</td>
+                            <td className="px-3 py-2.5 font-medium text-slate-900 align-top">{dev.rule_name || dev.rule_code}</td>
+                            <td className="px-3 py-2.5 font-mono text-amber-900 align-top">
+                              {isJsonLike(dev.actual_value ?? dev.value) ? (
+                                <L7JsonDataViewer data={dev.actual_value ?? dev.value} maxHeight="max-h-40" />
+                              ) : (
+                                String(dev.actual_value ?? dev.value ?? "—")
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5 font-mono text-slate-600 align-top">
+                              {isJsonLike(dev.threshold ?? dev.policy_value) ? (
+                                <L7JsonDataViewer data={dev.threshold ?? dev.policy_value} maxHeight="max-h-40" />
+                              ) : (
+                                String(dev.threshold ?? dev.policy_value ?? "—")
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5 text-slate-700 align-top">{dev.justification || "Reviewed"}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -11718,67 +11828,59 @@ const resolveStageStatus = (
 
                   return (
                     <div className="space-y-3">
-                      {/* Tabs — clean scrollable pill-tabs with role indicators */}
-                      <div className="relative">
-                        <div
-                          role="tablist"
-                          aria-label="Statutory verification checks"
-                          className="flex items-center gap-2 overflow-x-auto pb-2 pt-0.5 no-scrollbar border-b border-slate-200"
-                        >
-                          {verifsList.map((vItem: any, i: number) => {
-                            const tabKey = getTabKey(vItem, i);
-                            const isSelected = i === activeIndex;
-                            const code = vItem.verification_code || "CHECK";
-                            seenCounts[code] = (seenCounts[code] || 0) + 1;
-                            const isDuplicate = (codeCounts[code] || 0) > 1;
+                      {/* Tabs — wrapped light pill-tabs without scrollbar or checker chips */}
+                      <div
+                        role="tablist"
+                        aria-label="Statutory verification checks"
+                        className="flex flex-wrap items-center gap-2 pb-2.5 pt-0.5 border-b border-slate-200"
+                      >
+                        {verifsList.map((vItem: any, i: number) => {
+                          const tabKey = getTabKey(vItem, i);
+                          const isSelected = i === activeIndex;
+                          const code = vItem.verification_code || "CHECK";
+                          seenCounts[code] = (seenCounts[code] || 0) + 1;
+                          const isDuplicate = (codeCounts[code] || 0) > 1;
 
-                            const baseLabel = (vItem.verification_code || `Check ${i + 1}`)
-                              .replace(/_/g, " ")
-                              .replace(/\b\w/g, (c: string) => c.toUpperCase());
-                            const roleBadge = vItem.trigger_role || (isDuplicate ? `#${seenCounts[code]}` : "");
-                            const itemSuccess = vItem.success === true || vItem.execution_status === "COMPLETED";
+                          const baseLabel = (vItem.verification_code || `Check ${i + 1}`)
+                            .replace(/_/g, " ")
+                            .replace(/\b\w/g, (c: string) => c.toUpperCase());
+                          const tabLabel = isDuplicate
+                            ? `${baseLabel} (#${seenCounts[code]})`
+                            : baseLabel;
+                          const itemSuccess =
+                            vItem.success === true ||
+                            vItem.execution_status === "COMPLETED";
 
-                            return (
-                              <button
-                                key={tabKey}
-                                type="button"
-                                role="tab"
-                                aria-selected={isSelected}
-                                onClick={() => setL7ActiveVerifTab(tabKey)}
+                          return (
+                            <button
+                              key={tabKey}
+                              type="button"
+                              role="tab"
+                              aria-selected={isSelected}
+                              onClick={() => setL7ActiveVerifTab(tabKey)}
+                              className={cn(
+                                "group inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-all duration-150 border",
+                                isSelected
+                                  ? "bg-blue-50 text-blue-700 border-blue-300 ring-1 ring-blue-300/50 shadow-2xs font-bold"
+                                  : "bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border-slate-200/80 font-medium",
+                              )}
+                            >
+                              <span
                                 className={cn(
-                                  "group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-150 shrink-0",
-                                  isSelected
-                                    ? "bg-blue-600 text-white shadow-xs"
-                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200/90 hover:text-slate-900 border border-slate-200/50",
+                                  "h-2 w-2 rounded-full shrink-0 transition-transform",
+                                  itemSuccess
+                                    ? isSelected
+                                      ? "bg-emerald-600 ring-2 ring-emerald-200"
+                                      : "bg-emerald-500"
+                                    : isSelected
+                                      ? "bg-rose-600 ring-2 ring-rose-200"
+                                      : "bg-rose-500",
                                 )}
-                              >
-                                <span
-                                  className={cn(
-                                    "h-2 w-2 rounded-full shrink-0",
-                                    isSelected
-                                      ? "bg-white"
-                                      : itemSuccess
-                                        ? "bg-emerald-500"
-                                        : "bg-rose-500",
-                                  )}
-                                />
-                                <span>{baseLabel}</span>
-                                {roleBadge && (
-                                  <span
-                                    className={cn(
-                                      "text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider",
-                                      isSelected
-                                        ? "bg-blue-700 text-blue-100"
-                                        : "bg-slate-200/80 text-slate-600",
-                                    )}
-                                  >
-                                    {roleBadge}
-                                  </span>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
+                              />
+                              <span>{tabLabel}</span>
+                            </button>
+                          );
+                        })}
                       </div>
 
                       {/* Active Tab Panel */}
@@ -11845,13 +11947,13 @@ const resolveStageStatus = (
                               <table className="w-full text-left text-xs">
                                 <thead className="bg-slate-50/90 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                                   <tr>
-                                    <th scope="col" className="py-2.5 px-3.5 w-[35%] font-bold">
+                                    <th scope="col" className="py-2.5 px-3.5 w-[30%] font-bold">
                                       Parameter / Field
                                     </th>
-                                    <th scope="col" className="py-2.5 px-3.5 w-[40%] font-bold">
+                                    <th scope="col" className="py-2.5 px-3.5 w-[48%] font-bold">
                                       Verified Record / Value
                                     </th>
-                                    <th scope="col" className="py-2.5 px-3.5 w-[25%] font-bold">
+                                    <th scope="col" className="py-2.5 px-3.5 w-[22%] font-bold">
                                       Status &amp; Assessment
                                     </th>
                                   </tr>
@@ -11859,6 +11961,8 @@ const resolveStageStatus = (
                                 <tbody className="divide-y divide-slate-100">
                                   {summaryEntries.map(([k, val]: [string, any]) => {
                                     const label = formatKycFieldLabel(k);
+                                    const jsonLike = isJsonLike(val);
+
                                     const displayVal =
                                       typeof val === "boolean"
                                         ? val
@@ -11882,11 +11986,13 @@ const resolveStageStatus = (
 
                                     return (
                                       <tr key={k} className="hover:bg-slate-50/70 transition-colors">
-                                        <td className="py-2.5 px-3.5 text-slate-700 font-semibold text-xs">
+                                        <td className="py-2.5 px-3.5 text-slate-700 font-semibold text-xs align-top">
                                           {label}
                                         </td>
-                                        <td className="py-2.5 px-3.5">
-                                          {isCodeOrId && displayVal !== "—" ? (
+                                        <td className="py-2.5 px-3.5 align-top">
+                                          {jsonLike ? (
+                                            <L7JsonDataViewer data={val} label={label} />
+                                          ) : isCodeOrId && displayVal !== "—" ? (
                                             <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-xs inline-block">
                                               {displayVal}
                                             </span>
@@ -11899,16 +12005,16 @@ const resolveStageStatus = (
                                               {displayVal}
                                             </span>
                                           ) : (
-                                            <span className="font-medium text-slate-800 text-xs">
+                                            <span className="font-medium text-slate-800 text-xs leading-relaxed">
                                               {displayVal}
                                             </span>
                                           )}
                                         </td>
-                                        <td className="py-2.5 px-3.5">
+                                        <td className="py-2.5 px-3.5 align-top">
                                           <span
                                             className={cn(
                                               "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold border",
-                                              evalStatus.tone === "emerald"
+                                              evalStatus.tone === "emerald" || jsonLike
                                                 ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                                                 : evalStatus.tone === "rose"
                                                   ? "bg-rose-50 text-rose-700 border-rose-200"
@@ -11917,7 +12023,7 @@ const resolveStageStatus = (
                                                     : "bg-slate-100 text-slate-700 border-slate-200",
                                             )}
                                           >
-                                            {evalStatus.tone === "emerald" ? (
+                                            {evalStatus.tone === "emerald" || jsonLike ? (
                                               <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
                                             ) : evalStatus.tone === "rose" ? (
                                               <AlertCircle className="h-3 w-3 text-rose-600 shrink-0" />
@@ -11926,7 +12032,7 @@ const resolveStageStatus = (
                                             ) : (
                                               <Check className="h-3 w-3 text-slate-500 shrink-0" />
                                             )}
-                                            <span>{evalStatus.label}</span>
+                                            <span>{jsonLike ? "Validated Record" : evalStatus.label}</span>
                                           </span>
                                         </td>
                                       </tr>
@@ -11936,9 +12042,14 @@ const resolveStageStatus = (
                               </table>
                             </div>
                           ) : (
-                            <div className="py-6 px-4 text-center text-slate-600 text-xs bg-slate-50/60 rounded-xl border border-dashed border-slate-200 flex items-center justify-center gap-2">
-                              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                              <span>{activeItem.error_message || "Verification executed successfully. Zero adverse findings noted."}</span>
+                            <div className="space-y-3">
+                              <div className="py-6 px-4 text-center text-slate-600 text-xs bg-slate-50/60 rounded-xl border border-dashed border-slate-200 flex items-center justify-center gap-2">
+                                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                                <span>{activeItem.error_message || "Verification executed successfully. Zero adverse findings noted."}</span>
+                              </div>
+                              {isJsonLike(activeItem.raw_response) && (
+                                <L7JsonDataViewer data={activeItem.raw_response} label="Gateway Response Payload" />
+                              )}
                             </div>
                           )}
                         </div>
