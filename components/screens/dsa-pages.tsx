@@ -4044,6 +4044,16 @@ export function DsaProfilePage({ id }: { id: string }) {
     if (!canAct || !verifyingAgreementAction || !dsa) return;
 
     if (
+      verifyingAgreementAction === "APPROVE" &&
+      String(dsa?.digital_acceptance_status || "").toUpperCase() !== "ACCEPTED"
+    ) {
+      setAgreementDecisionError(
+        "Cannot approve: DSA applicant has not completed digital acceptance of empanelment terms yet.",
+      );
+      return;
+    }
+
+    if (
       verifyingAgreementAction === "REJECT" &&
       !agreementDecisionRemarks.trim()
     ) {
@@ -4148,7 +4158,7 @@ export function DsaProfilePage({ id }: { id: string }) {
         const alreadyMine = data?.lock_status === "LOCKED";
         toast({
           title: alreadyMine
-            ? "Case already acquired by you"
+            ? "Case is now acquired by you"
             : "Case auto-acquired",
           description:
             data?.message ||
@@ -9646,6 +9656,10 @@ const resolveStageStatus = (
                         (dsa as any)?.action === "APPROVE"))),
                 );
 
+                const isDigitalAccepted =
+                  String(dsa?.digital_acceptance_status || "").toUpperCase() ===
+                  "ACCEPTED";
+
                 const signedAgreementDoc = (dsa?.documents || []).find(
                   (doc: any) => {
                     const t = String(
@@ -9704,7 +9718,9 @@ const resolveStageStatus = (
                                 ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                                 : dsa?.agreement_status === "SIGNED_REJECTED"
                                   ? "bg-rose-50 text-rose-700 border-rose-200"
-                                  : "bg-slate-50 text-slate-600 border-slate-200",
+                                  : !isDigitalAccepted
+                                    ? "bg-amber-50 text-amber-700 border-amber-200"
+                                    : "bg-slate-50 text-slate-600 border-slate-200",
                             )}
                           >
                             {dsa?.agreement_status === "SIGNED_VERIFIED" ||
@@ -9714,7 +9730,9 @@ const resolveStageStatus = (
                                 ? "SIGNED_UPLOADED"
                                 : dsa?.agreement_status === "SIGNED_REJECTED"
                                   ? "REJECTED"
-                                  : "AWAITING SUBMISSION"}
+                                  : !isDigitalAccepted
+                                    ? "AWAITING DIGITAL ACCEPTANCE"
+                                    : "AWAITING SUBMISSION"}
                           </span>
                         </div>
 
@@ -9775,19 +9793,28 @@ const resolveStageStatus = (
                               </div>
                             )}
                           </div>
+                        ) : !isDigitalAccepted ? (
+                          <div className="p-4 bg-amber-50/80 rounded-xl border border-amber-200 text-center space-y-1.5">
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-bold">
+                              <Clock className="w-3.5 h-3.5" />
+                              Awaiting Applicant Digital Acceptance
+                            </div>
+                            <p className="text-xs font-bold text-amber-950">
+                              Empanelment Terms Acceptance Pending
+                            </p>
+                            <p className="text-[11px] text-amber-700 max-w-md mx-auto">
+                              Empanelment letter has been dispatched to the applicant. The applicant must review and accept the terms via the email link before agreement generation, download, or physical execution can proceed.
+                            </p>
+                          </div>
                         ) : (
                           <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-200/60 text-center space-y-1">
                             <p className="text-xs font-bold text-slate-800">
-                              {isL7Approved
-                                ? "Ready for Signed Agreement Upload"
-                                : "Awaiting HO Credit Head (L7) Final Approval"}
+                              Ready for Signed Agreement Upload
                             </p>
                             <p className="text-[11px] text-slate-500">
-                              {isL7Approved
-                                ? canManageAgreementFiles
-                                  ? "Download official partnership agreement, execute physically, and upload scanned signed copy."
-                                  : "Awaiting Branch Maker / Branch Checker to download, execute physically and upload the scanned signed copy."
-                                : "Agreement download and upload will unlock once final approval is completed."}
+                              {canManageAgreementFiles
+                                ? "Download official partnership agreement, execute physically, and upload scanned signed copy."
+                                : "Awaiting Branch Maker / Branch Checker to download, execute physically and upload the scanned signed copy."}
                             </p>
                           </div>
                         )}
@@ -9802,16 +9829,28 @@ const resolveStageStatus = (
                               variant="outline"
                               disabled={
                                 !isL7Approved ||
+                                !isDigitalAccepted ||
                                 actionLoading ||
                                 downloadingAgreement
                               }
                               title={
                                 !isL7Approved
                                   ? "Agreement download disabled until final approval by L7 is completed."
-                                  : undefined
+                                  : !isDigitalAccepted
+                                    ? "Agreement download disabled until DSA applicant digitally accepts empanelment terms."
+                                    : undefined
                               }
                               onClick={async () => {
                                 if (!dsa?.id) return;
+                                if (!isDigitalAccepted) {
+                                  toast({
+                                    title: "Acceptance pending",
+                                    description:
+                                      "DSA applicant must accept empanelment terms before agreement can be downloaded.",
+                                    variant: "warning",
+                                  });
+                                  return;
+                                }
                                 try {
                                   setDownloadingAgreement(true);
                                   if (generatedAgreementDoc?.file_url) {
@@ -9854,7 +9893,7 @@ const resolveStageStatus = (
                               }}
                               className={cn(
                                 "h-9 text-xs font-semibold flex items-center gap-1.5",
-                                !isL7Approved || downloadingAgreement
+                                !isL7Approved || !isDigitalAccepted || downloadingAgreement
                                   ? "opacity-50 cursor-not-allowed bg-slate-100 text-slate-400 border-slate-200"
                                   : "text-slate-700 hover:bg-slate-100 border-slate-300",
                               )}
@@ -9879,10 +9918,23 @@ const resolveStageStatus = (
                                   accept=".pdf"
                                   className="sr-only"
                                   id="internalSignedAgreementUpload"
-                                  disabled={!isL7Approved || actionLoading}
+                                  disabled={
+                                    !isL7Approved ||
+                                    !isDigitalAccepted ||
+                                    actionLoading
+                                  }
                                   onChange={async (e) => {
                                     const file = e.currentTarget.files?.[0];
                                     if (file) {
+                                      if (!isDigitalAccepted) {
+                                        toast({
+                                          title: "Acceptance pending",
+                                          description:
+                                            "DSA applicant must accept empanelment terms before signed agreement can be uploaded.",
+                                          variant: "warning",
+                                        });
+                                        return;
+                                      }
                                       if (file.size > 10 * 1024 * 1024) {
                                         toast({
                                           title: "File too large",
@@ -9901,19 +9953,21 @@ const resolveStageStatus = (
                                 <label
                                   className={cn(
                                     "inline-flex h-9 items-center justify-center gap-1.5 rounded-md px-3.5 text-xs font-semibold transition",
-                                    !isL7Approved || actionLoading
+                                    !isL7Approved || !isDigitalAccepted || actionLoading
                                       ? "opacity-50 cursor-not-allowed bg-slate-100 text-slate-400 border border-slate-200"
                                       : "bg-emerald-600 text-white hover:bg-emerald-700 border border-emerald-600 cursor-pointer shadow-sm",
                                   )}
                                   htmlFor={
-                                    isL7Approved && !actionLoading
+                                    isL7Approved && isDigitalAccepted && !actionLoading
                                       ? "internalSignedAgreementUpload"
                                       : undefined
                                   }
                                   title={
                                     !isL7Approved
                                       ? "Upload disabled until final approval by L7 is completed."
-                                      : undefined
+                                      : !isDigitalAccepted
+                                        ? "Upload disabled until DSA applicant digitally accepts empanelment terms."
+                                        : undefined
                                   }
                                 >
                                   <UploadCloud className="h-3.5 w-3.5" />
@@ -9927,6 +9981,7 @@ const resolveStageStatus = (
 
                             {/* Approve Signed Agreement — Branch Checker only */}
                             {canDecideSignedAgreement &&
+                              isDigitalAccepted &&
                               (signedAgreementDoc ||
                                 isSignedAgreementUploaded) &&
                               dsa?.agreement_status !== "SIGNED_VERIFIED" &&
@@ -13234,18 +13289,6 @@ const resolveStageStatus = (
         width="max-w-lg"
       >
         <div className="space-y-4">
-          {currentRevertTarget?.isDynamic && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 flex items-start gap-2">
-              <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-semibold">Dynamic Workflow Routing:</span>{" "}
-                {currentRevertTarget.dgmPosted
-                  ? "DGM is posted for this branch. Application will route back to DGM (Level 4)."
-                  : "DGM is not posted for this branch (skipped). Application will route dynamically back to Sub-Region Head (Level 3)."}
-              </div>
-            </div>
-          )}
-
           <Field>
             <Label htmlFor="revertRemarks">
               Revert Reason
@@ -13407,7 +13450,13 @@ const resolveStageStatus = (
           setAgreementDecisionRemarks("");
           setAgreementDecisionError("");
         }}
-        open={Boolean(verifyingAgreementAction) && isCheckerUserOrLevel}
+        open={
+          Boolean(verifyingAgreementAction) &&
+          isCheckerUserOrLevel &&
+          (verifyingAgreementAction !== "APPROVE" ||
+            String(dsa?.digital_acceptance_status || "").toUpperCase() ===
+              "ACCEPTED")
+        }
         title={
           verifyingAgreementAction === "APPROVE"
             ? "Approve Signed Agreement & Activate DSA Partner"
