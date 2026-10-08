@@ -11591,57 +11591,201 @@ const resolveStageStatus = (
 
                   const seenCounts: Record<string, number> = {};
 
-                  return (
-                    <div className="space-y-2">
-                      {/* Tabs — minimal underline style */}
-                      <div
-                        role="tablist"
-                        aria-label="Statutory verification checks"
-                        className="grid grid-cols-[repeat(auto-fit,minmax(0,1fr))] items-center gap-x-2 overflow-x-auto no-scrollbar border-b border-slate-200"
-                      >
-                        {verifsList.map((vItem: any, i: number) => {
-                          const tabKey = getTabKey(vItem, i);
-                          const isSelected = i === activeIndex;
-                          const code = vItem.verification_code || "CHECK";
-                          seenCounts[code] = (seenCounts[code] || 0) + 1;
-                          const isDuplicate = (codeCounts[code] || 0) > 1;
-                          const countSuffix = isDuplicate
-                            ? ` (${vItem.trigger_role ? `${vItem.trigger_role} ` : ""}#${seenCounts[code]})`
-                            : "";
-                          const label = `${(vItem.verification_code || `Check ${i + 1}`).replace(/_/g, " ")}${countSuffix}`;
-                          const itemSuccess = vItem.success === true || vItem.execution_status === "COMPLETED";
+                  const formatKycFieldLabel = (rawKey: string): string => {
+                    const map: Record<string, string> = {
+                      pan: "PAN Number",
+                      name: "Full Name",
+                      legal_name: "Legal Name",
+                      registered_name: "Registered Name",
+                      trade_name: "Trade Name",
+                      aml_score: "AML Risk Score",
+                      pep_match: "PEP Match",
+                      pep: "PEP Match",
+                      sanction_match: "Sanctions / Watchlist",
+                      sanctions_match: "Sanctions / Watchlist",
+                      screening_id: "Screening Reference ID",
+                      client_ref_id: "Client Reference ID",
+                      cibil_score: "CIBIL Bureau Score",
+                      bureau_score: "Bureau Credit Score",
+                      account_number: "Bank Account Number",
+                      acc_no: "Bank Account Number",
+                      ifsc: "IFSC Code",
+                      ifsc_code: "IFSC Code",
+                      bank_name: "Bank Name",
+                      branch_name: "Branch Name",
+                      account_status: "Account Status",
+                      gstin: "GSTIN Number",
+                      taxpayer_type: "Taxpayer Type",
+                      udyam_number: "Udyam Registration No",
+                      udyam_reg_no: "Udyam Registration No",
+                      enterprise_type: "Enterprise Category",
+                      major_activity: "Primary Activity",
+                      match_score: "Name Match Confidence",
+                      confidence_score: "Confidence Score",
+                      address: "Registered Address",
+                    };
+                    const lower = rawKey.toLowerCase().replace(/[\s-]/g, "_");
+                    if (map[lower]) return map[lower];
+                    return rawKey
+                      .replace(/([A-Z])/g, " $1")
+                      .replace(/_/g, " ")
+                      .replace(/\b\w/g, (c: string) => c.toUpperCase())
+                      .trim();
+                  };
 
-                          return (
-                            <button
-                              key={tabKey}
-                              type="button"
-                              role="tab"
-                              aria-selected={isSelected}
-                              onClick={() => setL7ActiveVerifTab(tabKey)}
-                              className={cn(
-                                "-mb-px flex items-center justify-center gap-2 whitespace-nowrap border-b-2 px-1 pb-2.5 pt-1 text-center text-xs font-semibold transition-colors duration-150",
-                                isSelected
-                                  ? "border-blue-600 text-slate-900"
-                                  : "border-transparent text-slate-500 hover:text-slate-800",
-                              )}
-                            >
-                              <span
+                  const getKycFieldEvaluation = (key: string, val: any) => {
+                    const lowerKey = key.toLowerCase();
+                    const strVal = String(val ?? "").toLowerCase().trim();
+
+                    if (
+                      lowerKey.includes("pep") ||
+                      lowerKey.includes("sanction") ||
+                      lowerKey.includes("blacklist") ||
+                      lowerKey.includes("adverse")
+                    ) {
+                      if (
+                        val === false ||
+                        strVal === "no" ||
+                        strVal === "false" ||
+                        strVal === "0" ||
+                        strVal === "clear" ||
+                        strVal === "clean" ||
+                        strVal === "none"
+                      ) {
+                        return { label: "Clear (No Match)", tone: "emerald" };
+                      }
+                      if (
+                        val === true ||
+                        strVal === "yes" ||
+                        strVal === "true" ||
+                        strVal === "1" ||
+                        strVal === "matched"
+                      ) {
+                        return { label: "Match Detected", tone: "rose" };
+                      }
+                    }
+
+                    if (lowerKey.includes("score")) {
+                      const num = Number(val);
+                      if (!isNaN(num)) {
+                        if (lowerKey.includes("cibil") || lowerKey.includes("bureau")) {
+                          if (num >= 700) return { label: "Favorable (≥ 700)", tone: "emerald" };
+                          if (num >= 650) return { label: "Acceptable (Tolerance)", tone: "amber" };
+                          return { label: "High Risk (< 650)", tone: "rose" };
+                        }
+                        if (lowerKey.includes("aml") || lowerKey.includes("risk")) {
+                          if (num >= 80) return { label: "Low Risk (Passed)", tone: "emerald" };
+                          if (num >= 50) return { label: "Medium Risk", tone: "amber" };
+                          return { label: "High Risk", tone: "rose" };
+                        }
+                        if (num >= 80) return { label: "High Confidence", tone: "emerald" };
+                      }
+                    }
+
+                    if (lowerKey.includes("status")) {
+                      if (
+                        strVal.includes("active") ||
+                        strVal.includes("valid") ||
+                        strVal.includes("verified") ||
+                        strVal.includes("completed") ||
+                        strVal.includes("success")
+                      ) {
+                        return { label: "Active & Verified", tone: "emerald" };
+                      }
+                      if (strVal.includes("fail") || strVal.includes("inactive") || strVal.includes("cancel")) {
+                        return { label: "Failed / Inactive", tone: "rose" };
+                      }
+                    }
+
+                    if (
+                      lowerKey.includes("pan") ||
+                      lowerKey.includes("gst") ||
+                      lowerKey.includes("udyam") ||
+                      lowerKey.includes("account") ||
+                      lowerKey.includes("name") ||
+                      lowerKey.includes("id")
+                    ) {
+                      if (strVal && strVal !== "—" && strVal !== "null" && strVal !== "undefined") {
+                        return { label: "Validated", tone: "emerald" };
+                      }
+                    }
+
+                    if (val === true || strVal === "yes") return { label: "Confirmed", tone: "emerald" };
+                    if (val === false || strVal === "no") return { label: "Negative", tone: "slate" };
+
+                    return { label: "Recorded", tone: "slate" };
+                  };
+
+                  return (
+                    <div className="space-y-3">
+                      {/* Tabs — clean scrollable pill-tabs with role indicators */}
+                      <div className="relative">
+                        <div
+                          role="tablist"
+                          aria-label="Statutory verification checks"
+                          className="flex items-center gap-2 overflow-x-auto pb-2 pt-0.5 no-scrollbar border-b border-slate-200"
+                        >
+                          {verifsList.map((vItem: any, i: number) => {
+                            const tabKey = getTabKey(vItem, i);
+                            const isSelected = i === activeIndex;
+                            const code = vItem.verification_code || "CHECK";
+                            seenCounts[code] = (seenCounts[code] || 0) + 1;
+                            const isDuplicate = (codeCounts[code] || 0) > 1;
+
+                            const baseLabel = (vItem.verification_code || `Check ${i + 1}`)
+                              .replace(/_/g, " ")
+                              .replace(/\b\w/g, (c: string) => c.toUpperCase());
+                            const roleBadge = vItem.trigger_role || (isDuplicate ? `#${seenCounts[code]}` : "");
+                            const itemSuccess = vItem.success === true || vItem.execution_status === "COMPLETED";
+
+                            return (
+                              <button
+                                key={tabKey}
+                                type="button"
+                                role="tab"
+                                aria-selected={isSelected}
+                                onClick={() => setL7ActiveVerifTab(tabKey)}
                                 className={cn(
-                                  "h-1.5 w-1.5 shrink-0 rounded-full",
-                                  itemSuccess ? "bg-emerald-500" : "bg-rose-500",
+                                  "group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-150 shrink-0",
+                                  isSelected
+                                    ? "bg-blue-600 text-white shadow-xs"
+                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200/90 hover:text-slate-900 border border-slate-200/50",
                                 )}
-                              />
-                              <span className="min-w-0 truncate">{label}</span>
-                            </button>
-                          );
-                        })}
+                              >
+                                <span
+                                  className={cn(
+                                    "h-2 w-2 rounded-full shrink-0",
+                                    isSelected
+                                      ? "bg-white"
+                                      : itemSuccess
+                                        ? "bg-emerald-500"
+                                        : "bg-rose-500",
+                                  )}
+                                />
+                                <span>{baseLabel}</span>
+                                {roleBadge && (
+                                  <span
+                                    className={cn(
+                                      "text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider",
+                                      isSelected
+                                        ? "bg-blue-700 text-blue-100"
+                                        : "bg-slate-200/80 text-slate-600",
+                                    )}
+                                  >
+                                    {roleBadge}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
 
                       {/* Active Tab Panel */}
-                      <div className="rounded-xl border border-slate-200 bg-white">
+                      <div className="rounded-xl border border-slate-200 bg-white shadow-2xs overflow-hidden">
                         {/* Meta strip */}
-                        <div className="px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
-                          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                        <div className="px-4 py-3 bg-slate-50/70 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+                          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
                             <span className="font-bold text-slate-900 text-xs sm:text-sm uppercase tracking-wide">
                               {(activeItem.verification_code || "Verification").replace(/_/g, " ")}
                               {(codeCounts[activeItem.verification_code || "CHECK"] || 0) > 1
@@ -11649,76 +11793,152 @@ const resolveStageStatus = (
                                 : ""}
                             </span>
                             <span className="text-slate-300">&bull;</span>
-                            <span className="text-slate-600 text-[11px]">
+                            <span className="inline-flex items-center gap-1 text-[11px] text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded-md">
                               Provider: <strong className="text-slate-800 font-semibold">{activeItem.provider || "API Gateway"}</strong>
                             </span>
-                            <span className="text-slate-300">&bull;</span>
-                            <span className="text-slate-600 text-[11px]">
+                            <span className="inline-flex items-center gap-1 text-[11px] text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded-md">
                               Role: <strong className="text-slate-800 font-semibold">{activeItem.trigger_role || "MAKER"}</strong>
                             </span>
                           </div>
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2.5">
                             <span
                               className={cn(
-                                "px-2 py-0.5 rounded text-[10px] font-bold border",
+                                "px-2.5 py-0.5 rounded-full text-[10px] font-bold border inline-flex items-center gap-1",
                                 isSuccess
                                   ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                                   : "bg-rose-50 text-rose-700 border-rose-200",
                               )}
                             >
-                              {isSuccess ? "VERIFIED" : "FAILED"}
+                              {isSuccess ? (
+                                <>
+                                  <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                                  VERIFIED
+                                </>
+                              ) : (
+                                <>
+                                  <AlertTriangle className="h-3 w-3 text-rose-600" />
+                                  FAILED
+                                </>
+                              )}
                             </span>
                             {activeItem.executed_at && (
-                              <span className="text-slate-500 text-[11px] whitespace-nowrap">
+                              <span className="text-slate-500 text-[11px] whitespace-nowrap bg-white border border-slate-200 px-2 py-0.5 rounded-md">
                                 Executed: <strong className="text-slate-700">{formatDate(activeItem.executed_at)}</strong>
                               </span>
                             )}
                           </div>
                         </div>
 
-                        {/* Findings & Summary Table */}
+                        {/* Findings & Summary Table — Beautiful Tabular Format */}
                         <div className="p-3.5">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-2">
-                            Findings &amp; Summary
-                          </span>
+                          <div className="flex items-center justify-between mb-2 px-0.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                              Findings &amp; Parameter Evaluation
+                            </span>
+                            <span className="text-[10px] font-semibold text-slate-400">
+                              {summaryEntries.length} attributes verified
+                            </span>
+                          </div>
+
                           {summaryEntries.length > 0 ? (
-                            <div className="rounded-xl border border-slate-200 bg-white">
-                              <table className="w-full text-xs">
-                                <tbody>
-                                  {summaryEntries.reduce<any[][]>((rows, [k, val], idx) => {
-                                    if (idx % 2 === 0) rows.push([[k, val]]);
-                                    else rows[rows.length - 1].push([k, val]);
-                                    return rows;
-                                  }, []).map((pairRow, rIdx) => (
-                                    <tr key={rIdx} className="border-b border-slate-100 last:border-b-0">
-                                      {pairRow.map(([k, val]: [string, any]) => {
-                                        const label = k.replace(/([A-Z])/g, " $1").replace(/_/g, " ").trim();
-                                        const displayVal = typeof val === "boolean" ? (val ? "Yes" : "No") : String(val ?? "—");
-                                        return (
-                                          <React.Fragment key={k}>
-                                            <td className="px-3 py-2 text-[11px] font-medium capitalize text-slate-500 whitespace-nowrap w-[20%]">
-                                              {label}
-                                            </td>
-                                            <td className="px-3 py-2 text-xs font-semibold text-slate-900 break-words w-[30%]">
+                            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                              <table className="w-full text-left text-xs">
+                                <thead className="bg-slate-50/90 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                  <tr>
+                                    <th scope="col" className="py-2.5 px-3.5 w-[35%] font-bold">
+                                      Parameter / Field
+                                    </th>
+                                    <th scope="col" className="py-2.5 px-3.5 w-[40%] font-bold">
+                                      Verified Record / Value
+                                    </th>
+                                    <th scope="col" className="py-2.5 px-3.5 w-[25%] font-bold">
+                                      Status &amp; Assessment
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                  {summaryEntries.map(([k, val]: [string, any]) => {
+                                    const label = formatKycFieldLabel(k);
+                                    const displayVal =
+                                      typeof val === "boolean"
+                                        ? val
+                                          ? "Yes"
+                                          : "No"
+                                        : typeof val === "object" && val !== null
+                                          ? JSON.stringify(val)
+                                          : String(val ?? "—");
+
+                                    const evalStatus = getKycFieldEvaluation(k, val);
+                                    const lowerK = k.toLowerCase();
+                                    const isCodeOrId =
+                                      lowerK.includes("pan") ||
+                                      lowerK.includes("gst") ||
+                                      lowerK.includes("id") ||
+                                      lowerK.includes("number") ||
+                                      lowerK.includes("ifsc") ||
+                                      lowerK.includes("code");
+                                    const isScore = lowerK.includes("score");
+                                    const isName = lowerK.includes("name");
+
+                                    return (
+                                      <tr key={k} className="hover:bg-slate-50/70 transition-colors">
+                                        <td className="py-2.5 px-3.5 text-slate-700 font-semibold text-xs">
+                                          {label}
+                                        </td>
+                                        <td className="py-2.5 px-3.5">
+                                          {isCodeOrId && displayVal !== "—" ? (
+                                            <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-xs inline-block">
                                               {displayVal}
-                                            </td>
-                                          </React.Fragment>
-                                        );
-                                      })}
-                                      {pairRow.length === 1 && (
-                                        <>
-                                          <td className="px-3 py-2 w-[20%]">&nbsp;</td>
-                                          <td className="px-3 py-2 w-[30%]">&nbsp;</td>
-                                        </>
-                                      )}
-                                    </tr>
-                                  ))}
+                                            </span>
+                                          ) : isScore && displayVal !== "—" ? (
+                                            <span className="font-extrabold text-slate-900 text-sm">
+                                              {displayVal}
+                                            </span>
+                                          ) : isName && displayVal !== "—" ? (
+                                            <span className="font-bold text-slate-900 text-xs sm:text-sm">
+                                              {displayVal}
+                                            </span>
+                                          ) : (
+                                            <span className="font-medium text-slate-800 text-xs">
+                                              {displayVal}
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td className="py-2.5 px-3.5">
+                                          <span
+                                            className={cn(
+                                              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold border",
+                                              evalStatus.tone === "emerald"
+                                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                                : evalStatus.tone === "rose"
+                                                  ? "bg-rose-50 text-rose-700 border-rose-200"
+                                                  : evalStatus.tone === "amber"
+                                                    ? "bg-amber-50 text-amber-800 border-amber-200"
+                                                    : "bg-slate-100 text-slate-700 border-slate-200",
+                                            )}
+                                          >
+                                            {evalStatus.tone === "emerald" ? (
+                                              <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                                            ) : evalStatus.tone === "rose" ? (
+                                              <AlertCircle className="h-3 w-3 text-rose-600 shrink-0" />
+                                            ) : evalStatus.tone === "amber" ? (
+                                              <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
+                                            ) : (
+                                              <Check className="h-3 w-3 text-slate-500 shrink-0" />
+                                            )}
+                                            <span>{evalStatus.label}</span>
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
                                 </tbody>
                               </table>
                             </div>
                           ) : (
-                            <div className="py-4 text-center text-slate-500 text-xs italic">
-                              {activeItem.error_message || "Verification executed successfully. No exceptions noted."}
+                            <div className="py-6 px-4 text-center text-slate-600 text-xs bg-slate-50/60 rounded-xl border border-dashed border-slate-200 flex items-center justify-center gap-2">
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                              <span>{activeItem.error_message || "Verification executed successfully. Zero adverse findings noted."}</span>
                             </div>
                           )}
                         </div>
