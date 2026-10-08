@@ -76,10 +76,12 @@ function SearchableDsaSelect({
   dsaList,
   selectedCode,
   onSelect,
+  onOpenChange,
 }: {
   dsaList: any[];
   selectedCode: string;
   onSelect: (code: string) => void;
+  onOpenChange?: (isOpen: boolean) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -102,16 +104,21 @@ function SearchableDsaSelect({
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setIsOpen(false);
+        onOpenChange?.(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [onOpenChange]);
 
   return (
     <div className="relative" ref={dropdownRef}>
       <div
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          const next = !isOpen;
+          setIsOpen(next);
+          onOpenChange?.(next);
+        }}
         className={`w-full h-10 border rounded-lg px-3.5 text-sm font-medium cursor-pointer transition-all flex items-center justify-between bg-white shadow-2xs ${
           isOpen
             ? "border-blue-500 ring-2 ring-blue-500/20 shadow-xs"
@@ -180,6 +187,7 @@ function SearchableDsaSelect({
                       onSelect(dsa.dsa_code);
                       setIsOpen(false);
                       setSearchQuery("");
+                      onOpenChange?.(false);
                     }}
                     className={`p-2 rounded-xl cursor-pointer flex items-center justify-between text-xs transition-colors ${
                       isSelected
@@ -318,6 +326,7 @@ export function LeadManagementScreen() {
   const [submittingLead, setSubmittingLead] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isShareDropdownOpen, setIsShareDropdownOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isQueryModalOpen, setIsQueryModalOpen] = useState(false);
   const [isSanctionModalOpen, setIsSanctionModalOpen] = useState(false);
@@ -1173,7 +1182,7 @@ const setFilters = (newFilters: {
       mobile: lead.mobile || "",
       email: lead.email || "",
       gender: lead.gender || "MALE",
-      dob: lead.dob || "",
+      dob: parseDobToIso(lead.dob || (lead as any).date_of_birth),
       address: lead.address || "",
       city: lead.city || "Mumbai",
       state: lead.state || "Maharashtra",
@@ -1185,7 +1194,7 @@ const setFilters = (newFilters: {
       avg_net_monthly_income: lead.avg_net_monthly_income,
       existing_monthly_repayment_obligation: lead.existing_monthly_repayment_obligation,
       entity_name: lead.entity_name || "",
-      doi: lead.doi || "",
+      doi: parseDobToIso(lead.doi || (lead as any).date_of_incorporation),
       business_address: lead.business_address || "",
       proprietor_partner_director_name: lead.proprietor_partner_director_name || "",
       annual_gross_turnover_last_fy: lead.annual_gross_turnover_last_fy,
@@ -1554,7 +1563,17 @@ const setFilters = (newFilters: {
       </div>
 
       {/* Share Link Modal (With DSA Partner Selector for Branch Users) */}
-      <Modal open={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} title="Customer Self-Fill Application Link" width="max-w-md">
+      <Modal
+        open={isShareModalOpen}
+        onClose={() => {
+          setIsShareModalOpen(false);
+          setIsShareDropdownOpen(false);
+        }}
+        title="Customer Self-Fill Application Link"
+        width="max-w-md"
+        className="overflow-visible"
+        bodyClassName={cn("overflow-visible transition-[padding] duration-200", isShareDropdownOpen ? "pb-52" : "pb-0")}
+      >
         <div className="space-y-4 text-xs">
           {/* DSA Selector for Branch User */}
           {isBankUser && (
@@ -1569,6 +1588,7 @@ const setFilters = (newFilters: {
                   setSelectedShareDsaCode(code);
                   setShareableUrl(null);
                 }}
+                onOpenChange={setIsShareDropdownOpen}
               />
             </div>
           )}
@@ -1585,6 +1605,7 @@ const setFilters = (newFilters: {
                 setSelectedShareProductId(val);
                 setShareableUrl(null);
               }}
+              onOpenChange={setIsShareDropdownOpen}
               buttonClassName="border-purple-200 focus:border-purple-500 focus:ring-purple-500/20 rounded-xl"
             >
               <option value="">-- Any Loan Product (Customer Selects) --</option>
@@ -1715,6 +1736,8 @@ const setFilters = (newFilters: {
                       </Label>
                     </div>
                     <Select
+                      searchable
+                      searchPlaceholder="Search branch name or code..."
                       value={createForm.Branch_id || ""}
                       onChange={(e) => setCreateForm({ ...createForm, Branch_id: e.target.value })}
                       className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
@@ -3525,7 +3548,7 @@ const setFilters = (newFilters: {
                   </label>
                   <input
                     type="date"
-                    value={editForm.dob || ""}
+                    value={editForm.dob ? parseDobToIso(editForm.dob) : ""}
                     onChange={(e) => setEditForm({ ...editForm, dob: e.target.value })}
                     className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
                   />
@@ -3651,7 +3674,7 @@ const setFilters = (newFilters: {
                   </label>
                   <input
                     type="date"
-                    value={editForm.doi || ""}
+                    value={editForm.doi ? parseDobToIso(editForm.doi) : ""}
                     onChange={(e) => setEditForm({ ...editForm, doi: e.target.value })}
                     className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
                   />

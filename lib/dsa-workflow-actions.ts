@@ -186,6 +186,7 @@ export function canShowCallBackAction(params: {
   level?: number | null;
   viewerLevel?: number | null;
   previousActorLevel?: number | null;
+  isReallocatedByMe?: boolean;
 }): boolean {
   const {
     rowLocked,
@@ -194,12 +195,19 @@ export function canShowCallBackAction(params: {
     level,
     viewerLevel,
     previousActorLevel,
+    isReallocatedByMe,
   } = params;
+
+  if (accessReason === "rejected" || accessReason === "closed") return false;
+  if (!viewerLevel) return false;
+
+  // Re-allocated by current user to another role among L3, L4, or L5
+  if (isReallocatedByMe) {
+    return true;
+  }
 
   if (!rowLocked) return false;
   if (assignedUserId !== null && assignedUserId !== undefined) return false;
-  if (accessReason === "rejected" || accessReason === "closed") return false;
-  if (!viewerLevel) return false;
   // The case itself must sit at a level the backend permits CALL_BACK at.
   if (!canCallBack(level)) return false;
   // Strict N -> N-1: only the previous authority may pull it back.

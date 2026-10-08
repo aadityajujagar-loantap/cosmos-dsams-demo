@@ -65,6 +65,9 @@ export function parseDobToIso(raw?: string | null): string {
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
     return trimmed;
   }
+  if (/^\d{4}-\d{2}-\d{2}[ T]/.test(trimmed)) {
+    return trimmed.slice(0, 10);
+  }
   if (/^\d{8}$/.test(trimmed)) {
     return `${trimmed.slice(0, 4)}-${trimmed.slice(4, 6)}-${trimmed.slice(6, 8)}`;
   }
@@ -74,7 +77,10 @@ export function parseDobToIso(raw?: string | null): string {
   }
   const d = new Date(trimmed);
   if (!isNaN(d.getTime())) {
-    return d.toISOString().split("T")[0];
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
   }
   return trimmed;
 }

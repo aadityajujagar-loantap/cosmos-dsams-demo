@@ -537,14 +537,6 @@ export default function CustomerSelfFillPage() {
       </header>
 
       <main className="max-w-5xl mx-auto pt-3 sm:pt-4 px-4 sm:px-6">
-        
-        {/* Page Title Header */}
-        <div className="mb-3 text-center">
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
-            Customer Loan <span className="text-blue-600">Application</span>
-          </h1>
-        </div>
-
         {/* Global Error Banner */}
         {error && (
           <div className="mb-6 bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl text-xs font-semibold flex items-center gap-3 shadow-xs">
