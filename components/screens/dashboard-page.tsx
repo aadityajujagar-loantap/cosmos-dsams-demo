@@ -45,7 +45,7 @@ import { useMockStore } from "@/lib/store";
 import { buildApplicationDeviation, evaluateBreDeviation } from "@/lib/bre";
 import { buildApplicationJourney } from "@/lib/product-journeys";
 import { getActiveProductConfigs, getUniqueProductConfigs, resolveProductConfig } from "@/lib/product-configs";
-import { compactNumber, formatCurrency, formatDate, makeId, cn } from "@/lib/utils";
+import { compactNumber, formatCurrency, formatDate, makeId, cn, getDsaDisplayStatus } from "@/lib/utils";
 import {
   resolveCaseAccess,
   describeCaseLock,
@@ -111,9 +111,9 @@ export function DashboardPage() {
     // Use live API count for active DSAs when authenticated; fall back to store if offline/unauthenticated
     const isLive = typeof window !== "undefined" && Boolean(localStorage.getItem("auth_token"));
     const activeDsas = isLive
-      ? liveDsas.filter((item) => item.operational_status === "ACTIVE" || item.onboarding_status === "APPROVED").length
+      ? liveDsas.filter((item) => getDsaDisplayStatus(item) === "ACTIVE").length
       : liveDsas.length > 0
-      ? liveDsas.filter((item) => item.operational_status === "ACTIVE" || item.onboarding_status === "APPROVED").length
+      ? liveDsas.filter((item) => getDsaDisplayStatus(item) === "ACTIVE").length
       : store.dsas.filter((item) => item.status === "Active").length;
     const approved = store.applications.filter((item) => item.status === "Approved" || item.status === "Disbursed");
     const totalPayout = store.commissions.reduce((sum, item) => sum + item.payout, 0);
@@ -178,13 +178,12 @@ export function DashboardPage() {
     const liveMapped: any[] = liveDsas.map((item: any) => {
       const applicantName = item.name || item.contact_person || item.entity_name || item.code;
       const isSub = item.onboarding_status === "SUBMITTED";
-      const isApp = item.onboarding_status === "APPROVED";
       return {
         id: String(item.id),
         code: item.code,
         name: applicantName,
         businessType: item.business_type || item.dsa_type || "Individual",
-        status: isSub ? "Submitted" : (isApp ? "Active" : item.onboarding_status),
+        status: isSub ? "Submitted" : getDsaDisplayStatus(item),
         onboardingDate: item.created_at || item.onboarding_date || new Date().toISOString(),
         manager: item.manager || currentUser?.name,
         city: item.city,
@@ -216,7 +215,10 @@ export function DashboardPage() {
 
   const branchStats = useMemo(
     () => ({
-      active: branchDsas.filter((item) => item.status === "Active" || item.status === "APPROVED").length,
+      active: branchDsas.filter((item) => {
+        const s = String(item.status || "").toUpperCase();
+        return s === "ACTIVE";
+      }).length,
       blacklisted: branchDsas.filter((item) => item.status === "Blacklisted" || item.status === "BLACKLISTED").length,
       onHold: branchDsas.filter((item) => item.status === "On Hold" || item.status === "ON_HOLD").length,
       pendingChecker: branchDsas.filter(
