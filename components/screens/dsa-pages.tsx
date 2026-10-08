@@ -2957,7 +2957,7 @@ export function DsaManagementPage() {
                             </span>
                           )}
                         </td>
-                        <td className="p-4">
+                        <td className="p-4 whitespace-nowrap">
                           <StatusBadge status={getDsaDisplayStatus(item)} />
                         </td>
                         <td className="p-4 text-slate-700 text-xs">
