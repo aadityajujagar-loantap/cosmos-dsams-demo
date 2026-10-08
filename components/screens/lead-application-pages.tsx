@@ -1213,7 +1213,7 @@ export function ApplicationDetailPage({ id }: { id: string }) {
                         <p className="font-medium text-slate-950">{doc.type}</p>
                         <p className="text-xs text-slate-500">{doc.fileName}</p>
                       </div>
-                      <StatusBadge status={doc.status === "Verified" ? "Checked" : doc.status} />
+                      <StatusBadge status={doc.status} />
                     </div>
                     {canVerifyDocuments && doc.status !== "Verified" && doc.status !== "Failed" ? (
                       <div className="flex justify-end gap-2 pt-1">

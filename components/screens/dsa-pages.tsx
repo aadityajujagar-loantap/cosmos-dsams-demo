@@ -113,7 +113,9 @@ import {
   formatCommissionDisplay,
   formatCurrency,
   formatDate,
+  formatStatusLabel,
   generateDsaId,
+  isCheckerLoggedIn,
   makeId,
   percent,
 } from "@/lib/utils";
@@ -126,23 +128,34 @@ export function getDsaDisplayStatus(dsa: any): string {
     dsa.onboarding_status || dsa.status || "",
   ).toUpperCase();
 
-  if (agreementStatus === "SIGNED_VERIFIED" || operationalStatus === "ACTIVE") {
+  // ONLY show ACTIVE status when agreement is verified by Checker AND operational_status is ACTIVE
+  if (agreementStatus === "SIGNED_VERIFIED" && operationalStatus === "ACTIVE") {
     return "ACTIVE";
   }
+
+  // Right after L7 approval or when onboarding is approved:
   if (
     onboardingStatus === "APPROVED" ||
-    onboardingStatus === "AGREEMENT_COMPLETED"
+    onboardingStatus === "AGREEMENT_COMPLETED" ||
+    onboardingStatus === "AWAITING_AGREEMENT_GENERATE" ||
+    agreementStatus === "AWAITING_AGREEMENT_GENERATE"
   ) {
-    // If agreement is approved/completed but operational_status is not yet ACTIVE, show APPROVED
-    if (
-      operationalStatus &&
-      operationalStatus !== "NOT_ACTIVE" &&
-      operationalStatus !== "INACTIVE"
-    ) {
-      return operationalStatus;
+    if (agreementStatus === "SIGNED_VERIFIED" && operationalStatus === "ACTIVE") {
+      return "ACTIVE";
     }
-    return onboardingStatus;
+    if (agreementStatus === "SIGNED_UPLOADED") {
+      return "Awaiting Agreement Verification";
+    }
+    if (agreementStatus === "GENERATED" || agreementStatus === "SENT") {
+      return "Agreement Generated";
+    }
+    return "awaiting_agreement_generate";
   }
+
+  if (onboardingStatus === "AWAITING_AGREEMENT_GENERATE") {
+    return "awaiting_agreement_generate";
+  }
+
   return onboardingStatus || "PENDING";
 }
 
@@ -171,6 +184,7 @@ const managementStatuses: DsaStatus[] = [
   "Pending Credit Approval",
   "KYC Pending",
   "On Hold",
+  "awaiting_agreement_generate",
   "Active",
   "Suspended",
   "Rejected",
@@ -201,7 +215,7 @@ function activeDsaPatch(dsa: Dsa): Partial<Dsa> {
     })),
     monthlyLeads: 0,
     rejectionReason: undefined,
-    status: "Active",
+    status: "awaiting_agreement_generate",
     statusReason: undefined,
     statusReasonAction: undefined,
     statusReasonAt: undefined,
@@ -414,11 +428,13 @@ export function getEffectiveDsaCode(dsa: any): string {
       : "";
 }
 
-export function getDocDisplayStatus(status?: string): string {
+export function getDocDisplayStatus(status?: string, isChecker?: boolean): string {
   if (!status) return "";
   const s = String(status).trim();
-  if (s.toUpperCase() === "VERIFIED" || s.toUpperCase() === "CHECKED")
-    return "Verified";
+  const checker = isChecker !== undefined ? isChecker : isCheckerLoggedIn();
+  if (s.toUpperCase() === "VERIFIED" || s.toUpperCase() === "CHECKED") {
+    return checker ? "Checked" : "Verified";
+  }
   return s;
 }
 
@@ -801,10 +817,20 @@ export function getDsaWorkflowLevelInfo(
   const isRejected = onboardingStatus === "REJECTED";
 
   if (isCompleted || isRejected) {
+    const isChecker =
+      (currentUserRole || "").toLowerCase().includes("checker") || isCheckerLoggedIn();
     return {
       currentLevel: dsa.current_approval_level || 7,
-      levelName: isCompleted ? "Approved & Verified" : "Rejected",
-      stageTitle: isCompleted ? "Approved & Verified" : "Rejected",
+      levelName: isCompleted
+        ? isChecker
+          ? "Approved & Checked"
+          : "Approved & Verified"
+        : "Rejected",
+      stageTitle: isCompleted
+        ? isChecker
+          ? "Approved & Checked"
+          : "Approved & Verified"
+        : "Rejected",
       roleName: "N/A",
       authorityTitle: isCompleted ? "Approving Authority" : "N/A",
       actionOptions: "N/A",
@@ -992,7 +1018,7 @@ export function getDsaWorkflowLevelInfo(
       authorityTitle: "Approving Authority",
       actionOptions: "Approve / Reject",
       canUserApprove: canApprove,
-      actionLabel: "Grant Final Approval & Sanction",
+      actionLabel: "Final Approval",
       nextLevelName: "Approved & Active",
       isFinalStep: true,
       isDeviationStep: false,
@@ -2085,11 +2111,22 @@ export function DsaManagementPage() {
       return { onboarding_status: "PENDING_APPROVAL" };
     if (normalized.includes("kyc"))
       return { onboarding_status: "COMPLIANCE_CHECK" };
+    if (normalized.includes("awaiting_agreement") || normalized.includes("awaiting agreement"))
+      return { onboarding_status: "APPROVED" };
     return { onboarding_status: statusVal.toUpperCase() };
   };
 
   const fetchParams = useMemo(() => {
     const statusParams = getBackendStatusParams(status);
+    if (managementTab === "active") {
+      return {
+        search: search.trim() || undefined,
+        operational_status: "ACTIVE",
+        bucket: "active" as DsaWorkBucket,
+        page,
+        per_page: 10,
+      };
+    }
     return {
       search: search.trim() || undefined,
       ...statusParams,
@@ -3025,8 +3062,9 @@ export function DsaManagementPage() {
 export function mapBackendStatusToFrontend(
   onboarding?: string,
   operational?: string,
+  agreement?: string,
 ): DsaStatus {
-  if (operational === "ACTIVE") return "Active";
+  if (operational === "ACTIVE" && agreement === "SIGNED_VERIFIED") return "Active";
   if (operational === "SUSPENDED") return "Suspended";
   if (operational === "TERMINATED") return "Blacklisted";
 
@@ -3036,7 +3074,11 @@ export function mapBackendStatusToFrontend(
   if (norm === "DOCUMENT_VERIFICATION") return "Pending Branch Approval";
   if (norm === "COMPLIANCE_CHECK") return "KYC Pending";
   if (norm === "PENDING_APPROVAL") return "Pending Credit Approval";
-  if (norm === "APPROVED") return "Active";
+  if (norm === "APPROVED") {
+    if (operational === "ACTIVE" && agreement === "SIGNED_VERIFIED") return "Active";
+    return "awaiting_agreement_generate";
+  }
+  if (norm === "AWAITING_AGREEMENT_GENERATE") return "awaiting_agreement_generate";
   if (norm === "REJECTED") return "Rejected";
   return "Draft";
 }
@@ -7473,7 +7515,7 @@ const resolveStageStatus = (
                 ) : (
                   <>
                     <CheckCircle2 className="h-4 w-4" />
-                    Grant Final Approval &amp; Sanction
+                    Final Approval
                   </>
                 )}
               </Button>
@@ -8208,7 +8250,7 @@ const resolveStageStatus = (
                               {panVerif?.executed_at
                                 ? `Checked on ${formatDate(panVerif.executed_at)} via ${panVerif.provider === "scoreme" ? "ScoreMe" : "NSDL"}`
                                 : isPanChecked
-                                  ? "Verified via NSDL / Income Tax Dept"
+                                  ? (isCheckerRole ? "Checked via NSDL / Income Tax Dept" : "Verified via NSDL / Income Tax Dept")
                                   : "NSDL / Income Tax Dept"}
                             </span>
                             <div className="flex items-center gap-1.5">
@@ -8298,12 +8340,12 @@ const resolveStageStatus = (
                             ) : isGstChecked ? (
                               <>
                                 <p className="text-base font-semibold text-slate-900">
-                                  Verified via GSTN Database
+                                  {isCheckerRole ? "Checked via GSTN Database" : "Verified via GSTN Database"}
                                 </p>
                                 <p className="text-xs text-emerald-700 font-medium mt-0.5">
                                   {dsa.pan
                                     ? `PAN ${dsa.pan} record validated · Active Taxpayer`
-                                    : "Verified & Active"}
+                                    : (isCheckerRole ? "Checked & Active" : "Verified & Active")}
                                 </p>
                               </>
                             ) : dsa.gst_applicable ? (
@@ -8451,7 +8493,7 @@ const resolveStageStatus = (
                               {bankVerif?.executed_at
                                 ? `Checked on ${formatDate(bankVerif.executed_at)} via BAV`
                                 : isBankChecked
-                                  ? "Bank Account Verification (BAV)"
+                                  ? (isCheckerRole ? "Bank Account Checked (BAV)" : "Bank Account Verification (BAV)")
                                   : isMakerUser
                                     ? "Pending Checker Verification"
                                     : "Bank Account Verification (BAV)"}
@@ -10836,8 +10878,8 @@ const resolveStageStatus = (
         title={
           approvingDsa
             ? workflowLevelInfo.currentLevel === 7
-              ? "Grant Final Approval & Sanction — HO Credit Head"
-              : `Approve DSA Application — ${workflowLevelInfo.levelName}`
+              ? "Final Approval— HO Credit Head"
+              : `Approve DSA Application`
             : ""
         }
         width="max-w-lg"
@@ -10847,8 +10889,8 @@ const resolveStageStatus = (
             <Field>
               <Label htmlFor="approvalRemarks">
                 {workflowLevelInfo.currentLevel === 7
-                  ? "Sanction Remarks / Justification"
-                  : "Approval Remarks / Justification"}{" "}
+                  ? "Sanction Remarks"
+                  : "Approval Remarks"}{" "}
                 <span className="text-rose-500">*</span>
               </Label>
               <textarea
@@ -11083,19 +11125,19 @@ const resolveStageStatus = (
                 {actionLoading
                   ? "Processing..."
                   : workflowLevelInfo.currentLevel === 1
-                    ? "Confirm & Submit to Checker"
+                    ? "Confirm & Submit"
                     : workflowLevelInfo.currentLevel === 2
-                      ? "Confirm & Submit to Sub-Region Head"
+                      ? "Confirm & Submit"
                       : workflowLevelInfo.currentLevel === 3
-                        ? "Confirm & Recommend to DGM"
+                        ? "Confirm & Recommend"
                         : workflowLevelInfo.currentLevel === 4
-                          ? "Confirm & Recommend to Region Head"
+                          ? "Confirm & Recommend"
                           : workflowLevelInfo.currentLevel === 5
-                            ? "Confirm & Recommend to HO Credit Officer"
+                            ? "Confirm & Recommend"
                             : workflowLevelInfo.currentLevel === 6
-                              ? "Confirm & Recommend Appraisal to HO Credit Head"
+                              ? "Confirm & Recommend"
                               : workflowLevelInfo.currentLevel === 7
-                                ? "Grant Final Approval & Sanction"
+                                ? "Final Approval"
                                 : workflowLevelInfo.actionLabel}
               </Button>
             </div>
@@ -11806,18 +11848,8 @@ const resolveStageStatus = (
                             <span className="font-medium text-slate-900">
                               {displayName}
                             </span>
-                            <span className="text-slate-400 text-[11px] ml-2 font-mono">
-                              {fileName}
-                            </span>
                           </div>
                           <div className="flex items-center gap-3">
-                            <span className="text-[10px] text-slate-500">
-                              {doc.verified_at
-                                ? formatDate(doc.verified_at)
-                                : isVerified
-                                  ? "Verified"
-                                  : "Pending"}
-                            </span>
                             <span
                               className={cn(
                                 "px-2 py-0.5 rounded text-[10px] font-bold border",
@@ -11906,12 +11938,12 @@ const resolveStageStatus = (
         description=""
         onClose={closeDecisionModals}
         open={Boolean(queryingDsa)}
-        title="Raise Query to Maker (Checker → L1)"
+        title="Raise Query"
         width="max-w-lg"
       >
         <div className="space-y-4">
           <Field>
-            <Label htmlFor="queryReason">Query details (mandatory)</Label>
+            <Label htmlFor="queryReason">Query details *</Label>
             <textarea
               id="queryReason"
               rows={3}
@@ -11981,28 +12013,16 @@ const resolveStageStatus = (
         }
         description={
           rejectionStep === "confirm"
-            ? `Permanent terminal action on Application #${rejectingDsa?.code || rejectingDsa?.id}`
-            : `Level ${workflowLevelInfo.currentLevel} (${workflowLevelInfo.levelName}) Review Action`
+            ? ``
+            : ``
         }
         width="max-w-lg"
       >
         {rejectionStep === "input" ? (
           <div className="space-y-4">
-            <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-start gap-2.5">
-              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold">Rejection Policy (Task 20A)</p>
-                <p className="mt-0.5 text-[11px] text-amber-800">
-                  Rejection is a terminal action. You must provide a clear
-                  mandatory remark (1–2000 characters). Upon rejection, the case
-                  will be moved to the Maker Rejected Bucket.
-                </p>
-              </div>
-            </div>
-
             <Field>
               <Label htmlFor="profileRejectionReason">
-                Rejection reason / justification{" "}
+                Rejection reason{" "}
                 <span className="text-rose-600">*</span>
               </Label>
               <textarea
@@ -12913,8 +12933,8 @@ const resolveStageStatus = (
         }
         description={
           currentRevertTarget
-            ? `Send application #${getEffectiveDsaCode(revertingDsa)} back to ${currentRevertTarget.targetRole} (Level ${currentRevertTarget.targetLevel}) for re-evaluation.`
-            : "Send application back for re-evaluation."
+            ? ``
+            : ""
         }
         width="max-w-lg"
       >
@@ -12933,7 +12953,7 @@ const resolveStageStatus = (
 
           <Field>
             <Label htmlFor="revertRemarks">
-              Revert Reason / Observations{" "}
+              Revert Reason
               <span className="text-rose-500">*</span>
             </Label>
             <textarea
@@ -13004,22 +13024,12 @@ const resolveStageStatus = (
 
       {/* ── Task 20C: RE_ALLOCATE modal ───────────────────────────────────── */}
       <Modal
-        description={`Hand application #${getEffectiveDsaCode(dsa)} to another authority. Re-allocation is permitted between Levels 3, 4 and 5 only.`}
+        description={``}
         onClose={closeDecisionModals}
         open={Boolean(reAllocatingDsa) && showReAllocate}
         title="Re-allocate to Another Authority"
       >
         <div className="space-y-4">
-          <div className="flex items-start gap-2.5 rounded-lg border border-violet-200 bg-violet-50 px-3.5 py-3 text-xs leading-relaxed text-violet-900">
-            <Info className="mt-0.5 h-4 w-4 shrink-0 text-violet-500" />
-            <p>
-              The target must hold a Sub-Region Head, DGM or Region Head role.
-              The DGM option appears only when a DGM is posted for this branch.
-              The case moves to the target&rsquo;s level, assigned and locked to
-              them.
-            </p>
-          </div>
-
           <div className="space-y-1.5">
             <Label htmlFor="reAllocateTarget">Re-allocate To *</Label>
             {eligibleLoading ? (

@@ -13,6 +13,7 @@ import type {
   BranchOption,
   SubRegionOption,
   RegionOption,
+  DsaWorkBucket,
 } from "@/types/dsa";
 import type { LoanProduct, LoanType, LoanScheme, LoanTypeParameter, SchemeParameter, LoanTypeSlab, SchemeSlab } from "@/types/product";
 import type {
@@ -434,7 +435,7 @@ export const adminApi = {
     sort_by?: string;
     sort_order?: string;
     /** Task 22 — role-scoped work bucket. */
-    bucket?: "all" | "received" | "in_process" | "rejected" | "approved";
+    bucket?: DsaWorkBucket;
   }): Promise<BackendResponse<DsaListResponse>> => {
     return request<BackendResponse<DsaListResponse>>(`/v1/dsa${compactParams(params)}`, {
       method: "GET",

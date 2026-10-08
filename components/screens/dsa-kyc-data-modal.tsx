@@ -4,14 +4,12 @@ import React, { useEffect, useState, useCallback } from "react";
 import {
   Modal,
   Button,
-  StatusBadge,
 } from "@/components/ui/primitives";
 import { adminApi } from "@/apis/admin";
 import { cn } from "@/lib/utils";
 import {
   Loader2,
   ShieldCheck,
-  CheckCircle2,
   AlertCircle,
   Building2,
   CreditCard,
@@ -353,34 +351,7 @@ function TableRow({
         {label}
       </td>
       <td className="px-3 py-1.5 text-slate-900 align-top leading-tight">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className={cn(isMono && "font-mono font-bold text-slate-950")}>{value}</span>
-          {badge === "success" && (
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              <CheckCircle2 className="h-2.5 w-2.5" /> Verified
-            </span>
-          )}
-          {badge === "warning" && (
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-              Review
-            </span>
-          )}
-          {badge === "danger" && (
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-              Adverse
-            </span>
-          )}
-          {badge === "info" && (
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-              Compliant
-            </span>
-          )}
-          {badge === "neutral" && (
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-              Input
-            </span>
-          )}
-        </div>
+        <span className={cn(isMono && "font-mono font-bold text-slate-950")}>{value}</span>
       </td>
     </tr>
   );

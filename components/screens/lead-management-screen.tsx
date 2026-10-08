@@ -69,7 +69,7 @@ import { PageHeader } from "@/components/module";
 import { Button, Card, CardContent, CardHeader, Modal, StatusBadge, Tabs, Input, Select, Label } from "@/components/ui/primitives";
 import { useMockStore } from "@/lib/store";
 import { useToast } from "@/components/ui/toast";
-import { formatCurrency, formatDate, parseDobToIso, calculateAgeFromDob, cn } from "@/lib/utils";
+import { formatCurrency, formatDate, parseDobToIso, calculateAgeFromDob, cn, formatStatusLabel } from "@/lib/utils";
 import { getLoanPurposeOptionsFromApi } from "@/lib/loan-purpose";
 
 function SearchableDsaSelect({
@@ -1835,7 +1835,7 @@ const setFilters = (newFilters: {
                     {panVerified && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 border border-emerald-300">
                         <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                        PAN Verified
+                        {formatStatusLabel("PAN Verified")}
                       </span>
                     )}
                   </div>
@@ -1905,7 +1905,7 @@ const setFilters = (newFilters: {
                     {otpVerified && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 border border-emerald-300">
                         <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                        Mobile Verified
+                        {formatStatusLabel("Mobile Verified")}
                       </span>
                     )}
                   </div>
@@ -2825,7 +2825,7 @@ const setFilters = (newFilters: {
                   value={<span className="font-mono uppercase font-bold tracking-wider">{selectedLead.pan_no || "N/A"}</span>}
                   subvalue={
                     <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full">
-                      <Check className="h-2.5 w-2.5" /> PAN Verified
+                      <Check className="h-2.5 w-2.5" /> {formatStatusLabel("PAN Verified")}
                     </span>
                   }
                 />
@@ -2834,7 +2834,7 @@ const setFilters = (newFilters: {
                   value={<span className="font-mono">{selectedLead.mobile || "N/A"}</span>}
                   subvalue={
                     <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full">
-                      <Check className="h-2.5 w-2.5" /> OTP Verified
+                      <Check className="h-2.5 w-2.5" /> {formatStatusLabel("OTP Verified")}
                     </span>
                   }
                 />

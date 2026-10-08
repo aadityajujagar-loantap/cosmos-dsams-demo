@@ -13,6 +13,7 @@ export type DsaStatus =
   | "Pending Credit Approval"
   | "KYC Pending"
   | "On Hold"
+  | "awaiting_agreement_generate"
   | "Active"
   | "Suspended"
   | "Rejected"

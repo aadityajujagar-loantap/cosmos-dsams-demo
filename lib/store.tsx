@@ -1553,8 +1553,14 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
               const isApp = item.onboarding_status === "APPROVED";
               const isHold = item.onboarding_status === "ON_HOLD";
               const isRej = item.onboarding_status === "REJECTED";
-              const status: DsaStatus = isApp || item.operational_status === "ACTIVE"
+              const isSignedVerified =
+                String(item.agreement_status || "").toUpperCase() === "SIGNED_VERIFIED" &&
+                String(item.operational_status || "").toUpperCase() === "ACTIVE";
+
+              const status: DsaStatus = isSignedVerified
                 ? "Active"
+                : isApp
+                ? "awaiting_agreement_generate"
                 : isHold
                 ? "On Hold"
                 : isRej

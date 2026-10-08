@@ -184,3 +184,50 @@ export function titleCase(value: string) {
     .replace(/[-_]/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
+
+export function isCheckerLoggedIn(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const rolesStr = localStorage.getItem("auth_roles");
+    const roles: string[] = rolesStr ? JSON.parse(rolesStr) : [];
+    const userStr = localStorage.getItem("auth_user");
+    const user = userStr ? JSON.parse(userStr) : null;
+    const sessionUserStr = localStorage.getItem("cosmos_dsa_user");
+    const sessionUser = sessionUserStr ? JSON.parse(sessionUserStr) : null;
+
+    const roleStr = String(user?.role || sessionUser?.role || "").toLowerCase();
+    const email = String(user?.email || sessionUser?.email || "").toLowerCase();
+    const ticket = String(user?.ticket_no || user?.emp_id || sessionUser?.ticket_no || "").toLowerCase();
+
+    const isCheckerRole =
+      roles.some((r) => {
+        const lower = String(r).toLowerCase();
+        return lower.includes("checker") || lower.includes("sub_region") || lower.includes("subregion");
+      }) ||
+      roleStr.includes("checker") ||
+      roleStr.includes("sub-region") ||
+      roleStr.includes("sub region") ||
+      ticket.startsWith("chk") ||
+      email.includes("checker");
+
+    return isCheckerRole;
+  } catch {
+    return false;
+  }
+}
+
+export function formatStatusLabel(status: string, isChecker?: boolean): string {
+  if (!status) return "";
+  const norm = status.trim().toLowerCase();
+  if (norm === "awaiting_agreement_generate") {
+    return "Awaiting Agreement Generate";
+  }
+  const checker = isChecker !== undefined ? isChecker : isCheckerLoggedIn();
+  if (checker) {
+    if (norm === "verified") {
+      return "Checked";
+    }
+    return status.replace(/\bVerified\b/g, "Checked").replace(/\bverified\b/g, "checked");
+  }
+  return status;
+}
