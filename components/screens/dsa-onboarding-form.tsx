@@ -2194,7 +2194,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
     // Base payload — fields required by both DsaBranchSubmitRequest & DsaSelfSubmitRequest
     const payload: any = {
-      ...(createdDsaId ? { dsa_id: Number(createdDsaId) || createdDsaId } : {}),
       dsa_type: dsaType,
       branch_id: validBranchId,
       pan: pan.toUpperCase(),
