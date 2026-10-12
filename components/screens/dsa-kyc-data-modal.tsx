@@ -41,8 +41,75 @@ export function DsaKycDataModal({
   const [error, setError] = useState<string | null>(null);
   const [apiData, setApiData] = useState<any>(null);
 
+  const resolvePanDetails = useCallback(() => {
+    if (!dsa) return null;
+
+    const parseCandidate = (data: any) => {
+      if (!data) return null;
+      if (typeof data === "string") {
+        try {
+          return JSON.parse(data);
+        } catch {
+          return null;
+        }
+      }
+      return typeof data === "object" ? data : null;
+    };
+
+    const fromCached =
+      parseCandidate(cachedVerif?.details) ||
+      parseCandidate(cachedVerif?.normalized_data) ||
+      parseCandidate(cachedVerif?.response_payload) ||
+      parseCandidate(cachedVerif?.raw_response) ||
+      parseCandidate(cachedVerif?.response_json) ||
+      parseCandidate((cachedVerif as any)?.data?.details) ||
+      parseCandidate((cachedVerif as any)?.data);
+    if (fromCached) return fromCached;
+
+    const fromVerifications = ((dsa as any)?.verifications || []).find(
+      (v: any) => {
+        const vc = String(v.verification_code || "").toUpperCase();
+        return vc.includes("PAN");
+      },
+    );
+    if (fromVerifications) {
+      const fromVerifCandidate =
+        parseCandidate(fromVerifications.normalized_data) ||
+        parseCandidate(fromVerifications.details) ||
+        parseCandidate(fromVerifications.response_payload) ||
+        parseCandidate(fromVerifications.raw_response) ||
+        parseCandidate(fromVerifications.response_json);
+      if (fromVerifCandidate) return fromVerifCandidate;
+    }
+
+    if (dsa.pan) {
+      const isEntity =
+        dsa.dsa_type === "ENTITY" ||
+        dsa.dsa_type === "Entity" ||
+        dsa.entity_type === "ENTITY";
+      return {
+        pan: dsa.pan,
+        fullName: dsa.contact_person || dsa.name,
+        name: dsa.contact_person || dsa.name,
+        validStatus: "VALID",
+        status: "VALID",
+        panStatus: "VALID",
+        dobOrDoi: dsa.date_of_birth,
+        category: isEntity
+          ? "Company / Commercial Firm"
+          : "Individual (Person)",
+        phone: dsa.mobile,
+        email: dsa.email,
+        city: dsa.city,
+        state: dsa.state,
+        pincode: dsa.pincode,
+      };
+    }
+    return null;
+  }, [dsa, cachedVerif]);
+
   const fetchKycData = useCallback(async () => {
-    if (!type || !dsa) return;
+    if (!type || !dsa || isMaker) return;
     setLoading(true);
     setError(null);
 
@@ -57,48 +124,30 @@ export function DsaKycDataModal({
 
       if (type === "pan") {
         if (!dsa.pan) throw new Error("No PAN number found on DSA profile.");
-        res = isEntity
-          ? await adminApi.verifyPanEntity({
-              pan: dsa.pan,
-              dsa_id: dsaIdNum,
-              entity_name: dsa.entity_name || dsa.name,
-            })
-          : await adminApi.verifyPanAdvance({
-              pan: dsa.pan,
-              dsa_id: dsaIdNum,
-            });
+        const code = isEntity ? "PAN_ENTITY" : "PAN_ADVANCED_INDIVIDUAL";
+        res = await adminApi.triggerCheckerVerification(dsa.id, code, {
+          pan: dsa.pan,
+        });
       } else if (type === "gst") {
-        if (dsa.gst) {
-          res = await adminApi.verifyGstInfo({
-            gstin: dsa.gst,
-            flag: 1,
-            dsa_id: dsaIdNum,
-          });
-        } else if (dsa.pan) {
-          res = await adminApi.resolvePanToGstin({
-            pan: dsa.pan,
-            dsa_id: dsaIdNum,
-          });
-        } else {
-          throw new Error("Neither GSTIN nor PAN available on DSA profile.");
-        }
+        res = await adminApi.triggerCheckerVerification(dsa.id, "GST", {
+          gstin: dsa.gst,
+          pan: dsa.pan,
+        });
       } else if (type === "bank") {
         if (!dsa.account_number || !dsa.ifsc) {
           throw new Error("Bank Account Number and IFSC code are required.");
         }
-        res = await adminApi.verifyBankAccount({
+        res = await adminApi.triggerCheckerVerification(dsa.id, "BANK", {
           account_number: dsa.account_number,
           ifsc: dsa.ifsc,
-          dsa_id: dsaIdNum,
         });
       } else if (type === "udyam") {
         const regNo =
           dsa.business_license_no ||
           (dsa as any)?.udyam_registration_no ||
           "UDYAM-MH-12-0012345";
-        res = await adminApi.verifyUdyam({
+        res = await adminApi.triggerCheckerVerification(dsa.id, "UDYAM", {
           registration_number: regNo,
-          dsa_id: dsaIdNum,
         });
       } else if (type === "cibil") {
         const isInd =
@@ -136,25 +185,43 @@ export function DsaKycDataModal({
     } finally {
       setLoading(false);
     }
-  }, [type, dsa, cachedVerif]);
+  }, [type, dsa, cachedVerif, isMaker]);
 
   useEffect(() => {
     if (open && type) {
+      if (type === "pan") {
+        const panDetails = resolvePanDetails();
+        if (panDetails) {
+          setApiData({ data: { details: panDetails } });
+          setLoading(false);
+          setError(null);
+          return;
+        }
+      }
+
+      if (isMaker) {
+        setLoading(false);
+        setError(null);
+        return;
+      }
+
       // If we already have cached verif details for this type, initialize state immediately
       const initialCachedDetails =
         cachedVerif?.details ||
         cachedVerif?.response_payload ||
         cachedVerif?.raw_response ||
+        cachedVerif?.normalized_data ||
         (cachedVerif as any)?.data?.details;
       if (initialCachedDetails) {
         setApiData({ data: { details: initialCachedDetails } });
+      } else {
+        fetchKycData();
       }
-      fetchKycData();
     } else {
       setApiData(null);
       setError(null);
     }
-  }, [open, type, fetchKycData]);
+  }, [open, type, fetchKycData, cachedVerif, isMaker, resolvePanDetails]);
 
   if (!open || !type || (isMaker && type !== "pan")) return null;
 
@@ -175,7 +242,9 @@ export function DsaKycDataModal({
   const getTitle = () => {
     switch (type) {
       case "pan":
-        return "PAN Verification · Live API Data";
+        return isMaker
+          ? "PAN Verification · Verified Details"
+          : "PAN Verification · Live API Data";
       case "gst":
         return dsa?.gst
           ? "GSTIN Master Database · Live API Data"

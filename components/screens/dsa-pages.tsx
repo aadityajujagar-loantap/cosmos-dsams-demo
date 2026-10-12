@@ -3661,11 +3661,11 @@ export function DsaProfilePage({ id }: { id: string }) {
     dsa?.onboarding_status !== "REJECTED",
   );
 
-  // PAN is never auto-approved: it only turns Verified once someone explicitly
-  // runs the PAN check via its button. The Maker runs it as the approving
-  // authority; the Checker keeps a Re-Check button for a second opinion.
+  // PAN is verified during DSA self-onboarding journey; Maker only views verified status.
+  // Only Checker authority can run Re-Check PAN verification.
   const canVerifyPanKyc = Boolean(
-    (isMakerUser || isCheckerRole) &&
+    !isMakerUser &&
+    isCheckerRole &&
     dsa?.operational_status !== "ACTIVE" &&
     dsa?.onboarding_status !== "REJECTED",
   );
@@ -3680,9 +3680,7 @@ export function DsaProfilePage({ id }: { id: string }) {
       toast({
         title: "Access Restricted",
         description:
-          type === "pan"
-            ? "Only Maker or Checker authority can run PAN verification."
-            : "Only Checker authority can perform or re-check KYC verifications.",
+          "Only Checker authority can perform or re-check KYC verifications.",
         variant: "warning",
       });
       return;
@@ -3706,119 +3704,44 @@ export function DsaProfilePage({ id }: { id: string }) {
           dsa.dsa_type === "Entity" ||
           dsa.entity_type === "ENTITY";
 
-        let res: any;
-        if (isEntity) {
-          res = await adminApi.verifyPanEntity({
-            pan: dsa.pan,
-            dsa_id: dsaIdNum,
-            entity_name: dsa.entity_name || dsa.name,
-          });
-        } else {
-          res = await adminApi.verifyPanAdvance({
-            pan: dsa.pan,
-            dsa_id: dsaIdNum,
-          });
-        }
-        if (res && res.success) {
+        const panCode = isEntity ? "PAN_ENTITY" : "PAN_ADVANCED_INDIVIDUAL";
+        const res = await triggerCheckerVerification(dsa.id, panCode, {
+          pan: dsa.pan,
+        });
+        await loadKycHistory(dsa.id);
+        await fetchDsaDetail(dsa.id);
+        const isSuccess =
+          res &&
+          res.is_success !== false &&
+          (res.status === undefined ||
+            res.status === "success" ||
+            res.status === true);
+        if (isSuccess) {
           setVerifiedKyc((prev) => ({ ...prev, pan: true }));
           setFailedKyc((prev) => ({ ...prev, pan: false }));
-          toast({
-            title: isEntity ? "Entity PAN Verified" : "PAN Verified",
-            description:
-              res.message ||
-              (isEntity
-                ? "Corporate PAN verified successfully via Karza Gateway."
-                : "PAN verified successfully via ScoreMe API Gateway."),
-            variant: "success",
-          });
-          await loadKycHistory(dsa.id);
-          await fetchDsaDetail(dsa.id);
         } else {
           setVerifiedKyc((prev) => ({ ...prev, pan: false }));
           setFailedKyc((prev) => ({ ...prev, pan: true }));
-          toast({
-            title: isEntity
-              ? "Entity PAN Verification Failed"
-              : "PAN Verification Failed",
-            description: res?.message || "Failed to verify PAN.",
-            variant: "destructive",
-          });
         }
       } else if (type === "gst") {
-        try {
-          await triggerCheckerVerification(dsa.id, "GST");
-        } catch {
-          // non-critical if not at Level 2 review stage
-        }
-
-        if (variant === "pan_to_gstin" || !dsa.gst) {
-          if (!dsa.pan) {
-            toast({
-              title: "PAN Missing",
-              description:
-                "PAN number required to resolve linked GSTIN records.",
-              variant: "warning",
-            });
-            return;
-          }
-          const res = await adminApi.resolvePanToGstin({
-            pan: dsa.pan,
-            dsa_id: dsaIdNum,
-          });
-          if (res && res.success) {
-            setVerifiedKyc((prev) => ({ ...prev, gst: true }));
-            setFailedKyc((prev) => ({ ...prev, gst: false }));
-            const details = res.data?.details?.data || res.data?.details || [];
-            if (Array.isArray(details) && details.length > 0) {
-              const gsts = details
-                .map((d: any) => d.gstin || d.gstinId || d)
-                .filter(Boolean);
-              setDiscoveredGstins(gsts);
-            }
-            toast({
-              title: "PAN to GSTIN Resolved",
-              description:
-                res.message || "Linked GSTIN numbers resolved successfully.",
-              variant: "success",
-            });
-            await loadKycHistory(dsa.id);
-            await fetchDsaDetail(dsa.id);
-          } else {
-            setVerifiedKyc((prev) => ({ ...prev, gst: false }));
-            setFailedKyc((prev) => ({ ...prev, gst: true }));
-            toast({
-              title: "GSTIN Lookup Failed",
-              description: res?.message || "Failed to find GSTIN for PAN.",
-              variant: "destructive",
-            });
-          }
+        const res = await triggerCheckerVerification(dsa.id, "GST", {
+          gstin: dsa.gst,
+          pan: dsa.pan,
+        });
+        await loadKycHistory(dsa.id);
+        await fetchDsaDetail(dsa.id);
+        const isSuccess =
+          res &&
+          res.is_success !== false &&
+          (res.status === undefined ||
+            res.status === "success" ||
+            res.status === true);
+        if (isSuccess) {
+          setVerifiedKyc((prev) => ({ ...prev, gst: true }));
+          setFailedKyc((prev) => ({ ...prev, gst: false }));
         } else {
-          const res = await adminApi.verifyGstInfo({
-            gstin: dsa.gst,
-            flag: 1,
-            dsa_id: dsaIdNum,
-          });
-          if (res && res.success) {
-            setVerifiedKyc((prev) => ({ ...prev, gst: true }));
-            setFailedKyc((prev) => ({ ...prev, gst: false }));
-            toast({
-              title: "GSTIN Verified",
-              description:
-                res.message ||
-                "GSTIN filing and registration verified via GSTN.",
-              variant: "success",
-            });
-            await loadKycHistory(dsa.id);
-            await fetchDsaDetail(dsa.id);
-          } else {
-            setVerifiedKyc((prev) => ({ ...prev, gst: false }));
-            setFailedKyc((prev) => ({ ...prev, gst: true }));
-            toast({
-              title: "GSTIN Verification Failed",
-              description: res?.message || "Failed to verify GSTIN.",
-              variant: "destructive",
-            });
-          }
+          setVerifiedKyc((prev) => ({ ...prev, gst: false }));
+          setFailedKyc((prev) => ({ ...prev, gst: true }));
         }
       } else if (type === "bank") {
         if (!dsa.account_number || !dsa.ifsc) {
@@ -3831,88 +3754,64 @@ export function DsaProfilePage({ id }: { id: string }) {
           return;
         }
 
-        const isPennyless = variant === "pennyless";
-        const res = isPennyless
-          ? await adminApi.verifyBankAccountPennyless({
-              account_number: dsa.account_number,
-              ifsc: dsa.ifsc,
-              dsa_id: dsaIdNum,
-            })
-          : await adminApi.verifyBankAccount({
-              account_number: dsa.account_number,
-              ifsc: dsa.ifsc,
-              dsa_id: dsaIdNum,
-            });
-
-        if (res && res.success) {
+        let res: any;
+        try {
+          res = await triggerCheckerVerification(dsa.id, "BANK", {
+            account_number: dsa.account_number,
+            ifsc: dsa.ifsc,
+          });
+        } catch {
+          const isPennyless = variant === "pennyless";
+          res = isPennyless
+            ? await adminApi.verifyBankAccountPennyless({
+                account_number: dsa.account_number,
+                ifsc: dsa.ifsc,
+                dsa_id: dsaIdNum,
+              })
+            : await adminApi.verifyBankAccount({
+                account_number: dsa.account_number,
+                ifsc: dsa.ifsc,
+                dsa_id: dsaIdNum,
+              });
+        }
+        await loadKycHistory(dsa.id);
+        await fetchDsaDetail(dsa.id);
+        const isSuccess =
+          res &&
+          res.is_success !== false &&
+          (res.status === undefined ||
+            res.status === "success" ||
+            res.status === true);
+        if (isSuccess) {
           setVerifiedKyc((prev) => ({ ...prev, bank: true }));
           setFailedKyc((prev) => ({ ...prev, bank: false }));
-          toast({
-            title: isPennyless
-              ? "Pennyless BAV Verified"
-              : "Penny Drop BAV Verified",
-            description:
-              res.message ||
-              (isPennyless
-                ? "Bank account verified successfully via Pennyless BAV."
-                : "Bank account verified successfully via Penny Drop (₹1.00)."),
-            variant: "success",
-          });
-          await loadKycHistory(dsa.id);
-          await fetchDsaDetail(dsa.id);
         } else {
           setVerifiedKyc((prev) => ({ ...prev, bank: false }));
           setFailedKyc((prev) => ({ ...prev, bank: true }));
-          toast({
-            title: "Bank Verification Failed",
-            description: res?.message || "Failed to verify bank account.",
-            variant: "destructive",
-          });
         }
       } else if (type === "udyam") {
-        try {
-          await triggerCheckerVerification(dsa.id, "UDYAM");
-        } catch {
-          // non-critical if not at Level 2 review stage
-        }
-
         const regNo =
           dsa.business_license_no ||
           (dsa as any)?.udyam_registration_no ||
           (dsa as any)?.udyam_number ||
           "";
-        if (!regNo.trim()) {
-          toast({
-            title: "Udyam Number Missing",
-            description:
-              "No Udyam registration number on the DSA profile to verify. Ask the applicant to provide it first.",
-            variant: "warning",
-          });
-          return;
-        }
-        const res = await adminApi.verifyUdyam({
+        const res = await triggerCheckerVerification(dsa.id, "UDYAM", {
           registration_number: regNo,
-          dsa_id: dsaIdNum,
         });
-        if (res && res.success) {
+        await loadKycHistory(dsa.id);
+        await fetchDsaDetail(dsa.id);
+        const isSuccess =
+          res &&
+          res.is_success !== false &&
+          (res.status === undefined ||
+            res.status === "success" ||
+            res.status === true);
+        if (isSuccess) {
           setVerifiedKyc((prev) => ({ ...prev, udyam: true }));
           setFailedKyc((prev) => ({ ...prev, udyam: false }));
-          toast({
-            title: "Udyam Registration Verified",
-            description:
-              res.message || "MSME Udyam certificate verified successfully.",
-            variant: "success",
-          });
-          await loadKycHistory(dsa.id);
-          await fetchDsaDetail(dsa.id);
         } else {
           setVerifiedKyc((prev) => ({ ...prev, udyam: false }));
           setFailedKyc((prev) => ({ ...prev, udyam: true }));
-          toast({
-            title: "Udyam Verification Failed",
-            description: res?.message || "Failed to verify Udyam registration.",
-            variant: "destructive",
-          });
         }
       } else if (type === "cibil") {
         if (isMakerUser) return;
@@ -4810,8 +4709,9 @@ export function DsaProfilePage({ id }: { id: string }) {
 
   const isPanChecked =
     !failedKyc.pan &&
-    (Boolean(verifiedKyc.pan) ||
-      isKycTypeVerified("pan", ["PAN"], false));
+    (Boolean(dsa?.pan) ||
+      Boolean(verifiedKyc.pan) ||
+      isKycTypeVerified("pan", ["PAN"], true));
   const isGstChecked =
     !failedKyc.gst &&
     (Boolean(verifiedKyc.gst) ||
@@ -7962,7 +7862,6 @@ const resolveStageStatus = (
                           onClick={async () => {
                             if (!dsa) return;
                             setVerifyingKyc({
-                              pan: true,
                               gst: true,
                               bank: true,
                               udyam: true,
@@ -7978,68 +7877,48 @@ const resolveStageStatus = (
                                 key: string;
                                 promise: Promise<any>;
                               }[] = [];
-                              if (dsa.gst) {
-                                tasks.push({
-                                  key: "gst",
-                                  promise: (async () => {
-                                    try {
-                                      await triggerCheckerVerification(
-                                        dsa.id,
-                                        "GST",
-                                      );
-                                    } catch {}
-                                    return adminApi.verifyGstInfo({
-                                      gstin: dsa.gst,
-                                      flag: 1,
-                                      dsa_id: dsaIdNum,
-                                    });
-                                  })(),
-                                });
-                              } else if (dsa.pan) {
-                                tasks.push({
-                                  key: "gst",
-                                  promise: (async () => {
-                                    try {
-                                      await triggerCheckerVerification(
-                                        dsa.id,
-                                        "GST",
-                                      );
-                                    } catch {}
-                                    return adminApi.resolvePanToGstin({
-                                      pan: dsa.pan,
-                                      dsa_id: dsaIdNum,
-                                    });
-                                  })(),
-                                });
-                              }
+                              tasks.push({
+                                key: "gst",
+                                promise: triggerCheckerVerification(
+                                  dsa.id,
+                                  "GST",
+                                  { gstin: dsa.gst, pan: dsa.pan },
+                                ),
+                              });
                               if (dsa.account_number && dsa.ifsc) {
                                 tasks.push({
                                   key: "bank",
-                                  promise: adminApi.verifyBankAccount({
-                                    account_number: dsa.account_number,
-                                    ifsc: dsa.ifsc,
-                                    dsa_id: dsaIdNum,
-                                  }),
+                                  promise: (async () => {
+                                    try {
+                                      return await triggerCheckerVerification(
+                                        dsa.id,
+                                        "BANK",
+                                        {
+                                          account_number: dsa.account_number,
+                                          ifsc: dsa.ifsc,
+                                        },
+                                      );
+                                    } catch {
+                                      return adminApi.verifyBankAccount({
+                                        account_number: dsa.account_number,
+                                        ifsc: dsa.ifsc,
+                                        dsa_id: dsaIdNum,
+                                      });
+                                    }
+                                  })(),
                                 });
                               }
                               const regNo =
                                 dsa.business_license_no ||
                                 (dsa as any)?.udyam_registration_no ||
-                                "UDYAM-MH-12-0012345";
+                                "";
                               tasks.push({
                                 key: "udyam",
-                                promise: (async () => {
-                                  try {
-                                    await triggerCheckerVerification(
-                                      dsa.id,
-                                      "UDYAM",
-                                    );
-                                  } catch {}
-                                  return adminApi.verifyUdyam({
-                                    registration_number: regNo,
-                                    dsa_id: dsaIdNum,
-                                  });
-                                })(),
+                                promise: triggerCheckerVerification(
+                                  dsa.id,
+                                  "UDYAM",
+                                  { registration_number: regNo },
+                                ),
                               });
                               if (
                                 !isMakerUser &&
@@ -8189,18 +8068,11 @@ const resolveStageStatus = (
                           const vc = String(v.verification_code || "").toUpperCase();
                           // dsa_verifications codes are exact registry codes (GST, UDYAM,
                           // PAN_ADVANCED_INDIVIDUAL, ...); match whole tokens only.
-                          const match = allowedTypes
+                          return allowedTypes
                             ? allowedTypes.some(
                                 (a) => vc === a.toUpperCase() || vc.includes(a.toUpperCase()),
                               )
                             : vc.includes(code.toUpperCase());
-                          if (!match) return false;
-                          if (dsa?.created_at && v.created_at) {
-                            return (
-                              new Date(v.created_at) >= new Date(dsa.created_at)
-                            );
-                          }
-                          return true;
                         },
                       );
                       if (fromDsa) return fromDsa;
@@ -8208,13 +8080,7 @@ const resolveStageStatus = (
 
                       const fromDb = kycVerificationsList.find((v: any) => {
                         const t = String(v.type || "").toUpperCase();
-                        if (!matchesType(t)) return false;
-                        if (dsa?.created_at && v.created_at) {
-                          return (
-                            new Date(v.created_at) >= new Date(dsa.created_at)
-                          );
-                        }
-                        return true;
+                        return matchesType(t);
                       });
                       if (fromDb) {
                         return {
@@ -8227,8 +8093,8 @@ const resolveStageStatus = (
                       return undefined;
                     };
 
-                    // PAN reads dsa_verifications only — onboarding KYC rows are not approval.
-                    const panVerif = getVerif("PAN", false);
+                    // PAN reads dsa_verifications and onboarding KYC rows
+                    const panVerif = getVerif("PAN", true);
                     // PAN_TO_GSTIN must NOT satisfy the GST slot: its type string contains
                     // "GST", so a substring match would let a PAN-to-GSTIN row satisfy both.
                     const gstVerif =
