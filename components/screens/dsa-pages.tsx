@@ -2778,14 +2778,15 @@ export function DsaManagementPage() {
                 <table className="w-full border-collapse text-sm table-fixed">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-bold uppercase tracking-wider text-slate-500">
-                      <th className="w-1/4 p-4 text-center">DSA Name</th>
-                      <th className="w-1/4 p-4 text-center">DSA Type</th>
-                      <th className="w-1/4 p-4 text-center">Status</th>
-                      <th className="w-1/4 p-4 text-center whitespace-nowrap">Actions</th>
+                      <th className="w-20 px-3 py-4 text-center whitespace-nowrap">Sr No.</th>
+                      <th className="p-4 text-center">DSA Name</th>
+                      <th className="p-4 text-center">DSA Type</th>
+                      <th className="p-4 text-center">Status</th>
+                      <th className="p-4 text-center whitespace-nowrap">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {dsas.map((item) => {
+                    {dsas.map((item, index) => {
                       // Task 22 — a row is only actionable when the case is at
                       // this role's stage. Rows that are not are still listed
                       // (you can see it exists) but cannot be opened, edited or
@@ -2844,7 +2845,12 @@ export function DsaManagementPage() {
                         }}
                         title={locked ? lockNote : undefined}
                       >
-                        <td className="w-1/4 p-4 text-center">
+                        <td className="w-20 px-3 py-4 text-center whitespace-nowrap">
+                          <span className="font-medium text-slate-700">
+                            {((pagination.currentPage || page || 1) - 1) * (pagination.perPage || 10) + index + 1}
+                          </span>
+                        </td>
+                        <td className="p-4 text-center">
                           <p
                             className={cn(
                               "font-semibold",
@@ -2856,16 +2862,16 @@ export function DsaManagementPage() {
                             {displayName}
                           </p>
                         </td>
-                        <td className="w-1/4 p-4 text-center">
+                        <td className="p-4 text-center">
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 capitalize">
                             {isIndividual ? "Individual" : "Entity"}
                           </span>
                         </td>
-                        <td className="w-1/4 p-4 text-center whitespace-nowrap">
+                        <td className="p-4 text-center whitespace-nowrap">
                           <StatusBadge status={getDsaDisplayStatus(item)} />
                         </td>
                         <td
-                          className="w-1/4 p-4 text-center whitespace-nowrap"
+                          className="p-4 text-center whitespace-nowrap"
                           onClick={(event) => event.stopPropagation()}
                         >
                           <div className="flex items-center justify-center gap-2 shrink-0 whitespace-nowrap">
