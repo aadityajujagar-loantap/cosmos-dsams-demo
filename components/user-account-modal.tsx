@@ -1,10 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { LogOut } from "lucide-react";
+import {
+  Building2,
+  Hash,
+  LogOut,
+  Mail,
+  Phone,
+  ShieldCheck,
+  Ticket,
+} from "lucide-react";
 
 import { authApi } from "@/apis/auth";
-import { Badge, Button, Modal } from "@/components/ui/primitives";
+import { Button, Modal } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { authService } from "@/services/authService";
 import type { Role, User } from "@/types/auth";
@@ -27,7 +35,7 @@ function roleNames(roles: Role[]) {
 }
 
 function fieldValue(value: unknown) {
-  if (value === null || value === undefined || value === "") return "-";
+  if (value === null || value === undefined || value === "") return "—";
   return String(value);
 }
 
@@ -38,7 +46,12 @@ function initials(name: string) {
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 }
 
-export function UserAccountModal({ fallbackUser, onClose, onSignOut, open }: UserAccountModalProps) {
+export function UserAccountModal({
+  fallbackUser,
+  onClose,
+  onSignOut,
+  open,
+}: UserAccountModalProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [backendUser, setBackendUser] = useState<User | null>(null);
@@ -96,89 +109,138 @@ export function UserAccountModal({ fallbackUser, onClose, onSignOut, open }: Use
       title="User Profile"
       width="max-w-md"
     >
-      <div className="space-y-4">
-        {/* Profile Card Header */}
-        <div className="flex items-center gap-3.5 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-slate-900 text-sm font-bold text-white shadow-xs">
-            {initials(displayName)}
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="truncate text-sm font-bold text-slate-900 leading-tight">
-                {displayName}
-              </h3>
-              <Badge tone="blue" className="text-[10px] h-5 font-bold uppercase shrink-0">
-                {displayRole}
-              </Badge>
-            </div>
-            <p className="truncate text-xs font-medium text-slate-500 mt-0.5">
-              {displayEmail}
+      {loading ? (
+        <div className="space-y-4">
+          <div className="flex flex-col items-center justify-center rounded-xl border border-slate-200/80 bg-slate-50/60 p-10 text-center min-h-[260px]">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-slate-800 mb-3" />
+            <h4 className="text-xs font-semibold text-slate-800">Loading user profile...</h4>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Fetching session details and account info
             </p>
           </div>
+          <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              className="h-9 px-4 text-xs font-medium text-slate-600 rounded-lg hover:bg-slate-100 transition"
+            >
+              Close
+            </Button>
+            <Button
+              type="button"
+              disabled
+              variant="danger"
+              className="h-9 gap-2 px-4 text-xs font-medium rounded-lg opacity-50 cursor-not-allowed"
+            >
+              <LogOut className="h-4 w-4" />
+              Sign Out
+            </Button>
+          </div>
         </div>
-
-        {/* Account Details Summary */}
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center justify-between">
-            <span>Assignment &amp; Scope</span>
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 normal-case">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              {authService.getToken() ? "Session Active" : "No Token"}
-            </span>
+      ) : (
+        <div className="space-y-3.5">
+          {/* Profile Header Card */}
+          <div className="flex items-center gap-3.5 rounded-xl border border-slate-200 bg-white p-3.5">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">
+              {initials(displayName)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="truncate text-sm font-semibold text-slate-900">
+                  {displayName}
+                </h3>
+                <span className="inline-flex items-center rounded-md bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-700 shrink-0">
+                  {displayRole}
+                </span>
+              </div>
+              <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-slate-500">
+                <Mail className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                <span className="truncate">{displayEmail}</span>
+              </p>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
-            <div className="space-y-0.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">User ID</span>
-              <p className="font-mono font-bold text-slate-900">{fieldValue(user?.id ?? fallbackUser.id)}</p>
+          {/* Assignment & Scope Details */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 space-y-3">
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-200/80">
+              <div className="flex items-center gap-1.5">
+                <ShieldCheck className="h-4 w-4 text-slate-600" />
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+                  Assignment &amp; Scope
+                </span>
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700 border border-emerald-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                {authService.getToken() ? "Session Active" : "No Token"}
+              </span>
             </div>
-            <div className="space-y-0.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ticket Number</span>
-              <p className="font-mono font-bold text-slate-900">{fieldValue(user?.ticket_no)}</p>
-            </div>
-            <div className="space-y-0.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Phone</span>
-              <p className="font-medium text-slate-800">{fieldValue(user?.phone)}</p>
-            </div>
-            <div className="space-y-0.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Branch Code</span>
-              <p className="font-mono font-bold text-slate-900">{fieldValue(user?.branch_code ?? fallbackUser.code)}</p>
-            </div>
-            <div className="space-y-0.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Branch Role</span>
-              <p className="font-medium text-slate-800">{fieldValue(user?.branch_role_id)}</p>
-            </div>
-            <div className="space-y-0.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Zone Code</span>
-              <p className="font-medium text-slate-800">{fieldValue(user?.zone_code)}</p>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="rounded-lg border border-slate-200/80 bg-white p-2.5">
+                <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
+                  <Hash className="h-3 w-3 text-slate-400" />
+                  <span>User ID</span>
+                </div>
+                <p className="mt-1 font-mono text-xs font-semibold text-slate-900 truncate">
+                  {fieldValue(user?.id ?? fallbackUser.id)}
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-slate-200/80 bg-white p-2.5">
+                <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
+                  <Ticket className="h-3 w-3 text-slate-400" />
+                  <span>Ticket Number</span>
+                </div>
+                <p className="mt-1 font-mono text-xs font-semibold text-slate-900 truncate">
+                  {fieldValue(user?.ticket_no)}
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-slate-200/80 bg-white p-2.5">
+                <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
+                  <Phone className="h-3 w-3 text-slate-400" />
+                  <span>Phone</span>
+                </div>
+                <p className="mt-1 text-xs font-medium text-slate-800 truncate">
+                  {fieldValue(user?.phone)}
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-slate-200/80 bg-white p-2.5">
+                <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
+                  <Building2 className="h-3 w-3 text-slate-400" />
+                  <span>Branch Code</span>
+                </div>
+                <p className="mt-1 font-mono text-xs font-semibold text-slate-900 truncate">
+                  {fieldValue(user?.branch_code ?? fallbackUser.code)}
+                </p>
+              </div>
             </div>
           </div>
-          {loading && (
-            <p className="mt-2 text-[11px] text-slate-400 italic">Syncing latest account data...</p>
-          )}
-        </div>
 
-        {/* Actions Footer */}
-        <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onClose}
-            className="text-xs font-semibold text-slate-600"
-          >
-            Close
-          </Button>
-          <Button
-            type="button"
-            onClick={onSignOut}
-            variant="danger"
-            className="gap-2 text-xs font-bold px-4 py-2 shadow-xs"
-          >
-            <LogOut className="h-4 w-4" />
-            Sign Out
-          </Button>
+          {/* Actions Footer */}
+          <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              className="h-9 px-4 text-xs font-medium text-slate-600 rounded-lg hover:bg-slate-100 transition"
+            >
+              Close
+            </Button>
+            <Button
+              type="button"
+              onClick={onSignOut}
+              variant="danger"
+              className="h-9 gap-2 px-4 text-xs font-semibold rounded-lg shadow-2xs hover:shadow-xs transition"
+            >
+              <LogOut className="h-4 w-4" />
+              Sign Out
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
     </Modal>
   );
 }
