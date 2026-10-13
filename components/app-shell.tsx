@@ -7,11 +7,15 @@ import {
   Bell,
   Building2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ClipboardCheck,
   FileText,
   LayoutDashboard,
   LineChart,
   Menu, MapPin,
+  PanelLeftClose,
+  PanelLeftOpen,
   Send,
   Settings,
   ShieldCheck,
@@ -212,7 +216,41 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [navOpenGroup, setNavOpenGroup] = useState<string | null>();
   const [readNotificationsVersion, setReadNotificationsVersion] = useState(0);
   const [branches, setBranches] = useState<BranchOption[]>([]);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [flyoutGroup, setFlyoutGroup] = useState<string | null>(null);
+  const [flyoutPos, setFlyoutPos] = useState<{ top: number; left: number } | null>(null);
   const { store, currentUser, logout, hasPermission } = useMockStore();
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("cosmos_sidebar_collapsed");
+      if (saved !== null) {
+        setIsCollapsed(saved === "true");
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!flyoutGroup) return;
+    const handleClickOutside = () => setFlyoutGroup(null);
+    window.addEventListener("click", handleClickOutside);
+    return () => window.removeEventListener("click", handleClickOutside);
+  }, [flyoutGroup]);
+
+  const toggleCollapse = () => {
+    setIsCollapsed((prev) => {
+      const next = !prev;
+      setFlyoutGroup(null);
+      try {
+        localStorage.setItem("cosmos_sidebar_collapsed", String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     getCachedBranches()
@@ -641,175 +679,284 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   if (!mounted || !currentUser) return null;
 
-  const navigation = (
-    <nav className="scrollbar-subtle flex flex-1 flex-col gap-2 overflow-y-auto px-2 py-3">
-      {navGroups.map((group) => {
-        const hasDropdown = group.items.length > 1;
-        const groupActive = group.items.some((item) => isActive(pathname, item.href));
-        const groupOpen = navOpenGroup === undefined ? groupActive : navOpenGroup === group.label;
+  function renderNavigation(collapsed: boolean) {
+    if (collapsed) {
+      return (
+        <nav className="scrollbar-subtle flex flex-1 flex-col items-center gap-2 overflow-y-auto px-2 py-3">
+          {navGroups.map((group) => {
+            const hasDropdown = group.items.length > 1;
+            const groupActive = group.items.some((item) => isActive(pathname, item.href));
 
-        if (!hasDropdown) {
-          const item = group.items[0];
-          const Icon = item.icon;
-          const active = isActive(pathname, item.href);
+            if (!hasDropdown) {
+              const item = group.items[0];
+              const Icon = item.icon;
+              const active = isActive(pathname, item.href);
+
+              return (
+                <div key={group.label} className="relative flex justify-center">
+                  <Link
+                    className={cn(
+                      "flex h-10 w-10 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-100 hover:text-slate-950",
+                      active && "bg-blue-50 text-blue-700 ring-1 ring-blue-100",
+                    )}
+                    href={item.href}
+                    title={item.label}
+                    onClick={() => {
+                      setMobileOpen(false);
+                      setNavOpenGroup(null);
+                    }}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                  </Link>
+                </div>
+              );
+            }
+
+            const GroupIcon = group.items[0].icon;
+
+            return (
+              <div key={group.label} className="relative flex justify-center">
+                <button
+                  aria-label={group.label}
+                  className={cn(
+                    "flex h-10 w-10 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-100 hover:text-slate-950",
+                    groupActive && "bg-blue-50 text-blue-700 ring-1 ring-blue-100",
+                    flyoutGroup === group.label && "bg-slate-100 text-slate-950 ring-2 ring-blue-500",
+                  )}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setFlyoutPos({ top: rect.top, left: rect.right + 8 });
+                    setFlyoutGroup((current) => (current === group.label ? null : group.label));
+                  }}
+                  title={group.label}
+                  type="button"
+                >
+                  <GroupIcon className="h-4 w-4 shrink-0" />
+                </button>
+              </div>
+            );
+          })}
+        </nav>
+      );
+    }
+
+    return (
+      <nav className="scrollbar-subtle flex flex-1 flex-col gap-2 overflow-y-auto px-2 py-3">
+        {navGroups.map((group) => {
+          const hasDropdown = group.items.length > 1;
+          const groupActive = group.items.some((item) => isActive(pathname, item.href));
+          const groupOpen = navOpenGroup === undefined ? groupActive : navOpenGroup === group.label;
+
+          if (!hasDropdown) {
+            const item = group.items[0];
+            const Icon = item.icon;
+            const active = isActive(pathname, item.href);
+
+            return (
+              <div key={group.label}>
+                <Link
+                  className={cn(
+                    "flex h-9 items-center gap-2.5 rounded-md px-2.5 text-sm font-medium leading-5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950",
+                    active && "bg-blue-50 text-blue-700 ring-1 ring-blue-100",
+                  )}
+                  href={item.href}
+                  onClick={() => {
+                    setMobileOpen(false);
+                    setNavOpenGroup(null);
+                  }}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate text-sm font-medium leading-5">{item.label}</span>
+                </Link>
+              </div>
+            );
+          }
+
+          const GroupIcon = group.items[0].icon;
 
           return (
             <div key={group.label}>
-              <Link
+              <button
+                aria-expanded={groupOpen}
                 className={cn(
-                  "flex h-9 items-center gap-2.5 rounded-md px-2.5 text-sm font-medium leading-5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950",
-                  active && "bg-blue-50 text-blue-700 ring-1 ring-blue-100",
+                  "group flex h-9 w-full items-center justify-between gap-2.5 rounded-md px-2.5 text-left text-sm font-medium leading-5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950",
+                  groupOpen && "bg-slate-50 ring-1 ring-slate-100",
                 )}
-                href={item.href}
-                onClick={() => {
-                  setMobileOpen(false);
-                  setNavOpenGroup(null);
-                }}
+                onClick={() =>
+                  setNavOpenGroup((current) => {
+                    const resolved = current === undefined && groupActive ? group.label : current;
+                    return resolved === group.label ? null : group.label;
+                  })
+                }
+                type="button"
               >
-                <Icon className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate text-sm font-medium leading-5">{item.label}</span>
-              </Link>
-            </div>
-          );
-        }
-
-        const GroupIcon = group.items[0].icon;
-
-        return (
-          <div key={group.label}>
-            <button
-              aria-expanded={groupOpen}
-              className={cn(
-                "group flex h-9 w-full items-center justify-between gap-2.5 rounded-md px-2.5 text-left text-sm font-medium leading-5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950",
-                groupOpen && "bg-slate-50 ring-1 ring-slate-100",
-              )}
-              onClick={() =>
-                setNavOpenGroup((current) => {
-                  const resolved = current === undefined && groupActive ? group.label : current;
-                  return resolved === group.label ? null : group.label;
-                })
-              }
-              type="button"
-            >
-              <span className="flex min-w-0 items-center gap-2.5">
-                <GroupIcon className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate text-sm font-medium leading-5">{group.label}</span>
-              </span>
-              <ChevronDown
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <GroupIcon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate text-sm font-medium leading-5">{group.label}</span>
+                </span>
+                <ChevronDown
+                  className={cn(
+                    "h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 group-hover:text-slate-600",
+                    groupOpen && "rotate-180",
+                  )}
+                />
+              </button>
+              <div
                 className={cn(
-                  "h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 group-hover:text-slate-600",
-                  groupOpen && "rotate-180",
+                  "grid transition-all duration-200 ease-out",
+                  hasDropdown && !groupOpen ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100",
                 )}
-              />
-            </button>
-            <div
-              className={cn(
-                "grid transition-all duration-200 ease-out",
-                hasDropdown && !groupOpen ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100",
-              )}
-            >
-              <div className="min-h-0 overflow-hidden">
-                <div className={cn("space-y-0.5", hasDropdown && "pt-0.5")}>
-                  {group.items.map((item) => {
-                    const Icon = item.icon;
-                    const active = isActive(pathname, item.href);
-                    return (
-                      <Link
-                        className={cn(
-                          "flex h-9 items-center gap-2.5 rounded-md px-2.5 text-sm font-medium leading-5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950",
-                          hasDropdown && "ml-1.5 border-l border-slate-100 pl-3",
-                          active && "bg-blue-50 text-blue-700 ring-1 ring-blue-100",
-                        )}
-                        href={item.href}
-                        key={item.href}
-                        onClick={() => setMobileOpen(false)}
-                      >
-                        <Icon className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate text-sm font-medium leading-5">{item.label}</span>
-                      </Link>
-                    );
-                  })}
+              >
+                <div className="min-h-0 overflow-hidden">
+                  <div className={cn("space-y-0.5", hasDropdown && "pt-0.5")}>
+                    {group.items.map((item) => {
+                      const Icon = item.icon;
+                      const active = isActive(pathname, item.href);
+                      return (
+                        <Link
+                          className={cn(
+                            "flex h-9 items-center gap-2.5 rounded-md px-2.5 text-sm font-medium leading-5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950",
+                            hasDropdown && "ml-1.5 border-l border-slate-100 pl-3",
+                            active && "bg-blue-50 text-blue-700 ring-1 ring-blue-100",
+                          )}
+                          href={item.href}
+                          key={item.href}
+                          onClick={() => setMobileOpen(false)}
+                        >
+                          <Icon className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate text-sm font-medium leading-5">{item.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        );
-      })}
-    </nav>
-  );
+          );
+        })}
+      </nav>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
       <aside
-        className="fixed left-0 top-0 z-30 hidden h-screen w-64 border-r border-slate-200 bg-white lg:flex lg:flex-col"
+        className={cn(
+          "fixed left-0 top-0 z-30 hidden h-screen border-r border-slate-200 bg-white lg:flex lg:flex-col transition-all duration-300 ease-in-out",
+          isCollapsed ? "w-16" : "w-64",
+        )}
       >
-        <div className="flex h-16 items-center border-b border-slate-100 px-4 shrink-0">
-          <Image
-            alt="Cosmos Bank"
-            className="h-9 w-auto max-w-[230px]"
-            height={40}
-            priority
-            src={withBasePath("/logo-dsasm-cosmos.png")}
-            unoptimized
-            width={220}
-          />
+        <div
+          className={cn(
+            "flex h-16 items-center border-b border-slate-100 shrink-0",
+            isCollapsed ? "justify-center px-2" : "px-4",
+          )}
+        >
+          {isCollapsed ? (
+            <div className="flex h-10 w-10 items-center justify-center">
+              <Image
+                alt="Cosmos Bank"
+                className="h-8 w-auto object-contain"
+                height={36}
+                priority
+                src={withBasePath("/logo-collapsed.png")}
+                unoptimized
+                width={36}
+              />
+            </div>
+          ) : (
+            <Image
+              alt="Cosmos Bank"
+              className="h-9 w-auto max-w-[230px]"
+              height={40}
+              priority
+              src={withBasePath("/logo-dsasm-cosmos.png")}
+              unoptimized
+              width={220}
+            />
+          )}
         </div>
-        {navigation}
-        <div className="border-t border-slate-200 p-3 shrink-0 space-y-2">
+        {renderNavigation(isCollapsed)}
+        {/* Collapse Option at bottom left */}
+        <div className={cn("border-t border-slate-200 shrink-0", isCollapsed ? "p-2 flex justify-center" : "p-2.5")}>
           <button
             type="button"
-            onClick={() => setNotificationsOpen(true)}
-            aria-label="Open notifications"
-            className="group flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200/80 bg-white p-2 text-left transition hover:bg-slate-50 hover:border-slate-300"
-          >
-            <div className="flex items-center gap-2.5">
-              <span className="relative grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700 transition group-hover:bg-slate-200">
-                <Bell className="h-4 w-4" />
-                {notificationRows.length ? (
-                  <span className="absolute -right-1 -top-1 grid h-4.5 min-w-4.5 place-items-center rounded-full bg-rose-600 px-1 text-[9px] font-bold text-white">
-                    {notificationRows.length}
-                  </span>
-                ) : null}
-              </span>
-              <span className="text-xs font-semibold text-slate-800">Notifications</span>
-            </div>
-            {notificationRows.length ? (
-              <span className="text-[11px] font-semibold text-rose-600">
-                {notificationRows.length} new
-              </span>
-            ) : (
-              <span className="text-[11px] text-slate-400">All read</span>
+            onClick={toggleCollapse}
+            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className={cn(
+              "group flex items-center rounded-lg border border-slate-200/80 bg-slate-50/70 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 hover:border-slate-300",
+              isCollapsed
+                ? "h-10 w-10 justify-center"
+                : "w-full justify-between gap-2 px-3 py-2 text-xs font-semibold",
             )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setProfileOpen(true)}
-            className="group flex w-full items-center gap-3 rounded-lg border border-slate-200/80 bg-slate-50/70 p-2 text-left transition hover:bg-slate-100 hover:border-slate-300"
           >
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-slate-900 text-xs font-bold text-white shadow-xs">
-              {initials(currentUser.name)}
-            </span>
-            <div className="min-w-0 flex-1">
-              <span className="block truncate text-xs font-bold text-slate-900 leading-tight">
-                {currentUser.name}
-              </span>
-              <span className="block truncate text-[11px] font-medium text-slate-500">
-                {currentUser.role}
-              </span>
-            </div>
-            <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 group-hover:text-slate-600 transition-colors" />
+            {isCollapsed ? (
+              <PanelLeftOpen className="h-4 w-4 text-slate-500 group-hover:text-slate-800 transition-colors" />
+            ) : (
+              <>
+                <span className="flex items-center gap-2">
+                  <PanelLeftClose className="h-4 w-4 text-slate-500 group-hover:text-slate-800 transition-colors" />
+                  <span>Collapse</span>
+                </span>
+                <ChevronLeft className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-600 transition-colors" />
+              </>
+            )}
           </button>
         </div>
       </aside>
 
-      <div className="flex min-h-screen flex-col lg:pl-64">
+      {/* Flyout menu for collapsed grouped nav items */}
+      {isCollapsed && flyoutGroup && flyoutPos && (
+        <div
+          className="fixed z-50 min-w-[13rem] rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl animate-in fade-in zoom-in-95 duration-150"
+          style={{ top: `${flyoutPos.top}px`, left: `${flyoutPos.left}px` }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-2.5 py-1.5 border-b border-slate-100 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            {flyoutGroup}
+          </div>
+          <div className="mt-1 space-y-0.5">
+            {navGroups
+              .find((g) => g.label === flyoutGroup)
+              ?.items.map((item) => {
+                const Icon = item.icon;
+                const active = isActive(pathname, item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => {
+                      setFlyoutGroup(null);
+                      setMobileOpen(false);
+                    }}
+                    className={cn(
+                      "flex h-9 items-center gap-2.5 rounded-md px-2.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-950",
+                      active && "bg-blue-50 text-blue-700 font-semibold ring-1 ring-blue-100",
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
+      <div
+        className={cn(
+          "flex min-h-screen flex-col transition-all duration-300 ease-in-out",
+          isCollapsed ? "lg:pl-16" : "lg:pl-64",
+        )}
+      >
         {/* Top Header across all pages & all roles */}
         <header className="sticky top-0 z-20 flex min-h-[3.75rem] items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-2 backdrop-blur lg:px-6">
-          <div className="flex items-center gap-3 lg:hidden">
+          <div className="flex items-center gap-3">
             <Button
               aria-label="Open navigation"
-              className="mr-2 shrink-0"
+              className="mr-2 shrink-0 lg:hidden"
               onClick={() => setMobileOpen(true)}
               size="icon"
               type="button"
@@ -817,25 +964,54 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               <Menu className="h-5 w-5" />
             </Button>
-            <span className="text-sm font-bold text-slate-800">Cosmos Bank</span>
-          </div>
-          <div className="hidden lg:block" />
-          <div className="flex items-center gap-3 ml-auto">
-            <div className="flex flex-col items-end text-right">
-              <div className="flex items-center gap-1.5 leading-tight">
-                <span className="text-xs font-bold text-slate-900">{currentUser.name}</span>
-                <span className="rounded bg-blue-50 border border-blue-200 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
-                  {currentUser.role}
-                </span>
-              </div>
-              <div className="mt-1 inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-900 shadow-2xs">
+
+            <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+              <span className="text-sm font-bold tracking-tight text-slate-900">
+                {currentUser.name}
+              </span>
+              <span className="inline-flex items-center rounded-md bg-blue-50 border border-blue-200/80 px-2 py-0.5 text-[11px] font-semibold text-blue-700 shadow-2xs">
+                {currentUser.role}
+              </span>
+              <div className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50/80 px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs">
                 <Building2 className="h-3.5 w-3.5 text-blue-600 shrink-0" />
                 <span>
-                  <strong>{branchNameDisplay.name}</strong>
-                  {branchNameDisplay.code ? ` (${branchNameDisplay.code})` : ""}
+                  <strong className="font-semibold text-slate-800">{branchNameDisplay.name}</strong>
+                  {branchNameDisplay.code ? <span className="text-slate-500"> ({branchNameDisplay.code})</span> : ""}
                 </span>
               </div>
             </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 ml-auto">
+            <button
+              type="button"
+              onClick={() => setNotificationsOpen(true)}
+              aria-label="Open notifications"
+              title={`Notifications (${notificationRows.length ? `${notificationRows.length} new` : "All read"})`}
+              className="group relative flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200/80 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 hover:border-slate-300 shadow-2xs"
+            >
+              <Bell className="h-4 w-4 transition-transform group-hover:scale-105" />
+              {notificationRows.length ? (
+                <span className="absolute -top-1 -right-1 grid h-4.5 min-w-4.5 place-items-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white shadow-xs">
+                  {notificationRows.length}
+                </span>
+              ) : null}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setProfileOpen(true)}
+              aria-label="User account menu"
+              className="group flex items-center gap-2 rounded-lg border border-slate-200/80 bg-white p-1 pr-2.5 transition hover:bg-slate-50 hover:border-slate-300 shadow-2xs"
+            >
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-slate-900 text-xs font-bold text-white shadow-xs">
+                {initials(currentUser.name)}
+              </span>
+              <span className="hidden sm:inline-block max-w-[120px] truncate text-xs font-semibold text-slate-800">
+                {currentUser.name}
+              </span>
+              <ChevronDown className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-600 transition-colors" />
+            </button>
           </div>
         </header>
         <main className="compact-dashboard flex flex-1 flex-col w-full px-3 py-3 sm:px-4 sm:py-3.5 lg:px-5 lg:py-4">{children}</main>
@@ -861,7 +1037,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 width={210}
               />
             </div>
-            {navigation}
+            {renderNavigation(false)}
             <div className="border-t border-slate-200 p-3 shrink-0 space-y-2">
               <button
                 type="button"
