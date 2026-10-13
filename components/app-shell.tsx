@@ -19,7 +19,6 @@ import {
   Send,
   Settings,
   ShieldCheck,
-  UserCheck,
   UserPlus,
   Users,
   Wallet,
@@ -329,7 +328,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         {
           items: [
             { href: "/dsa/management", icon: Users, label: "DSA Management" },
-            { href: "/dsa/active", icon: UserCheck, label: "Active DSAs" },
             { href: "/dsa/onboarding", icon: UserPlus, label: "Onboard DSA" },
             { href: "/dsa/product-setting", icon: Settings, label: "Product Setting" },
           ],
@@ -414,7 +412,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         {
           items: [
             { href: "/dsa/management", icon: Users, label: "DSA Management" },
-            { href: "/dsa/active", icon: UserCheck, label: "Active DSAs" },
             { href: "/dsa/onboarding", icon: UserPlus, label: "Onboard DSA" },
           ],
           label: "Branch Initiator",
@@ -433,7 +430,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         {
           items: [
             { href: "/dsa/management", icon: Users, label: "DSA Approval Queue" },
-            { href: "/dsa/active", icon: UserCheck, label: "Active DSAs" },
             { href: "/dsa/product-setting", icon: Settings, label: "Product Setting" },
           ],
           label: "Checker Review",
