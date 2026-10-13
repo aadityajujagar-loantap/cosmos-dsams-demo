@@ -105,7 +105,7 @@ export function DashboardPage() {
   const [uploadedDocs, setUploadedDocs] = useState<string[]>([]);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [sourcingPartner, setSourcingPartner] = useState("");
-  const [managerView, setManagerView] = useState<"overview" | "verificationQueue" | "onHoldQueue">("overview");
+  const [managerView, setManagerView] = useState<"overview" | "verificationQueue" | "onHoldQueue" | "activeQueue">("overview");
   const [authorityTab, setAuthorityTab] = useState<string>("all");
   const [authoritySearch, setAuthoritySearch] = useState<string>("");
   const [authorityStatusFilter, setAuthorityStatusFilter] = useState<string>("");
@@ -168,6 +168,15 @@ export function DashboardPage() {
       return true;
     });
   }, [currentUser, liveDsas]);
+
+  const managerActiveDsas = useMemo((): LiveDsa[] => {
+    return liveDsas.filter(
+      (item) =>
+        getDsaDisplayStatus(item) === "ACTIVE" ||
+        String(item.operational_status || "").toUpperCase() === "ACTIVE",
+    );
+  }, [liveDsas]);
+
 
   const branchDsas = useMemo(() => {
     const isWorkflowAuthority = [
@@ -400,7 +409,7 @@ export function DashboardPage() {
       } else if (authorityTab === "rejected") {
         if (!isRejectedByMe) return false;
       } else if (authorityTab === "active") {
-        if (opStatus !== "ACTIVE" && statusStr !== "ACTIVE") return false;
+        if (opStatus !== "ACTIVE" && statusStr !== "ACTIVE" && getDsaDisplayStatus(dsa) !== "ACTIVE") return false;
       } else if (authorityTab === "all") {
         if (userLevel && userLevel >= 2) {
           if (!isInProcessForMe && !isRevertedByMe && !isRejectedByMe && !isApprovedByMe) {
@@ -914,6 +923,12 @@ export function DashboardPage() {
                 {onHoldDsas.length}
               </span>
             </Button>
+            <Button onClick={() => setManagerView("activeQueue")} size="sm" type="button" variant="ghost">
+              Active DSAs
+              <span className="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                {managerActiveDsas.length}
+              </span>
+            </Button>
           </div>
 
           <Card className="shadow-md">
@@ -1043,6 +1058,12 @@ export function DashboardPage() {
                 {onHoldDsas.length}
               </span>
             </Button>
+            <Button onClick={() => setManagerView("activeQueue")} size="sm" type="button" variant="ghost">
+              Active DSAs
+              <span className="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                {managerActiveDsas.length}
+              </span>
+            </Button>
           </div>
 
           <Card className="shadow-md">
@@ -1140,6 +1161,110 @@ export function DashboardPage() {
       );
     }
 
+    if (managerView === "activeQueue") {
+      return (
+        <div>
+          <PageHeader
+            description="Directory of approved and activated DSA partners operating with Cosmos Bank."
+            eyebrow={currentUser.role === "DSA Credit" ? "Credit approval cockpit" : "Portfolio cockpit"}
+            title="Dashboard"
+          />
+
+          <div className="mb-6 inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+            <Button onClick={() => setManagerView("overview")} size="sm" type="button" variant="ghost">
+              Overview
+            </Button>
+            <Button onClick={() => setManagerView("verificationQueue")} size="sm" type="button" variant="ghost">
+              Verification Queue
+              <span className="ml-1 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
+                {pendingDsas.length}
+              </span>
+            </Button>
+            <Button onClick={() => setManagerView("onHoldQueue")} size="sm" type="button" variant="ghost">
+              On-Hold Queue
+              <span className="ml-1 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
+                {onHoldDsas.length}
+              </span>
+            </Button>
+            <Button onClick={() => setManagerView("activeQueue")} size="sm" type="button" variant="secondary">
+              Active DSAs
+              <span className="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                {managerActiveDsas.length}
+              </span>
+            </Button>
+          </div>
+
+          <Card className="shadow-md">
+            <CardHeader className="flex-row items-center justify-between border-b border-slate-100 pb-4">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Active DSAs</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Partners with executed partnership agreements and active operational status.
+                </p>
+              </div>
+              <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                {managerActiveDsas.length} active
+              </span>
+            </CardHeader>
+            <CardContent className="p-0">
+              {managerActiveDsas.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-left text-sm table-fixed">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-bold uppercase tracking-wider text-slate-500">
+                        <th className="w-1/4 p-4 text-left">DSA Name</th>
+                        <th className="w-1/4 p-4 text-left">DSA Type</th>
+                        <th className="w-1/4 p-4 text-left">Status</th>
+                        <th className="w-1/4 p-4 text-left whitespace-nowrap">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {managerActiveDsas.map((dsa) => {
+                        const isIndividual = String(dsa.dsa_type || dsa.business_type || "").toUpperCase() === "INDIVIDUAL";
+                        const displayName = isIndividual
+                          ? (dsa.name || dsa.contact_person || dsa.code)
+                          : ((dsa as any).entity_name || (dsa as any).company_name || dsa.name || dsa.contact_person || dsa.code);
+                        return (
+                          <tr key={dsa.id} className="hover:bg-slate-50/40 transition">
+                            <td className="w-1/4 p-4 text-left">
+                              <p className="font-semibold text-blue-700 hover:underline">
+                                {displayName}
+                              </p>
+                            </td>
+                            <td className="w-1/4 p-4 text-left">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 capitalize">
+                                {isIndividual ? "Individual" : "Entity"}
+                              </span>
+                            </td>
+                            <td className="w-1/4 p-4 text-left whitespace-nowrap">
+                              <StatusBadge status="ACTIVE" />
+                            </td>
+                            <td className="w-1/4 p-4 text-left whitespace-nowrap">
+                              <Link href={`/dsa/${dsa.id}`}>
+                                <Button size="sm" type="button" variant="primary">
+                                  Actions
+                                </Button>
+                              </Link>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-8 text-center text-slate-500">
+                  <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto mb-2" />
+                  <p className="text-sm font-semibold text-slate-700">No active DSAs found.</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Partners will appear here once their agreements are verified and activated.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
     return (
       <div>
         <PageHeader
@@ -1167,6 +1292,12 @@ export function DashboardPage() {
               On-Hold Queue
               <span className="ml-1 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
                 {onHoldDsas.length}
+              </span>
+            </Button>
+            <Button onClick={() => setManagerView("activeQueue")} size="sm" type="button" variant="ghost">
+              Active DSAs
+              <span className="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                {managerActiveDsas.length}
               </span>
             </Button>
           </div>
@@ -1208,7 +1339,9 @@ export function DashboardPage() {
         )}
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <KpiCard change="+12.4%" icon={Building2} label="Active DSAs" tone="blue" value={String(stats.activeDsas)} />
+          <div onClick={() => setManagerView("activeQueue")} className="cursor-pointer">
+            <KpiCard change="+12.4%" icon={Building2} label="Active DSAs" tone="blue" value={String(stats.activeDsas)} />
+          </div>
           <KpiCard change="+9.1%" icon={ClipboardCheck} label="Approved applications" tone="green" value={String(stats.approved)} />
           <KpiCard change="+18.2%" icon={BadgeIndianRupee} label="Payout exposure" tone="slate" value={compactNumber(stats.totalPayout)} />
         </div>
@@ -1694,13 +1827,13 @@ export function DashboardPage() {
               </div>
             ) : paginatedAuthorityDsas.length ? (
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left text-sm">
+                <table className="w-full border-collapse text-left text-sm table-fixed">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-bold uppercase tracking-wider text-slate-500">
-                      <th className="p-4">DSA Name</th>
-                      <th className="p-4">DSA Type</th>
-                      <th className="p-4">Status</th>
-                      <th className="p-4 text-right whitespace-nowrap min-w-[170px]">Actions</th>
+                      <th className="w-1/4 p-4 text-left">DSA Name</th>
+                      <th className="w-1/4 p-4 text-left">DSA Type</th>
+                      <th className="w-1/4 p-4 text-left">Status</th>
+                      <th className="w-1/4 p-4 text-left whitespace-nowrap">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -1720,20 +1853,20 @@ export function DashboardPage() {
                           )}
                           key={dsa.id}
                         >
-                          <td className="p-4">
+                          <td className="w-1/4 p-4 text-left">
                             <p className={cn("font-semibold", locked ? "text-slate-500" : "text-blue-700 hover:underline")}>
                               {displayName}
                             </p>
                           </td>
-                          <td className="p-4">
+                          <td className="w-1/4 p-4 text-left">
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 capitalize">
                               {isIndividual ? "Individual" : "Entity"}
                             </span>
                           </td>
-                          <td className="p-4 whitespace-nowrap">
+                          <td className="w-1/4 p-4 text-left whitespace-nowrap">
                             <StatusBadge status={dsa.status} />
                           </td>
-                          <td className="p-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <td className="w-1/4 p-4 text-left whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                             {locked ? (
                               <span className="text-slate-300">—</span>
                             ) : (

@@ -2775,13 +2775,13 @@ export function DsaManagementPage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left text-sm">
+                <table className="w-full border-collapse text-left text-sm table-fixed">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-bold uppercase tracking-wider text-slate-500">
-                      <th className="p-4">DSA Name</th>
-                      <th className="p-4">DSA Type</th>
-                      <th className="p-4">Status</th>
-                      <th className="p-4 text-right whitespace-nowrap min-w-[170px]">Actions</th>
+                      <th className="w-1/4 p-4 text-left">DSA Name</th>
+                      <th className="w-1/4 p-4 text-left">DSA Type</th>
+                      <th className="w-1/4 p-4 text-left">Status</th>
+                      <th className="w-1/4 p-4 text-left whitespace-nowrap">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -2844,7 +2844,7 @@ export function DsaManagementPage() {
                         }}
                         title={locked ? lockNote : undefined}
                       >
-                        <td className="p-4">
+                        <td className="w-1/4 p-4 text-left">
                           <p
                             className={cn(
                               "font-semibold",
@@ -2856,19 +2856,19 @@ export function DsaManagementPage() {
                             {displayName}
                           </p>
                         </td>
-                        <td className="p-4">
+                        <td className="w-1/4 p-4 text-left">
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 capitalize">
                             {isIndividual ? "Individual" : "Entity"}
                           </span>
                         </td>
-                        <td className="p-4 whitespace-nowrap">
+                        <td className="w-1/4 p-4 text-left whitespace-nowrap">
                           <StatusBadge status={getDsaDisplayStatus(item)} />
                         </td>
                         <td
-                          className="p-4 text-right whitespace-nowrap"
+                          className="w-1/4 p-4 text-left whitespace-nowrap"
                           onClick={(event) => event.stopPropagation()}
                         >
-                          <div className="flex items-center justify-end gap-2 shrink-0 whitespace-nowrap">
+                          <div className="flex items-center justify-start gap-2 shrink-0 whitespace-nowrap">
                             {showCallBackAction ? (
                               <Button
                                 onClick={() => {
