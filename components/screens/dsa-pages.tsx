@@ -9680,15 +9680,8 @@ const resolveStageStatus = (
                           </div>
                         ) : !isDigitalAccepted ? (
                           <div className="p-4 bg-amber-50/80 rounded-xl border border-amber-200 text-center space-y-1.5">
-                            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-bold">
-                              <Clock className="w-3.5 h-3.5" />
-                              Awaiting Applicant Digital Acceptance
-                            </div>
                             <p className="text-xs font-bold text-amber-950">
                               Empanelment Terms Acceptance Pending
-                            </p>
-                            <p className="text-[11px] text-amber-700 max-w-md mx-auto">
-                              Empanelment letter has been dispatched to the applicant. The applicant must review and accept the terms via the email link before agreement generation, download, or physical execution can proceed.
                             </p>
                           </div>
                         ) : (

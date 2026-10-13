@@ -249,14 +249,21 @@ export function DashboardPage() {
       const caseLevel = Number(dsa.current_approval_level);
 
       const isRevertedByMe =
-        (dsa.status_reason_action === "REVERTED" &&
-          (!userId || String(dsa.status_reason_by) === String(userId) || (userLevel && caseLevel < userLevel))) ||
+        ((dsa.status_reason_action === "REVERTED" || dsa.status_reason_action === "QUERY_RAISED") &&
+          (!userId ||
+            String(dsa.status_reason_by) === String(userId) ||
+            (userLevel && caseLevel < userLevel) ||
+            (userLevel === 1 && caseLevel === 1))) ||
         (Array.isArray(dsa.approvals) &&
           dsa.approvals.some(
             (a: any) =>
-              (a.status === "REVERTED" || a.action === "REVERT") &&
+              (a.status === "REVERTED" ||
+                a.action === "REVERT" ||
+                a.status === "QUERY" ||
+                a.action === "QUERY") &&
               ((userId && String(a.actioned_by) === String(userId)) ||
-                (userLevel && Number(a.approval_level) === userLevel)),
+                (userLevel && Number(a.approval_level) === userLevel) ||
+                (userLevel === 1 && Number(a.approval_level) === 1)),
           ));
 
       const isRejectedByMe =
@@ -351,14 +358,21 @@ export function DashboardPage() {
       const caseLevel = Number(dsa.current_approval_level);
 
       const isRevertedByMe =
-        (dsa.status_reason_action === "REVERTED" &&
-          (!userId || String(dsa.status_reason_by) === String(userId) || (userLevel && caseLevel < userLevel))) ||
+        ((dsa.status_reason_action === "REVERTED" || dsa.status_reason_action === "QUERY_RAISED") &&
+          (!userId ||
+            String(dsa.status_reason_by) === String(userId) ||
+            (userLevel && caseLevel < userLevel) ||
+            (userLevel === 1 && caseLevel === 1))) ||
         (Array.isArray(dsa.approvals) &&
           dsa.approvals.some(
             (a: any) =>
-              (a.status === "REVERTED" || a.action === "REVERT") &&
+              (a.status === "REVERTED" ||
+                a.action === "REVERT" ||
+                a.status === "QUERY" ||
+                a.action === "QUERY") &&
               ((userId && String(a.actioned_by) === String(userId)) ||
-                (userLevel && Number(a.approval_level) === userLevel)),
+                (userLevel && Number(a.approval_level) === userLevel) ||
+                (userLevel === 1 && Number(a.approval_level) === 1)),
           ));
 
       const isRejectedByMe =
@@ -418,7 +432,17 @@ export function DashboardPage() {
 
       if (authorityStatusFilter) {
         const dsaSt = String(dsa.onboarding_status || dsa.status || "").toUpperCase();
-        if (dsaSt !== authorityStatusFilter.toUpperCase()) return false;
+        if (authorityStatusFilter.toUpperCase() === "REVERTED") {
+          if (
+            dsaSt !== "REVERTED" &&
+            dsa.status_reason_action !== "REVERTED" &&
+            dsa.status_reason_action !== "QUERY_RAISED"
+          ) {
+            return false;
+          }
+        } else if (dsaSt !== authorityStatusFilter.toUpperCase()) {
+          return false;
+        }
       }
 
       if (authoritySearch.trim()) {
