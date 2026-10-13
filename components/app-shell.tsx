@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
+  Building2,
   ChevronDown,
   ClipboardCheck,
   FileText,
@@ -29,6 +30,8 @@ import { withBasePath } from "@/lib/base-path";
 import type { MockStore, Notification } from "@/lib/types";
 import { cn, formatDate, initials } from "@/lib/utils";
 import { isRoleAllowedOnPortal, portalDeniedMessage } from "@/lib/portal";
+import { getUserBranchScopeSync, getCachedBranches } from "@/lib/branch-scope";
+import type { BranchOption } from "@/types/dsa";
 
 interface NavItem {
   href: string;
@@ -64,6 +67,22 @@ function isActive(pathname: string, href: string) {
 }
 
 function isPathAllowedForRole(role: string, pathname: string) {
+  if (
+    role === "Sub-Region Head" ||
+    role === "DGM" ||
+    role === "Region Head" ||
+    role === "Branch Regional Head" ||
+    role === "HO Credit Officer" ||
+    role === "HO Credit Head" ||
+    role === "DSA Credit"
+  ) {
+    return (
+      pathname === "/" ||
+      (pathname.startsWith("/dsa/") &&
+        !["/dsa/management", "/dsa/product-setting", "/dsa/onboarding"].includes(pathname))
+    );
+  }
+
   // Universal: All internal workflow authorities (L1–L7) & admin can ALWAYS access DSA approval/management pages
   const isDsaApprovalPage =
     pathname === "/dsa" ||
@@ -110,13 +129,11 @@ function isPathAllowedForRole(role: string, pathname: string) {
     return (
       pathname === "/" ||
       pathname === "/dsa/management" ||
-      pathname.startsWith("/dsa/") ||
+      (pathname.startsWith("/dsa/") && !pathname.startsWith("/dsa/product-setting")) ||
       pathname === "/leads" ||
       pathname.startsWith("/leads/") ||
       pathname === "/applications" ||
-      pathname.startsWith("/applications/") ||
-      pathname.startsWith("/administration/location-hierarchy") ||
-      pathname.startsWith("/administration/master-values")
+      pathname.startsWith("/applications/")
     );
   }
 
@@ -141,7 +158,6 @@ function isPathAllowedForRole(role: string, pathname: string) {
 }
 
 function defaultPathForRole(role: string) {
-  if (role === "Branch Regional Head") return "/dsa/management";
   return "/";
 }
 
@@ -195,7 +211,31 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [navOpenGroup, setNavOpenGroup] = useState<string | null>();
   const [readNotificationsVersion, setReadNotificationsVersion] = useState(0);
+  const [branches, setBranches] = useState<BranchOption[]>([]);
   const { store, currentUser, logout, hasPermission } = useMockStore();
+
+  useEffect(() => {
+    getCachedBranches()
+      .then((list) => {
+        if (Array.isArray(list) && list.length > 0) setBranches(list);
+      })
+      .catch(() => {});
+  }, []);
+
+  const branchScope = useMemo(() => {
+    return getUserBranchScopeSync(currentUser, branches);
+  }, [currentUser, branches]);
+
+  const branchNameDisplay = useMemo(() => {
+    const code = branchScope?.primaryBranchCode || currentUser?.code || "BR001";
+    let name = branchScope?.primaryBranchName || currentUser?.branchName;
+    if (!name) {
+      if (code === "BR002") name = "Deccan Branch";
+      else if (code === "BR003") name = "Connaught Place Branch";
+      else name = "Main Branch";
+    }
+    return { name, code };
+  }, [branchScope, currentUser]);
 
   const mounted = useIsClient();
 
@@ -242,7 +282,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navGroups = useMemo<NavGroup[]>(() => {
     if (!currentUser) return [];
 
-    if (currentUser.role === "DSA Manager" || currentUser.role === "DSA Credit") {
+    if (currentUser.role === "DSA Manager") {
       return [
         {
           items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
@@ -312,144 +352,19 @@ export function AppShell({ children }: { children: ReactNode }) {
           label: "Master Values",
         },
       ];
-    } else if (currentUser.role === "Sub-Region Head") {
+    } else if (
+      currentUser.role === "Sub-Region Head" ||
+      currentUser.role === "DGM" ||
+      currentUser.role === "Region Head" ||
+      currentUser.role === "Branch Regional Head" ||
+      currentUser.role === "HO Credit Officer" ||
+      currentUser.role === "HO Credit Head" ||
+      currentUser.role === "DSA Credit"
+    ) {
       return [
         {
           items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
           label: "Overview",
-        },
-        {
-          items: [
-            { href: "/dsa/management", icon: Users, label: "DSA Approval Queue" },
-            { href: "/dsa/active", icon: UserCheck, label: "Active DSAs" },
-          ],
-          label: "Sub-Region Queue",
-        },
-        {
-          items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications" }],
-          label: "Applications",
-        },
-        {
-          items: [{ href: "/analytics/reports", icon: LineChart, label: "Reports" }],
-          label: "Analytics",
-        },
-        {
-          items: [{ href: "/administration/master-values", icon: Settings, label: "Master Values" }],
-          label: "Master Values",
-        },
-      ];
-    } else if (currentUser.role === "DGM") {
-      return [
-        {
-          items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
-          label: "Overview",
-        },
-        {
-          items: [
-            { href: "/dsa/management", icon: Users, label: "DSA Approval Queue" },
-            { href: "/dsa/active", icon: UserCheck, label: "Active DSAs" },
-          ],
-          label: "DGM Queue",
-        },
-        {
-          items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications" }],
-          label: "Applications",
-        },
-        {
-          items: [{ href: "/analytics/reports", icon: LineChart, label: "Reports" }],
-          label: "Analytics",
-        },
-        {
-          items: [{ href: "/administration/master-values", icon: Settings, label: "Master Values" }],
-          label: "Master Values",
-        },
-      ];
-    } else if (currentUser.role === "Region Head" || currentUser.role === "Branch Regional Head") {
-      return [
-        {
-          items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
-          label: "Overview",
-        },
-        {
-          items: [
-            { href: "/dsa/management", icon: Users, label: "DSA Approval Queue" },
-            { href: "/dsa/active", icon: UserCheck, label: "Active DSAs" },
-          ],
-          label: "Regional Queue",
-        },
-        {
-          items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications" }],
-          label: "Applications",
-        },
-        {
-          items: [{ href: "/analytics/reports", icon: LineChart, label: "Reports" }],
-          label: "Analytics",
-        },
-        {
-          items: [{ href: "/administration/master-values", icon: Settings, label: "Master Values" }],
-          label: "Master Values",
-        },
-      ];
-    } else if (currentUser.role === "HO Credit Officer") {
-      return [
-        {
-          items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
-          label: "Overview",
-        },
-        {
-          items: [
-            { href: "/dsa/management", icon: Users, label: "DSA Approval Queue" },
-            { href: "/dsa/active", icon: UserCheck, label: "Active DSAs" },
-            { href: "/dsa/product-setting", icon: Settings, label: "Product Setting" },
-          ],
-          label: "Credit Appraisal",
-        },
-        {
-          items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications" }],
-          label: "Applications",
-        },
-        {
-          items: [{ href: "/bre/rules", icon: ShieldCheck, label: "BRE Rules" }],
-          label: "Rules",
-        },
-        {
-          items: [{ href: "/analytics/reports", icon: LineChart, label: "Reports" }],
-          label: "Analytics",
-        },
-        {
-          items: [{ href: "/administration/master-values", icon: Settings, label: "Master Values" }],
-          label: "Master Values",
-        },
-      ];
-    } else if (currentUser.role === "HO Credit Head") {
-      return [
-        {
-          items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
-          label: "Overview",
-        },
-        {
-          items: [
-            { href: "/dsa/management", icon: Users, label: "Final Approval Queue" },
-            { href: "/dsa/active", icon: UserCheck, label: "Active DSAs" },
-            { href: "/dsa/product-setting", icon: Settings, label: "Product Setting" },
-          ],
-          label: "Final Sanction",
-        },
-        {
-          items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications" }],
-          label: "Applications",
-        },
-        {
-          items: [{ href: "/bre/rules", icon: ShieldCheck, label: "BRE Rules" }],
-          label: "Rules",
-        },
-        {
-          items: [{ href: "/analytics/reports", icon: LineChart, label: "Reports" }],
-          label: "Analytics",
-        },
-        {
-          items: [{ href: "/administration/master-values", icon: Settings, label: "Master Values" }],
-          label: "Master Values",
         },
       ];
     } else if (currentUser.role === "Branch User") {
@@ -463,21 +378,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             { href: "/dsa/management", icon: Users, label: "DSA Management" },
             { href: "/dsa/active", icon: UserCheck, label: "Active DSAs" },
             { href: "/dsa/onboarding", icon: UserPlus, label: "Onboard DSA" },
-            { href: "/dsa/product-setting", icon: Settings, label: "Product Setting" },
           ],
           label: "Branch Initiator",
         },
         {
           items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications & Leads" }],
           label: "Sourcing",
-        },
-        {
-          items: [{ href: "/administration/location-hierarchy", icon: MapPin, label: "Location Hierarchy" }],
-          label: "Master Data",
-        },
-        {
-          items: [{ href: "/administration/master-values", icon: Settings, label: "Master Values" }],
-          label: "Master Values",
         },
       ];
     } else if (currentUser.role === "Checker") {
@@ -898,19 +804,39 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="flex min-h-screen flex-col lg:pl-64">
-        {/* Mobile Header only (drawer menu toggle) — desktop header removed as search bar is permanently removed */}
-        <header className="sticky top-0 z-20 flex h-14 items-center border-b border-slate-200 bg-white/95 px-4 backdrop-blur lg:hidden">
-          <Button
-            aria-label="Open navigation"
-            className="mr-3 shrink-0"
-            onClick={() => setMobileOpen(true)}
-            size="icon"
-            type="button"
-            variant="ghost"
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
-          <span className="text-sm font-bold text-slate-800">Cosmos Bank</span>
+        {/* Top Header across all pages & all roles */}
+        <header className="sticky top-0 z-20 flex min-h-[3.75rem] items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-2 backdrop-blur lg:px-6">
+          <div className="flex items-center gap-3 lg:hidden">
+            <Button
+              aria-label="Open navigation"
+              className="mr-2 shrink-0"
+              onClick={() => setMobileOpen(true)}
+              size="icon"
+              type="button"
+              variant="ghost"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+            <span className="text-sm font-bold text-slate-800">Cosmos Bank</span>
+          </div>
+          <div className="hidden lg:block" />
+          <div className="flex items-center gap-3 ml-auto">
+            <div className="flex flex-col items-end text-right">
+              <div className="flex items-center gap-1.5 leading-tight">
+                <span className="text-xs font-bold text-slate-900">{currentUser.name}</span>
+                <span className="rounded bg-blue-50 border border-blue-200 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+                  {currentUser.role}
+                </span>
+              </div>
+              <div className="mt-1 inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-900 shadow-2xs">
+                <Building2 className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                <span>
+                  <strong>{branchNameDisplay.name}</strong>
+                  {branchNameDisplay.code ? ` (${branchNameDisplay.code})` : ""}
+                </span>
+              </div>
+            </div>
+          </div>
         </header>
         <main className="compact-dashboard flex flex-1 flex-col w-full px-3 py-3 sm:px-4 sm:py-3.5 lg:px-5 lg:py-4">{children}</main>
       </div>

@@ -96,7 +96,7 @@ function sessionRoleFromBackendRoles(
   const normRoles = roleNames.map((r) => r.toLowerCase().replace(/[\s_-]+/g, ""));
 
   if (normRoles.some((role) => ["superadmin", "admin", "dsamanager"].includes(role))) return "DSA Manager";
-  if (normRoles.some((role) => ["hocredithead", "credithead"].includes(role))) return "HO Credit Head";
+  if (normRoles.some((role) => ["hocredithead", "credithead", "headofficecredithead", "level7hocredithead", "level7credithead", "approvingauthority", "level7", "l7"].includes(role))) return "HO Credit Head";
   if (normRoles.some((role) => ["hocreditofficer", "creditofficer"].includes(role))) return "HO Credit Officer";
   if (normRoles.some((role) => ["regionhead", "regionalhead", "branchregionalhead"].includes(role))) return "Region Head";
   if (normRoles.some((role) => ["dgm", "dgmuser", "deputygeneralmanager"].includes(role))) return "DGM";

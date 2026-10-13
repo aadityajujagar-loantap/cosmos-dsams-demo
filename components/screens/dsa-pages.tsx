@@ -443,6 +443,26 @@ export function isDdReviewReportDocument(docOrType?: any): boolean {
   );
 }
 
+export function isPhotographDocument(docOrType?: any): boolean {
+  if (!docOrType) return false;
+  const rawType =
+    typeof docOrType === "object"
+      ? docOrType.document_type || docOrType.type || ""
+      : docOrType;
+  const rawName =
+    typeof docOrType === "object"
+      ? docOrType.display_name || docOrType.title || docOrType.name || docOrType.label || ""
+      : "";
+  const t = String(rawType).toLowerCase().trim();
+  const n = String(rawName).toLowerCase().trim();
+  return (
+    t === "recent_photograph" ||
+    t === "stakeholder_photograph" ||
+    t.includes("photograph") ||
+    n.includes("photograph")
+  );
+}
+
 export function formatDocumentType(type?: string): string {
   if (!type) return "Document Preview";
   if (isVisitReportDocument(type)) return "Physical Visit Report";
@@ -2665,38 +2685,17 @@ export function DsaManagementPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <PageHeader
-          description={
-            userBranchScope?.isBranchRestricted
-              ? `Displaying partner applications assigned strictly to ${userBranchScope.primaryBranchName || userBranchScope.primaryBranchCode || "your assigned branch"}.`
-              : "Manage registered partner entities, verify bank details, and execute agreement signing workflows."
-          }
-          eyebrow={
-            userBranchScope?.isBranchRestricted
-              ? `Branch: ${userBranchScope.primaryBranchName || userBranchScope.primaryBranchCode || "Assigned Branch"}`
-              : "Administration"
-          }
-          title="DSA Management"
-        />
-        {userBranchScope?.isBranchRestricted && (
-          <div className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2 text-xs font-semibold text-blue-900 shadow-sm self-start sm:self-center">
-            <Building2 className="h-4 w-4 text-blue-600 shrink-0" />
-            <span>
-              Assigned Branch:{" "}
-              <strong>
-                {userBranchScope.primaryBranchName ||
-                  userBranchScope.primaryBranchCode}
-              </strong>
-              {userBranchScope.primaryBranchCode
-                ? ` (${userBranchScope.primaryBranchCode})`
-                : ""}
-            </span>
-          </div>
-        )}
-      </div>
+      <PageHeader
+        description={
+          userBranchScope?.isBranchRestricted
+            ? `Displaying partner applications assigned strictly to ${userBranchScope.primaryBranchName || userBranchScope.primaryBranchCode || "your branch"}.`
+            : "Manage registered partner entities, verify bank details, and execute agreement signing workflows."
+        }
+        eyebrow="Administration"
+        title="DSA Management"
+      />
 
-      <div className="space-y-2">
+      <div>
         <Tabs
           onChange={(tab) => {
             setManagementTab(tab as DsaWorkBucket);
@@ -2708,10 +2707,6 @@ export function DsaManagementPage() {
           }))}
           value={managementTab}
         />
-        <p className="text-xs text-slate-500">
-          {DSA_WORK_BUCKETS.find((b) => b.value === managementTab)
-            ?.description}
-        </p>
       </div>
 
       <Card className="min-h-[500px]">
@@ -2783,14 +2778,9 @@ export function DsaManagementPage() {
                 <table className="w-full border-collapse text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-bold uppercase tracking-wider text-slate-500">
-                      <th className="p-4">Partner</th>
-                      <th className="p-4">DSA ID</th>
-                      <th className="p-4">Type &amp; PAN</th>
-                      <th className="p-4">GST Applicable</th>
+                      <th className="p-4">DSA Name</th>
+                      <th className="p-4">DSA Type</th>
                       <th className="p-4">Status</th>
-                      <th className="p-4">Location</th>
-                      <th className="p-4">Approval Rate</th>
-                      <th className="p-4">Commission</th>
                       <th className="p-4 text-right whitespace-nowrap min-w-[170px]">Actions</th>
                     </tr>
                   </thead>
@@ -2842,6 +2832,11 @@ export function DsaManagementPage() {
                         isReallocatedByMe,
                       });
 
+                      const isIndividual = String(item.dsa_type || item.business_type || (item as any).businessType || "").toUpperCase() === "INDIVIDUAL";
+                      const displayName = isIndividual
+                        ? (item.name || item.contact_person || item.code)
+                        : ((item as any).entity_name || (item as any).company_name || item.name || item.contact_person || item.code);
+
                       return (
                       <tr
                         className={cn(
@@ -2865,80 +2860,24 @@ export function DsaManagementPage() {
                         title={locked ? lockNote : undefined}
                       >
                         <td className="p-4">
-                          <div>
-                            <div className="flex items-center gap-2">
-                            <p
-                              className={cn(
-                                "font-semibold",
-                                locked
-                                  ? "text-slate-500"
-                                  : "text-blue-700 hover:underline",
-                              )}
-                            >
-                              {item.name ||
-                                item.contact_person ||
-                                item.dsa_code ||
-                                item.code}
-                            </p>
-                          </div>
-                            <p className="text-[10px] text-slate-500">
-                              {item.contact_person} · {item.email}
-                              {(item.branch_name ||
-                                item.branch?.branch_name) && (
-                                <span className="ml-2 inline-flex items-center text-[10px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded font-medium">
-                                  <Building2 className="h-3 w-3 mr-1 inline text-slate-400" />
-                                  {item.branch_name || item.branch?.branch_name}
-                                </span>
-                              )}
-                            </p>
-                          </div>
-                        </td>
-                        <td className="p-4 font-mono text-xs font-bold">
-                          {(
-                            typeof item.dsa_code === "object"
-                              ? (item.dsa_code as any)?.code
-                              : item.dsa_code
-                          ) ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
-                              {typeof item.dsa_code === "object"
-                                ? (item.dsa_code as any)?.code
-                                : item.dsa_code}
-                            </span>
-                          ) : (
-                            <span className="text-slate-600">{item.code}</span>
-                          )}
+                          <p
+                            className={cn(
+                              "font-semibold",
+                              locked
+                                ? "text-slate-500"
+                                : "text-blue-700 hover:underline",
+                            )}
+                          >
+                            {displayName}
+                          </p>
                         </td>
                         <td className="p-4">
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 mr-1.5">
-                            {item.dsa_type || "INDIVIDUAL"}
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 capitalize">
+                            {isIndividual ? "Individual" : "Entity"}
                           </span>
-                          <span className="font-mono text-xs font-semibold text-slate-800">
-                            {item.pan || "N/A"}
-                          </span>
-                        </td>
-                        <td className="p-4">
-                          {item.gst_applicable ? (
-                            <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              <Check className="h-3 w-3" />
-                              Yes
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-medium bg-slate-100 text-slate-600">
-                              No
-                            </span>
-                          )}
                         </td>
                         <td className="p-4 whitespace-nowrap">
                           <StatusBadge status={getDsaDisplayStatus(item)} />
-                        </td>
-                        <td className="p-4 text-slate-700 text-xs">
-                          {item.city}, {item.state}
-                        </td>
-                        <td className="p-4 font-medium text-slate-700">
-                          {percent(item.approval_rate || 0)}
-                        </td>
-                        <td className="p-4 font-semibold text-slate-900">
-                          {formatCurrency(item.commission_earned || 0)}
                         </td>
                         <td
                           className="p-4 text-right whitespace-nowrap"
@@ -2973,25 +2912,20 @@ export function DsaManagementPage() {
                                 Creds
                               </Button>
                             ) : null}
-                            <Button
-                              disabled={locked}
-                              onClick={() => {
-                                if (locked) {
-                                  toast({
-                                    title: "Editing unavailable",
-                                    description: lockNote,
-                                    variant: "warning",
-                                  });
-                                  return;
-                                }
-                                setEditing(item as any);
-                              }}
-                              size="sm"
-                              type="button"
-                              variant="secondary"
-                            >
-                              Edit
-                            </Button>
+                            {locked ? (
+                              <span className="text-slate-300">—</span>
+                            ) : (
+                              <Button
+                                onClick={() => {
+                                  router.push(`/dsa/${item.id}`);
+                                }}
+                                size="sm"
+                                type="button"
+                                variant="primary"
+                              >
+                                Actions
+                              </Button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -3428,6 +3362,7 @@ export function DsaProfilePage({ id }: { id: string }) {
   const dsa = useMemo(() => normalizeDsaData(rawDsa), [rawDsa]);
 
   const [viewingDeviationsModal, setViewingDeviationsModal] = useState(false);
+  const [viewingDdReportModal, setViewingDdReportModal] = useState(false);
 
   const policyEvalData = useMemo(() => {
     const rep = deviationReportData;
@@ -4339,7 +4274,13 @@ export function DsaProfilePage({ id }: { id: string }) {
       // Fallback to text report generation if PDF generation is not available
     }
 
-    const rep = deviationReportData;
+    let rep = deviationReportData;
+    if (!rep) {
+      try {
+        rep = await fetchDeviationReport(dsa.id);
+        if (rep) setDeviationReportData(rep);
+      } catch {}
+    }
     const bre = rep?.bre_evaluation || rep;
     const rules: any[] = bre?.rules || [];
     const deviations: any[] = rep?.deviations || bre?.deviations || [];
@@ -5008,6 +4949,18 @@ const resolveStageStatus = (
         variant: "warning",
       });
       return;
+    }
+    if (isPhotographDocument(doc)) {
+      const isAllowed = /\.(png|jpe?g)$/i.test(file.name);
+      if (!isAllowed) {
+        toast({
+          title: "Invalid file format",
+          description:
+            "Photographs can only be uploaded in .png, .jpeg, or .jpg format.",
+          variant: "warning",
+        });
+        return;
+      }
     }
     const docType = doc.document_type || doc.type;
     setReuploadingDocType(docType);
@@ -7576,6 +7529,34 @@ const resolveStageStatus = (
                   : ""}
               </Button>
             )}
+            <Button
+              size="sm"
+              type="button"
+              variant="outline"
+              onClick={() => {
+                if (!deviationReportData && dsa?.id) {
+                  fetchDeviationReport(dsa.id).then((data) => {
+                    if (data) setDeviationReportData(data);
+                  });
+                }
+                setViewingDdReportModal(true);
+              }}
+              className="h-8 text-xs font-semibold px-3 flex items-center gap-1.5 border-blue-300 bg-blue-50 text-blue-900 hover:bg-blue-100 shadow-2xs"
+            >
+              <FileCheck2 className="h-3.5 w-3.5 text-blue-600" />
+              Due Diligence Report
+            </Button>
+            <Button
+              size="sm"
+              type="button"
+              variant="outline"
+              onClick={handleDownloadDeviationReport}
+              title="Download Due Diligence Report"
+              className="h-8 text-xs font-semibold px-2.5 flex items-center gap-1.5 border-slate-300 bg-white text-slate-700 hover:bg-slate-50 shadow-2xs"
+            >
+              <Download className="h-3.5 w-3.5 text-blue-600" />
+              Download DD Report
+            </Button>
             {canManageDsaLifecycle && (
               <div className="flex gap-2">
                 {dsa.operational_status === "ACTIVE" && (
@@ -9246,7 +9227,11 @@ const resolveStageStatus = (
                                     !isDdReport && (
                                       <>
                                         <input
-                                          accept=".jpg,.jpeg,.png,.pdf"
+                                          accept={
+                                            isPhotographDocument(doc)
+                                              ? ".png,.jpeg,.jpg"
+                                              : ".jpg,.jpeg,.png,.pdf"
+                                          }
                                           className="sr-only"
                                           id={`reupload-doc-${doc.id || docType}`}
                                           type="file"
@@ -9405,11 +9390,20 @@ const resolveStageStatus = (
                                     )}
                                   >
                                     {document.requirement}
+                                    <span className="block text-[10px] text-slate-400 font-normal mt-0.5">
+                                      {isPhotographDocument(document)
+                                        ? "Allowed: .png, .jpeg, .jpg (Max 10MB)"
+                                        : "Allowed: .pdf, .jpg, .jpeg, .png (Max 10MB)"}
+                                    </span>
                                   </p>
                                 </div>
                                 <div>
                                   <input
-                                    accept=".jpg,.jpeg,.png,.pdf"
+                                    accept={
+                                      isPhotographDocument(document)
+                                        ? ".png,.jpeg,.jpg"
+                                        : ".jpg,.jpeg,.png,.pdf"
+                                    }
                                     className="sr-only"
                                     id={inputId}
                                     onChange={async (e) => {
@@ -9425,6 +9419,18 @@ const resolveStageStatus = (
                                             variant: "warning",
                                           });
                                           return;
+                                        }
+                                        if (isPhotographDocument(document)) {
+                                          const isAllowed = /\.(png|jpe?g)$/i.test(file.name);
+                                          if (!isAllowed) {
+                                            toast({
+                                              title: "Invalid file format",
+                                              description:
+                                                "Photographs can only be uploaded in .png, .jpeg, or .jpg format.",
+                                              variant: "warning",
+                                            });
+                                            return;
+                                          }
                                         }
                                         try {
                                           if (
@@ -13559,6 +13565,63 @@ const resolveStageStatus = (
               variant="outline"
               onClick={() => setViewingDeviationsModal(false)}
               className="text-xs"
+            >
+              Close
+            </Button>
+          </div>
+        </div>
+      </Modal>
+      {/* Due Diligence Review Report Modal */}
+      <Modal
+        onClose={() => setViewingDdReportModal(false)}
+        open={viewingDdReportModal}
+        title="Due Diligence Review Report"
+        description={`DSA #${getEffectiveDsaCode(dsa)} • ${dsa.name} • ${dsa.dsa_type || "INDIVIDUAL"}`}
+        width="max-w-5xl"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+            <span className="text-xs text-slate-500 font-medium">
+              Complete Due Diligence and Verification assessment report for DSA empanelment.
+            </span>
+            <Button
+              size="sm"
+              type="button"
+              variant="outline"
+              onClick={handleDownloadDeviationReport}
+              className="h-8 text-xs font-semibold px-3 flex items-center gap-1.5 border-slate-300 bg-white text-slate-700 hover:bg-slate-50 shadow-2xs"
+            >
+              <Download className="h-3.5 w-3.5 text-blue-600" />
+              Download Report
+            </Button>
+          </div>
+          <div className="max-h-[72vh] overflow-y-auto pr-1">
+            {loadingDeviationReport && !deviationReportData ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-blue-600 mr-2" />
+                <span className="text-xs text-slate-600 font-medium">Loading Due Diligence Report...</span>
+              </div>
+            ) : (
+              renderDueDiligenceReportContent()
+            )}
+          </div>
+          <div className="flex justify-between items-center pt-3 border-t border-slate-200">
+            <Button
+              size="sm"
+              type="button"
+              variant="outline"
+              onClick={handleDownloadDeviationReport}
+              className="h-8 text-xs font-semibold px-3 flex items-center gap-1.5"
+            >
+              <Download className="h-3.5 w-3.5 text-blue-600" />
+              Download Report
+            </Button>
+            <Button
+              size="sm"
+              type="button"
+              variant="secondary"
+              onClick={() => setViewingDdReportModal(false)}
+              className="text-xs px-4"
             >
               Close
             </Button>

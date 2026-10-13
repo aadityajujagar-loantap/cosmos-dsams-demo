@@ -384,7 +384,7 @@ export default function LoginPage() {
               alt="Cosmos Logo"
               width={708}
               height={118}
-              className="h-8 w-auto"
+              className="h-10 w-auto"
               priority
               unoptimized
             />
@@ -399,27 +399,10 @@ export default function LoginPage() {
             Manage your agent networks, submit applicants directly, track real-time payout structures, and verify
             document checklists in one single platform.
           </p>
-          <div className="flex gap-4 pt-3 border-t border-slate-800">
-            <div>
-              <p className="text-2xl font-bold text-blue-400">300+</p>
-              <p className="text-xs text-slate-400">DSA Partners Sourced</p>
-            </div>
-            <div className="h-10 w-[1px] bg-slate-800" />
-            <div>
-              <p className="text-2xl font-bold text-blue-400">Rs. 729 Cr+</p>
-              <p className="text-xs text-slate-400">Disbursed Volume</p>
-            </div>
-            <div className="h-10 w-[1px] bg-slate-800" />
-            <div>
-              <p className="text-2xl font-bold text-blue-400">Instant</p>
-              <p className="text-xs text-slate-400">Auto-BRE Underwriting</p>
-            </div>
-          </div>
         </div>
 
         <div className="relative z-10 text-xs text-slate-500 flex justify-between border-t border-slate-800 pt-6">
           <p>(c) 2026 Cosmos Co-operative Bank Ltd.</p>
-          <p>Privacy Policy - Terms of Use</p>
         </div>
       </div>
 
