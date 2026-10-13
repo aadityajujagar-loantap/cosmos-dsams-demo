@@ -1091,7 +1091,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       ) : null}
 
       <Modal
-        description="Unread alerts plus workflow items with no action for 4+ days."
+        description=""
         onClose={() => setNotificationsOpen(false)}
         open={notificationsOpen}
         title="Notification alerts"

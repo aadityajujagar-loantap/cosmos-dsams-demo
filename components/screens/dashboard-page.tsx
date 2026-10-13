@@ -896,11 +896,6 @@ export function DashboardPage() {
       return (
         <div>
           <PageHeader
-            description={
-              currentUser.role === "DSA Credit"
-                ? "Review Branch-submitted DSA records and complete credit approval from the full partner profile."
-                : "Review submitted DSA records before making activation or rejection decisions from the full partner profile."
-            }
             eyebrow={currentUser.role === "DSA Credit" ? "Credit approval cockpit" : "Portfolio cockpit"}
             title="Dashboard"
           />
@@ -1035,7 +1030,6 @@ export function DashboardPage() {
       return (
         <div>
           <PageHeader
-            description="Upload missing mandatory DSA documents before moving the partner back into approval review."
             eyebrow={currentUser.role === "DSA Credit" ? "Credit approval cockpit" : "Portfolio cockpit"}
             title="Dashboard"
           />
@@ -1163,7 +1157,6 @@ export function DashboardPage() {
       return (
         <div>
           <PageHeader
-            description="Directory of approved and activated DSA partners operating with Cosmos Bank."
             eyebrow={currentUser.role === "DSA Credit" ? "Credit approval cockpit" : "Portfolio cockpit"}
             title="Dashboard"
           />
@@ -1207,13 +1200,13 @@ export function DashboardPage() {
             <CardContent className="p-0">
               {managerActiveDsas.length > 0 ? (
                 <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-left text-sm table-fixed">
+                  <table className="w-full border-collapse text-sm table-fixed">
                     <thead>
                       <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-bold uppercase tracking-wider text-slate-500">
-                        <th className="w-1/4 p-4 text-left">DSA Name</th>
-                        <th className="w-1/4 p-4 text-left">DSA Type</th>
-                        <th className="w-1/4 p-4 text-left">Status</th>
-                        <th className="w-1/4 p-4 text-left whitespace-nowrap">Actions</th>
+                        <th className="w-1/4 p-4 text-center">DSA Name</th>
+                        <th className="w-1/4 p-4 text-center">DSA Type</th>
+                        <th className="w-1/4 p-4 text-center">Status</th>
+                        <th className="w-1/4 p-4 text-center whitespace-nowrap">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -1224,25 +1217,27 @@ export function DashboardPage() {
                           : ((dsa as any).entity_name || (dsa as any).company_name || dsa.name || dsa.contact_person || dsa.code);
                         return (
                           <tr key={dsa.id} className="hover:bg-slate-50/40 transition">
-                            <td className="w-1/4 p-4 text-left">
+                            <td className="w-1/4 p-4 text-center">
                               <p className="font-semibold text-blue-700 hover:underline">
                                 {displayName}
                               </p>
                             </td>
-                            <td className="w-1/4 p-4 text-left">
+                            <td className="w-1/4 p-4 text-center">
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 capitalize">
                                 {isIndividual ? "Individual" : "Entity"}
                               </span>
                             </td>
-                            <td className="w-1/4 p-4 text-left whitespace-nowrap">
+                            <td className="w-1/4 p-4 text-center whitespace-nowrap">
                               <StatusBadge status="ACTIVE" />
                             </td>
-                            <td className="w-1/4 p-4 text-left whitespace-nowrap">
-                              <Link href={`/dsa/${dsa.id}`}>
-                                <Button size="sm" type="button" variant="primary">
-                                  Actions
-                                </Button>
-                              </Link>
+                            <td className="w-1/4 p-4 text-center whitespace-nowrap">
+                              <div className="flex items-center justify-center">
+                                <Link href={`/dsa/${dsa.id}`}>
+                                  <Button size="sm" type="button" variant="primary">
+                                    Actions
+                                  </Button>
+                                </Link>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -1266,11 +1261,6 @@ export function DashboardPage() {
     return (
       <div>
         <PageHeader
-          description={
-            currentUser.role === "DSA Credit"
-              ? "Credit desk command center for Branch-submitted DSA approvals, underwriting health, and payout exposure."
-              : "Command center for partner onboarding, lead velocity, underwriting health, verification queues, and payout exposure."
-          }
           eyebrow={currentUser.role === "DSA Credit" ? "Credit approval cockpit" : "Portfolio cockpit"}
           title="Dashboard"
         />
@@ -1726,13 +1716,6 @@ export function DashboardPage() {
     return (
       <div>
         <PageHeader
-          description={
-            isChecker
-              ? "Review and recommend branch DSA applications for Checker Due Diligence."
-              : isMaker
-                ? "Onboard DSAs from the branch and track the internal approval handoff to Checker."
-                : `Review and process DSA applications awaiting approval in your ${currentUser.role} queue.`
-          }
           eyebrow={`${roleTitle} desk`}
           title={`${roleTitle} Dashboard: ${currentUser.name}`}
         />
@@ -1825,13 +1808,13 @@ export function DashboardPage() {
               </div>
             ) : paginatedAuthorityDsas.length ? (
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left text-sm table-fixed">
+                <table className="w-full border-collapse text-sm table-fixed">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-bold uppercase tracking-wider text-slate-500">
-                      <th className="w-1/4 p-4 text-left">DSA Name</th>
-                      <th className="w-1/4 p-4 text-left">DSA Type</th>
-                      <th className="w-1/4 p-4 text-left">Status</th>
-                      <th className="w-1/4 p-4 text-left whitespace-nowrap">Actions</th>
+                      <th className="w-1/4 p-4 text-center">DSA Name</th>
+                      <th className="w-1/4 p-4 text-center">DSA Type</th>
+                      <th className="w-1/4 p-4 text-center">Status</th>
+                      <th className="w-1/4 p-4 text-center whitespace-nowrap">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -1851,33 +1834,35 @@ export function DashboardPage() {
                           )}
                           key={dsa.id}
                         >
-                          <td className="w-1/4 p-4 text-left">
+                          <td className="w-1/4 p-4 text-center">
                             <p className={cn("font-semibold", locked ? "text-slate-500" : "text-blue-700 hover:underline")}>
                               {displayName}
                             </p>
                           </td>
-                          <td className="w-1/4 p-4 text-left">
+                          <td className="w-1/4 p-4 text-center">
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 capitalize">
                               {isIndividual ? "Individual" : "Entity"}
                             </span>
                           </td>
-                          <td className="w-1/4 p-4 text-left whitespace-nowrap">
+                          <td className="w-1/4 p-4 text-center whitespace-nowrap">
                             <StatusBadge status={dsa.status} />
                           </td>
-                          <td className="w-1/4 p-4 text-left whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                            {locked ? (
-                              <span className="text-slate-300">—</span>
-                            ) : (
-                              <Link href={`/dsa/${dsa.id}`}>
-                                <Button
-                                  size="sm"
-                                  type="button"
-                                  variant="primary"
-                                >
-                                  Actions
-                                </Button>
-                              </Link>
-                            )}
+                          <td className="w-1/4 p-4 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-center">
+                              {locked ? (
+                                <span className="text-slate-300">—</span>
+                              ) : (
+                                <Link href={`/dsa/${dsa.id}`}>
+                                  <Button
+                                    size="sm"
+                                    type="button"
+                                    variant="primary"
+                                  >
+                                    Actions
+                                  </Button>
+                                </Link>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -2009,7 +1994,6 @@ export function DashboardPage() {
     return (
       <div>
         <PageHeader
-          description="Access your sourced applicant status, track sub-agents under your network, and check real-time payouts."
           eyebrow="Direct Selling Channel"
           title={`Partner Portal: ${currentUser.name}`}
         />
@@ -2140,9 +2124,6 @@ export function DashboardPage() {
               <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
                 Welcome back, {currentUser.name}
               </h1>
-              <p className="text-sm text-slate-300 max-w-lg leading-relaxed">
-                Apply for personal, business, or housing loans directly with instant scoring and transparent stage tracking.
-              </p>
             </div>
             <button
               onClick={() => {
