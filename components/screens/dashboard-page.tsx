@@ -1203,34 +1203,40 @@ export function DashboardPage() {
                   <table className="w-full border-collapse text-sm table-fixed">
                     <thead>
                       <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-bold uppercase tracking-wider text-slate-500">
-                        <th className="w-1/4 p-4 text-center">DSA Name</th>
-                        <th className="w-1/4 p-4 text-center">DSA Type</th>
-                        <th className="w-1/4 p-4 text-center">Status</th>
-                        <th className="w-1/4 p-4 text-center whitespace-nowrap">Actions</th>
+                        <th className="w-20 px-3 py-4 text-center whitespace-nowrap">Sr No.</th>
+                        <th className="p-4 text-center">DSA Name</th>
+                        <th className="p-4 text-center">DSA Type</th>
+                        <th className="p-4 text-center">Status</th>
+                        <th className="p-4 text-center whitespace-nowrap">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {managerActiveDsas.map((dsa) => {
+                      {managerActiveDsas.map((dsa, index) => {
                         const isIndividual = String(dsa.dsa_type || dsa.business_type || "").toUpperCase() === "INDIVIDUAL";
                         const displayName = isIndividual
                           ? (dsa.name || dsa.contact_person || dsa.code)
                           : ((dsa as any).entity_name || (dsa as any).company_name || dsa.name || dsa.contact_person || dsa.code);
                         return (
                           <tr key={dsa.id} className="hover:bg-slate-50/40 transition">
-                            <td className="w-1/4 p-4 text-center">
+                            <td className="w-20 px-3 py-4 text-center whitespace-nowrap">
+                              <span className="font-medium text-slate-700">
+                                {index + 1}
+                              </span>
+                            </td>
+                            <td className="p-4 text-center">
                               <p className="font-semibold text-blue-700 hover:underline">
                                 {displayName}
                               </p>
                             </td>
-                            <td className="w-1/4 p-4 text-center">
+                            <td className="p-4 text-center">
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 capitalize">
                                 {isIndividual ? "Individual" : "Entity"}
                               </span>
                             </td>
-                            <td className="w-1/4 p-4 text-center whitespace-nowrap">
+                            <td className="p-4 text-center whitespace-nowrap">
                               <StatusBadge status="ACTIVE" />
                             </td>
-                            <td className="w-1/4 p-4 text-center whitespace-nowrap">
+                            <td className="p-4 text-center whitespace-nowrap">
                               <div className="flex items-center justify-center">
                                 <Link href={`/dsa/${dsa.id}`}>
                                   <Button size="sm" type="button" variant="primary">
@@ -1811,14 +1817,15 @@ export function DashboardPage() {
                 <table className="w-full border-collapse text-sm table-fixed">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-bold uppercase tracking-wider text-slate-500">
-                      <th className="w-1/4 p-4 text-center">DSA Name</th>
-                      <th className="w-1/4 p-4 text-center">DSA Type</th>
-                      <th className="w-1/4 p-4 text-center">Status</th>
-                      <th className="w-1/4 p-4 text-center whitespace-nowrap">Actions</th>
+                      <th className="w-20 px-3 py-4 text-center whitespace-nowrap">Sr No.</th>
+                      <th className="p-4 text-center">DSA Name</th>
+                      <th className="p-4 text-center">DSA Type</th>
+                      <th className="p-4 text-center">Status</th>
+                      <th className="p-4 text-center whitespace-nowrap">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {paginatedAuthorityDsas.map((dsa) => {
+                    {paginatedAuthorityDsas.map((dsa, index) => {
                       const access = resolveCaseAccess(dsa, currentUser?.role);
                       const locked = !access.allowed;
                       const isIndividual = String(dsa.dsa_type || (dsa as any).business_type || dsa.businessType || "").toUpperCase() === "INDIVIDUAL";
@@ -1834,20 +1841,25 @@ export function DashboardPage() {
                           )}
                           key={dsa.id}
                         >
-                          <td className="w-1/4 p-4 text-center">
+                          <td className="w-20 px-3 py-4 text-center whitespace-nowrap">
+                            <span className="font-medium text-slate-700">
+                              {(authorityPage - 1) * authorityPageSize + index + 1}
+                            </span>
+                          </td>
+                          <td className="p-4 text-center">
                             <p className={cn("font-semibold", locked ? "text-slate-500" : "text-blue-700 hover:underline")}>
                               {displayName}
                             </p>
                           </td>
-                          <td className="w-1/4 p-4 text-center">
+                          <td className="p-4 text-center">
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 capitalize">
                               {isIndividual ? "Individual" : "Entity"}
                             </span>
                           </td>
-                          <td className="w-1/4 p-4 text-center whitespace-nowrap">
+                          <td className="p-4 text-center whitespace-nowrap">
                             <StatusBadge status={dsa.status} />
                           </td>
-                          <td className="w-1/4 p-4 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <td className="p-4 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-center">
                               {locked ? (
                                 <span className="text-slate-300">—</span>
@@ -1871,10 +1883,9 @@ export function DashboardPage() {
                 </table>
               </div>
             ) : (
-              <div className="p-8 text-center text-slate-500">
+              <div className="p-12 text-center text-slate-500">
                 <Users className="h-10 w-10 text-slate-300 mx-auto mb-2" />
                 <p className="text-sm font-semibold text-slate-700">No DSAs found in queue.</p>
-                <p className="text-xs text-slate-400 mt-0.5">Only DSAs assigned to your scope will appear here.</p>
               </div>
             )}
           </CardContent>
