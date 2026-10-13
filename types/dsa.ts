@@ -205,7 +205,7 @@ export interface Dsa {
   }>;
 }
 
-export type DsaWorkBucket = "all" | "received" | "in_process" | "rejected" | "approved" | "active";
+export type DsaWorkBucket = "all" | "received" | "in_process" | "reverted" | "rejected" | "approved" | "active";
 
 /** Task 20C — candidate returned by GET /api/v1/dsa/{id}/eligible-users. */
 export interface DsaEligibleUser {
@@ -228,40 +228,30 @@ export interface DsaEligibleUsersResponse {
 export const DSA_WORK_BUCKETS: {
   value: DsaWorkBucket;
   label: string;
-  description: string;
 }[] = [
   {
     value: "all",
     label: "All",
-    description:
-      "Every DSA visible to you. Open one to lock it and start processing.",
-  },
-  {
-    value: "received",
-    label: "Received",
-    description:
-      "Applications routed to your stage that still need your decision, plus any specifically assigned to you.",
   },
   {
     value: "in_process",
     label: "In Process",
-    description:
-      "Applications currently assigned to you — you are the one processing them.",
   },
   {
-    value: "rejected",
-    label: "Rejected",
-    description: "Applications rejected and returned to the Maker.",
+    value: "reverted",
+    label: "Reverted",
   },
   {
     value: "approved",
     label: "Approved",
-    description: "Applications that completed sanction and approval.",
+  },
+  {
+    value: "rejected",
+    label: "Rejected",
   },
   {
     value: "active",
     label: "Active DSAs",
-    description: "DSAs with approved agreements and active operational status.",
   },
 ];
 

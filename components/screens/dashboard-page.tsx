@@ -23,6 +23,8 @@ import {
   ChevronDown,
   UserPlus,
   Lock,
+  RotateCcw,
+  XCircle,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -51,6 +53,7 @@ import {
   describeCaseLock,
   CASE_VIEW_ONLY_BADGE_CLASS,
   CASE_VIEW_ONLY_ROW_CLASS,
+  resolveUserLevel,
 } from "@/lib/dsa-case-access";
 import { Application, Product, Lead } from "@/lib/types";
 import { adminApi } from "@/apis/admin";
@@ -103,6 +106,10 @@ export function DashboardPage() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [sourcingPartner, setSourcingPartner] = useState("");
   const [managerView, setManagerView] = useState<"overview" | "verificationQueue" | "onHoldQueue">("overview");
+  const [authorityTab, setAuthorityTab] = useState<string>("all");
+  const [authoritySearch, setAuthoritySearch] = useState<string>("");
+  const [authorityStatusFilter, setAuthorityStatusFilter] = useState<string>("");
+  const [authorityPage, setAuthorityPage] = useState<number>(1);
 
   // ----------------------------------------------------
   // 1. DSA MANAGER (SUPER ADMIN) CALCULATIONS & RENDER
@@ -179,10 +186,16 @@ export function DashboardPage() {
       const applicantName = item.name || item.contact_person || item.entity_name || item.code;
       const isSub = item.onboarding_status === "SUBMITTED";
       return {
+        ...item,
         id: String(item.id),
         code: item.code,
         name: applicantName,
         businessType: item.business_type || item.dsa_type || "Individual",
+        dsa_type: item.dsa_type || item.business_type || "INDIVIDUAL",
+        pan: item.pan || "N/A",
+        gst_applicable: Boolean(item.gst_applicable || item.gst),
+        approval_rate: item.approval_rate || 0,
+        commission_earned: item.commission_earned || 0,
         status: isSub ? "Submitted" : getDsaDisplayStatus(item),
         onboardingDate: item.created_at || item.onboarding_date || new Date().toISOString(),
         manager: item.manager || currentUser?.name,
@@ -212,6 +225,217 @@ export function DashboardPage() {
 
     return result;
   }, [currentUser, liveDsas, store.dsas]);
+
+  const authorityStats = useMemo(() => {
+    const userLevel = resolveUserLevel(currentUser?.role);
+    const userId = currentUser?.id;
+
+    let inProcess = 0;
+    let reverted = 0;
+    let approved = 0;
+    let rejected = 0;
+
+    branchDsas.forEach((dsa: any) => {
+      const access = resolveCaseAccess(dsa, currentUser?.role);
+      const statusStr = String(dsa.onboarding_status || dsa.status || "").toUpperCase();
+      const opStatus = String(dsa.operational_status || "").toUpperCase();
+      const caseLevel = Number(dsa.current_approval_level);
+
+      const isRevertedByMe =
+        (dsa.status_reason_action === "REVERTED" &&
+          (!userId || String(dsa.status_reason_by) === String(userId) || (userLevel && caseLevel < userLevel))) ||
+        (Array.isArray(dsa.approvals) &&
+          dsa.approvals.some(
+            (a: any) =>
+              (a.status === "REVERTED" || a.action === "REVERT") &&
+              ((userId && String(a.actioned_by) === String(userId)) ||
+                (userLevel && Number(a.approval_level) === userLevel)),
+          ));
+
+      const isRejectedByMe =
+        statusStr === "REJECTED" &&
+        (userLevel === 1 ||
+          !userLevel ||
+          (userId && String(dsa.status_reason_by) === String(userId)) ||
+          (Array.isArray(dsa.approvals) &&
+            dsa.approvals.some(
+              (a: any) =>
+                (a.status === "REJECTED" || a.action === "REJECT") &&
+                ((userId && String(a.actioned_by) === String(userId)) ||
+                  (userLevel && Number(a.approval_level) === userLevel)),
+            )));
+
+      const isApprovedByMe =
+        statusStr === "APPROVED" ||
+        statusStr === "AGREEMENT_PENDING" ||
+        statusStr === "AGREEMENT_COMPLETED" ||
+        opStatus === "ACTIVE" ||
+        (userLevel &&
+          userLevel >= 2 &&
+          Array.isArray(dsa.approvals) &&
+          dsa.approvals.some(
+            (a: any) =>
+              (a.status === "APPROVED" ||
+                a.status === "RECOMMENDED" ||
+                a.action === "APPROVE" ||
+                a.action === "RECOMMEND") &&
+              ((userId && String(a.actioned_by) === String(userId)) ||
+                Number(a.approval_level) === userLevel),
+          )) ||
+        Boolean(userLevel && caseLevel > userLevel && statusStr !== "REJECTED");
+
+      const isInProcessForMe =
+        userLevel && userLevel >= 2
+          ? caseLevel === userLevel && statusStr !== "REJECTED" && statusStr !== "APPROVED"
+          : access.allowed;
+
+      if (isRejectedByMe) {
+        rejected++;
+      } else if (isRevertedByMe) {
+        reverted++;
+      } else if (isInProcessForMe) {
+        inProcess++;
+      } else if (isApprovedByMe) {
+        approved++;
+      }
+    });
+
+    return { inProcess, reverted, approved, rejected };
+  }, [branchDsas, currentUser?.role, currentUser?.id]);
+
+  const authorityTabs = useMemo(
+    () => [
+      {
+        value: "all",
+        label: "All",
+      },
+      {
+        value: "in_process",
+        label: "In Process",
+      },
+      {
+        value: "reverted",
+        label: "Reverted",
+      },
+      {
+        value: "approved",
+        label: "Approved",
+      },
+      {
+        value: "rejected",
+        label: "Rejected",
+      },
+      {
+        value: "active",
+        label: "Active DSAs",
+      },
+    ],
+    [],
+  );
+
+  const filteredAuthorityDsas = useMemo(() => {
+    const userLevel = resolveUserLevel(currentUser?.role);
+    const userId = currentUser?.id;
+
+    return branchDsas.filter((dsa: any) => {
+      const access = resolveCaseAccess(dsa, currentUser?.role);
+      const statusStr = String(dsa.onboarding_status || dsa.status || "").toUpperCase();
+      const opStatus = String(dsa.operational_status || "").toUpperCase();
+      const caseLevel = Number(dsa.current_approval_level);
+
+      const isRevertedByMe =
+        (dsa.status_reason_action === "REVERTED" &&
+          (!userId || String(dsa.status_reason_by) === String(userId) || (userLevel && caseLevel < userLevel))) ||
+        (Array.isArray(dsa.approvals) &&
+          dsa.approvals.some(
+            (a: any) =>
+              (a.status === "REVERTED" || a.action === "REVERT") &&
+              ((userId && String(a.actioned_by) === String(userId)) ||
+                (userLevel && Number(a.approval_level) === userLevel)),
+          ));
+
+      const isRejectedByMe =
+        statusStr === "REJECTED" &&
+        (userLevel === 1 ||
+          !userLevel ||
+          (userId && String(dsa.status_reason_by) === String(userId)) ||
+          (Array.isArray(dsa.approvals) &&
+            dsa.approvals.some(
+              (a: any) =>
+                (a.status === "REJECTED" || a.action === "REJECT") &&
+                ((userId && String(a.actioned_by) === String(userId)) ||
+                  (userLevel && Number(a.approval_level) === userLevel)),
+            )));
+
+      const isApprovedByMe =
+        statusStr === "APPROVED" ||
+        statusStr === "AGREEMENT_PENDING" ||
+        statusStr === "AGREEMENT_COMPLETED" ||
+        opStatus === "ACTIVE" ||
+        (userLevel &&
+          userLevel >= 2 &&
+          Array.isArray(dsa.approvals) &&
+          dsa.approvals.some(
+            (a: any) =>
+              (a.status === "APPROVED" ||
+                a.status === "RECOMMENDED" ||
+                a.action === "APPROVE" ||
+                a.action === "RECOMMEND") &&
+              ((userId && String(a.actioned_by) === String(userId)) ||
+                Number(a.approval_level) === userLevel),
+          )) ||
+        Boolean(userLevel && caseLevel > userLevel && statusStr !== "REJECTED");
+
+      const isInProcessForMe =
+        userLevel && userLevel >= 2
+          ? caseLevel === userLevel && statusStr !== "REJECTED" && statusStr !== "APPROVED"
+          : access.allowed;
+
+      if (authorityTab === "in_process") {
+        if (!isInProcessForMe) return false;
+      } else if (authorityTab === "reverted") {
+        if (!isRevertedByMe) return false;
+      } else if (authorityTab === "approved") {
+        if (!isApprovedByMe) return false;
+      } else if (authorityTab === "rejected") {
+        if (!isRejectedByMe) return false;
+      } else if (authorityTab === "active") {
+        if (opStatus !== "ACTIVE" && statusStr !== "ACTIVE") return false;
+      } else if (authorityTab === "all") {
+        if (userLevel && userLevel >= 2) {
+          if (!isInProcessForMe && !isRevertedByMe && !isRejectedByMe && !isApprovedByMe) {
+            return false;
+          }
+        }
+      }
+
+      if (authorityStatusFilter) {
+        const dsaSt = String(dsa.onboarding_status || dsa.status || "").toUpperCase();
+        if (dsaSt !== authorityStatusFilter.toUpperCase()) return false;
+      }
+
+      if (authoritySearch.trim()) {
+        const q = authoritySearch.toLowerCase().trim();
+        const n = String(dsa.name || "").toLowerCase();
+        const c = String(dsa.code || dsa.dsa_code || "").toLowerCase();
+        const p = String(dsa.pan || "").toLowerCase();
+        const ct = String(dsa.city || "").toLowerCase();
+        const cp = String(dsa.contact_person || "").toLowerCase();
+        if (!n.includes(q) && !c.includes(q) && !p.includes(q) && !ct.includes(q) && !cp.includes(q)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [branchDsas, authorityTab, authorityStatusFilter, authoritySearch, currentUser?.role, currentUser?.id]);
+
+  const authorityPageSize = 10;
+  const authorityTotalPages = Math.ceil(filteredAuthorityDsas.length / authorityPageSize) || 1;
+  const paginatedAuthorityDsas = useMemo(() => {
+    const start = (authorityPage - 1) * authorityPageSize;
+    return filteredAuthorityDsas.slice(start, start + authorityPageSize);
+  }, [filteredAuthorityDsas, authorityPage]);
 
   const branchStats = useMemo(
     () => ({
@@ -1382,73 +1606,113 @@ export function DashboardPage() {
           title={`${roleTitle} Dashboard: ${currentUser.name}`}
         />
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <KpiCard change="Scope" icon={Building2} label="Relevant DSAs" tone="blue" value={String(branchStats.total)} />
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <KpiCard
-            change={isChecker ? "Checker Review" : "Queue Status"}
+            change="Awaiting Action"
             icon={Clock}
-            label={isChecker ? "Pending Checker" : "Pending Queue"}
-            tone="amber"
-            value={String(isChecker ? branchStats.pendingChecker : branchStats.pendingCredit)}
+            label="In Process"
+            tone="blue"
+            value={String(authorityStats.inProcess)}
           />
-          <KpiCard change="Docs hold" icon={FileWarning} label="On-Hold DSAs" tone="amber" value={String(branchStats.onHold)} />
-          <KpiCard change="Approved" icon={CheckCircle2} label="Activated DSAs" tone="green" value={String(branchStats.active)} />
-          <KpiCard change="Restricted" icon={FileWarning} label="Blacklisted" tone="slate" value={String(branchStats.blacklisted)} />
+          <KpiCard
+            change="Needs correction"
+            icon={RotateCcw}
+            label="Reverted"
+            tone="amber"
+            value={String(authorityStats.reverted)}
+          />
+          <KpiCard
+            change="Approved / Cleared"
+            icon={CheckCircle2}
+            label="Approved"
+            tone="green"
+            value={String(authorityStats.approved)}
+          />
+          <KpiCard
+            change="Closed"
+            icon={XCircle}
+            label="Rejected"
+            tone="slate"
+            value={String(authorityStats.rejected)}
+          />
         </div>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_360px]">
-          <Card className="shadow-md">
-            <CardHeader className="border-b border-slate-100 pb-4">
-              <div>
-                <h2 className="text-base font-bold text-slate-900">
-                  {isChecker
-                    ? "Branch Checker Review Queue"
-                    : isMaker
-                      ? "Branch DSA onboarding tracker"
-                      : `${currentUser.role} Review Queue`}
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {isChecker
-                    ? "Applications submitted by branch Makers pending Checker Due Diligence."
-                    : isMaker
-                      ? "Track DSA applications submitted from your branch through Maker & Checker stages."
-                      : `Applications awaiting appraisal and recommendation at ${currentUser.role} stage.`}
-                </p>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              {listLoading ? (
-                <div className="flex items-center justify-center py-20">
-                  <span className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" />
-                </div>
-              ) : branchDsas.length ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-sm">
-                    <thead>
-                      <tr className="bg-slate-50/75 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        <th className="p-4 pl-6">Partner</th>
-                        <th className="p-4">Code</th>
-                        <th className="p-4">Submitted</th>
-                        <th className="p-4">Status</th>
-                        <th className="p-4 text-right pr-6">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {branchDsas.slice(0, 8).map((dsa) => {
-                        // Task 22 — same gate as the DSA management list: a case
-                        // that is not at this role's stage (or is rejected) stays
-                        // listed but cannot be opened, so the dashboard cannot
-                        // be used to bypass the stage rule.
-                        const access = resolveCaseAccess(dsa, currentUser?.role);
-                        const locked = !access.allowed;
-                        const lockNote = describeCaseLock(
-                          access.reason,
-                          (dsa as any).current_approval_level,
-                        );
-                        const isReviewable =
-                          isChecker && Number(dsa.current_approval_level) === 2;
+        <div className="mt-6">
+          <Tabs
+            onChange={(tab) => {
+              setAuthorityTab(tab);
+              setAuthorityPage(1);
+            }}
+            tabs={authorityTabs.map((bucket) => ({
+              label: bucket.label,
+              value: bucket.value,
+            }))}
+            value={authorityTab}
+          />
+        </div>
 
-                        return (
+        <Card className="mt-4 shadow-md min-h-[500px]">
+          <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-slate-100 bg-slate-50/50">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <Input
+                aria-label="Search partners"
+                onChange={(e) => {
+                  setAuthoritySearch(e.target.value);
+                  setAuthorityPage(1);
+                }}
+                placeholder="Search by name, code, pan, city..."
+                value={authoritySearch}
+                className="w-full sm:w-[300px]"
+              />
+              <Select
+                aria-label="Filter by status"
+                onChange={(e) => {
+                  setAuthorityStatusFilter(e.target.value);
+                  setAuthorityPage(1);
+                }}
+                value={authorityStatusFilter}
+                className="w-full sm:w-[180px]"
+              >
+                <option value="">All statuses</option>
+                <option value="SUBMITTED">Submitted</option>
+                <option value="UNDER_REVIEW">Under Review</option>
+                <option value="APPROVED">Approved</option>
+                <option value="REVERTED">Reverted</option>
+                <option value="REJECTED">Rejected</option>
+                <option value="ACTIVE">Active</option>
+              </Select>
+            </div>
+            <span className="text-xs text-slate-500 font-medium">
+              Found {filteredAuthorityDsas.length} partners
+            </span>
+          </div>
+
+          <CardContent className="p-0">
+            {listLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <span className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" />
+              </div>
+            ) : paginatedAuthorityDsas.length ? (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-bold uppercase tracking-wider text-slate-500">
+                      <th className="p-4">DSA Name</th>
+                      <th className="p-4">DSA Type</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4 text-right whitespace-nowrap min-w-[170px]">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {paginatedAuthorityDsas.map((dsa) => {
+                      const access = resolveCaseAccess(dsa, currentUser?.role);
+                      const locked = !access.allowed;
+                      const isIndividual = String(dsa.dsa_type || (dsa as any).business_type || dsa.businessType || "").toUpperCase() === "INDIVIDUAL";
+                      const displayName = isIndividual
+                        ? (dsa.name || dsa.contact_person || dsa.code)
+                        : ((dsa as any).entity_name || (dsa as any).company_name || dsa.name || dsa.contact_person || dsa.code);
+
+                      return (
                         <tr
                           className={cn(
                             "transition",
@@ -1456,92 +1720,75 @@ export function DashboardPage() {
                           )}
                           key={dsa.id}
                         >
-                          <td className="p-4 pl-6">
-                            <div className="flex items-center gap-2">
-                              <div className="font-semibold text-slate-800">
-                                {dsa.name}
-                              </div>
-                              {locked ? (
-                                <span className="inline-flex items-center gap-1 rounded border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                                  <Lock className="h-3 w-3" />
-                                  View only
-                                </span>
-                              ) : null}
-                            </div>
-                            <div className="text-xs text-slate-500">{dsa.businessType}</div>
-                          </td>
-                          <td className="p-4 font-mono text-xs text-slate-600">{dsa.code}</td>
-                          <td className="p-4 text-xs text-slate-500">{formatDate(dsa.onboardingDate)}</td>
                           <td className="p-4">
+                            <p className={cn("font-semibold", locked ? "text-slate-500" : "text-blue-700 hover:underline")}>
+                              {displayName}
+                            </p>
+                          </td>
+                          <td className="p-4">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 capitalize">
+                              {isIndividual ? "Individual" : "Entity"}
+                            </span>
+                          </td>
+                          <td className="p-4 whitespace-nowrap">
                             <StatusBadge status={dsa.status} />
                           </td>
-                          <td className="p-4 text-right pr-6">
+                          <td className="p-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                             {locked ? (
-                              <Button
-                                disabled
-                                size="sm"
-                                title={lockNote}
-                                type="button"
-                                variant="outline"
-                              >
-                                View only
-                              </Button>
+                              <span className="text-slate-300">—</span>
                             ) : (
                               <Link href={`/dsa/${dsa.id}`}>
                                 <Button
                                   size="sm"
                                   type="button"
-                                  variant={isReviewable ? "primary" : "outline"}
+                                  variant="primary"
                                 >
-                                  {isReviewable ? "Review" : "Open"}
+                                  Actions
                                 </Button>
                               </Link>
                             )}
                           </td>
                         </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="p-8 text-center text-slate-500">
-                  <Users className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm font-semibold text-slate-700">No DSAs found in queue.</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Only DSAs assigned to your scope will appear here.</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="p-8 text-center text-slate-500">
+                <Users className="h-10 w-10 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm font-semibold text-slate-700">No DSAs found in queue.</p>
+                <p className="text-xs text-slate-400 mt-0.5">Only DSAs assigned to your scope will appear here.</p>
+              </div>
+            )}
+          </CardContent>
 
-          <Card className="shadow-md">
-            <CardHeader className="border-b border-slate-100 pb-4">
-              <h2 className="text-base font-bold text-slate-900">
-                {isChecker ? "Checker Due Diligence" : "Internal handoff"}
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                {isChecker
-                  ? "Checker verification & recommendation workflow."
-                  : "Branch submissions remain inactive until DSA Credit approves them."}
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="rounded-md bg-sky-50 p-4">
-                <p className="text-sm font-semibold text-blue-950">
-                  Pending Checker Queue
-                </p>
-                <p className="mt-1 text-2xl font-semibold text-blue-700">
-                  {isChecker ? branchStats.pendingChecker : branchStats.pendingCredit}
-                </p>
-              </div>
-              <div className="space-y-2 text-xs text-slate-600">
-                <p className="rounded-md border border-slate-100 p-3">1. Branch Maker verifies documents and KYC, then submits to Checker.</p>
-                <p className="rounded-md border border-slate-100 p-3">2. Checker runs due diligence checks and recommends to Sub-Region Head.</p>
-                <p className="rounded-md border border-slate-100 p-3">3. Sub-Region Head through HO Credit Head finalize approval.</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+          <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
+            <span>
+              Page {authorityPage} of {authorityTotalPages} · {filteredAuthorityDsas.length} total
+            </span>
+            <div className="flex gap-2">
+              <Button
+                disabled={authorityPage <= 1}
+                onClick={() => setAuthorityPage((p) => Math.max(1, p - 1))}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                Previous
+              </Button>
+              <Button
+                disabled={authorityPage >= authorityTotalPages}
+                onClick={() => setAuthorityPage((p) => Math.min(authorityTotalPages, p + 1))}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        </Card>
 
         {onHoldDsas.length > 0 && (
           <div className="mt-6">
@@ -1589,12 +1836,6 @@ export function DashboardPage() {
                           <td className="p-4 pl-6">
                             <div className="flex items-center gap-2">
                               <div className="font-semibold text-slate-800">{dsa.name}</div>
-                              {locked ? (
-                                <span className={CASE_VIEW_ONLY_BADGE_CLASS}>
-                                  <Lock className="h-3 w-3" />
-                                  View only
-                                </span>
-                              ) : null}
                             </div>
                             <div className="text-xs text-slate-500">{dsa.business_type}</div>
                           </td>
@@ -1609,9 +1850,7 @@ export function DashboardPage() {
                           </td>
                           <td className="p-4 text-right pr-6">
                             {locked ? (
-                              <Button disabled size="sm" title={lockNote} type="button" variant="outline">
-                                View only
-                              </Button>
+                              <span className="text-slate-300">—</span>
                             ) : (
                               <Link href={`/dsa/${dsa.id}`}>
                                 <Button size="sm" type="button" variant="outline">

@@ -178,6 +178,15 @@ function SupportingDocInput({
   );
 }
 
+function cleanLicenseValue(val?: string | null): string | null {
+  if (!val || typeof val !== "string") return null;
+  const parts = val
+    .split(",")
+    .map((p) => p.replace(/^(shop\s*act|udyam)\s*:\s*/i, "").trim())
+    .filter((p) => Boolean(p) && p !== "Standard Regulatory Compliance");
+  return parts.length > 0 ? parts.join(", ") : null;
+}
+
 interface DsaBasicDetailsTabProps {
   dsa: any;
   canEdit: boolean;
@@ -327,8 +336,8 @@ export function DsaBasicDetailsTab({
             dsa.experience_years !== undefined && dsa.experience_years !== null
               ? String(dsa.experience_years)
               : "",
-          udyam_no: dsa.udyam_no || "",
-          shop_act_no: dsa.shop_act_no || "",
+          udyam_no: cleanLicenseValue(dsa.udyam_no) || "",
+          shop_act_no: cleanLicenseValue(dsa.shop_act_no) || "",
           business_premises_ownership: dsa.business_premises_ownership || "Self Owned",
         });
         break;
@@ -1457,26 +1466,25 @@ export function DsaBasicDetailsTab({
             <DetailItem
               label="Statutory Registration / License No"
               value={
-                [
-                  dsa.udyam_no ? `Udyam: ${dsa.udyam_no}` : null,
-                  dsa.shop_act_no ? `Shop Act: ${dsa.shop_act_no}` : null,
-                ].filter(Boolean).join(", ") ||
-                dsa.business_license_no ||
+                [cleanLicenseValue(dsa.udyam_no), cleanLicenseValue(dsa.shop_act_no)]
+                  .filter(Boolean)
+                  .join(", ") ||
+                cleanLicenseValue(dsa.business_license_no) ||
                 (dsa.registered_business_proof ? `Registered Proofs on File (${dsa.registered_business_proof.split(",").join(", ")})` : null) ||
                 dsa.registration_no_llpin_cin ||
                 "Standard Regulatory Compliance"
               }
             />
-            {dsa.udyam_no ? (
+            {cleanLicenseValue(dsa.udyam_no) ? (
               <DetailItem
                 label="Udyam Registration Number"
-                value={<span className="font-mono font-semibold text-slate-900">{dsa.udyam_no}</span>}
+                value={<span className="font-mono font-semibold text-slate-900">{cleanLicenseValue(dsa.udyam_no)}</span>}
               />
             ) : null}
-            {dsa.shop_act_no ? (
+            {cleanLicenseValue(dsa.shop_act_no) ? (
               <DetailItem
                 label="Shop Act License / Reg. Number"
-                value={<span className="font-mono font-semibold text-slate-900">{dsa.shop_act_no}</span>}
+                value={<span className="font-mono font-semibold text-slate-900">{cleanLicenseValue(dsa.shop_act_no)}</span>}
               />
             ) : null}
           </DetailGrid>

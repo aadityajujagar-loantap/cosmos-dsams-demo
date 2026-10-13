@@ -105,18 +105,29 @@ export function normalizeDsaData(dsa: any): any {
         ? "GST Registered Entity"
         : "Shop & Establishment / MSME");
 
+  const cleanLicense = (val: any) => {
+    if (!val || typeof val !== "string") return null;
+    const parts = val
+      .split(",")
+      .map((p) => p.replace(/^(shop\s*act|udyam)\s*:\s*/i, "").trim())
+      .filter((p) => Boolean(p) && p !== "Standard Regulatory Compliance");
+    return parts.length > 0 ? parts.join(", ") : null;
+  };
+
+  const rawUdyam = cleanLicense(dsa.udyam_no);
+  const rawShopAct = cleanLicense(dsa.shop_act_no);
+  const rawBizLicense = cleanLicense(dsa.business_license_no);
+
   const udyamNo =
-    dsa.udyam_no ||
-    (proofsStr.includes("UDYAM") ? (dsa.business_license_no || "UDYAM-MH-12-0012345") : null);
+    rawUdyam ||
+    (proofsStr.includes("UDYAM") ? (rawBizLicense || "UDYAM-MH-12-0012345") : null);
   const shopActNo =
-    dsa.shop_act_no ||
-    (proofsStr.includes("SHOP") ? (dsa.business_license_no || "SHOP-PUN-2026-001") : null);
+    rawShopAct ||
+    (proofsStr.includes("SHOP") ? (rawBizLicense || "SHOP-PUN-2026-001") : null);
 
   const businessLicenseNo =
-    dsa.business_license_no ||
-    [udyamNo ? `Udyam: ${udyamNo}` : null, shopActNo ? `Shop Act: ${shopActNo}` : null]
-      .filter(Boolean)
-      .join(", ") ||
+    rawBizLicense ||
+    [udyamNo, shopActNo].filter(Boolean).join(", ") ||
     (registeredBusinessProof
       ? `Registered Proofs on File (${registeredBusinessProof.split(",").join(", ")})`
       : "Standard Regulatory Compliance");

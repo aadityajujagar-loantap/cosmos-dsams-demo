@@ -1389,6 +1389,24 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       return;
     }
 
+    const isPhotographDoc =
+      docType === "recent_photograph" ||
+      docType === "stakeholder_photograph" ||
+      docType.toLowerCase().includes("photograph");
+
+    if (isPhotographDoc) {
+      const isAllowed = /\.(png|jpe?g)$/i.test(file.name);
+      if (!isAllowed) {
+        toast({
+          title: "Invalid file format",
+          description:
+            "Photographs can only be uploaded in .png, .jpeg, or .jpg format.",
+          variant: "warning",
+        });
+        return;
+      }
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = reader.result as string;
@@ -2207,8 +2225,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       shop_act_no: !gstApplicable && shopActNumber.trim() ? shopActNumber.trim() : undefined,
       udyam_no: !gstApplicable && udyamNumber.trim() ? udyamNumber.trim() : undefined,
       business_license_no: !gstApplicable ? ([
-        shopActNumber.trim() ? `Shop Act: ${shopActNumber.trim()}` : null,
-        udyamNumber.trim() ? `Udyam: ${udyamNumber.trim()}` : null,
+        shopActNumber.trim() || null,
+        udyamNumber.trim() || null,
       ].filter(Boolean).join(", ") || undefined) : undefined,
       address,
       city,
@@ -4270,8 +4288,13 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                             {doc.label}{required && <span className="text-red-500 font-bold ml-0.5" style={{ color: "#ef4444" }}>*</span>}
                           </span>
                         </div>
+                        <span className="text-[10px] text-slate-400 block font-normal ml-6 mt-0.5">
+                          {doc.type === "recent_photograph" || doc.type === "stakeholder_photograph" || doc.type.toLowerCase().includes("photograph")
+                            ? "Allowed formats: .png, .jpeg, .jpg (Max 10MB)"
+                            : "Allowed formats: .pdf, .jpg, .jpeg, .png (Max 10MB)"}
+                        </span>
                         {attached && (
-                          <span className="text-[11px] text-emerald-700 font-medium ml-6 block">
+                          <span className="text-[11px] text-emerald-700 font-medium ml-6 block mt-0.5">
                             ✓ {attached.name} ({attached.size})
                           </span>
                         )}
@@ -4299,11 +4322,18 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                             <span>Attach</span>
                             <input
                               type="file"
-                              accept=".pdf,.jpg,.jpeg,.png"
+                              accept={
+                                doc.type === "recent_photograph" || doc.type === "stakeholder_photograph" || doc.type.toLowerCase().includes("photograph")
+                                  ? ".png,.jpeg,.jpg"
+                                  : ".pdf,.jpg,.jpeg,.png"
+                              }
                               className="hidden"
                               onChange={(e) => {
                                 const f = e.target.files?.[0];
-                                if (f) handleFileUpload(doc.type, f);
+                                if (f) {
+                                  e.target.value = "";
+                                  handleFileUpload(doc.type, f);
+                                }
                               }}
                             />
                           </label>
