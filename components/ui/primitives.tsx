@@ -618,10 +618,10 @@ export function Tabs({
           <span className="inline-flex items-center gap-1.5">
             {tab.label}
             {tab.dot ? (
-              <span
-                className="inline-block h-2 w-2 rounded-full bg-amber-500"
-                title="Pending items in this tab"
-              />
+              <span className="relative flex h-1.5 w-1.5 shrink-0" title="Pending action required">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-60" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#0095da]" />
+              </span>
             ) : null}
           </span>
         </button>

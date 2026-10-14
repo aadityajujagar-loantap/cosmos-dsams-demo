@@ -2915,7 +2915,7 @@ export function DsaManagementPage() {
                                 variant="outline"
                               >
                                 <KeyRound className="h-4 w-4 mr-1.5" />
-                                Creds
+                                Credentials
                               </Button>
                             ) : null}
                             {locked ? (
@@ -2929,7 +2929,7 @@ export function DsaManagementPage() {
                                 type="button"
                                 variant="primary"
                               >
-                                Actions
+                                Open
                               </Button>
                             )}
                           </div>
@@ -7677,8 +7677,8 @@ const resolveStageStatus = (
           onChange={setTab}
           tabs={[
             { label: "DSA Approval", value: "actions", dot: Boolean(getWorkflowBlockReason()) },
-            { label: "DSA Application Form", value: "overview", dot: pendingCheckerVerifications.length > 0 || !hasCheckerDdNote || !hasCheckerGeneratedReport },
-            { label: "Documents Checklist", value: "documents", dot: hasUnverifiedApplicantDocs || missingProfileDocuments.length > 0 || hasUnverifiedDdlReport },
+            { label: "DSA Application Form", value: "overview", dot: !isMakerUser && (pendingCheckerVerifications.length > 0 || !hasCheckerDdNote || !hasCheckerGeneratedReport) },
+            { label: "Documents Checklist", value: "documents", dot: hasUnverifiedApplicantDocs || missingProfileDocuments.length > 0 || (!isMakerUser && hasUnverifiedDdlReport) },
             ...(canViewAgreementsTab
               ? [{
                   label: "Agreements",
@@ -7743,11 +7743,11 @@ const resolveStageStatus = (
                     )}
                   />
                   <span>KYC</span>
-                  {pendingCheckerVerifications.length > 0 ? (
-                    <span
-                      className="inline-block h-2 w-2 rounded-full bg-amber-500"
-                      title="Pending statutory verifications"
-                    />
+                  {!isMakerUser && pendingCheckerVerifications.length > 0 ? (
+                    <span className="relative flex h-1.5 w-1.5 shrink-0" title="Pending statutory verifications">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-60" />
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#0095da]" />
+                    </span>
                   ) : null}
                   <span
                     className={cn(
@@ -7783,11 +7783,11 @@ const resolveStageStatus = (
                     )}
                   />
                   <span>Due Diligence Report</span>
-                  {!hasCheckerDdNote || !hasCheckerGeneratedReport ? (
-                    <span
-                      className="inline-block h-2 w-2 rounded-full bg-amber-500"
-                      title="Due diligence note or report pending"
-                    />
+                  {!isMakerUser && (!hasCheckerDdNote || !hasCheckerGeneratedReport) ? (
+                    <span className="relative flex h-1.5 w-1.5 shrink-0" title="Due diligence note or report pending">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-60" />
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#0095da]" />
+                    </span>
                   ) : null}
                 </button>
               </div>
@@ -9020,10 +9020,10 @@ const resolveStageStatus = (
                               />
                               <span>{cat.label}</span>
                               {hasPending ? (
-                                <span
-                                  className="inline-block h-2 w-2 rounded-full bg-amber-500"
-                                  title="Pending items in this section"
-                                />
+                                <span className="relative flex h-1.5 w-1.5 shrink-0" title="Pending items in this section">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-60" />
+                                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#0095da]" />
+                                </span>
                               ) : null}
                               <span
                                 className={cn(
@@ -10736,7 +10736,7 @@ const resolveStageStatus = (
                   !workflowLevelInfo.isRejected && (
                     <div className="mt-5 flex flex-wrap items-center gap-3 pt-4 border-t border-slate-200">
                             <Button
-                              disabled={isSubmitDisabled}
+                              disabled={actionLoading}
                               onClick={() => {
                                 const blockReason = getWorkflowBlockReason();
                                 if (blockReason) {
@@ -10754,31 +10754,8 @@ const resolveStageStatus = (
                                 }
                               }}
                               size="sm"
-                              className={cn(
-                                "font-bold text-xs py-2 px-4 h-auto shadow-sm flex items-center gap-1.5 transition-all",
-                                isSubmitDisabled
-                                  ? "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300 opacity-60 shadow-none hover:bg-slate-200"
-                                  : "bg-emerald-600 hover:bg-emerald-700 text-white",
-                              )}
-                              title={
-                                isSubmitDisabled
-                                  ? isMakerLevel
-                                    ? "Upload Physical Visit Report to enable submission to Checker"
-                                    : hasUnverifiedApplicantDocs
-                                      ? `Checker must verify all partner documents (${applicantVerifiedDocsCount}/${applicantReviewDocs.length} verified)`
-                                      : !areAllCheckerVerificationsDone
-                                        ? "Complete all required statutory verifications to enable recommendation"
-                                        : !isVisitReportUploaded
-                                          ? "Upload Physical Visit Report to enable recommendation"
-                                          : !hasCheckerDdNote
-                                            ? "Enter Due Diligence Notes to enable recommendation"
-                                            : !hasCheckerGeneratedReport
-                                              ? "Submit Due Diligence Report to enable recommendation"
-                                              : hasUnverifiedDdlReport
-                                                ? "Due Diligence Review Report must be verified in the Documents tab before submitting recommendation"
-                                                : "Complete all steps to enable recommendation"
-                                  : workflowLevelInfo.actionLabel
-                              }
+                              className="font-bold text-xs py-2 px-4 h-auto shadow-sm flex items-center gap-1.5 transition-all bg-emerald-600 hover:bg-emerald-700 text-white"
+                              title={workflowLevelInfo.actionLabel}
                             >
                               <Check className="h-4 w-4" />
                               {workflowLevelInfo.actionLabel}
@@ -10934,32 +10911,9 @@ const resolveStageStatus = (
                 </Button>
               )}
               <Button
-                className={cn(
-                  "font-semibold transition-all",
-                  workflowLevelInfo.isCompleted ||
-                    dsa?.onboarding_status === "APPROVED" ||
-                    approvingDsa?.onboarding_status === "APPROVED" ||
-                    (workflowLevelInfo.currentLevel === 2 &&
-                      (hasUnverifiedApplicantDocs ||
-                        !hasCheckerDdNote ||
-                        !hasCheckerGeneratedReport ||
-                        hasUnverifiedDdlReport))
-                    ? "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300 opacity-60 shadow-none hover:bg-slate-200"
-                    : "bg-emerald-600 hover:bg-emerald-700 text-white",
-                )}
+                className="font-semibold transition-all bg-emerald-600 hover:bg-emerald-700 text-white"
                 type="button"
-                disabled={
-                  actionLoading ||
-                  Boolean(getWorkflowBlockReason()) ||
-                  workflowLevelInfo.isCompleted ||
-                  dsa?.onboarding_status === "APPROVED" ||
-                  approvingDsa?.onboarding_status === "APPROVED" ||
-                  (workflowLevelInfo.currentLevel === 2 &&
-                    (hasUnverifiedApplicantDocs ||
-                      !hasCheckerDdNote ||
-                      !hasCheckerGeneratedReport ||
-                      hasUnverifiedDdlReport))
-                }
+                disabled={actionLoading}
                 onClick={async () => {
                   if (!approvalRemarks.trim()) {
                     setApprovalRemarksError("Please provide approval remarks.");

@@ -393,6 +393,7 @@ function getDocDisplayLabel(key: string, docList?: DocDef[]): string {
     other_document: "Other Supporting Document",
     gst_certificate: "GST Certificate",
     rent_agreement: "Rental Proof / Rent Agreement",
+    address_proof: "Address Proof",
     experience_certificate: "Experience / Empanelment Certificate",
     board_resolution: "Board Resolution",
     business_license_shop_act: "Shop Act License",
@@ -1273,6 +1274,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         d.type === "experience_certificate" ||
         d.type === "business_license" ||
         d.type === "rent_agreement" ||
+        d.type === "address_proof" ||
         d.type === "dsa_consent_dpdp" ||
         d.type === "gst_certificate" ||
         d.type === "board_resolution"
@@ -1355,6 +1357,22 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         list.splice(otherDocIdx, 0, rentalDoc);
       } else {
         list.push(rentalDoc);
+      }
+    }
+
+    // Dynamic Address Proof: populates only when premises are self owned
+    if (businessPremisesOwnership === "Owned") {
+      const otherDocIdx = list.findIndex((d) => d.type === "other_document");
+      const addressDoc: DocDef = {
+        type: "address_proof",
+        label: "Address Proof",
+        required: true,
+        requirementLabel: "Mandatory",
+      };
+      if (otherDocIdx !== -1) {
+        list.splice(otherDocIdx, 0, addressDoc);
+      } else {
+        list.push(addressDoc);
       }
     }
 
@@ -3946,7 +3964,12 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         type="radio"
                         name="ownership"
                         checked={businessPremisesOwnership === "Rented"}
-                        onChange={() => setBusinessPremisesOwnership("Rented")}
+                        onChange={() => {
+                          setBusinessPremisesOwnership("Rented");
+                          if (uploadedDocs["address_proof"]) {
+                            removeDoc("address_proof");
+                          }
+                        }}
                         className="h-4 w-4 text-blue-600 focus:ring-blue-500 cursor-pointer"
                       />
                       <span>Rented / Leased Premises (Rent Agreement required)</span>

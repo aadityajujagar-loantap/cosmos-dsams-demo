@@ -524,13 +524,6 @@ export default function LoginPage() {
                     </button>
                   </div>
                 </div>
-                {loginPortal === "dsa" ? (
-                  <p className="text-[11px] text-slate-500 pt-1 leading-relaxed">
-                    Partner login checks operational status{" "}
-                    <span className="font-semibold text-emerald-700">ACTIVE</span> (assigned upon
-                    agreement verification).
-                  </p>
-                ) : null}
 
               <div className="flex gap-3 pt-1">
                 <button

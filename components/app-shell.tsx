@@ -948,7 +948,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         )}
       >
         {/* Top Header across all pages & all roles */}
-        <header className="sticky top-0 z-20 flex min-h-[3.75rem] items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-2 backdrop-blur lg:px-6">
+        <header className="sticky top-0 z-20 flex min-h-[4.25rem] items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-2.5 backdrop-blur lg:px-6">
           <div className="flex items-center gap-3">
             <Button
               aria-label="Open navigation"
@@ -961,18 +961,19 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Menu className="h-5 w-5" />
             </Button>
 
-            <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
-              <span className="text-sm font-bold tracking-tight text-slate-900">
-                {currentUser.name}
-              </span>
-              <span className="inline-flex items-center rounded-md bg-blue-50 border border-blue-200/80 px-2 py-0.5 text-[11px] font-semibold text-blue-700 shadow-2xs">
-                {currentUser.role}
-              </span>
-              <div className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50/80 px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs">
-                <Building2 className="h-3.5 w-3.5 text-blue-600 shrink-0" />
-                <span>
-                  <strong className="font-semibold text-slate-800">{branchNameDisplay.name}</strong>
-                  {branchNameDisplay.code ? <span className="text-slate-500"> ({branchNameDisplay.code})</span> : ""}
+            <div className="flex flex-col items-start justify-center gap-1.5">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold tracking-tight text-slate-900 leading-none">
+                  {currentUser.name}
+                </span>
+                <span className="inline-flex items-center rounded-md bg-blue-50 border border-blue-200/80 px-2 py-0.5 text-[11px] font-semibold text-blue-700 shadow-2xs leading-none">
+                  {currentUser.role}
+                </span>
+              </div>
+              <div className="-ml-2 inline-flex items-center gap-1.5 rounded-md border border-slate-200/80 bg-slate-50/80 px-2 py-1 shadow-2xs">
+                <span className="text-sm font-semibold tracking-tight text-slate-900 leading-none">
+                  {branchNameDisplay.name}
+                  {branchNameDisplay.code ? ` (${branchNameDisplay.code})` : ""}
                 </span>
               </div>
             </div>
