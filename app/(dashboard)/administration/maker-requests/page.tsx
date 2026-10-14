@@ -5,6 +5,7 @@ import { ClipboardCheck, Eye, RefreshCw, ShieldAlert, ThumbsDown, ThumbsUp, X } 
 
 import { useAuth } from "@/hooks/useAuth";
 import { useMakerChecker } from "@/hooks/useMakerChecker";
+import { useRouter } from "next/navigation";
 import { Button, Card, CardContent, CardHeader, EmptyState, Input, Modal, Select, StatusBadge, Textarea } from "@/components/ui/primitives";
 import type { MakerRequest, MakerRequestActionType, MakerRequestStatus } from "@/types/makerChecker";
 
@@ -58,6 +59,7 @@ export default function MakerRequestsPage() {
     setSelectedRequest,
   } = useMakerChecker();
   const { hasPermission, hasRole, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<MakerRequestStatus>("pending");
   const [actionFilter, setActionFilter] = useState<MakerRequestActionType | "">("");
   const [groupFilter, setGroupFilter] = useState("");
@@ -105,6 +107,7 @@ export default function MakerRequestsPage() {
     if (!reviewed) return;
     setSelectedRequest(null);
     loadRequests();
+    router.push("/");
   };
 
   const handleOpenRejectModal = (uuid: string) => {
