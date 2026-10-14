@@ -106,7 +106,7 @@ export function DashboardPage() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [sourcingPartner, setSourcingPartner] = useState("");
   const [managerView, setManagerView] = useState<"overview" | "verificationQueue" | "onHoldQueue" | "activeQueue">("overview");
-  const [authorityTab, setAuthorityTab] = useState<string>("all");
+  const [authorityTab, setAuthorityTab] = useState<string>("in_process");
   const [authoritySearch, setAuthoritySearch] = useState<string>("");
   const [authorityStatusFilter, setAuthorityStatusFilter] = useState<string>("");
   const [authorityPage, setAuthorityPage] = useState<number>(1);
@@ -321,10 +321,6 @@ export function DashboardPage() {
 
   const authorityTabs = useMemo(
     () => [
-      {
-        value: "all",
-        label: "All",
-      },
       {
         value: "in_process",
         label: "In Process",
@@ -1266,7 +1262,7 @@ export function DashboardPage() {
                               <div className="flex items-center justify-center">
                                 <Link href={`/dsa/${dsa.id}`}>
                                   <Button size="sm" type="button" variant="primary">
-                                    Actions
+                                    Open
                                   </Button>
                                 </Link>
                               </div>
@@ -1748,8 +1744,21 @@ export function DashboardPage() {
     return (
       <div>
         <PageHeader
-          eyebrow={`${roleTitle} desk`}
-          title={`${roleTitle} Dashboard: ${currentUser.name}`}
+          action={
+            <div className="w-full sm:w-[280px] lg:w-[320px]">
+              <Input
+                aria-label="Search partners"
+                onChange={(e) => {
+                  setAuthoritySearch(e.target.value);
+                  setAuthorityPage(1);
+                }}
+                placeholder="Search by name, code, pan, city..."
+                value={authoritySearch}
+                className="w-full bg-white shadow-2xs"
+              />
+            </div>
+          }
+          title={`${roleTitle} Dashboard`}
         />
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -1798,41 +1807,6 @@ export function DashboardPage() {
         </div>
 
         <Card className="mt-4 shadow-md min-h-[500px]">
-          <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-slate-100 bg-slate-50/50">
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-              <Input
-                aria-label="Search partners"
-                onChange={(e) => {
-                  setAuthoritySearch(e.target.value);
-                  setAuthorityPage(1);
-                }}
-                placeholder="Search by name, code, pan, city..."
-                value={authoritySearch}
-                className="w-full sm:w-[300px]"
-              />
-              <Select
-                aria-label="Filter by status"
-                onChange={(e) => {
-                  setAuthorityStatusFilter(e.target.value);
-                  setAuthorityPage(1);
-                }}
-                value={authorityStatusFilter}
-                className="w-full sm:w-[180px]"
-              >
-                <option value="">All statuses</option>
-                <option value="SUBMITTED">Submitted</option>
-                <option value="UNDER_REVIEW">Under Review</option>
-                <option value="APPROVED">Approved</option>
-                <option value="REVERTED">Reverted</option>
-                <option value="REJECTED">Rejected</option>
-                <option value="ACTIVE">Active</option>
-              </Select>
-            </div>
-            <span className="text-xs text-slate-500 font-medium">
-              Found {filteredAuthorityDsas.length} partners
-            </span>
-          </div>
-
           <CardContent className="p-0">
             {listLoading ? (
               <div className="flex items-center justify-center py-20">
@@ -1896,7 +1870,7 @@ export function DashboardPage() {
                                     type="button"
                                     variant="primary"
                                   >
-                                    Actions
+                                    Open
                                   </Button>
                                 </Link>
                               )}

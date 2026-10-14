@@ -16,7 +16,7 @@ export function PageHeader({
   title: string;
 }) {
   return (
-    <div className="mb-2.5 flex flex-col gap-1.5 lg:flex-row lg:items-end lg:justify-between">
+    <div className="mb-2.5 flex flex-col gap-1.5 md:flex-row md:items-end md:justify-between">
       <div>
         {eyebrow ? (
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-blue-700">{eyebrow}</p>
