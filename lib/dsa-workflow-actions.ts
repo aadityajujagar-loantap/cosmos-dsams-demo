@@ -50,7 +50,7 @@ export function allowedWorkflowActions(
         "FORWARD",
       ];
     case 6:
-      return ["RECOMMEND", "REJECT", "REVERT", "FORWARD", "CALL_BACK"];
+      return ["RECOMMEND", "REJECT", "REVERT", "FORWARD"];
     case 7:
       // L7 is the configured final step (is_final = true) in the workflow
       // seeder, so it only ever sanctions or rejects.
@@ -79,7 +79,7 @@ export function isWorkflowActionAllowed(
  * rather than re-implementing the resolver here.
  */
 export function canCallBack(level: number | null | undefined): boolean {
-  return [4, 5, 6].includes(Number(level));
+  return [4, 5].includes(Number(level));
 }
 
 /**
@@ -171,48 +171,50 @@ export function resolvePreviousActorLevel(
 /**
  * Decide whether the DSA management list should offer a Call Back action.
  *
- * Task 20C rule: a case that moved from Level N to Level N+1 may only be called
- * back by an authority at the previous level (N-1), never by the level the case
- * currently sits at. The button additionally requires that:
- *  - the row is view-only for this user (the case is not on their desk);
- *  - the case is UNCLAIMED — a claimed case is live work already owned by
- *    somebody (after a CALL_BACK the engine returns it ASSIGNED + LOCKED);
- *  - the case is not in a terminal state the backend refuses outright.
+ * Task 20C rule:
+ * CALL_BACK is strictly restricted to Levels L3, L4, and L5 (Sub-Region Head / AGM, DGM, Region Head).
+ * L1 (Maker), L2 (Checker), L6 (HO Credit Officer), and L7 (HO Credit Head) are strictly blocked.
+ *
+ * Furthermore, CALL_BACK is available ONLY when the case was re-allocated (among L3, L4, L5)
+ * by the current user, NOT when approved/recommended to the next level.
  */
 export function canShowCallBackAction(params: {
-  rowLocked: boolean;
+  rowLocked?: boolean;
   assignedUserId?: number | null;
   accessReason?: string;
   level?: number | null;
   viewerLevel?: number | null;
   previousActorLevel?: number | null;
+  wasActionedByMe?: boolean;
   isReallocatedByMe?: boolean;
 }): boolean {
   const {
-    rowLocked,
-    assignedUserId,
     accessReason,
     level,
     viewerLevel,
-    previousActorLevel,
+    wasActionedByMe,
     isReallocatedByMe,
   } = params;
 
   if (accessReason === "rejected" || accessReason === "closed") return false;
-  if (!viewerLevel) return false;
+  if (!viewerLevel || !level) return false;
 
-  // Re-allocated by current user to another role among L3, L4, or L5
-  if (isReallocatedByMe) {
-    return true;
+  const vLvl = Number(viewerLevel);
+  const cLvl = Number(level);
+
+  // Strictly consecutive: L3 can only call back from L4; L4 can only call back from L5.
+  const isConsecutiveCallback =
+    (vLvl === 3 && cLvl === 4) ||
+    (vLvl === 4 && cLvl === 5);
+
+  if (!isConsecutiveCallback) return false;
+
+  // Caller must be the actor who actioned / handed off the case
+  if (wasActionedByMe !== undefined || isReallocatedByMe !== undefined) {
+    return Boolean(wasActionedByMe ?? isReallocatedByMe);
   }
 
-  if (!rowLocked) return false;
-  if (assignedUserId !== null && assignedUserId !== undefined) return false;
-  // The case itself must sit at a level the backend permits CALL_BACK at.
-  if (!canCallBack(level)) return false;
-  // Strict N -> N-1: only the previous authority may pull it back.
-  const prev = previousActorLevel ?? Number(level) - 1;
-  return viewerLevel === prev;
+  return true;
 }
 
 /**
@@ -444,7 +446,7 @@ if (
     3: ["RECOMMEND", "REJECT", "REVERT", "RE_ALLOCATE", "FORWARD"],
     4: ["RECOMMEND", "REJECT", "REVERT", "CALL_BACK", "RE_ALLOCATE", "FORWARD"],
     5: ["RECOMMEND", "REJECT", "REVERT", "CALL_BACK", "RE_ALLOCATE", "FORWARD"],
-    6: ["RECOMMEND", "REJECT", "REVERT", "FORWARD", "CALL_BACK"],
+    6: ["RECOMMEND", "REJECT", "REVERT", "FORWARD"],
     7: ["APPROVE", "REJECT"],
   };
 
@@ -461,7 +463,7 @@ if (
 
   // CALL_BACK shown at the levels the backend allows on the pending step.
   const cb = [1, 2, 3, 4, 5, 6, 7].map((l) => canCallBack(l));
-  const cbOk = JSON.stringify(cb) === JSON.stringify([false, false, false, true, true, true, false]);
+  const cbOk = JSON.stringify(cb) === JSON.stringify([false, false, false, true, true, false, false]);
   if (!cbOk) failed++;
   console.log(`${cbOk ? "PASS" : "FAIL"}  CALL_BACK levels -> [${cb.join(", ")}]`);
 
@@ -730,61 +732,61 @@ if (
   if (!actedOk) failed++;
   console.log(`${actedOk ? "PASS" : "FAIL"}  acted stage with no remarks keeps its default -> "${actedNoRemarks}"`);
 
-  // N -> N-1 rule, walked through the walkthrough's own scenarios.
-  // `prev` is resolvePreviousActorLevel(approvals, level) for each case.
-  const nMinus1: [string, boolean, boolean][] = [
+  // Task 20C: CALL_BACK test cases.
+  // Restricted ONLY to L3, L4, L5, and ONLY when reallocated by me (not when approved to next level).
+  const callBackCases: [string, boolean, boolean][] = [
     [
-      "S1 L3<-L4: only L3 sees it (case at L4)",
+      "L3 user who reallocated case to another authority CAN call back",
       true,
-      canShowCallBackAction({ rowLocked: true, assignedUserId: null, accessReason: "not_my_stage", level: 4, viewerLevel: 3, previousActorLevel: 3 }),
+      canShowCallBackAction({ rowLocked: true, assignedUserId: 108, accessReason: "not_my_stage", level: 4, viewerLevel: 3, isReallocatedByMe: true }),
     ],
     [
-      "S1 L4 (current owner) must NOT see it",
-      false,
-      canShowCallBackAction({ rowLocked: true, assignedUserId: null, accessReason: "not_my_stage", level: 4, viewerLevel: 4, previousActorLevel: 3 }),
-    ],
-    [
-      "S2 L4<-L5: only L4 sees it (case at L5)",
+      "L4 user who reallocated case CAN call back",
       true,
-      canShowCallBackAction({ rowLocked: true, assignedUserId: null, accessReason: "not_my_stage", level: 5, viewerLevel: 4, previousActorLevel: 4 }),
+      canShowCallBackAction({ rowLocked: true, assignedUserId: 105, accessReason: "not_my_stage", level: 3, viewerLevel: 4, isReallocatedByMe: true }),
     ],
     [
-      "S2 L5 (current owner) must NOT see it",
-      false,
-      canShowCallBackAction({ rowLocked: true, assignedUserId: null, accessReason: "not_my_stage", level: 5, viewerLevel: 5, previousActorLevel: 4 }),
-    ],
-    [
-      "S3 L5<-L6: only L5 sees it (case at L6)",
+      "L5 user who reallocated case CAN call back",
       true,
-      canShowCallBackAction({ rowLocked: true, assignedUserId: null, accessReason: "not_my_stage", level: 6, viewerLevel: 5, previousActorLevel: 5 }),
+      canShowCallBackAction({ rowLocked: true, assignedUserId: 104, accessReason: "not_my_stage", level: 3, viewerLevel: 5, isReallocatedByMe: true }),
     ],
     [
-      "called back => claimed => nobody sees it",
+      "L2 Checker must NEVER see Call Back",
       false,
-      canShowCallBackAction({ rowLocked: true, assignedUserId: 8, accessReason: "not_my_stage", level: 4, viewerLevel: 3, previousActorLevel: 3 }),
+      canShowCallBackAction({ rowLocked: true, assignedUserId: null, accessReason: "not_my_stage", level: 3, viewerLevel: 2, isReallocatedByMe: false }),
     ],
     [
-      "case on my own desk => hidden",
+      "L1 Maker must NEVER see Call Back",
       false,
-      canShowCallBackAction({ rowLocked: false, assignedUserId: null, accessReason: "allowed", level: 4, viewerLevel: 3, previousActorLevel: 3 }),
+      canShowCallBackAction({ rowLocked: true, assignedUserId: null, accessReason: "not_my_stage", level: 2, viewerLevel: 1, isReallocatedByMe: false }),
     ],
     [
-      "rejected => hidden",
+      "L6 HO Credit Officer must NEVER see Call Back",
       false,
-      canShowCallBackAction({ rowLocked: true, assignedUserId: null, accessReason: "rejected", level: 4, viewerLevel: 3, previousActorLevel: 3 }),
+      canShowCallBackAction({ rowLocked: true, assignedUserId: null, accessReason: "not_my_stage", level: 7, viewerLevel: 6, isReallocatedByMe: false }),
     ],
     [
-      "L3 pending => backend has no CALL_BACK here",
+      "L7 HO Credit Head must NEVER see Call Back",
       false,
-      canShowCallBackAction({ rowLocked: true, assignedUserId: null, accessReason: "not_my_stage", level: 3, viewerLevel: 2, previousActorLevel: 2 }),
+      canShowCallBackAction({ rowLocked: true, assignedUserId: null, accessReason: "not_my_stage", level: 7, viewerLevel: 7, isReallocatedByMe: false }),
     ],
     [
-      "admin (no level) => hidden",
+      "Case approved to next level (not reallocated) does NOT show Call Back",
       false,
-      canShowCallBackAction({ rowLocked: true, assignedUserId: null, accessReason: "not_my_stage", level: 4, viewerLevel: null, previousActorLevel: 3 }),
+      canShowCallBackAction({ rowLocked: true, assignedUserId: null, accessReason: "not_my_stage", level: 4, viewerLevel: 3, isReallocatedByMe: false }),
+    ],
+    [
+      "Reallocated case that is rejected => hidden",
+      false,
+      canShowCallBackAction({ rowLocked: true, assignedUserId: 108, accessReason: "rejected", level: 4, viewerLevel: 3, isReallocatedByMe: true }),
+    ],
+    [
+      "Admin (no level) => hidden",
+      false,
+      canShowCallBackAction({ rowLocked: true, assignedUserId: 108, accessReason: "not_my_stage", level: 4, viewerLevel: null, isReallocatedByMe: true }),
     ],
   ];
-  for (const [name, want, got] of nMinus1) {
+  for (const [name, want, got] of callBackCases) {
     const ok = got === want;
     if (!ok) failed++;
     console.log(`${ok ? "PASS" : "FAIL"}  ${name} -> ${got} (expected ${want})`);
