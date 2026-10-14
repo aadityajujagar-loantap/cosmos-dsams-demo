@@ -19,6 +19,7 @@ export interface User {
   phone?: string | null;
   branch_role_id?: string | null;
   branch_code?: string | null;
+  subregion_id?: string | null;
   zone_code?: string | null;
   deactivated_at?: string | null;
   created_at?: string | null;
