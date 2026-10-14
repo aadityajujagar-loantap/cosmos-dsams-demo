@@ -86,14 +86,14 @@ function isPathAllowedForRole(role: string, pathname: string) {
     );
   }
 
-  // Universal: All internal workflow authorities (L1–L7) & admin can ALWAYS access DSA approval/management pages
+  // Universal: Internal workflow authorities (L1–L7) can access DSA detail pages, but /dsa/management is restricted to Super Admin
   const isDsaApprovalPage =
-    pathname === "/dsa" ||
-    pathname === "/dsa/management" ||
-    (pathname.startsWith("/dsa/") &&
-      !["/dsa/onboarding", "/dsa/product-setting"].some(
-        (path) => pathname === path || pathname.startsWith(`${path}/`),
-      ));
+    (pathname === "/dsa" || pathname === "/dsa/management")
+      ? (role === "DSA Manager" || role === "Super Admin" || role === "ADMIN")
+      : (pathname.startsWith("/dsa/") &&
+          !["/dsa/onboarding", "/dsa/product-setting"].some(
+            (path) => pathname === path || pathname.startsWith(`${path}/`),
+          ));
 
   if (isDsaApprovalPage) return true;
 
@@ -106,7 +106,6 @@ function isPathAllowedForRole(role: string, pathname: string) {
 
     return (
       pathname === "/" ||
-      pathname === "/dsa/management" ||
       partnerDsaProfile ||
       pathname === "/leads" ||
       pathname.startsWith("/leads/") ||
@@ -131,7 +130,6 @@ function isPathAllowedForRole(role: string, pathname: string) {
   if (role === "Branch User" || role === "Checker") {
     return (
       pathname === "/" ||
-      pathname === "/dsa/management" ||
       (pathname.startsWith("/dsa/") && !pathname.startsWith("/dsa/product-setting")) ||
       pathname === "/leads" ||
       pathname.startsWith("/leads/") ||
@@ -394,7 +392,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         },
         {
           items: [
-            { href: "/dsa/management", icon: Users, label: "DSA Management" },
             { href: "/dsa/onboarding", icon: UserPlus, label: "Onboard DSA" },
           ],
           label: "Branch Initiator",
@@ -409,10 +406,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         {
           items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
           label: "Overview",
-        },
-        {
-          items: [{ href: "/dsa/management", icon: Users, label: "Manage My Network" }],
-          label: "Network",
         },
         {
           items: [
@@ -913,21 +906,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Menu className="h-5 w-5" />
             </Button>
 
-            <div className="flex flex-col items-start justify-center gap-1.5">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold tracking-tight text-slate-900 leading-none">
-                  {currentUser.name}
-                </span>
-                <span className="inline-flex items-center rounded-md bg-blue-50 border border-blue-200/80 px-2 py-0.5 text-[11px] font-semibold text-blue-700 shadow-2xs leading-none">
-                  {currentUser.role}
-                </span>
-              </div>
-              <div className="-ml-2 inline-flex items-center gap-1.5 rounded-md border border-slate-200/80 bg-slate-50/80 px-2 py-1 shadow-2xs">
-                <span className="text-sm font-semibold tracking-tight text-slate-900 leading-none">
-                  {branchNameDisplay.name}
-                  {branchNameDisplay.code ? ` (${branchNameDisplay.code})` : ""}
-                </span>
-              </div>
+            <div className="inline-flex items-center gap-1.5 rounded-md border border-slate-200/80 bg-slate-50/80 px-2 py-1 shadow-2xs">
+              <span className="text-sm font-semibold tracking-tight text-slate-900 leading-none">
+                {branchNameDisplay.name}
+                {branchNameDisplay.code ? ` (${branchNameDisplay.code})` : ""}
+              </span>
             </div>
           </div>
 

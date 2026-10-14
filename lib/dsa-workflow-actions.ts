@@ -50,7 +50,7 @@ export function allowedWorkflowActions(
         "FORWARD",
       ];
     case 6:
-      return ["RECOMMEND", "REJECT", "REVERT", "FORWARD", "CALL_BACK"];
+      return ["RECOMMEND", "REJECT", "REVERT", "FORWARD"];
     case 7:
       // L7 is the configured final step (is_final = true) in the workflow
       // seeder, so it only ever sanctions or rejects.
@@ -79,7 +79,7 @@ export function isWorkflowActionAllowed(
  * rather than re-implementing the resolver here.
  */
 export function canCallBack(level: number | null | undefined): boolean {
-  return [4, 5, 6].includes(Number(level));
+  return [4, 5].includes(Number(level));
 }
 
 /**
@@ -180,31 +180,42 @@ export function resolvePreviousActorLevel(
  *  - the case is not in a terminal state the backend refuses outright.
  */
 export function canShowCallBackAction(params: {
-  rowLocked: boolean;
+  rowLocked?: boolean;
   assignedUserId?: number | null;
   accessReason?: string;
   level?: number | null;
   viewerLevel?: number | null;
   previousActorLevel?: number | null;
+  wasActionedByMe?: boolean;
+  isReallocatedByMe?: boolean;
 }): boolean {
   const {
-    rowLocked,
-    assignedUserId,
     accessReason,
     level,
     viewerLevel,
-    previousActorLevel,
+    wasActionedByMe,
+    isReallocatedByMe,
   } = params;
 
-  if (!rowLocked) return false;
-  if (assignedUserId !== null && assignedUserId !== undefined) return false;
   if (accessReason === "rejected" || accessReason === "closed") return false;
-  if (!viewerLevel) return false;
-  // The case itself must sit at a level the backend permits CALL_BACK at.
-  if (!canCallBack(level)) return false;
-  // Strict N -> N-1: only the previous authority may pull it back.
-  const prev = previousActorLevel ?? Number(level) - 1;
-  return viewerLevel === prev;
+  if (!viewerLevel || !level) return false;
+
+  const vLvl = Number(viewerLevel);
+  const cLvl = Number(level);
+
+  // Strictly consecutive: L3 can only call back from L4; L4 can only call back from L5.
+  const isConsecutiveCallback =
+    (vLvl === 3 && cLvl === 4) ||
+    (vLvl === 4 && cLvl === 5);
+
+  if (!isConsecutiveCallback) return false;
+
+  // Caller must be the actor who actioned / handed off the case
+  if (wasActionedByMe !== undefined || isReallocatedByMe !== undefined) {
+    return Boolean(wasActionedByMe ?? isReallocatedByMe);
+  }
+
+  return true;
 }
 
 /**
@@ -436,7 +447,7 @@ if (
     3: ["RECOMMEND", "REJECT", "REVERT", "RE_ALLOCATE", "FORWARD"],
     4: ["RECOMMEND", "REJECT", "REVERT", "CALL_BACK", "RE_ALLOCATE", "FORWARD"],
     5: ["RECOMMEND", "REJECT", "REVERT", "CALL_BACK", "RE_ALLOCATE", "FORWARD"],
-    6: ["RECOMMEND", "REJECT", "REVERT", "FORWARD", "CALL_BACK"],
+    6: ["RECOMMEND", "REJECT", "REVERT", "FORWARD"],
     7: ["APPROVE", "REJECT"],
   };
 
@@ -453,7 +464,7 @@ if (
 
   // CALL_BACK shown at the levels the backend allows on the pending step.
   const cb = [1, 2, 3, 4, 5, 6, 7].map((l) => canCallBack(l));
-  const cbOk = JSON.stringify(cb) === JSON.stringify([false, false, false, true, true, true, false]);
+  const cbOk = JSON.stringify(cb) === JSON.stringify([false, false, false, true, true, false, false]);
   if (!cbOk) failed++;
   console.log(`${cbOk ? "PASS" : "FAIL"}  CALL_BACK levels -> [${cb.join(", ")}]`);
 

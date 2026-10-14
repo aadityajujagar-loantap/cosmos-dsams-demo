@@ -25,6 +25,8 @@ import {
   Lock,
   RotateCcw,
   XCircle,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -60,6 +62,8 @@ import { adminApi } from "@/apis/admin";
 import type { ActivityLog } from "@/types/activityLog";
 import { useDsa } from "@/hooks/useDsa";
 import type { Dsa as LiveDsa } from "@/types/dsa";
+import { useToast } from "@/components/ui/toast";
+import { canShowCallBackAction } from "@/lib/dsa-workflow-actions";
 
 const CUSTOMER_DSA_DISPLAY_NAME = "Assigned DSA";
 
@@ -110,6 +114,46 @@ export function DashboardPage() {
   const [authoritySearch, setAuthoritySearch] = useState<string>("");
   const [authorityStatusFilter, setAuthorityStatusFilter] = useState<string>("");
   const [authorityPage, setAuthorityPage] = useState<number>(1);
+
+  const { toast } = useToast();
+  const [callBackTarget, setCallBackTarget] = useState<any | null>(null);
+  const [callBackReason, setCallBackReason] = useState("");
+  const [callBackBusy, setCallBackBusy] = useState(false);
+  const [callBackError, setCallBackError] = useState("");
+
+  async function submitDashboardCallBack() {
+    if (!callBackTarget) return;
+    if (!callBackReason.trim()) {
+      setCallBackError("A reason is mandatory to call the case back.");
+      return;
+    }
+    setCallBackBusy(true);
+    setCallBackError("");
+    try {
+      const res = await adminApi.updateWorkflowAction(Number(callBackTarget.id), {
+        action: "CALL_BACK",
+        remarks: callBackReason.trim(),
+      });
+      toast({
+        title: "Case Called Back",
+        description:
+          res?.message ||
+          "The case has been returned to you and locked. It is now actionable on your desk.",
+        variant: "success",
+      });
+      setCallBackTarget(null);
+      setCallBackReason("");
+      await fetchLiveDsas({ per_page: 200 });
+    } catch (err: unknown) {
+      setCallBackError(
+        err instanceof Error
+          ? err.message
+          : "Only the previous authority who actioned this case can call it back.",
+      );
+    } finally {
+      setCallBackBusy(false);
+    }
+  }
 
   // ----------------------------------------------------
   // 1. DSA MANAGER (SUPER ADMIN) CALCULATIONS & RENDER
@@ -281,28 +325,52 @@ export function DashboardPage() {
                   (userLevel && Number(a.approval_level) === userLevel)),
             )));
 
+      const isCallableBackByMe = Boolean(
+        userId &&
+          userLevel &&
+          ((userLevel === 3 && caseLevel === 4) ||
+           (userLevel === 4 && caseLevel === 5)) &&
+          statusStr !== "REJECTED" &&
+          statusStr !== "APPROVED" &&
+          Number(dsa.assigned_user_id) !== Number(userId) &&
+          (
+            (Array.isArray(dsa.approvals) &&
+              dsa.approvals.some(
+                (a: any) =>
+                  Number(a?.approval_level ?? a?.level) === userLevel &&
+                  ["RECOMMENDED", "FORWARDED", "REALLOCATED", "CALLED_BACK"].includes(
+                    String(a?.status || a?.action || "").toUpperCase(),
+                  ) &&
+                  (Number(a?.actioned_by) === Number(userId) ||
+                   Number(a?.assigned_user_id) === Number(userId)),
+              )) ||
+            (Number(dsa.status_reason_by) === Number(userId)) ||
+            (!Array.isArray(dsa.approvals) || dsa.approvals.length === 0)
+          )
+      );
+
       const isApprovedByMe =
-        statusStr === "APPROVED" ||
-        statusStr === "AGREEMENT_PENDING" ||
-        statusStr === "AGREEMENT_COMPLETED" ||
-        opStatus === "ACTIVE" ||
-        (userLevel &&
-          userLevel >= 2 &&
-          Array.isArray(dsa.approvals) &&
-          dsa.approvals.some(
-            (a: any) =>
-              (a.status === "APPROVED" ||
-                a.status === "RECOMMENDED" ||
-                a.action === "APPROVE" ||
-                a.action === "RECOMMEND") &&
-              ((userId && String(a.actioned_by) === String(userId)) ||
-                Number(a.approval_level) === userLevel),
-          )) ||
-        Boolean(userLevel && caseLevel > userLevel && statusStr !== "REJECTED");
+        !isCallableBackByMe &&
+        (statusStr === "APPROVED" ||
+          statusStr === "AGREEMENT_PENDING" ||
+          statusStr === "AGREEMENT_COMPLETED" ||
+          opStatus === "ACTIVE" ||
+          (userLevel &&
+            userLevel >= 2 &&
+            Array.isArray(dsa.approvals) &&
+            dsa.approvals.some(
+              (a: any) =>
+                (a.status === "APPROVED" ||
+                  a.status === "RECOMMENDED" ||
+                  a.action === "APPROVE" ||
+                  a.action === "RECOMMEND") &&
+                ((userId && String(a.actioned_by) === String(userId)) ||
+                  Number(a.approval_level) === userLevel),
+            )));
 
       const isInProcessForMe =
         userLevel && userLevel >= 2
-          ? caseLevel === userLevel && statusStr !== "REJECTED" && statusStr !== "APPROVED"
+          ? ((caseLevel === userLevel && statusStr !== "REJECTED" && statusStr !== "APPROVED") || isCallableBackByMe)
           : access.allowed;
 
       if (isRejectedByMe) {
@@ -386,28 +454,52 @@ export function DashboardPage() {
                   (userLevel && Number(a.approval_level) === userLevel)),
             )));
 
+      const isCallableBackByMe = Boolean(
+        userId &&
+          userLevel &&
+          ((userLevel === 3 && caseLevel === 4) ||
+           (userLevel === 4 && caseLevel === 5)) &&
+          statusStr !== "REJECTED" &&
+          statusStr !== "APPROVED" &&
+          Number(dsa.assigned_user_id) !== Number(userId) &&
+          (
+            (Array.isArray(dsa.approvals) &&
+              dsa.approvals.some(
+                (a: any) =>
+                  Number(a?.approval_level ?? a?.level) === userLevel &&
+                  ["RECOMMENDED", "FORWARDED", "REALLOCATED", "CALLED_BACK"].includes(
+                    String(a?.status || a?.action || "").toUpperCase(),
+                  ) &&
+                  (Number(a?.actioned_by) === Number(userId) ||
+                   Number(a?.assigned_user_id) === Number(userId)),
+              )) ||
+            (Number(dsa.status_reason_by) === Number(userId)) ||
+            (!Array.isArray(dsa.approvals) || dsa.approvals.length === 0)
+          )
+      );
+
       const isApprovedByMe =
-        statusStr === "APPROVED" ||
-        statusStr === "AGREEMENT_PENDING" ||
-        statusStr === "AGREEMENT_COMPLETED" ||
-        opStatus === "ACTIVE" ||
-        (userLevel &&
-          userLevel >= 2 &&
-          Array.isArray(dsa.approvals) &&
-          dsa.approvals.some(
-            (a: any) =>
-              (a.status === "APPROVED" ||
-                a.status === "RECOMMENDED" ||
-                a.action === "APPROVE" ||
-                a.action === "RECOMMEND") &&
-              ((userId && String(a.actioned_by) === String(userId)) ||
-                Number(a.approval_level) === userLevel),
-          )) ||
-        Boolean(userLevel && caseLevel > userLevel && statusStr !== "REJECTED");
+        !isCallableBackByMe &&
+        (statusStr === "APPROVED" ||
+          statusStr === "AGREEMENT_PENDING" ||
+          statusStr === "AGREEMENT_COMPLETED" ||
+          opStatus === "ACTIVE" ||
+          (userLevel &&
+            userLevel >= 2 &&
+            Array.isArray(dsa.approvals) &&
+            dsa.approvals.some(
+              (a: any) =>
+                (a.status === "APPROVED" ||
+                  a.status === "RECOMMENDED" ||
+                  a.action === "APPROVE" ||
+                  a.action === "RECOMMEND") &&
+                ((userId && String(a.actioned_by) === String(userId)) ||
+                  Number(a.approval_level) === userLevel),
+            )));
 
       const isInProcessForMe =
         userLevel && userLevel >= 2
-          ? caseLevel === userLevel && statusStr !== "REJECTED" && statusStr !== "APPROVED"
+          ? ((caseLevel === userLevel && statusStr !== "REJECTED" && statusStr !== "APPROVED") || isCallableBackByMe)
           : access.allowed;
 
       if (authorityTab === "in_process") {
@@ -420,12 +512,6 @@ export function DashboardPage() {
         if (!isRejectedByMe) return false;
       } else if (authorityTab === "active") {
         if (opStatus !== "ACTIVE" && statusStr !== "ACTIVE" && getDsaDisplayStatus(dsa) !== "ACTIVE") return false;
-      } else if (authorityTab === "all") {
-        if (userLevel && userLevel >= 2) {
-          if (!isInProcessForMe && !isRevertedByMe && !isRejectedByMe && !isApprovedByMe) {
-            return false;
-          }
-        }
       }
 
       if (authorityStatusFilter) {
@@ -1833,6 +1919,40 @@ export function DashboardPage() {
                         ? (dsa.name || dsa.contact_person || dsa.code)
                         : ((dsa as any).entity_name || (dsa as any).company_name || dsa.name || dsa.contact_person || dsa.code);
 
+                      const viewerLevel = resolveUserLevel(currentUser?.role);
+                      const currentCaseLevel = Number(dsa.current_approval_level);
+                      const vLvl = Number(viewerLevel);
+
+                      const wasActionedByMe = Boolean(
+                        currentUser?.id &&
+                          vLvl &&
+                          ((vLvl === 3 && currentCaseLevel === 4) ||
+                           (vLvl === 4 && currentCaseLevel === 5)) &&
+                          Number(dsa.assigned_user_id) !== Number(currentUser.id) &&
+                          (
+                            (Array.isArray(dsa.approvals) &&
+                              dsa.approvals.some(
+                                (a: any) =>
+                                  Number(a?.approval_level ?? a?.level) === vLvl &&
+                                  ["RECOMMENDED", "FORWARDED", "REALLOCATED", "CALLED_BACK"].includes(
+                                    String(a?.status || a?.action || "").toUpperCase(),
+                                  ) &&
+                                  (Number(a?.actioned_by) === Number(currentUser.id) ||
+                                   Number(a?.assigned_user_id) === Number(currentUser.id)),
+                              )) ||
+                            (Number(dsa.status_reason_by) === Number(currentUser.id)) ||
+                            (!Array.isArray(dsa.approvals) || dsa.approvals.length === 0)
+                          )
+                      );
+                      const showCallBackAction = canShowCallBackAction({
+                        rowLocked: locked,
+                        assignedUserId: dsa.assigned_user_id,
+                        accessReason: access.reason,
+                        level: dsa.current_approval_level,
+                        viewerLevel,
+                        wasActionedByMe,
+                      });
+
                       return (
                         <tr
                           className={cn(
@@ -1860,9 +1980,25 @@ export function DashboardPage() {
                             <StatusBadge status={dsa.status} />
                           </td>
                           <td className="p-4 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-center">
+                            <div className="flex items-center justify-center gap-2">
+                              {showCallBackAction ? (
+                                <Button
+                                  onClick={() => {
+                                    setCallBackTarget(dsa);
+                                    setCallBackReason("");
+                                    setCallBackError("");
+                                  }}
+                                  size="sm"
+                                  title="Pull this case back to your stage for re-evaluation"
+                                  type="button"
+                                  className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 bg-sky-50 text-sky-800 hover:bg-sky-100 border border-sky-300 font-semibold text-xs h-7 px-2.5 shadow-2xs"
+                                >
+                                  <RotateCcw className="h-3.5 w-3.5 shrink-0" />
+                                  <span>Call Back</span>
+                                </Button>
+                              ) : null}
                               {locked ? (
-                                <span className="text-slate-300">—</span>
+                                !showCallBackAction && <span className="text-slate-300">—</span>
                               ) : (
                                 <Link href={`/dsa/${dsa.id}`}>
                                   <Button
@@ -1996,6 +2132,65 @@ export function DashboardPage() {
             </Card>
           </div>
         )}
+        <Modal
+          onClose={() => {
+            setCallBackTarget(null);
+            setCallBackReason("");
+            setCallBackError("");
+          }}
+          open={Boolean(callBackTarget)}
+          title="Call Back to Your Desk"
+        >
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="dashboardCallBackReason">Reason for Call Back *</Label>
+              <textarea
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                id="dashboardCallBackReason"
+                maxLength={2000}
+                onChange={(e) => setCallBackReason(e.target.value)}
+                placeholder="e.g. Calling back to re-evaluate branch documentation."
+                rows={4}
+                value={callBackReason}
+              />
+              <p className="text-[11px] text-slate-500">Maximum 2000 characters.</p>
+            </div>
+            {callBackError ? (
+              <p className="flex items-start gap-1.5 text-xs font-medium text-rose-600">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                {callBackError}
+              </p>
+            ) : null}
+            <div className="flex justify-end gap-2 pt-1">
+              <Button
+                onClick={() => {
+                  setCallBackTarget(null);
+                  setCallBackReason("");
+                  setCallBackError("");
+                }}
+                size="sm"
+                type="button"
+                variant="secondary"
+              >
+                Cancel
+              </Button>
+              <Button
+                className="bg-sky-600 hover:bg-sky-700 text-white font-bold"
+                disabled={callBackBusy}
+                onClick={submitDashboardCallBack}
+                size="sm"
+                type="button"
+              >
+                {callBackBusy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-4 w-4" />
+                )}
+                Confirm Call Back
+              </Button>
+            </div>
+          </div>
+        </Modal>
       </div>
     );
   } else if (currentUser.role === "DSA Partner") {

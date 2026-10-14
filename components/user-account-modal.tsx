@@ -3,12 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Building2,
-  Hash,
   LogOut,
   Mail,
   Phone,
-  ShieldCheck,
-  Ticket,
 } from "lucide-react";
 
 import { authApi } from "@/apis/auth";
@@ -157,25 +154,7 @@ export function UserAccountModal({
           {/* Assignment & Scope Details */}
           <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 space-y-3">
             <div className="grid grid-cols-2 gap-2.5">
-              <div className="rounded-lg border border-slate-200/80 bg-white p-2.5">
-                <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
-                  <Hash className="h-3 w-3 text-slate-400" />
-                  <span>User ID</span>
-                </div>
-                <p className="mt-1 font-mono text-xs font-semibold text-slate-900 truncate">
-                  {fieldValue(user?.id ?? fallbackUser.id)}
-                </p>
-              </div>
 
-              <div className="rounded-lg border border-slate-200/80 bg-white p-2.5">
-                <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
-                  <Ticket className="h-3 w-3 text-slate-400" />
-                  <span>Ticket Number</span>
-                </div>
-                <p className="mt-1 font-mono text-xs font-semibold text-slate-900 truncate">
-                  {fieldValue(user?.ticket_no)}
-                </p>
-              </div>
 
               <div className="rounded-lg border border-slate-200/80 bg-white p-2.5">
                 <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
