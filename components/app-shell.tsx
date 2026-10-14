@@ -128,7 +128,7 @@ function isPathAllowedForRole(role: string, pathname: string) {
     );
   }
 
-  if (role === "Branch User") {
+  if (role === "Branch User" || role === "Checker") {
     return (
       pathname === "/" ||
       pathname === "/dsa/management" ||
@@ -137,23 +137,6 @@ function isPathAllowedForRole(role: string, pathname: string) {
       pathname.startsWith("/leads/") ||
       pathname === "/applications" ||
       pathname.startsWith("/applications/")
-    );
-  }
-
-  if (role === "Checker") {
-    return (
-      pathname === "/" ||
-      pathname === "/dsa/management" ||
-      pathname.startsWith("/dsa/") ||
-      pathname === "/leads" ||
-      pathname.startsWith("/leads/") ||
-      pathname === "/applications" ||
-      pathname.startsWith("/applications/") ||
-      pathname.startsWith("/administration/maker-requests") ||
-      pathname.startsWith("/administration/location-hierarchy") ||
-      pathname.startsWith("/administration/audit-logs") ||
-      pathname.startsWith("/administration/users") ||
-      pathname.startsWith("/administration/master-values")
     );
   }
 
@@ -403,7 +386,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           label: "Overview",
         },
       ];
-    } else if (currentUser.role === "Branch User") {
+    } else if (currentUser.role === "Branch User" || currentUser.role === "Checker") {
       return [
         {
           items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
@@ -419,37 +402,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         {
           items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications & Leads" }],
           label: "Sourcing",
-        },
-      ];
-    } else if (currentUser.role === "Checker") {
-      return [
-        {
-          items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
-          label: "Overview",
-        },
-        {
-          items: [
-            { href: "/dsa/management", icon: Users, label: "DSA Approval Queue" },
-            { href: "/dsa/product-setting", icon: Settings, label: "Product Setting" },
-          ],
-          label: "Checker Review",
-        },
-        {
-          items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications & Leads" }],
-          label: "Applications",
-        },
-        {
-          items: [
-            { href: "/administration/maker-requests", icon: ClipboardCheck, label: "Maker Requests" },
-            { href: "/administration/location-hierarchy", icon: MapPin, label: "Location Hierarchy" },
-            { href: "/administration/audit-logs", icon: FileText, label: "Audit Logs" },
-            { href: "/administration/users", icon: Users, label: "User Directory" },
-          ],
-          label: "Operations & Verification",
-        },
-        {
-          items: [{ href: "/administration/master-values", icon: Settings, label: "Master Values" }],
-          label: "Master Values",
         },
       ];
     } else if (currentUser.role === "DSA Partner") {

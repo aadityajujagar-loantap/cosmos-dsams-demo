@@ -5945,7 +5945,7 @@ const resolveStageStatus = (
         variant: "success",
       });
       closeDecisionModals();
-      router.push("/dsa/management");
+      router.push("/");
     } catch (err: unknown) {
       setReAllocateError(
         err instanceof Error
@@ -7515,7 +7515,7 @@ const resolveStageStatus = (
                         description: `Application #${dsa.dsa_code || dsa.code || dsa.id} sanctioned. DSA Code allotted and Empanelment Letter generated.`,
                         variant: "success",
                       });
-                      router.push("/dsa/management");
+                      router.push("/");
                     }
                   } catch (err: any) {
                     setApprovalRemarksError(
@@ -8899,9 +8899,6 @@ const resolveStageStatus = (
                           width="max-w-xl"
                         >
                           <div className="space-y-4">
-                            <p className="text-xs text-slate-500">
-                              This observation is mandatory and will be embedded in the generated Due Diligence Report.
-                            </p>
                             <textarea
                               rows={5}
                               className="w-full rounded-md border border-slate-200 bg-white p-3 text-xs text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 font-sans leading-relaxed"
@@ -8925,7 +8922,8 @@ const resolveStageStatus = (
                                 size="sm"
                                 disabled={
                                   submittingCheckerReport ||
-                                  (!checkerDdNote.trim() && !hasCheckerDdNote)
+                                  (!checkerDdNote.trim() && !hasCheckerDdNote) ||
+                                  kycVerifiedCount < 6
                                 }
                                 onClick={() => {
                                   handleSubmitCheckerDdReport();
@@ -9117,7 +9115,10 @@ const resolveStageStatus = (
                               getDocumentCategory(d) === cat.id &&
                               getEffectiveDocStatus(d) !== "Verified",
                           ).length;
-                          const hasPending = missingCount > 0 || unverifiedCount > 0;
+                          const hasPending =
+                            cat.id === "kyc"
+                              ? kycVerifiedCount < 6
+                              : missingCount > 0 || unverifiedCount > 0;
 
                           return (
                             <button
@@ -9478,7 +9479,7 @@ const resolveStageStatus = (
                     {categoryMissingDocs.length > 0 && canMakerReuploadDocs ? (
                       <div className="pt-4 border-t border-slate-100">
                         <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
-                          Upload Missing {currentCategoryLabel}
+                          Upload Missing Documents
                         </h4>
                         <div className="grid gap-4 lg:grid-cols-2">
                           {categoryMissingDocs.map((document) => {
@@ -11183,12 +11184,8 @@ const resolveStageStatus = (
                           : `${approvingDsa.name} approved and forwarded to ${workflowLevelInfo.nextLevelName}.`,
                       variant: "success",
                     });
-                    if (workflowLevelInfo.currentLevel === 7) {
-                      // L7 has no Agreements tab — route to the activity trail.
-                      setTab(canViewAgreementsTab ? "agreements" : "case-activity");
-                    }
                     closeDecisionModals();
-                    router.push("/dsa/management");
+                    router.push("/");
                   }
                 }}
               >
@@ -12295,7 +12292,7 @@ const resolveStageStatus = (
                       variant: "success",
                     });
                     closeDecisionModals();
-                    router.push("/dsa/management");
+                    router.push("/");
                   }
                 }
               }}
@@ -12404,8 +12401,8 @@ const resolveStageStatus = (
                         variant: "success",
                       });
                       closeDecisionModals();
-                      // Rejected is a dead-end for every role — return to the list.
-                      router.push("/dsa/management");
+                      // Rejected is a dead-end for every role — return to dashboard.
+                      router.push("/");
                     }
                   } catch (err: any) {
                     setRejectionError(
@@ -12524,8 +12521,8 @@ const resolveStageStatus = (
                           variant: "success",
                         });
                         closeDecisionModals();
-                        // Rejected is a dead-end for every role — return to the list.
-                        router.push("/dsa/management");
+                        // Rejected is a dead-end for every role — return to dashboard.
+                        router.push("/");
                       }
                     } catch (err: any) {
                       setRejectionError(
@@ -12641,7 +12638,7 @@ const resolveStageStatus = (
                 if (!deletingDsa) return;
                 deleteDsaCascade(deletingDsa.id);
                 setDeletingDsa(null);
-                router.push("/dsa/management");
+                router.push("/");
               }}
               type="button"
               variant="danger"
@@ -13298,8 +13295,8 @@ const resolveStageStatus = (
                   });
                   closeDecisionModals();
                   // The case now sits at another authority's stage, so this
-                  // user has no viewable case — return to the list.
-                  router.push("/dsa/management");
+                  // user has no viewable case — return to dashboard.
+                  router.push("/");
                 }
               }}
             >
