@@ -108,7 +108,7 @@ export function UserAccountModal({
         <div className="space-y-4">
           <div className="flex flex-col items-center justify-center rounded-xl border border-slate-200/80 bg-slate-50/60 p-10 text-center min-h-[260px]">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-slate-800 mb-3" />
-            <h4 className="text-xs font-semibold text-slate-800">Loading user profile...</h4>
+            <h4 className="text-xs @font-semibold text-slate-800">Loading user profile...</h4>
             <p className="mt-1 text-[11px] text-slate-400">
               Fetching session details and account info
             </p>
