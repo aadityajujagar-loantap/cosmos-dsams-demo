@@ -3717,11 +3717,14 @@ export function DsaProfilePage({ id }: { id: string }) {
         }
       } else if (type === "cibil") {
         if (isMakerUser) return;
-        const isInd =
-          dsa.dsa_type === "INDIVIDUAL" || dsa.dsa_type === "Individual";
-        const cibilCode = isInd ? "CIBIL_CONSUMER" : "CIBIL_COMMERCIAL";
+        const isEntity =
+          (dsa.dsa_type || "").toUpperCase() === "ENTITY" ||
+          (dsa.entity_type || "").toUpperCase() === "ENTITY" ||
+          ((dsa.business_type || "").toUpperCase() !== "INDIVIDUAL" && (dsa.business_type || "").trim() !== "");
+        const cibilCode = isEntity ? "CIBIL_COMMERCIAL" : "CIBIL_CONSUMER";
         const res = await triggerCheckerVerification(dsa.id, cibilCode, {
           pan: dsa.pan,
+          entity_name: dsa.entity_name || dsa.name,
         });
         // Mark attempted regardless of success/failure (only throws are excluded)
         setCheckerKycAttempted("cibil", true);
@@ -5118,10 +5121,11 @@ const resolveStageStatus = (
 
 
   const isIndividualDsa =
-    !dsa.entity_type ||
-    dsa.entity_type === "INDIVIDUAL" ||
-    dsa.dsa_type === "INDIVIDUAL" ||
-    dsa.dsa_type === "Individual";
+    (dsa.dsa_type || "").toUpperCase() === "INDIVIDUAL" ||
+    (!dsa.dsa_type &&
+      ((dsa.business_type || "").toUpperCase() === "INDIVIDUAL" ||
+        (dsa.entity_type || "").toUpperCase() === "INDIVIDUAL" ||
+        !dsa.entity_type));
 
   // 2.6 API Checks — Due Diligence Stage Specifications
   // Note: DSA Consent must be captured before triggering any API — as per DPDP Act. API charges borne by Cosmos Bank.
@@ -7862,18 +7866,22 @@ const resolveStageStatus = (
                                   isCheckerUserOrLevel ||
                                   isCheckerRole)
                               ) {
-                                const isInd =
-                                  dsa.dsa_type === "INDIVIDUAL" ||
-                                  dsa.dsa_type === "Individual";
-                                const cibilCode = isInd
-                                  ? "CIBIL_CONSUMER"
-                                  : "CIBIL_COMMERCIAL";
+                                const isEntity =
+                                  (dsa.dsa_type || "").toUpperCase() === "ENTITY" ||
+                                  (dsa.entity_type || "").toUpperCase() === "ENTITY" ||
+                                  ((dsa.business_type || "").toUpperCase() !== "INDIVIDUAL" && (dsa.business_type || "").trim() !== "");
+                                const cibilCode = isEntity
+                                  ? "CIBIL_COMMERCIAL"
+                                  : "CIBIL_CONSUMER";
                                 tasks.push({
                                   key: "cibil",
                                   promise: triggerCheckerVerification(
                                     dsa.id,
                                     cibilCode,
-                                    { pan: dsa.pan },
+                                    {
+                                      pan: dsa.pan,
+                                      entity_name: dsa.entity_name || dsa.name,
+                                    },
                                   ),
                                 });
                                 tasks.push({
