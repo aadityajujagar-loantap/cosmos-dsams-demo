@@ -6484,805 +6484,457 @@ const resolveStageStatus = (
         dsa?.agreement_status === "SIGNED_VERIFIED" ||
         dsa?.operational_status === "ACTIVE" ||
         workflowLevelInfo.isCompleted ||
-
         (Number(dsa?.current_approval_level) >= 7 &&
           ((dsa as any)?.status === "APPROVED" ||
             (dsa as any)?.action === "APPROVE")),
     );
 
+    const formatDt = (val?: string | null) => {
+      if (!val) return "";
+      try {
+        return formatDate(val);
+      } catch {
+        return String(val);
+      }
+    };
+
+    const isL2Actioned = Boolean(
+      (dsa as any)?.status === "RECOMMENDED" ||
+        dsa?.onboarding_status === "RECOMMENDED" ||
+        Number(dsa?.current_approval_level) > 2 ||
+        (dsa as any)?.is_l2_actioned,
+    );
+
+    const checkerName =
+      checkerRemarks?.name ||
+      note?.submitted_by?.name ||
+      (note as any)?.officer_name ||
+      "";
+    const checkerDesignation =
+      checkerRemarks?.designation ||
+      note?.submitted_by?.role ||
+      (note as any)?.officer_designation ||
+      "Sub-Region Staff";
+    const checkerDate =
+      formatDt(checkerRemarks?.date || note?.submitted_at);
+    const checkerObs =
+      note?.observations ||
+      savedCheckerDdNote?.observations ||
+      checkerRemarks?.observations ||
+      "";
+    const checkerRem =
+      getCleanRemark(checkerRemarks?.remarks) ||
+      getCleanRemark(note?.remarks) ||
+      (isL2Actioned ? "Due Diligence completed and forwarded by Checker." : "");
+    const checkerExRem =
+      getCleanRemark(checkerRemarks?.exception_remarks) ||
+      getCleanRemark(note?.exception_remarks) ||
+      "";
+
+    const l3Approval = dsa?.approvals?.find(
+      (a: any) => Number(a.approval_level) === 3 || a.stage_code === "LEVEL_3_SUB_REGION_HEAD"
+    );
+    const l3Name = l3Hist?.name || l3Approval?.actioned_by?.name || "";
+    const l3Designation = l3Hist?.designation || "Sub-Region Head";
+    const l3Date = formatDt(l3Hist?.date || l3Approval?.actioned_at);
+    const l3Remarks =
+      getCleanRemark(l3Hist?.remarks) ||
+      (l3Approval?.remarks ? getCleanRemark(l3Approval.remarks) : "");
+
+    const l4Approval = dsa?.approvals?.find(
+      (a: any) => Number(a.approval_level) === 4 || a.stage_code === "LEVEL_4_DGM"
+    );
+    const l4IsSkipped = l4Approval?.status === "SKIPPED";
+    const l4Name = l4IsSkipped ? "" : (l4Hist?.name || l4Approval?.actioned_by?.name || "");
+    const l4Designation = l4Hist?.designation || "DGM";
+    const l4Date = l4IsSkipped ? "" : formatDt(l4Hist?.date || l4Approval?.actioned_at);
+    const l4Remarks = l4IsSkipped
+      ? "Not Applicable / DGM not posted for mapped branch (Step Skipped)."
+      : (getCleanRemark(l4Hist?.remarks) || (l4Approval?.remarks ? getCleanRemark(l4Approval.remarks) : ""));
+
+    const l5Approval = dsa?.approvals?.find(
+      (a: any) => Number(a.approval_level) === 5 || a.stage_code === "LEVEL_5_REGION_HEAD"
+    );
+    const l5Name = l5Hist?.name || l5Approval?.actioned_by?.name || "";
+    const l5Designation = l5Hist?.designation || "Region Head";
+    const l5Date = formatDt(l5Hist?.date || l5Approval?.actioned_at);
+    const l5Remarks =
+      getCleanRemark(l5Hist?.remarks) ||
+      (l5Approval?.remarks ? getCleanRemark(l5Approval.remarks) : "");
+
+    const l6Approval = dsa?.approvals?.find(
+      (a: any) => Number(a.approval_level) === 6 || a.stage_code === "LEVEL_6_HO_CREDIT_OFFICER"
+    );
+    const l6Name = l6Hist?.name || l6Approval?.actioned_by?.name || "";
+    const l6Designation = l6Hist?.designation || "HO Credit Officer";
+    const l6Date = formatDt(l6Hist?.date || l6Approval?.actioned_at);
+    const l6Remarks =
+      getCleanRemark(l6Hist?.remarks) ||
+      (l6Approval?.remarks ? getCleanRemark(l6Approval.remarks) : "");
+
+    const l7Approval = dsa?.approvals?.find(
+      (a: any) => Number(a.approval_level) === 7 || a.stage_code === "LEVEL_7_HO_CREDIT_HEAD"
+    );
+    const l7Name = l7Hist?.name || l7Approval?.actioned_by?.name || "";
+    const l7Designation = l7Hist?.designation || "HO Credit Head";
+    const l7Date = formatDt(l7Hist?.date || l7Approval?.actioned_at);
+    const l7Remarks =
+      getCleanRemark(l7Hist?.remarks) ||
+      (l7Approval?.remarks ? getCleanRemark(l7Approval.remarks) : "");
+
+    const rawOfficialCode =
+      dsa?.dsa_code && typeof dsa.dsa_code === "object" ? dsa.dsa_code.code : dsa?.dsa_code;
+    const isTemp =
+      !rawOfficialCode ||
+      rawOfficialCode === dsa?.code ||
+      /^DSA[_-]/i.test(String(rawOfficialCode));
+    const canShowOfficialCode =
+      !isTemp && (isAlreadyApproved || dsa?.operational_status === "ACTIVE");
+
+    const bre = rep?.bre_evaluation || rep?.policy_evaluation || rep;
+    const deviationRules: any[] = [];
+    const sourceRules: any[] = rep?.deviation_details || bre?.rules || [];
+    for (const r of sourceRules) {
+      const dec = String(r.decision || "").toUpperCase();
+      if (dec === "DEVIATION" || r.is_deviation) {
+        deviationRules.push(r);
+      }
+    }
+
     return (
       <div className="space-y-6">
-        <div className="rounded-xl border border-slate-300 bg-white p-5 shadow-xs space-y-5 text-slate-800 font-sans">
+        <div className="border border-slate-900 bg-white p-5 sm:p-7 shadow-xs space-y-4 text-slate-900 font-sans">
           {/* Report Header Title */}
-          <div className="text-center pb-2 border-b-2 border-slate-900">
+          <div className="text-center pb-2">
             <h2 className="text-base sm:text-lg font-bold uppercase tracking-wider text-slate-900">
               Due Diligence Report For DSA Onboarding
             </h2>
-            <p className="text-sm font-bold text-slate-500 uppercase tracking-widest mt-0.5">
+            <p className="text-sm font-bold text-slate-700 uppercase tracking-widest mt-0.5">
               ({isEntity ? "Entity" : "Individual"})
             </p>
           </div>
 
-          {/* Application Metadata Top Bar */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 text-sm gap-y-1.5 text-slate-700 font-medium pb-1">
-            <div>
-              <span className="font-bold text-slate-900">
-                Branch:
-              </span>{" "}
-              {dsaBranchName}
-            </div>
-            <div className="sm:text-right">
-              <span className="font-bold text-slate-900">
-                Application Ref / Code:
-              </span>{" "}
-              <span className="font-mono font-semibold">
-                {dsaAppCode}
-              </span>
-            </div>
-            <div>
-              <span className="font-bold text-slate-900">
-                Report Generated Date:
-              </span>{" "}
-              {reportDate}
-            </div>
-            <div className="sm:text-right">
-              <span className="font-bold text-slate-900">
-                DSA Type:
-              </span>{" "}
-              <span className="font-bold text-slate-900">
-                {isEntity ? "ENTITY" : "INDIVIDUAL"}
-              </span>
-            </div>
-          </div>
+          <table className="w-full border-collapse border border-slate-900 text-xs sm:text-sm">
+            <thead>
+              <tr className="bg-slate-50">
+                <th className="w-1/2 border border-slate-900 px-3 py-2 text-left font-bold text-slate-900">
+                  Particulars
+                </th>
+                <th className="w-1/2 border border-slate-900 px-3 py-2 text-left font-bold text-slate-900">
+                  Information
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {/* Basic Information */}
+              <tr className="bg-slate-100 font-bold">
+                <td colSpan={2} className="border border-slate-900 px-3 py-2 text-slate-900">
+                  Basic Information
+                </td>
+              </tr>
+              {isEntity ? (
+                <>
+                  <tr>
+                    <td className="w-1/2 border border-slate-900 px-3 py-1.5 text-slate-800">Applicant Name</td>
+                    <td className="w-1/2 border border-slate-900 px-3 py-1.5 font-medium text-slate-900">{basicInfo.applicant_name || dsa?.entity_name || dsa?.name || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Constitution</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.constitution || "Private Limited"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Registered Office Full Address</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.registered_office_address || dsa?.address || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Ownership</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.ownership || "Owned"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Branch Office Address (if any)</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.branch_office_address || basicInfo.registered_office_address || dsa?.address || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Name of the promotor / Key Person (Proprietor/ Partner/ Directors)</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.promoter_key_person || dsa?.contact_person || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Office Contact Number</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.office_contact_number || dsa?.mobile || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Office Mail ID</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.office_email || dsa?.email || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Date of Establishment</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.date_of_establishment || dsa?.dob || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">PAN No.</td>
+                    <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">{basicInfo.pan || dsa?.pan || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business License Type</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.business_license_type || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business License No.</td>
+                    <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">{basicInfo.business_license_number || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Branches to Assign</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.branches_to_assign || dsaBranchName}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Expected Monthly Business Commitment</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.expected_monthly_business_commitment || "25 Lakhs"}</td>
+                  </tr>
+                </>
+              ) : (
+                <>
+                  <tr>
+                    <td className="w-1/2 border border-slate-900 px-3 py-1.5 text-slate-800">Name of DSA</td>
+                    <td className="w-1/2 border border-slate-900 px-3 py-1.5 font-medium text-slate-900">{basicInfo.applicant_name || basicInfo.name_of_dsa || dsa?.name || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Constitution</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.constitution || "Individual"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Date of Birth</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.date_of_birth || dsa?.dob || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Residence Address</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.residence_address || dsa?.address || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business / Office Address (if any)</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.business_office_address || basicInfo.residence_address || dsa?.address || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Ownership</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.ownership || "Owned"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Contact Number</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.contact_number || dsa?.mobile || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Mail ID</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.email || dsa?.email || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">PAN No.</td>
+                    <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">{basicInfo.pan || dsa?.pan || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Aadhar No.</td>
+                    <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">{basicInfo.aadhaar || dsa?.aadhaar_no || dsa?.aadhaar || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business License Type</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.business_license_type || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business License No.</td>
+                    <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">{basicInfo.business_license_number || "—"}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Regions to Assign</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.regions_to_assign || basicInfo.branches_to_assign || dsaBranchName}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Expected Monthly Business Commitment (INR)</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.expected_monthly_business_commitment || "10 Lakhs"}</td>
+                  </tr>
+                </>
+              )}
 
-          {/* Checker DD Note */}
-          {(() => {
-            const ddObs =
-              note?.observations ||
-              savedCheckerDdNote?.observations ||
-              deviationReportData?.dd_note?.observations;
-            if (!ddObs) return null;
-            return (
-              <div>
-                <div className="bg-[#0f172a] text-white px-3 py-2 text-sm font-bold uppercase tracking-wider rounded-t">
-                  Due Diligence Note <span className="text-red-400 ml-0.5">*</span>
-                </div>
-                <div className="border border-t-0 border-slate-300 rounded-b px-4 py-3 bg-white">
-                  <p className="text-base font-medium text-slate-800 leading-relaxed whitespace-pre-wrap">{ddObs}</p>
-                </div>
-              </div>
-            );
-          })()}
+              {/* Financial Due Diligence */}
+              <tr className="bg-slate-100 font-bold">
+                <td colSpan={2} className="border border-slate-900 px-3 py-2 text-slate-900">
+                  Financial Due Diligence
+                </td>
+              </tr>
+              <tr>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Income Tax Returns Submitted</td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{finDd.itr_submitted || finDd.income_tax_returns_submitted || "No"}</td>
+              </tr>
+              <tr>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Income Details for F.Y.</td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{finDd.income_details_fy || "F. Y. ------------"}</td>
+              </tr>
+              <tr>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Net Sales / Revenue as per latest F.Y.</td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{finDd.net_sales_revenue || "Rs. -------------- Lakh"}</td>
+              </tr>
+              <tr>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Net profit after Tax as per latest F.Y.</td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{finDd.net_profit_after_tax || "Rs. ------------ Lakh"}</td>
+              </tr>
+              <tr>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">CIBIL Score (CV Score)</td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                  {isEntity
+                    ? (finDd.cibil_cmr && finDd.cibil_cmr !== "N/A" ? finDd.cibil_cmr : "<Attached Cibil Report at the end of this form.>")
+                    : (finDd.cibil_score && finDd.cibil_score !== "N/A" ? finDd.cibil_score : "—")}
+                </td>
+              </tr>
+              <tr>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Existing Banking relationship with our Bank</td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                  {finDd.existing_banking_relationship ? `Yes (${finDd.existing_banking_relationship})` : "No"}
+                </td>
+              </tr>
 
-          {/* SECTION 1: Basic Information */}
-          <div>
-            <div className="bg-[#0f172a] text-white px-3 py-2 text-sm font-bold uppercase tracking-wider rounded-t">
-              SECTION 1: Basic Information
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-slate-300 text-sm table-fixed">
-                <tbody>
-                  <tr>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      {isEntity
-                        ? "Applicant Name (Entity):"
-                        : "Name of DSA:"}
-                    </td>
-                    <td
-                      colSpan={3}
-                      className="bg-white border border-slate-300 p-2.5 font-bold text-slate-900"
-                    >
-                      {basicInfo.applicant_name ||
-                        basicInfo.name_of_dsa ||
-                        dsa?.name ||
-                        dsa?.entity_name ||
-                        "N/A"}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      Constitution:
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2.5 text-slate-900">
-                      {basicInfo.constitution ||
-                        (isEntity
-                          ? "Private Limited"
-                          : "Individual")}
-                    </td>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      {isEntity
-                        ? "Date of Establishment:"
-                        : "Date of Birth:"}
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2.5 text-slate-900">
-                      {basicInfo.date_of_birth ||
-                        basicInfo.date_of_establishment ||
-                        dsa?.dob ||
-                        "N/A"}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      {isEntity
-                        ? "Registered Office Address:"
-                        : "Residence Address:"}
-                    </td>
-                    <td
-                      colSpan={3}
-                      className="bg-white border border-slate-300 p-2 text-slate-900"
-                    >
-                      {basicInfo.residence_address ||
-                        basicInfo.registered_office_address ||
-                        dsa?.address ||
-                        "N/A"}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      {isEntity
-                        ? "Branch Office Address:"
-                        : "Business / Office Address:"}
-                    </td>
-                    <td
-                      colSpan={3}
-                      className="bg-white border border-slate-300 p-2 text-slate-900"
-                    >
-                      {basicInfo.business_office_address ||
-                        basicInfo.branch_office_address ||
-                        basicInfo.residence_address ||
-                        dsa?.address ||
-                        "N/A"}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      Ownership:
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2.5 text-slate-900">
-                      {basicInfo.ownership || "Owned"}
-                    </td>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      {isEntity
-                        ? "Promoter / Key Person:"
-                        : "Contact Number:"}
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2.5 text-slate-900">
-                      {isEntity
-                        ? basicInfo.promoter_key_person ||
-                          dsa?.contact_person ||
-                          "N/A"
-                        : basicInfo.contact_number ||
-                          dsa?.mobile ||
-                          "N/A"}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      {isEntity
-                        ? "Office Contact Number:"
-                        : "Mail ID:"}
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2.5 text-slate-900">
-                      {isEntity
-                        ? basicInfo.office_contact_number ||
-                          dsa?.mobile ||
-                          "N/A"
-                        : basicInfo.email ||
-                          dsa?.email ||
-                          "N/A"}
-                    </td>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      {isEntity
-                        ? "Office Mail ID:"
-                        : "PAN:"}
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2.5 text-slate-900">
-                      {isEntity
-                        ? basicInfo.office_email ||
-                          dsa?.email ||
-                          "N/A"
-                        : basicInfo.pan ||
-                          dsa?.pan ||
-                          "N/A"}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      {isEntity ? "PAN:" : "Aadhaar:"}
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2.5 text-slate-900">
-                      {isEntity
-                        ? basicInfo.pan ||
-                          dsa?.pan ||
-                          "N/A"
-                        : basicInfo.aadhaar ||
-                          dsa?.aadhaar_no ||
-                          dsa?.aadhaar ||
-                          "N/A"}
-                    </td>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      Business License Type:
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2.5 text-slate-900">
-                      {basicInfo.business_license_type ||
-                        "N/A"}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      Business License Number:
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2 text-slate-900 font-mono">
-                      {basicInfo.business_license_number ||
-                        "N/A"}
-                    </td>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      {isEntity
-                        ? "Branches to Assign:"
-                        : "Regions / Branch to Assign:"}
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2.5 text-slate-900">
-                      {basicInfo.regions_to_assign ||
-                        basicInfo.branches_to_assign ||
-                        dsaBranchName}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      Expected Monthly Business
-                      Commitment:
-                    </td>
-                    <td
-                      colSpan={3}
-                      className="bg-white border border-slate-300 p-2 text-slate-900 font-medium"
-                    >
-                      {basicInfo.expected_monthly_business_commitment ||
-                        (isEntity
-                          ? "25 Lakhs"
-                          : "10 Lakhs")}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+              {/* Background and Reputational Verification */}
+              <tr className="bg-slate-100 font-bold">
+                <td colSpan={2} className="border border-slate-900 px-3 py-2 text-slate-900">
+                  Background and Reputational Verification
+                </td>
+              </tr>
+              <tr>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">KYC Documents verified</td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-900 leading-relaxed">
+                  PAN<br />
+                  GST<br />
+                  Udyam
+                </td>
+              </tr>
+              <tr>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business premises verification</td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bgRep.business_premises_verification || "Yes"}</td>
+              </tr>
+              <tr>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                  {isEntity
+                    ? "IBA Caution List / Negative List Checked (Through Compass Site)"
+                    : "IBA Caution List / Negative List Checked (Through Compass Site) and Matching %"}
+                </td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                  {bgRep.iba_caution_negative_list && String(bgRep.iba_caution_negative_list).toUpperCase().includes("CLEAR")
+                    ? (isEntity ? "No" : "No (0% Matching)")
+                    : (bgRep.compass_matching_percentage || "No")}
+                </td>
+              </tr>
 
-          {/* SECTION 2: Financial Due Diligence */}
-          <div>
-            <div className="bg-[#0f172a] text-white px-3 py-2 text-sm font-bold uppercase tracking-wider rounded-t">
-              SECTION 2: Financial Due Diligence
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-slate-300 text-sm table-fixed">
-                <tbody>
-                  <tr>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      Annual Turnover (Latest Year):
+              {/* Deviation Details */}
+              <tr className="bg-slate-100 font-bold">
+                <td colSpan={2} className="border border-slate-900 px-3 py-2 text-slate-900">
+                  Deviation Details
+                </td>
+              </tr>
+              {deviationRules.length > 0 ? (
+                deviationRules.map((dev: any, idx: number) => (
+                  <tr key={idx}>
+                    <td className="border border-slate-900 px-3 py-1.5 font-medium text-slate-900">
+                      {dev.parameter || dev.rule_name || "Deviation"}
                     </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2 text-slate-900 font-semibold">
-                      {finDd.annual_turnover ||
-                        (isEntity
-                          ? "1.25 Crores"
-                          : "35 Lakhs")}
-                    </td>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      Net Profit / Income:
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2 text-slate-900 font-semibold">
-                      {finDd.net_profit ||
-                        (isEntity
-                          ? "18.5 Lakhs"
-                          : "8.2 Lakhs")}
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                      {dev.deviation_trigger || dev.remarks || "Deviation Flagged"} (
+                      <span className="font-bold text-amber-700">{dev.decision || "DEVIATION"}</span>)
                     </td>
                   </tr>
-                  <tr>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      ITR Acknowledgment / Filing Status:
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2.5 text-slate-900">
-                      {finDd.itr_status ||
-                        "Filed (Last 2 Years on Record)"}
-                    </td>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      Primary Banker / Account:
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2.5 text-slate-900">
-                      {finDd.primary_bank ||
-                        (dsa?.bank_name
-                          ? `${dsa.bank_name} (A/C Verified via BAV)`
-                          : "Cosmos Co-op Bank")}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      Average Monthly Balance (AMB):
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2.5 text-slate-900">
-                      {finDd.amb || "₹ 1,85,000"}
-                    </td>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      Cheque Bounce / Return Instances:
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2.5 text-slate-900">
-                      {finDd.cheque_bounce_instances ||
-                        "Nil in last 12 months"}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      GST Return Filing Compliance:
-                    </td>
-                    <td
-                      colSpan={3}
-                      className="bg-white border border-slate-300 p-2 text-slate-900"
-                    >
-                      {finDd.gst_filing_compliance ||
-                        (dsa?.gst
-                          ? "GSTR-3B & GSTR-1 Regular / Active"
-                          : "Exempt / Certificate Attached")}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+                ))
+              ) : (
+                <tr>
+                  <td className="border border-slate-900 px-3 py-1.5 text-slate-600">Status</td>
+                  <td className="border border-slate-900 px-3 py-1.5 text-slate-600">Nil (No policy deviations recorded)</td>
+                </tr>
+              )}
 
-          {/* SECTION 3: Background & Reputational Verification */}
-          <div>
-            <div className="bg-[#0f172a] text-white px-3 py-2 text-sm font-bold uppercase tracking-wider rounded-t">
-              SECTION 3: Background &amp; Reputational
-              Verification
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-slate-300 text-sm table-fixed">
-                <tbody>
-                  <tr>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      Market Reputation / Reference Check:
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2.5 text-slate-900">
-                      {bgRep.market_reputation ||
-                        "Satisfactory / Positive"}
-                    </td>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      Prior Relationship with Cosmos Bank:
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2.5 text-slate-900">
-                      {bgRep.prior_relationship_with_bank ||
-                        "No Adverse Record"}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      CIBIL / Commercial Bureau Score:
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2 font-bold text-slate-900">
-                      {bgRep.cibil_score ||
-                        (isEntity
-                          ? "785 (Commercial CMR-2)"
-                          : "768 (TransUnion)")}
-                    </td>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      Overdue / Default History:
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2.5 text-slate-900">
-                      {bgRep.overdue_history ||
-                        "Nil Defaults Reported"}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      Negative / Blacklist Database Check:
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2.5 text-emerald-700 font-semibold">
-                      {bgRep.negative_database_check ||
-                        "Clear (RBI Defaulter / Cautious List Clean)"}
-                    </td>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      AML / PEP Screening Result:
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2.5 text-emerald-700 font-semibold">
-                      {bgRep.aml_pep_screening ||
-                        "No PEP or Sanctions Match"}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      Directorship / Entity Cross-check:
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2.5 text-slate-900">
-                      {bgRep.directorship_cross_check ||
-                        (isEntity
-                          ? "DIN Active / MCA Compliant"
-                          : "N/A - Individual")}
-                    </td>
-                    <td className="w-[28%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                      Compass AML Match Score:
-                    </td>
-                    <td className="w-[22%] bg-white border border-slate-300 p-2.5 text-slate-900">
-                      <span className="font-mono text-emerald-700 font-semibold">
-                        {bgRep.compass_matching_percentage ||
-                          "0% (Clear)"}
-                      </span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* SECTION 4: Maker & Checker Remarks */}
-          <div>
-            <div className="bg-[#0f172a] text-white px-3 py-2 text-sm font-bold uppercase tracking-wider rounded-t">
-              SECTION 4: Maker &amp; Checker Remarks
-            </div>
-            <div className="border border-t-0 border-slate-300 rounded-b divide-y divide-slate-200">
-              {/* Maker (Level 1) */}
-              {(() => {
-                const ddlMakerRemark =
-                  getCleanRemark(makerHist?.remarks) ||
-                  getCleanRemark((rep as any)?.maker_remarks?.remarks) ||
-                  getCleanRemark(makerRemarks) ||
-                  "Application submitted with verified primary documents.";
-
-                return (
-                  <div className="p-4 space-y-3 bg-white">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2.5">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider bg-emerald-700 text-white shadow-2xs">
-                          Maker
-                        </span>
-                        <span className="text-sm font-bold text-slate-900">
-                          Maker Verification — Level 1
-                        </span>
-                        <span className="text-xs text-slate-500 font-medium">
-                          (Branch Maker Intake)
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {makerHist?.date && (
-                          <span className="text-xs text-slate-500 font-medium">
-                            {formatDate(makerHist.date)}
-                          </span>
-                        )}
-                        <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                          Submitted
-                        </span>
-                      </div>
+              {/* Authority Remarks */}
+              <tr>
+                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top">
+                  <div className="font-bold">Checker Remarks</div>
+                  <div className="text-xs text-slate-700 mt-1"><strong>Name:</strong> {checkerName}</div>
+                  <div className="text-xs text-slate-700"><strong>Designation:</strong> {checkerDesignation}</div>
+                  <div className="text-xs text-slate-700"><strong>Date:</strong> {checkerDate}</div>
+                </td>
+                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap">
+                  {checkerObs && <div>{checkerObs}</div>}
+                  {checkerRem && <div className={checkerObs ? "mt-1" : ""}>{checkerRem}</div>}
+                  {checkerExRem && (
+                    <div className="mt-1 text-xs text-amber-800">
+                      <strong>Exception:</strong> {checkerExRem}
                     </div>
+                  )}
+                </td>
+              </tr>
 
-                    {/* Maker Remarks */}
-                    <p className="text-base font-bold text-slate-900 whitespace-pre-wrap leading-relaxed py-0.5">
-                      &ldquo;{ddlMakerRemark}&rdquo;
-                    </p>
+              <tr>
+                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top">
+                  <div className="font-bold">1st Recommending Authority Remarks</div>
+                  <div className="text-xs text-slate-700 mt-1"><strong>Name:</strong> {l3Name}</div>
+                  <div className="text-xs text-slate-700"><strong>Designation:</strong> {l3Designation}</div>
+                  <div className="text-xs text-slate-700"><strong>Date:</strong> {l3Date}</div>
+                </td>
+                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap">
+                  {l3Remarks}
+                </td>
+              </tr>
 
-                    <div className="text-xs text-slate-600 flex flex-wrap gap-x-4 gap-y-1 pt-1 font-medium">
-                      <span><strong className="text-slate-900">Name:</strong> {makerHist?.name || (rep as any)?.maker_remarks?.name || dsa?.maker_user?.name || "—"}</span>
-                      <span><strong className="text-slate-900">Designation:</strong> {makerHist?.designation || (rep as any)?.maker_remarks?.designation || "Branch Maker"}</span>
-                      <span><strong className="text-slate-900">Date:</strong> {makerHist?.date ? formatDate(makerHist.date) : (rep as any)?.maker_remarks?.date ? formatDate((rep as any)?.maker_remarks?.date) : "—"}</span>
-                    </div>
+              <tr>
+                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top">
+                  <div className="font-bold">2nd Recommending Authority Remarks</div>
+                  <div className="text-xs text-slate-700 mt-1"><strong>Name:</strong> {l4Name}</div>
+                  <div className="text-xs text-slate-700"><strong>Designation:</strong> {l4Designation}</div>
+                  <div className="text-xs text-slate-700"><strong>Date:</strong> {l4Date}</div>
+                </td>
+                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap">
+                  {l4Remarks}
+                </td>
+              </tr>
+
+              <tr>
+                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top">
+                  <div className="font-bold">3rd Recommending Authority Remarks</div>
+                  <div className="text-xs text-slate-700 mt-1"><strong>Name:</strong> {l5Name}</div>
+                  <div className="text-xs text-slate-700"><strong>Designation:</strong> {l5Designation}</div>
+                  <div className="text-xs text-slate-700"><strong>Date:</strong> {l5Date}</div>
+                </td>
+                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap">
+                  {l5Remarks}
+                </td>
+              </tr>
+
+              <tr>
+                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top">
+                  <div className="font-bold">4th Recommending Authority Remarks</div>
+                  <div className="text-xs text-slate-700 mt-1"><strong>Name:</strong> {l6Name}</div>
+                  <div className="text-xs text-slate-700"><strong>Designation:</strong> {l6Designation}</div>
+                  <div className="text-xs text-slate-700"><strong>Date:</strong> {l6Date}</div>
+                </td>
+                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap">
+                  {l6Remarks}
+                </td>
+              </tr>
+
+              <tr>
+                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top">
+                  <div className="font-bold">Approving Authority Remarks</div>
+                  <div className="text-xs text-slate-700 mt-1"><strong>Name:</strong> {l7Name}</div>
+                  <div className="text-xs text-slate-700"><strong>Designation:</strong> {l7Designation}</div>
+                  <div className="text-xs text-slate-700"><strong>Date:</strong> {l7Date}</div>
+                  <div className="mt-3 font-bold text-slate-900">
+                    DSA Code Allotted:
                   </div>
-                );
-              })()}
-
-              {/* Checker (Level 2) */}
-              {(() => {
-                const ddlCheckerRemark =
-                  getCleanRemark(checkerRemarks?.remarks) ||
-                  getCleanRemark(note?.observations) ||
-                  getCleanRemark(note?.remarks) ||
-                  getCleanRemark((note as any)?.recommendation_justification) ||
-                  getCleanRemark((rep?.recommendation_approval_history as any)?.checker?.remarks) ||
-                  getCleanRemark((rep as any)?.recommendationApprovalHistory?.checker?.remarks) ||
-                  (isL2Actioned ? "Due Diligence completed and forwarded by Checker." : "");
-
-                return (
-                  <div className="p-4 space-y-3 bg-white">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2.5">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider bg-emerald-700 text-white shadow-2xs">
-                          Checker
-                        </span>
-                        <span className="text-sm font-bold text-slate-900">
-                          Checker Due Diligence — Level 2
-                        </span>
-                        <span className="text-xs text-slate-500 font-medium">
-                          (Branch / Sub-Region Checker)
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {note?.submitted_at && (
-                          <span className="text-xs text-slate-500 font-medium">
-                            {formatDate(note.submitted_at)}
-                          </span>
-                        )}
-                        <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                          {note?.recommendation || "RECOMMENDED"}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Checker Remarks */}
-                    {ddlCheckerRemark ? (
-                      <p className="text-base font-bold text-slate-900 whitespace-pre-wrap leading-relaxed py-0.5">
-                        &ldquo;{ddlCheckerRemark}&rdquo;
-                      </p>
+                </td>
+                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap">
+                  <div>{l7Remarks}</div>
+                  <div className="mt-3">
+                    {canShowOfficialCode ? (
+                      <span className="font-bold text-emerald-800 text-sm font-mono">{String(rawOfficialCode)}</span>
                     ) : (
-                      <p className="text-xs text-slate-400 italic">
-                        Awaiting Checker Due Diligence note and remarks.
-                      </p>
+                      <span className="italic text-slate-500 text-xs">Pending Final Approval (Level 7) &amp; Active Onboarding</span>
                     )}
-
-                    <div className="text-xs text-slate-600 flex flex-wrap gap-x-4 gap-y-1 pt-1 font-medium">
-                      <span><strong className="text-slate-900">Name:</strong> {note?.submitted_by?.name || (note as any)?.officer_name || checkerRemarks?.name || "—"}</span>
-                      <span><strong className="text-slate-900">Designation:</strong> {note?.submitted_by?.role || (note as any)?.officer_designation || checkerRemarks?.designation || "Branch / Sub-Region Checker"}</span>
-                      <span><strong className="text-slate-900">Date:</strong> {note?.submitted_at ? formatDate(note.submitted_at) : (checkerRemarks as any)?.date ? formatDate((checkerRemarks as any).date) : "—"}</span>
-                      <span><strong className="text-slate-900">Decision:</strong> <span className="text-emerald-700 font-bold">{note?.recommendation || "RECOMMEND"}</span></span>
-                    </div>
                   </div>
-                );
-              })()}
-            </div>
-          </div>
-
-          {/* Workflow Approval Trail */}
-          {Boolean(l3Hist || l4Hist || l5Hist || l6Hist || l7Hist || postL7Hist || l3Approval || l4Approval || l5Approval || l6Approval || l7Approval || (workflowLevelInfo?.currentLevel ?? 1) > 2) && (
-            <div>
-              <div className="bg-[#0f172a] text-white px-3 py-2 text-sm font-bold uppercase tracking-wider rounded-t">
-                Workflow Approval Trail
-              </div>
-              <div className="border border-t-0 border-slate-300 rounded-b divide-y divide-slate-200">
-                {[
-                  {
-                    level: 3,
-                    roleBadge: "Sub-Region Head",
-                    authority: l3Hist?.designation || "Sub-Region Head (Level 3)",
-                    name: l3Hist?.name || l3Approval?.actioned_by?.name || "—",
-                    date: l3Hist?.date || l3Approval?.actioned_at,
-                    remarks:
-                      getCleanRemark(l3Hist?.remarks) ||
-                      resolveStageRemarksForDisplay({
-                        approvals: dsa?.approvals,
-                        level: 3,
-                        stageCode: "LEVEL_3_SUB_REGION_HEAD",
-                        currentLevel: workflowLevelInfo?.currentLevel ?? null,
-                        statusReason: dsa?.status_reason,
-                        statusReasonAction: dsa?.status_reason_action,
-                        defaultText: "Recommended by Sub-Region Head",
-                      }),
-                    status: resolveStageStatus(
-                      3,
-                      "LEVEL_3_SUB_REGION_HEAD",
-                      l3Approval?.status,
-                      "RECOMMENDED",
-                    ),
-                  },
-                  {
-                    level: 4,
-                    roleBadge: "DGM",
-                    authority: l4Hist?.designation || "Deputy General Manager (Level 4)",
-                    name:
-                      l4Hist?.name ||
-                      l4Approval?.actioned_by?.name ||
-                      "—",
-                    date: l4Hist?.date || l4Approval?.actioned_at,
-                    remarks:
-                      getCleanRemark(l4Hist?.remarks) ||
-                      resolveStageRemarksForDisplay({
-                        approvals: dsa?.approvals,
-                        level: 4,
-                        stageCode: "LEVEL_4_DGM",
-                        currentLevel: workflowLevelInfo?.currentLevel ?? null,
-                        statusReason: dsa?.status_reason,
-                        statusReasonAction: dsa?.status_reason_action,
-                        defaultText: "Recommended by DGM",
-                      }),
-                    status: resolveStageStatus(
-                      4,
-                      "LEVEL_4_DGM",
-                      l4Approval?.status,
-                      "RECOMMENDED",
-                    ),
-                  },
-                  {
-                    level: 5,
-                    roleBadge: "Region Head",
-                    authority: l5Hist?.designation || "Region Head (Level 5)",
-                    name: l5Hist?.name || l5Approval?.actioned_by?.name || "—",
-                    date: l5Hist?.date || l5Approval?.actioned_at,
-                    remarks:
-                      getCleanRemark(l5Hist?.remarks) ||
-                      resolveStageRemarksForDisplay({
-                        approvals: dsa?.approvals,
-                        level: 5,
-                        stageCode: "LEVEL_5_REGION_HEAD",
-                        currentLevel: workflowLevelInfo?.currentLevel ?? null,
-                        statusReason: dsa?.status_reason,
-                        statusReasonAction: dsa?.status_reason_action,
-                        defaultText: "Recommended by Region Head",
-                      }),
-                    status: resolveStageStatus(
-                      5,
-                      "LEVEL_5_REGION_HEAD",
-                      l5Approval?.status,
-                      "RECOMMENDED",
-                    ),
-                  },
-                  {
-                    level: 6,
-                    roleBadge: "Credit Officer",
-                    authority: l6Hist?.designation || "HO Credit Appraisal Officer (Level 6)",
-                    name: l6Hist?.name || l6Approval?.actioned_by?.name || "—",
-                    date: l6Hist?.date || l6Approval?.actioned_at,
-                    remarks:
-                      getCleanRemark(l6Hist?.remarks) ||
-                      resolveStageRemarksForDisplay({
-                        approvals: dsa?.approvals,
-                        level: 6,
-                        stageCode: "LEVEL_6_HO_CREDIT_OFFICER",
-                        currentLevel: workflowLevelInfo?.currentLevel ?? null,
-                        statusReason: dsa?.status_reason,
-                        statusReasonAction: dsa?.status_reason_action,
-                        defaultText: "Credit appraisal recommended for sanction",
-                      }),
-                    status: resolveStageStatus(
-                      6,
-                      "LEVEL_6_HO_CREDIT_OFFICER",
-                      l6Approval?.status,
-                      "RECOMMENDED",
-                    ),
-                  },
-                  {
-                    level: 7,
-                    roleBadge: "Credit Head",
-                    authority: l7Hist?.designation || "HO Credit Head Final Sanction (Level 7)",
-                    name: l7Hist?.name || l7Approval?.actioned_by?.name || "—",
-                    date: l7Hist?.date || l7Approval?.actioned_at,
-                    remarks:
-                      getCleanRemark(l7Hist?.remarks) ||
-                      resolveStageRemarksForDisplay({
-                        approvals: dsa?.approvals,
-                        level: 7,
-                        stageCode: "LEVEL_7_HO_CREDIT_HEAD",
-                        currentLevel: workflowLevelInfo?.currentLevel ?? null,
-                        statusReason: dsa?.status_reason,
-                        statusReasonAction: dsa?.status_reason_action,
-                        defaultText: isAlreadyApproved
-                          ? "Final Sanction granted. Application approved."
-                          : "Final Sanction & Approval granted by HO Credit Head",
-                      }),
-                    status: resolveStageStatus(
-                      7,
-                      "LEVEL_7_HO_CREDIT_HEAD",
-                      l7Approval?.status,
-                      isAlreadyApproved ? "APPROVED" : "RECOMMENDED",
-                    ),
-                  },
-                  postL7Hist
-                    ? (() => {
-                        const isPostL7Approved = Boolean(
-                          postL7Hist?.is_approved ||
-                          postL7Hist?.action === "APPROVED" ||
-                          dsa?.agreement_status === "SIGNED_VERIFIED" ||
-                          dsa?.operational_status === "ACTIVE"
-                        );
-                        return {
-                          level: 8,
-                          roleBadge: "Checker Post-Sanction",
-                          authority:
-                            postL7Hist?.designation ||
-                            "Post-Sanction Checker Verification",
-                          name: isPostL7Approved && postL7Hist?.name !== "Pending"
-                            ? (postL7Hist?.name || "—")
-                            : "—",
-                          date: isPostL7Approved ? postL7Hist?.date : null,
-                          remarks: isPostL7Approved
-                            ? (getCleanRemark(postL7Hist?.remarks) || "Agreement verified and activated.")
-                            : "",
-                          status: isPostL7Approved ? "APPROVED" : "PENDING",
-                        };
-                      })()
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .map((item: any) => {
-                    const isDone =
-                      item.status === "RECOMMENDED" ||
-                      item.status === "SUBMITTED" ||
-                      item.status === "APPROVED";
-                    const isBypassed = item.status === "SKIPPED";
-                    const isRejected = item.status === "REJECTED";
-                    const isQuery = item.status === "QUERY" || item.status === "QUERY_RAISED";
-                    const isReturned =
-                      item.status === "REVERTED" ||
-                      item.status === "REALLOCATED" ||
-                      item.status === "FORWARDED";
-
-                    return (
-                      <div key={item.level} className="p-4 space-y-3 bg-white">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex items-center gap-2.5">
-                            <span
-                              className={cn(
-                                "inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider shadow-2xs",
-                                isDone
-                                  ? "bg-emerald-700 text-white"
-                                  : isBypassed
-                                    ? "bg-slate-500 text-white"
-                                    : isRejected
-                                      ? "bg-rose-700 text-white"
-                                      : "bg-slate-200 text-slate-700",
-                              )}
-                            >
-                              {item.roleBadge}
-                            </span>
-                            <span className="text-sm font-bold text-slate-900">
-                              {item.authority}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {item.date && (
-                              <span className="text-xs text-slate-500 font-medium">
-                                {formatDate(item.date)}
-                              </span>
-                            )}
-                            <span
-                              className={cn(
-                                "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold border",
-                                isDone
-                                  ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                                  : isBypassed
-                                    ? "bg-slate-100 text-slate-600 border-slate-300"
-                                    : isQuery || isReturned
-                                      ? "bg-amber-100 text-amber-800 border-amber-300"
-                                      : isRejected
-                                        ? "bg-rose-100 text-rose-800 border-rose-300"
-                                        : "bg-slate-100 text-slate-500 border-slate-200",
-                              )}
-                            >
-                              {isDone
-                                ? item.level >= 7
-                                  ? "Approved"
-                                  : "Recommended"
-                                : isBypassed
-                                  ? "Bypassed"
-                                  : isQuery
-                                    ? "Query Raised"
-                                    : isReturned
-                                      ? item.status === "REVERTED"
-                                        ? "Reverted"
-                                          : item.status === "REALLOCATED"
-                                            ? "Reallocated"
-                                            : "Forwarded"
-                                      : isRejected
-                                        ? "Rejected"
-                                        : "Pending Review"}
-                            </span>
-                          </div>
-                        </div>
-
-                        {!isCalledBackStep(item.status) && item.remarks ? (
-                          <p className="text-base font-bold text-slate-900 whitespace-pre-wrap leading-relaxed py-0.5">
-                            &ldquo;{item.remarks}&rdquo;
-                          </p>
-                        ) : (
-                          <p className="text-xs text-slate-400 italic">
-                            Awaiting review remarks and progression from this authority.
-                          </p>
-                        )}
-
-                        <div className="text-xs text-slate-600 flex flex-wrap gap-x-4 gap-y-1 pt-1 font-medium">
-                          <span><strong className="text-slate-900">Name:</strong> {item.name || "—"}</span>
-                          {item.date && (
-                            <span><strong className="text-slate-900">Date:</strong> {formatDate(item.date)}</span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-          )}
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
         {/* Bottom Sanction Console */}
