@@ -329,6 +329,42 @@ function getDocumentUrl(
     }
   }
 
+  // DSA Application Form documents: bust cache with timestamp
+  if (isApplicationFormDocument(doc)) {
+    const ts = doc._timestamp || Date.now();
+    if (
+      !useStorageFallback &&
+      targetDsaId &&
+      doc.id &&
+      typeof doc.id === "number" &&
+      doc.id < 100000
+    ) {
+      return `${apiBase}/api/v1/dsa/${targetDsaId}/documents/${doc.id}/file?t=${ts}`;
+    }
+    if (targetDsaId) {
+      return `${apiBase}/api/v1/dsa/${targetDsaId}/documents/APPLICATION_FORM/file?t=${ts}`;
+    }
+    if (doc.file_path) {
+      return `${apiBase}/storage/${doc.file_path.replace(/^\/+/, "")}?t=${ts}`;
+    }
+    if (doc.file_url || doc.url) {
+      const rawUrl = doc.file_url || doc.url;
+      try {
+        const parsed = new URL(rawUrl);
+        const apiOrigin = new URL(apiBase).origin;
+        const finalUrl =
+          parsed.origin !== apiOrigin
+            ? `${apiOrigin}${parsed.pathname}${parsed.search}`
+            : rawUrl;
+        const sep = finalUrl.includes("?") ? "&" : "?";
+        return `${finalUrl}${sep}t=${ts}`;
+      } catch {
+        const sep = rawUrl.includes("?") ? "&" : "?";
+        return `${rawUrl}${sep}t=${ts}`;
+      }
+    }
+  }
+
   // Due Diligence Review Report documents: bust cache with timestamp
   if (isDdReviewReportDocument(doc)) {
     const ts = doc._timestamp || Date.now();
@@ -359,6 +395,9 @@ function getDocumentUrl(
         const sep = rawUrl.includes("?") ? "&" : "?";
         return `${rawUrl}${sep}t=${ts}`;
       }
+    }
+    if (targetDsaId) {
+      return `${apiBase}/api/v1/dsa/${targetDsaId}/documents/DUE_DILIGENCE_REVIEW_REPORT/file?t=${ts}`;
     }
   }
 
@@ -574,6 +613,7 @@ export function DocumentViewerBody({
   effectiveStatus,
   canVerifyDoc = true,
   verificationRoleNote,
+  showFooterClose = true,
   onVerify,
   onReject,
   onClose,
@@ -584,9 +624,10 @@ export function DocumentViewerBody({
   effectiveStatus: string;
   canVerifyDoc?: boolean;
   verificationRoleNote?: string;
-  onVerify: () => Promise<void>;
-  onReject: () => Promise<void>;
-  onClose: () => void;
+  showFooterClose?: boolean;
+  onVerify?: () => Promise<void>;
+  onReject?: () => Promise<void>;
+  onClose?: () => void;
 }) {
   const [useFallback, setUseFallback] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -615,11 +656,12 @@ export function DocumentViewerBody({
   const embedUrl = useMemo(() => {
     if (!url) return "";
     if (isPdf) {
+      // #toolbar=0 suppresses the top black/gray PDF toolbar (page controls, download, print)
       // #navpanes=0 suppresses the left sidebar thumbnail pages view
       // #pagemode=none prevents opening document pages outline or thumbnail panel
       // #view=FitH fits page horizontally for required standard viewing size
       const [base, hash] = url.split("#");
-      const pdfParams = "navpanes=0&pagemode=none&view=FitH";
+      const pdfParams = "toolbar=0&navpanes=0&scrollbar=1&pagemode=none&view=FitH";
       return hash ? `${base}#${pdfParams}&${hash}` : `${base}#${pdfParams}`;
     }
     return url;
@@ -658,20 +700,30 @@ export function DocumentViewerBody({
           ) : null}
         </div>
         {url ? (
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 font-semibold px-2.5 py-1 rounded-md bg-white border border-slate-200 shadow-2xs hover:bg-slate-50 transition-colors"
-          >
-            <ExternalLink className="h-3.5 w-3.5 text-blue-600" />
-            Open in new tab
-          </a>
+          <div className="flex items-center gap-2">
+            <a
+              href={`${url}${url.includes("?") ? "&" : "?"}download=1`}
+              download={previewDoc.file_name || (isApplicationFormDocument(previewDoc) ? `dsa_application_form_${dsaId || previewDoc.dsa_id || "document"}.pdf` : "document.pdf")}
+              className="inline-flex items-center gap-1.5 text-xs text-slate-700 hover:text-slate-900 font-semibold px-2.5 py-1 rounded-md bg-white border border-slate-200 shadow-2xs hover:bg-slate-50 transition-colors"
+            >
+              <Download className="h-3.5 w-3.5 text-slate-600" />
+              Download
+            </a>
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 font-semibold px-2.5 py-1 rounded-md bg-white border border-slate-200 shadow-2xs hover:bg-slate-50 transition-colors"
+            >
+              <ExternalLink className="h-3.5 w-3.5 text-blue-600" />
+              Open in new tab
+            </a>
+          </div>
         ) : null}
       </div>
 
       {/* Main Preview Box */}
-      <div className="flex-1 min-h-0 relative w-full overflow-hidden bg-slate-100/70 rounded-xl border border-slate-200 flex items-center justify-center p-1.5">
+      <div className="flex-1 min-h-0 relative w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs flex items-center justify-center">
         {!url ? (
           <div className="p-8 text-center text-slate-500">
             <FileText className="h-10 w-10 mx-auto mb-2 text-slate-400" />
@@ -758,13 +810,13 @@ export function DocumentViewerBody({
           <iframe
             src={embedUrl}
             title={previewDoc.file_name || "PDF Document"}
-            className="w-full h-full rounded-lg border border-slate-200 bg-white shadow-xs"
+            className="w-full h-full border-0 bg-white"
           />
         ) : (
           <iframe
             src={embedUrl}
             title={previewDoc.file_name || "Document"}
-            className="w-full h-full rounded-lg border border-slate-200 bg-white shadow-xs"
+            className="w-full h-full border-0 bg-white"
           />
         )}
       </div>
@@ -795,7 +847,7 @@ export function DocumentViewerBody({
           effectiveStatus !== "Failed" ? (
             canVerifyDoc ? (
               <Button
-                onClick={() => handleAction(onVerify)}
+                onClick={() => onVerify && handleAction(onVerify)}
                 disabled={submitting}
                 size="sm"
                 type="button"
@@ -814,16 +866,28 @@ export function DocumentViewerBody({
               </span>
             ) : null
           ) : null}
-          <Button
-            onClick={onClose}
-            disabled={submitting}
-            type="button"
-            variant="secondary"
-            size="sm"
-            className="text-xs px-3.5 py-1.5 h-auto rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors"
-          >
-            Close
-          </Button>
+          {url ? (
+            <a
+              href={`${url}${url.includes("?") ? "&" : "?"}download=1`}
+              download={previewDoc.file_name || (isApplicationFormDocument(previewDoc) ? `dsa_application_form_${dsaId || previewDoc.dsa_id || "document"}.pdf` : "document.pdf")}
+              className="inline-flex items-center gap-1.5 text-xs text-slate-700 hover:text-slate-900 font-medium px-3.5 py-1.5 h-auto rounded-lg border border-slate-200 bg-white hover:bg-slate-50 shadow-2xs transition-colors"
+            >
+              <Download className="h-3.5 w-3.5 text-slate-600" />
+              Download
+            </a>
+          ) : null}
+          {showFooterClose && onClose ? (
+            <Button
+              onClick={onClose}
+              disabled={submitting}
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="text-xs px-3.5 py-1.5 h-auto rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors"
+            >
+              Close
+            </Button>
+          ) : null}
         </div>
       </div>
     </div>
@@ -4613,6 +4677,20 @@ export function DsaProfilePage({ id }: { id: string }) {
         setLoadingPreviewDocId(null);
       }
     }
+
+    if (isApplicationFormDocument(doc) && dsa?.id) {
+      const freshDoc = {
+        ...doc,
+        document_type: "APPLICATION_FORM",
+        _timestamp: Date.now(),
+      };
+      setPreviewDoc(freshDoc);
+      if (freshDoc.id) {
+        setViewedDocIds((prev) => new Set([...prev, freshDoc.id]));
+      }
+      return;
+    }
+
     setPreviewDoc(doc);
     if (doc?.id) {
       setViewedDocIds((prev) => {
@@ -7241,17 +7319,23 @@ const resolveStageStatus = (
               size="sm"
               type="button"
               variant="outline"
-              onClick={() => {
-                if (!deviationReportData && dsa?.id) {
-                  fetchDeviationReport(dsa.id).then((data) => {
-                    if (data) setDeviationReportData(data);
-                  });
-                }
-                setViewingDdReportModal(true);
+              disabled={loadingPreviewDocId === "dd_report"}
+              onClick={async () => {
+                const ddDoc = backendDocs.find(isDdReviewReportDocument) || {
+                  document_type: "DUE_DILIGENCE_REVIEW_REPORT",
+                  file_name: `dsa_dd_review_report_${dsa?.id || ""}.pdf`,
+                  owner_name: dsa?.name,
+                  status: hasCheckerGeneratedReport ? "Checked" : "Uploaded",
+                };
+                await openDocPreview(ddDoc);
               }}
               className="h-8 text-xs font-semibold px-3 flex items-center gap-1.5 border-blue-300 bg-blue-50 text-blue-900 hover:bg-blue-100 shadow-2xs"
             >
-              <FileCheck2 className="h-3.5 w-3.5 text-blue-600" />
+              {loadingPreviewDocId === "dd_report" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
+              ) : (
+                <FileCheck2 className="h-3.5 w-3.5 text-blue-600" />
+              )}
               Due Diligence Report
             </Button>
             <Button
@@ -8652,7 +8736,24 @@ const resolveStageStatus = (
                             Checker generates and submits the report.
                           </div>
                         ) : (
-                          renderDueDiligenceReportContent()
+                          <div className="p-4 min-h-[780px] h-[780px]">
+                            <DocumentViewerBody
+                              previewDoc={
+                                backendDocs.find(isDdReviewReportDocument) || {
+                                  document_type: "DUE_DILIGENCE_REVIEW_REPORT",
+                                  file_name: `dsa_dd_review_report_${dsa?.id || ""}.pdf`,
+                                  owner_name: dsa?.name,
+                                  status: hasCheckerGeneratedReport ? "Checked" : "Uploaded",
+                                }
+                              }
+                              dsaId={dsa?.id}
+                              isBankUser={isBankUser}
+                              effectiveStatus={hasCheckerGeneratedReport ? "Checked" : "Uploaded"}
+                              canVerifyDoc={false}
+                              showFooterClose={false}
+                              onClose={() => {}}
+                            />
+                          </div>
                         )}
                       </div>
                     </div>
@@ -11604,7 +11705,7 @@ const resolveStageStatus = (
               : ""
             : ""
         }
-        width="max-w-2xl"
+        width="max-w-5xl"
         className="h-[88vh] max-h-[88vh]"
         bodyClassName="overflow-hidden flex flex-col p-4 sm:p-5"
       >
@@ -12160,56 +12261,26 @@ const resolveStageStatus = (
         open={viewingDdReportModal}
         title="Due Diligence Review Report"
         description={`DSA #${getEffectiveDsaCode(dsa)} • ${dsa.name} • ${dsa.dsa_type || "INDIVIDUAL"}`}
-        width="max-w-5xl"
+        width="max-w-4xl"
+        className="h-[88vh] max-h-[88vh]"
+        bodyClassName="overflow-hidden flex flex-col p-4 sm:p-5"
       >
-        <div className="space-y-4">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-            <span className="text-xs text-slate-500 font-medium">
-              Complete Due Diligence and Verification assessment report for DSA empanelment.
-            </span>
-            <Button
-              size="sm"
-              type="button"
-              variant="outline"
-              onClick={handleDownloadDeviationReport}
-              className="h-8 text-xs font-semibold px-3 flex items-center gap-1.5 border-slate-300 bg-white text-slate-700 hover:bg-slate-50 shadow-2xs"
-            >
-              <Download className="h-3.5 w-3.5 text-blue-600" />
-              Download Report
-            </Button>
-          </div>
-          <div className="max-h-[72vh] overflow-y-auto pr-1">
-            {loadingDeviationReport && !deviationReportData ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-6 w-6 animate-spin text-blue-600 mr-2" />
-                <span className="text-xs text-slate-600 font-medium">Loading Due Diligence Report...</span>
-              </div>
-            ) : (
-              renderDueDiligenceReportContent()
-            )}
-          </div>
-          <div className="flex justify-between items-center pt-3 border-t border-slate-200">
-            <Button
-              size="sm"
-              type="button"
-              variant="outline"
-              onClick={handleDownloadDeviationReport}
-              className="h-8 text-xs font-semibold px-3 flex items-center gap-1.5"
-            >
-              <Download className="h-3.5 w-3.5 text-blue-600" />
-              Download Report
-            </Button>
-            <Button
-              size="sm"
-              type="button"
-              variant="secondary"
-              onClick={() => setViewingDdReportModal(false)}
-              className="text-xs px-4"
-            >
-              Close
-            </Button>
-          </div>
-        </div>
+        <DocumentViewerBody
+          previewDoc={
+            backendDocs.find(isDdReviewReportDocument) || {
+              document_type: "DUE_DILIGENCE_REVIEW_REPORT",
+              file_name: `dsa_dd_review_report_${dsa?.id || ""}.pdf`,
+              owner_name: dsa?.name,
+              status: hasCheckerGeneratedReport ? "Checked" : "Uploaded",
+            }
+          }
+          dsaId={dsa?.id}
+          isBankUser={isBankUser}
+          effectiveStatus={hasCheckerGeneratedReport ? "Checked" : "Uploaded"}
+          canVerifyDoc={false}
+          showFooterClose={true}
+          onClose={() => setViewingDdReportModal(false)}
+        />
       </Modal>
     </div>
   );
