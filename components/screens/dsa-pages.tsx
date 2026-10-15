@@ -3394,6 +3394,9 @@ export function DsaProfilePage({ id }: { id: string }) {
 
   const [viewingDeviationsModal, setViewingDeviationsModal] = useState(false);
   const [viewingDdReportModal, setViewingDdReportModal] = useState(false);
+  const [deviationRemarksState, setDeviationRemarksState] = useState<Record<string | number, string>>({});
+  const [savingDeviationId, setSavingDeviationId] = useState<string | number | null>(null);
+  const [deviationRemarkStatus, setDeviationRemarkStatus] = useState<Record<string | number, { success?: boolean; error?: string }>>({});
 
   const policyEvalData = useMemo(() => {
     const rep = deviationReportData;
@@ -3609,6 +3612,78 @@ export function DsaProfilePage({ id }: { id: string }) {
     rawAuthRolesNorm.includes("ADMIN") ||
     rawAuthRolesNorm.includes("SUPERADMIN"),
   );
+
+  const canEditDeviationRemarks = Boolean(
+    isCheckerLevel && (isCheckerRole || isAdminOrSuperAdmin)
+  );
+
+  useEffect(() => {
+    if (deviationRules?.length) {
+      setDeviationRemarksState((prev) => {
+        const next = { ...prev };
+        for (const dev of deviationRules) {
+          const key = dev.id ?? dev.rule_code;
+          if (key && next[key] === undefined && dev.remark !== undefined) {
+            next[key] = dev.remark || "";
+          }
+        }
+        return next;
+      });
+    }
+  }, [deviationRules]);
+
+  const handleSaveDeviationRemark = async (dev: any) => {
+    const devId = dev.id;
+    if (!devId || !dsa?.id) return;
+    const key = dev.id ?? dev.rule_code;
+    const currentRemark = deviationRemarksState[key] ?? dev.remark ?? "";
+
+    if (currentRemark.length > 2000) {
+      setDeviationRemarkStatus((prev) => ({
+        ...prev,
+        [key]: { error: "Remark cannot exceed 2000 characters." },
+      }));
+      return;
+    }
+
+    setSavingDeviationId(key);
+    setDeviationRemarkStatus((prev) => ({
+      ...prev,
+      [key]: { success: false, error: undefined },
+    }));
+
+    try {
+      const res = await adminApi.saveCheckerDeviationRemark(dsa.id, devId, {
+        remark: currentRemark,
+      });
+
+      if (res && (res.status === "success" || res.status_code === 200 || (res as any).status === true)) {
+        dev.remark = currentRemark;
+        setDeviationRemarkStatus((prev) => ({
+          ...prev,
+          [key]: { success: true },
+        }));
+        setTimeout(() => {
+          setDeviationRemarkStatus((prev) => ({
+            ...prev,
+            [key]: { success: false },
+          }));
+        }, 3000);
+      } else {
+        setDeviationRemarkStatus((prev) => ({
+          ...prev,
+          [key]: { error: res?.message || "Failed to save remark." },
+        }));
+      }
+    } catch (err: any) {
+      setDeviationRemarkStatus((prev) => ({
+        ...prev,
+        [key]: { error: err?.message || "An unexpected error occurred." },
+      }));
+    } finally {
+      setSavingDeviationId(null);
+    }
+  };
 
   const isOtherNonCheckerRole =
     isMakerUser ||
@@ -7016,8 +7091,18 @@ const resolveStageStatus = (
                       {dev.parameter || dev.rule_name || "Deviation"}
                     </td>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
-                      {dev.deviation_trigger || dev.remarks || "Deviation Flagged"} (
-                      <span className="font-bold text-amber-700">{dev.decision || "DEVIATION"}</span>)
+                      <div>
+                        {dev.deviation_trigger || dev.remarks || "Deviation Flagged"} (
+                        <span className="font-bold text-amber-700">{dev.decision || "DEVIATION"}</span>)
+                      </div>
+                      <div className="mt-1 text-xs text-slate-700 bg-amber-50/70 p-1.5 border border-amber-200/80 rounded">
+                        <strong>Checker Remark:</strong>{" "}
+                        {dev.remark ? (
+                          <span>{dev.remark}</span>
+                        ) : (
+                          <span className="italic text-slate-400">No remark added</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -12185,63 +12270,131 @@ const resolveStageStatus = (
               <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
                 <thead className="sticky top-0 z-10 bg-slate-100">
                   <tr className="text-slate-800 font-bold border-b border-slate-300 text-left">
-                    <th className="w-[22%] border border-slate-300 p-2">
+                    <th className="w-[18%] border border-slate-300 p-2">
                       Parameter
                     </th>
-                    <th className="w-[24%] border border-slate-300 p-2">
+                    <th className="w-[18%] border border-slate-300 p-2">
                       Policy Requirement
                     </th>
-                    <th className="w-[18%] border border-slate-300 p-2">
+                    <th className="w-[14%] border border-slate-300 p-2">
                       Actual Value
                     </th>
-                    <th className="w-[24%] border border-slate-300 p-2">
+                    <th className="w-[18%] border border-slate-300 p-2">
                       Evaluation Remarks / Trigger
                     </th>
-                    <th className="w-[12%] border border-slate-300 p-2 text-center">
+                    <th className="w-[10%] border border-slate-300 p-2 text-center">
                       Decision
+                    </th>
+                    <th className="w-[22%] border border-slate-300 p-2">
+                      Checker Remark
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr className="bg-amber-100/90 text-amber-950 font-bold border border-slate-300">
                     <td
-                      colSpan={5}
+                      colSpan={6}
                       className="p-2 border border-slate-300 text-amber-900"
                     >
                       Deviations Flagged (Discretionary Approval Required)
                     </td>
                   </tr>
-                  {deviationRules.map((dev: any, idx: number) => (
-                    <tr key={idx} className="bg-white hover:bg-slate-50">
-                      <td className="border border-slate-300 p-2 font-bold text-slate-900">
-                        {dev.parameter ||
-                          dev.rule_name ||
-                          dev.rule_code ||
-                          "N/A"}
-                      </td>
-                      <td className="border border-slate-300 p-2 text-slate-700">
-                        {dev.policy ||
-                          dev.expected_value ||
-                          "Standard Criteria"}
-                      </td>
-                      <td className="border border-slate-300 p-2 font-mono text-slate-900 font-semibold">
-                        {dev.actual_value !== undefined &&
-                        dev.actual_value !== null
-                          ? String(dev.actual_value)
-                          : "N/A"}
-                      </td>
-                      <td className="border border-slate-300 p-2 text-slate-700">
-                        {dev.deviation_trigger ||
-                          dev.remarks ||
-                          "Deviation Flagged"}
-                      </td>
-                      <td className="border border-slate-300 p-2 text-center">
-                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold border border-amber-300 bg-amber-100 text-amber-800 uppercase">
-                          {dev.decision || "DEVIATION"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {deviationRules.map((dev: any, idx: number) => {
+                    const key = dev.id ?? dev.rule_code ?? idx;
+                    const remarkVal = deviationRemarksState[key] ?? dev.remark ?? "";
+                    const isSaving = savingDeviationId === key;
+                    const status = deviationRemarkStatus[key];
+
+                    return (
+                      <tr key={idx} className="bg-white hover:bg-slate-50">
+                        <td className="border border-slate-300 p-2 font-bold text-slate-900">
+                          {dev.parameter ||
+                            dev.rule_name ||
+                            dev.rule_code ||
+                            "N/A"}
+                        </td>
+                        <td className="border border-slate-300 p-2 text-slate-700">
+                          {dev.policy ||
+                            dev.expected_value ||
+                            "Standard Criteria"}
+                        </td>
+                        <td className="border border-slate-300 p-2 font-mono text-slate-900 font-semibold">
+                          {dev.actual_value !== undefined &&
+                          dev.actual_value !== null
+                            ? String(dev.actual_value)
+                            : "N/A"}
+                        </td>
+                        <td className="border border-slate-300 p-2 text-slate-700">
+                          {dev.deviation_trigger ||
+                            dev.remarks ||
+                            "Deviation Flagged"}
+                        </td>
+                        <td className="border border-slate-300 p-2 text-center">
+                          <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold border border-amber-300 bg-amber-100 text-amber-800 uppercase">
+                            {dev.decision || "DEVIATION"}
+                          </span>
+                        </td>
+                        <td className="border border-slate-300 p-2 align-top">
+                          {canEditDeviationRemarks ? (
+                            <div className="space-y-1.5">
+                              <textarea
+                                value={remarkVal}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setDeviationRemarksState((prev) => ({
+                                    ...prev,
+                                    [key]: val,
+                                  }));
+                                }}
+                                disabled={isSaving}
+                                rows={2}
+                                maxLength={2000}
+                                placeholder="Enter justification for this deviation..."
+                                className="w-full text-xs p-1.5 border border-slate-300 rounded focus:ring-1 focus:ring-amber-500 focus:border-amber-500 bg-white"
+                              />
+                              <div className="flex items-center justify-between">
+                                <span className={`text-[10px] ${remarkVal.length > 2000 ? "text-red-600 font-bold" : "text-slate-400"}`}>
+                                  {remarkVal.length}/2000
+                                </span>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  disabled={isSaving || remarkVal.length > 2000}
+                                  onClick={() => handleSaveDeviationRemark(dev)}
+                                  className="h-6 px-2 text-[11px] bg-amber-600 hover:bg-amber-700 text-white font-medium"
+                                >
+                                  {isSaving ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                      Saving...
+                                    </>
+                                  ) : status?.success ? (
+                                    <>
+                                      <Check className="h-3 w-3 mr-1 text-emerald-300" />
+                                      Saved
+                                    </>
+                                  ) : (
+                                    "Save Remark"
+                                  )}
+                                </Button>
+                              </div>
+                              {status?.error && (
+                                <p className="text-[11px] text-red-600 font-medium">{status.error}</p>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="text-slate-800 whitespace-pre-wrap">
+                              {dev.remark ? (
+                                <span>{dev.remark}</span>
+                              ) : (
+                                <span className="text-slate-400 italic">No remark added</span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
