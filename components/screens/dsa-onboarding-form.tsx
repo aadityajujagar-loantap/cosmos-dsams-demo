@@ -2452,6 +2452,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       payload.entity_name = entityName;
       payload.constitution = constitution;
       payload.nature_of_business = natureOfBusiness;
+      if (dateOfBirth) payload.date_of_birth = dateOfBirth;
+      if (resolvedAge) payload.age = Number(resolvedAge);
       payload.stakeholders = stakeholders.map((s) => ({
         stakeholder_type: s.stakeholder_type,
         name: s.name,
