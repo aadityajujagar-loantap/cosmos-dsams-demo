@@ -616,6 +616,17 @@ export const adminApi = {
     });
   },
 
+  saveCheckerDeviationRemark: async (
+    dsaId: number | string,
+    deviationId: number | string,
+    payload: { remark?: string | null }
+  ): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${dsaId}/checker/deviations/${deviationId}/remark`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
   generateCheckerDdReviewReport: async (
     idOrCode: number | string,
     payload?: {
