@@ -47,10 +47,15 @@ interface DsaOnboardingFormProps {
 interface Stakeholder {
   stakeholder_type: string;
   name: string;
+  gender?: string;
   mobile_no: string;
   pan: string;
   aadhaar: string;
   din_dpin_no?: string;
+  address?: string;
+  state?: string;
+  city?: string;
+  pinCode?: string;
 }
 
 interface DocDef {
@@ -473,10 +478,15 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     {
       stakeholder_type: "",
       name: "",
+      gender: "",
       mobile_no: "",
       pan: "",
       aadhaar: "",
       din_dpin_no: "",
+      address: "",
+      state: "",
+      city: "",
+      pinCode: "",
     },
   ]);
 
@@ -1881,12 +1891,52 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           if (detailsData.maskedAadhaarNumber && !updated.aadhaar) {
             updated.aadhaar = String(detailsData.maskedAadhaarNumber).trim().toUpperCase();
           }
+
+          if (detailsData.gender) {
+            const g = String(detailsData.gender).trim().toLowerCase();
+            if (g === "m" || g === "male") updated.gender = "Male";
+            else if (g === "f" || g === "female") updated.gender = "Female";
+            else if (g === "o" || g === "other") updated.gender = "Other";
+            else updated.gender = detailsData.gender;
+          }
+
+          const addrParts = [
+            detailsData.buildingName,
+            detailsData.streetName,
+            detailsData.locality,
+          ].filter(Boolean);
+          const combinedAddress = detailsData.address || addrParts.join(", ");
+          if (combinedAddress) updated.address = combinedAddress;
+
+          if (detailsData.state) {
+            const rawState = String(detailsData.state).trim();
+            const matchedState = stateOptions.find(
+              (o) => o.key.toLowerCase() === rawState.toLowerCase() || o.label.toLowerCase() === rawState.toLowerCase()
+            );
+            updated.state = matchedState ? matchedState.key : rawState;
+          }
+
+          if (detailsData.city) {
+            const rawCity = String(detailsData.city).trim();
+            const stateCode = (updated.state || "").toUpperCase().replace(/[\s-]+/g, "_");
+            const stateCities = stateCode ? cityOptions.filter((c) => c.stateKey === stateCode) : cityOptions;
+            const matchedCity = stateCities.find(
+              (c) => c.key.toLowerCase() === rawCity.toLowerCase() || c.label.toLowerCase() === rawCity.toLowerCase()
+            );
+            updated.city = matchedCity ? matchedCity.key : rawCity;
+          }
+
+          const rawPin = detailsData.pinCode || detailsData.pincode;
+          if (rawPin) {
+            updated.pinCode = String(rawPin).replace(/\D/g, "").slice(0, 6);
+          }
+
           next[index] = updated;
           return next;
         });
         toast({
           title: "Stakeholder PAN Verified",
-          description: `Verified for ${detailsData.fullName || trimmedPan}. Name auto-populated.`,
+          description: `Verified for ${detailsData.fullName || trimmedPan}. Details auto-populated.`,
           variant: "success",
         });
       } else {
@@ -1910,7 +1960,19 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   const handleAddStakeholder = () => {
     setStakeholders((prev) => [
       ...prev,
-      { stakeholder_type: "", name: "", mobile_no: "", pan: "", aadhaar: "", din_dpin_no: "" },
+      {
+        stakeholder_type: "",
+        name: "",
+        gender: "",
+        mobile_no: "",
+        pan: "",
+        aadhaar: "",
+        din_dpin_no: "",
+        address: "",
+        state: "",
+        city: "",
+        pinCode: "",
+      },
     ]);
   };
 
@@ -1926,6 +1988,22 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     setStakeholders((prev) => {
       const copy = [...prev];
       copy[idx] = { ...copy[idx], [key]: val };
+      return copy;
+    });
+  };
+
+  const handleStakeholderStateChange = (idx: number, newState: string) => {
+    setStakeholders((prev) => {
+      const copy = [...prev];
+      const s = copy[idx];
+      const newCode = newState ? newState.toUpperCase().replace(/[\s-]+/g, "_") : "";
+      const matchingCities = newCode ? cityOptions.filter((c) => c.stateKey === newCode) : [];
+      const shouldResetCity = !newState || (s.city && matchingCities.length > 0 && !matchingCities.some((c) => c.key.toLowerCase() === s.city?.toLowerCase()));
+      copy[idx] = {
+        ...s,
+        state: newState,
+        city: shouldResetCity ? "" : s.city,
+      };
       return copy;
     });
   };
@@ -2290,6 +2368,11 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         pan: s.pan.toUpperCase(),
         aadhaar: s.aadhaar || undefined,
         din_dpin_no: s.din_dpin_no || undefined,
+        gender: s.gender || undefined,
+        city: s.city || undefined,
+        state: s.state || undefined,
+        pinCode: s.pinCode || undefined,
+        address: s.address || undefined,
       }));
     }
 
@@ -4250,6 +4333,103 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                             />
                           </div>
                         </div>
+
+                        {/* Row 3: Gender & Address */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+                          <div>
+                            <Label className="text-sm font-bold text-slate-700 leading-none">Gender</Label>
+                            <Select
+                              value={s.gender || ""}
+                              onChange={(e) => handleUpdateStakeholder(idx, "gender", e.target.value)}
+                              className="mt-1.5 text-sm bg-white"
+                            >
+                              <option value="">Select Gender</option>
+                              <option value="Male">Male</option>
+                              <option value="Female">Female</option>
+                              <option value="Other">Other</option>
+                            </Select>
+                          </div>
+                          <div className="sm:col-span-2">
+                            <Label className="text-sm font-bold text-slate-700 leading-none">Address</Label>
+                            <Input
+                              value={s.address || ""}
+                              onChange={(e) => handleUpdateStakeholder(idx, "address", e.target.value)}
+                              placeholder="House/Flat No., Building, Street, Landmark"
+                              className="mt-1.5 text-sm bg-white"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Row 4: State, City, Pincode */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+                          <div>
+                            <Label className="text-sm font-bold text-slate-700 leading-none">State</Label>
+                            <Select
+                              value={s.state || ""}
+                              onChange={(e) => handleStakeholderStateChange(idx, e.target.value)}
+                              className="mt-1.5 text-sm bg-white"
+                              disabled={loadingStates}
+                            >
+                              <option value="">{loadingStates ? "Loading states..." : "Select State"}</option>
+                              {(s.state && !stateOptions.some((o) => o.key === s.state)
+                                ? [{ key: s.state, label: s.state }, ...stateOptions]
+                                : stateOptions
+                              ).map((st) => (
+                                <option key={st.key} value={st.key}>
+                                  {st.label}
+                                </option>
+                              ))}
+                            </Select>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-bold text-slate-700 leading-none">City</Label>
+                            {(() => {
+                              const sStateCode = s.state ? s.state.toUpperCase().replace(/[\s-]+/g, "_") : "";
+                              const matchingCities = sStateCode ? cityOptions.filter((c) => c.stateKey === sStateCode) : [];
+                              const resolvedCities = s.city && !matchingCities.some((c) => c.key === s.city)
+                                ? [{ key: s.city, label: s.city, stateKey: sStateCode }, ...matchingCities]
+                                : matchingCities;
+
+                              return (
+                                <Select
+                                  value={s.city || ""}
+                                  onChange={(e) => handleUpdateStakeholder(idx, "city", e.target.value)}
+                                  className="mt-1.5 text-sm bg-white"
+                                  disabled={!s.state || loadingCities}
+                                >
+                                  <option value="">
+                                    {!s.state
+                                      ? "Select State first"
+                                      : loadingCities
+                                      ? "Loading cities..."
+                                      : "Select City"}
+                                  </option>
+                                  {resolvedCities.map((c) => (
+                                    <option key={c.key} value={c.key}>
+                                      {c.label}
+                                    </option>
+                                  ))}
+                                </Select>
+                              );
+                            })()}
+                          </div>
+                          <div>
+                            <Label className="text-sm font-bold text-slate-700 leading-none">Pincode</Label>
+                            <Input
+                              value={s.pinCode || ""}
+                              onChange={(e) =>
+                                handleUpdateStakeholder(
+                                  idx,
+                                  "pinCode",
+                                  e.target.value.replace(/\D/g, "").slice(0, 6)
+                                )
+                              }
+                              placeholder="400001"
+                              className="mt-1.5 text-sm font-mono bg-white"
+                              maxLength={6}
+                            />
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -4722,23 +4902,29 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
                         <thead>
                           <tr className="bg-slate-100 text-slate-700 font-bold">
-                            <th className="border border-slate-300 p-2 text-center w-12">Sr.</th>
-                            <th className="border border-slate-300 p-2 text-left w-[20%]">Role / Designation</th>
+                            <th className="border border-slate-300 p-2 text-center w-10">Sr.</th>
+                            <th className="border border-slate-300 p-2 text-left w-[16%]">Role / Designation</th>
                             <th className="border border-slate-300 p-2 text-left">Full Name</th>
-                            <th className="border border-slate-300 p-2 text-left w-[16%]">Mobile</th>
-                            <th className="border border-slate-300 p-2 text-left w-[15%]">PAN</th>
-                            <th className="border border-slate-300 p-2 text-left w-[15%]">Aadhaar</th>
+                            <th className="border border-slate-300 p-2 text-left w-[10%]">Gender</th>
+                            <th className="border border-slate-300 p-2 text-left w-[13%]">Mobile</th>
+                            <th className="border border-slate-300 p-2 text-left w-[12%]">PAN</th>
+                            <th className="border border-slate-300 p-2 text-left w-[13%]">Aadhaar</th>
+                            <th className="border border-slate-300 p-2 text-left w-[18%]">Location</th>
                           </tr>
                         </thead>
                         <tbody>
                           {stakeholders.map((s, idx) => (
                             <tr key={idx} className="bg-white">
-                              <td className="border border-slate-300 p-2 font-bold text-slate-600 text-center w-12">{idx + 1}</td>
+                              <td className="border border-slate-300 p-2 font-bold text-slate-600 text-center w-10">{idx + 1}</td>
                               <td className="border border-slate-300 p-2 font-semibold text-slate-800">{s.stakeholder_type || "N/A"}</td>
                               <td className="border border-slate-300 p-2 font-bold text-slate-900">{s.name || "N/A"}</td>
+                              <td className="border border-slate-300 p-2 text-slate-800">{s.gender || "—"}</td>
                               <td className="border border-slate-300 p-2 font-mono text-slate-800">{s.mobile_no || "N/A"}</td>
                               <td className="border border-slate-300 p-2 font-mono font-semibold text-slate-800">{s.pan || "N/A"}</td>
                               <td className="border border-slate-300 p-2 font-mono text-slate-800">{s.aadhaar ? maskAadhaar(s.aadhaar) : "N/A"}</td>
+                              <td className="border border-slate-300 p-2 text-slate-700">
+                                {[s.city, s.state, s.pinCode].filter(Boolean).join(", ") || "—"}
+                              </td>
                             </tr>
                           ))}
                         </tbody>

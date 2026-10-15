@@ -193,6 +193,11 @@ export interface Dsa {
     pan?: string;
     aadhaar?: string;
     din_dpin_no?: string;
+    gender?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    pinCode?: string;
   }>;
   associate_concerns?: Array<{
     id?: number;
