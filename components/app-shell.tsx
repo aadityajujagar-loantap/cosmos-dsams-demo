@@ -69,7 +69,23 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function isSuperAdminRole(role?: string | null): boolean {
+  if (!role) return false;
+  const normalized = role.toLowerCase().replace(/[-_ ]/g, "");
+  return normalized === "superadmin" || normalized === "admin";
+}
+
 function isPathAllowedForRole(role: string, pathname: string) {
+  // Dashboard routes allowed for all authenticated users
+  if (pathname === "/" || pathname === "/dashboard") {
+    return true;
+  }
+
+  // DSA Management page is strictly restricted to Super Admin
+  if (pathname === "/dsa/management" || pathname.startsWith("/dsa/management/") || pathname === "/dsa") {
+    return isSuperAdminRole(role);
+  }
+
   if (
     role === "Sub-Region Head" ||
     role === "DGM" ||
@@ -80,20 +96,19 @@ function isPathAllowedForRole(role: string, pathname: string) {
     role === "DSA Credit"
   ) {
     return (
-      pathname === "/" ||
       (pathname.startsWith("/dsa/") &&
-        !["/dsa/management", "/dsa/product-setting", "/dsa/onboarding"].includes(pathname))
+        !["/dsa/management", "/dsa/product-setting", "/dsa/onboarding"].some(
+          (path) => pathname === path || pathname.startsWith(`${path}/`),
+        ))
     );
   }
 
-  // Universal: Internal workflow authorities (L1–L7) can access DSA detail pages, but /dsa/management is restricted to Super Admin
+  // Universal: Internal workflow authorities (L1–L7) can access DSA detail pages (/dsa/[id])
   const isDsaApprovalPage =
-    (pathname === "/dsa" || pathname === "/dsa/management")
-      ? (role === "DSA Manager" || role === "Super Admin" || role === "ADMIN")
-      : (pathname.startsWith("/dsa/") &&
-          !["/dsa/onboarding", "/dsa/product-setting"].some(
-            (path) => pathname === path || pathname.startsWith(`${path}/`),
-          ));
+    pathname.startsWith("/dsa/") &&
+    !["/dsa/onboarding", "/dsa/product-setting", "/dsa/management"].some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`),
+    );
 
   if (isDsaApprovalPage) return true;
 
@@ -105,7 +120,6 @@ function isPathAllowedForRole(role: string, pathname: string) {
       );
 
     return (
-      pathname === "/" ||
       partnerDsaProfile ||
       pathname === "/leads" ||
       pathname.startsWith("/leads/") ||
@@ -120,7 +134,6 @@ function isPathAllowedForRole(role: string, pathname: string) {
 
   if (role === "Customer") {
     return (
-      pathname === "/" ||
       pathname === "/applications" ||
       pathname.startsWith("/applications/") ||
       pathname.startsWith("/journey/")
@@ -129,8 +142,10 @@ function isPathAllowedForRole(role: string, pathname: string) {
 
   if (role === "Branch User" || role === "Checker") {
     return (
-      pathname === "/" ||
-      (pathname.startsWith("/dsa/") && !pathname.startsWith("/dsa/product-setting")) ||
+      (pathname.startsWith("/dsa/") &&
+        !["/dsa/management", "/dsa/product-setting"].some(
+          (path) => pathname === path || pathname.startsWith(`${path}/`),
+        )) ||
       pathname === "/leads" ||
       pathname.startsWith("/leads/") ||
       pathname === "/applications" ||
@@ -142,7 +157,7 @@ function isPathAllowedForRole(role: string, pathname: string) {
 }
 
 function defaultPathForRole(role: string) {
-  return "/";
+  return "/dashboard";
 }
 
 function canReviewInvoicesRole(role: string) {
@@ -181,7 +196,7 @@ function inferStoredNotificationHref(notification: Notification, store: MockStor
   if (notification.category === "Payout") return roleSafeHref(role, "/finance/invoices");
   if (notification.category === "Risk" || notification.category === "Lead") return roleSafeHref(role, "/applications");
   if (notification.category === "Workflow" && (text.includes("dsa") || text.includes("onboarding"))) {
-    return roleSafeHref(role, "/dsa/management");
+    return roleSafeHref(role, "/dashboard");
   }
   if (notification.category === "Workflow") return roleSafeHref(role, "/applications");
   return defaultPathForRole(role);
@@ -308,7 +323,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         },
         {
           items: [
-            { href: "/dsa/management", icon: Users, label: "DSA Management" },
+            ...(isSuperAdminRole(currentUser.role)
+              ? [{ href: "/dsa/management", icon: Users, label: "DSA Management" }]
+              : []),
             { href: "/dsa/onboarding", icon: UserPlus, label: "Onboard DSA" },
             { href: "/dsa/product-setting", icon: Settings, label: "Product Setting" },
           ],

@@ -2286,7 +2286,7 @@ export function DashboardPage() {
                             <StatusBadge status={agent.status} />
                           </td>
                           <td className="p-4 text-right pr-6">
-                            <Link href="/dsa/management">
+                            <Link href="/dashboard">
                               <button className="inline-flex h-8 px-3 items-center justify-center rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
                                 Manage
                               </button>

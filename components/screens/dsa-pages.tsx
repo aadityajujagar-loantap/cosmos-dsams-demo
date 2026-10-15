@@ -4794,11 +4794,11 @@ export function DsaProfilePage({ id }: { id: string }) {
             <div className="pt-2 flex justify-center">
               <Button
                 variant="secondary"
-                onClick={() => router.push("/dsa")}
+                onClick={() => router.push("/dashboard")}
                 className="gap-2 font-semibold"
               >
                 <ArrowLeft className="h-4 w-4" />
-                Return to Branch Queue
+                Return to Dashboard
               </Button>
             </div>
           </CardContent>
@@ -5890,7 +5890,7 @@ const resolveStageStatus = (
         variant: "success",
       });
       closeDecisionModals();
-      router.push("/");
+      router.push("/dashboard");
     } catch (err: unknown) {
       setReAllocateError(
         err instanceof Error
@@ -6277,10 +6277,10 @@ const resolveStageStatus = (
       <div>
         <Link
           className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-blue-700"
-          href="/dsa/management"
+          href="/dashboard"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to Manage My Network
+          Back to Dashboard
         </Link>
         <PageHeader
           description="Lead collection, application sourcing, and payout activity for this network partner."
@@ -7111,7 +7111,7 @@ const resolveStageStatus = (
                         description: `Application #${dsa.dsa_code || dsa.code || dsa.id} sanctioned. DSA Code allotted and Empanelment Letter generated.`,
                         variant: "success",
                       });
-                      router.push("/");
+                      router.push("/dashboard");
                     }
                   } catch (err: any) {
                     setApprovalRemarksError(
@@ -7159,10 +7159,10 @@ const resolveStageStatus = (
       <div className="space-y-4">
         <Link
           className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-blue-700"
-          href="/dsa/management"
+          href="/dashboard"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to DSA management
+          Back to Dashboard
         </Link>
         <EmptyState
           title={
@@ -7190,10 +7190,10 @@ const resolveStageStatus = (
 
       <Link
         className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-blue-700"
-        href="/dsa/management"
+        href="/dashboard"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to DSA management
+        Back to Dashboard
       </Link>
       <PageHeader
         action={
@@ -10746,7 +10746,7 @@ const resolveStageStatus = (
                       variant: "success",
                     });
                     closeDecisionModals();
-                    router.push("/");
+                    router.push("/dashboard");
                   }
                 }}
               >
@@ -10831,7 +10831,7 @@ const resolveStageStatus = (
                       variant: "success",
                     });
                     closeDecisionModals();
-                    router.push("/");
+                    router.push("/dashboard");
                   }
                 }
               }}
@@ -10941,7 +10941,7 @@ const resolveStageStatus = (
                       });
                       closeDecisionModals();
                       // Rejected is a dead-end for every role — return to dashboard.
-                      router.push("/");
+                      router.push("/dashboard");
                     }
                   } catch (err: any) {
                     setRejectionError(
@@ -11061,7 +11061,7 @@ const resolveStageStatus = (
                         });
                         closeDecisionModals();
                         // Rejected is a dead-end for every role — return to dashboard.
-                        router.push("/");
+                        router.push("/dashboard");
                       }
                     } catch (err: any) {
                       setRejectionError(
@@ -11177,7 +11177,7 @@ const resolveStageStatus = (
                 if (!deletingDsa) return;
                 deleteDsaCascade(deletingDsa.id);
                 setDeletingDsa(null);
-                router.push("/");
+                router.push("/dashboard");
               }}
               type="button"
               variant="danger"
@@ -11835,7 +11835,7 @@ const resolveStageStatus = (
                   closeDecisionModals();
                   // The case now sits at another authority's stage, so this
                   // user has no viewable case — return to dashboard.
-                  router.push("/");
+                  router.push("/dashboard");
                 }
               }}
             >

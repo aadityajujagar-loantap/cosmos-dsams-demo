@@ -181,13 +181,13 @@ export function ActiveDsasPage() {
           </Button>
 
           <Button
-            onClick={() => router.push("/dsa/management")}
+            onClick={() => router.push("/dashboard")}
             size="sm"
             variant="outline"
             className="gap-1.5"
           >
             <Layers className="h-3.5 w-3.5" />
-            All Queues
+            Dashboard
           </Button>
 
           <Button
@@ -362,12 +362,12 @@ export function ActiveDsasPage() {
             </div>
             {!search && !typeFilter && !tierFilter && (
               <Button
-                onClick={() => router.push("/dsa/management")}
+                onClick={() => router.push("/dashboard")}
                 size="sm"
                 variant="outline"
                 className="mt-2"
               >
-                View Approval Queue
+                View Dashboard
               </Button>
             )}
           </div>
