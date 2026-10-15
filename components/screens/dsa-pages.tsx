@@ -3289,6 +3289,9 @@ export function DsaProfilePage({ id }: { id: string }) {
   const [failedKyc, setFailedKyc] = useState<{ [key: string]: boolean }>({});
   const [loadingKycHistory, setLoadingKycHistory] = useState(false);
   const [discoveredGstins, setDiscoveredGstins] = useState<string[]>([]);
+  const [selectedGstin, setSelectedGstin] = useState<string>("");
+  const [fetchedGstins, setFetchedGstins] = useState<string[]>([]);
+  const [fetchingGstDetails, setFetchingGstDetails] = useState<boolean>(false);
   const [viewKycDataModalType, setViewKycDataModalType] =
     useState<KycDataType | null>(null);
   const [viewKycDataCachedVerif, setViewKycDataCachedVerif] =
@@ -3932,6 +3935,48 @@ export function DsaProfilePage({ id }: { id: string }) {
       });
     } finally {
       setVerifyingKyc((prev) => ({ ...prev, [type]: false }));
+    }
+  };
+
+  const handleFetchGstDetails = async (gstinToFetch: string) => {
+    if (!dsa || !gstinToFetch) return;
+    if (!canCheckerVerifyKyc) {
+      toast({
+        title: "Access Restricted",
+        description: "Only Checker authority can perform KYC verifications.",
+        variant: "warning",
+      });
+      return;
+    }
+    setFetchingGstDetails(true);
+    try {
+      await triggerCheckerVerification(dsa.id, "GST_BASIC_DETAILS", {
+        gstin: gstinToFetch.trim().toUpperCase(),
+      });
+      setFetchedGstins((prev) => Array.from(new Set([...prev, gstinToFetch.trim().toUpperCase()])));
+      await loadKycHistory(dsa.id);
+      await fetchDsaDetail(dsa.id);
+      toast({
+        title: "GST Details Fetched",
+        description: `Basic GST details for ${gstinToFetch} fetched successfully.`,
+        variant: "success",
+      });
+    } catch (err: any) {
+      const errMsg =
+        err?.response?.data?.message ||
+        err?.data?.message ||
+        (Array.isArray(err?.response?.data?.error)
+          ? err.response.data.error.join(", ")
+          : err?.response?.data?.error) ||
+        err?.message ||
+        `Failed to fetch GST details for ${gstinToFetch}.`;
+      toast({
+        title: "Fetch Failed",
+        description: errMsg,
+        variant: "destructive",
+      });
+    } finally {
+      setFetchingGstDetails(false);
     }
   };
 
@@ -7873,9 +7918,15 @@ const resolveStageStatus = (
                     const panVerif = getVerif("PAN", true);
                     // PAN_TO_GSTIN must NOT satisfy the GST slot: its type string contains
                     // "GST", so a substring match would let a PAN-to-GSTIN row satisfy both.
+                    const panToGstVerif =
+                      getVerif("PAN_TO_GSTIN") || getVerif("pan_to_gstin");
+                    const gstBasicVerif =
+                      getVerif("GST_BASIC_DETAILS") || getVerif("GST_BASIC");
                     const gstVerif =
                       getVerif("GST", true, ["GST_BASIC"]) ??
-                      getVerif("GSTIN", true, ["GST_BASIC"]);
+                      getVerif("GSTIN", true, ["GST_BASIC"]) ??
+                      panToGstVerif ??
+                      gstBasicVerif;
                     const bankVerif = getVerif("BANK") || getVerif("BAV");
                     const udyamVerif = getVerif("UDYAM");
                     const cibilVerif = getVerif("CIBIL");
@@ -7898,6 +7949,13 @@ const resolveStageStatus = (
                             /^[0-9]{2}[A-Z]{5}/.test(trimmed)
                           ) {
                             gsts.add(trimmed);
+                          } else if (trimmed.includes(",")) {
+                            trimmed.split(/[,;\s]+/).forEach((part) => {
+                              const p = part.trim().toUpperCase();
+                              if (p.length >= 10 && p.length <= 18) {
+                                gsts.add(p);
+                              }
+                            });
                           }
                           return;
                         }
@@ -7912,9 +7970,12 @@ const resolveStageStatus = (
                               typeof v === "string" &&
                               (kLower.includes("gst") || kLower.includes("tax"))
                             ) {
-                              const vTrim = v.trim().toUpperCase();
-                              if (vTrim && vTrim.length >= 10) {
-                                gsts.add(vTrim);
+                              const parts = v.split(/[,;\s]+/);
+                              for (const part of parts) {
+                                const vTrim = part.trim().toUpperCase();
+                                if (vTrim && vTrim.length >= 10 && vTrim.length <= 18) {
+                                  gsts.add(vTrim);
+                                }
                               }
                             }
                             traverse(v);
@@ -7928,18 +7989,37 @@ const resolveStageStatus = (
                     const allDiscoveredGsts: string[] = Array.from(
                       new Set([
                         ...(dsa.gst
-                          ? [String(dsa.gst).trim().toUpperCase()]
+                          ? String(dsa.gst).split(/[,;\s]+/).map((s: string) => s.trim().toUpperCase()).filter((s: string) => s.length >= 10 && s.length <= 18)
                           : []),
                         ...(dsa.gstin
-                          ? [String(dsa.gstin).trim().toUpperCase()]
+                          ? String(dsa.gstin).split(/[,;\s]+/).map((s: string) => s.trim().toUpperCase()).filter((s: string) => s.length >= 10 && s.length <= 18)
                           : []),
                         ...(dsa.gst_number
-                          ? [String(dsa.gst_number).trim().toUpperCase()]
+                          ? String(dsa.gst_number).split(/[,;\s]+/).map((s: string) => s.trim().toUpperCase()).filter((s: string) => s.length >= 10 && s.length <= 18)
                           : []),
                         ...extractAllGstins(gstVerif),
+                        ...extractAllGstins(panToGstVerif),
+                        ...extractAllGstins(gstBasicVerif),
                         ...extractAllGstins(discoveredGstins),
+                        ...(((dsa as any)?.verifications || []).flatMap((v: any) => extractAllGstins(v))),
                       ]),
+                    ).filter(Boolean);
+
+                    const fetchedGstinSet = new Set<string>(
+                      fetchedGstins.map((g) => g.trim().toUpperCase()),
                     );
+                    const allVers = (dsa as any)?.verifications || [];
+                    allVers.forEach((v: any) => {
+                      const code = String(v.verification_code || "").toUpperCase();
+                      if (code === "GST_BASIC_DETAILS" || code === "GST_BASIC") {
+                        const g =
+                          v.normalized_data?.gstin ||
+                          v.response_payload?.data?.gstinDetailedInformartion?.gstin ||
+                          v.response_payload?.data?.gstin ||
+                          v.request_payload?.gstin;
+                        if (g) fetchedGstinSet.add(String(g).trim().toUpperCase());
+                      }
+                    });
 
                     const resolvedGstNumber: string | null =
                       allDiscoveredGsts.length > 0
@@ -8036,28 +8116,78 @@ const resolveStageStatus = (
                             />
                           </div>
                           <div>
-                            {resolvedGstNumber ? (
-                              <>
-                                <p className="text-lg font-mono font-bold text-slate-900">
-                                  {resolvedGstNumber}
-                                </p>
-                                <p className="text-xs text-slate-500 mt-0.5">
-                                  Taxpayer Status: Regular · Active{" "}
-                                  {allDiscoveredGsts.length > 1
-                                    ? `(${allDiscoveredGsts.length} linked GSTINs found)`
-                                    : ""}
-                                </p>
-                                {allDiscoveredGsts.length > 1 && (
-                                  <div className="mt-1.5 p-1.5 bg-slate-50 rounded border border-slate-200 text-xs">
-                                    <span className="font-semibold text-slate-700">
-                                      Linked GSTINs:
-                                    </span>{" "}
-                                    <span className="font-mono text-blue-600 font-medium">
-                                      {allDiscoveredGsts.join(", ")}
-                                    </span>
+                            {allDiscoveredGsts.length > 0 ? (
+                              <div className="space-y-2">
+                                <div>
+                                  <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block mb-1">
+                                    Select GSTIN ({allDiscoveredGsts.length} found)
+                                  </label>
+                                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                                    <select
+                                      value={
+                                        selectedGstin ||
+                                        allDiscoveredGsts.find((g) => !fetchedGstinSet.has(g.toUpperCase())) ||
+                                        allDiscoveredGsts[0]
+                                      }
+                                      onChange={(e) => setSelectedGstin(e.target.value)}
+                                      className="flex-1 text-xs font-mono font-bold rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-800 focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500 shadow-2xs"
+                                    >
+                                      {allDiscoveredGsts.map((gst) => {
+                                        const isFetched = fetchedGstinSet.has(gst.toUpperCase());
+                                        return (
+                                          <option key={gst} value={gst} disabled={isFetched}>
+                                            {gst} {isFetched ? "— Fetched" : ""}
+                                          </option>
+                                        );
+                                      })}
+                                    </select>
+                                    {canCheckerVerifyKyc && (
+                                      <Button
+                                        size="sm"
+                                        type="button"
+                                        disabled={
+                                          fetchingGstDetails ||
+                                          !(
+                                            selectedGstin ||
+                                            allDiscoveredGsts.find((g) => !fetchedGstinSet.has(g.toUpperCase())) ||
+                                            allDiscoveredGsts[0]
+                                          ) ||
+                                          fetchedGstinSet.has(
+                                            (
+                                              selectedGstin ||
+                                              allDiscoveredGsts.find((g) => !fetchedGstinSet.has(g.toUpperCase())) ||
+                                              allDiscoveredGsts[0]
+                                            ).toUpperCase(),
+                                          )
+                                        }
+                                        onClick={() =>
+                                          handleFetchGstDetails(
+                                            selectedGstin ||
+                                            allDiscoveredGsts.find((g) => !fetchedGstinSet.has(g.toUpperCase())) ||
+                                            allDiscoveredGsts[0],
+                                          )
+                                        }
+                                        className="text-xs px-3 py-2 h-auto font-semibold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center gap-1.5 whitespace-nowrap shadow-2xs disabled:bg-slate-200 disabled:text-slate-400"
+                                      >
+                                        {fetchingGstDetails ? (
+                                          <>
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                            Fetching...
+                                          </>
+                                        ) : (
+                                          <>
+                                            <ShieldCheck className="h-3 w-3" />
+                                            Fetch GST Details
+                                          </>
+                                        )}
+                                      </Button>
+                                    )}
                                   </div>
-                                )}
-                              </>
+                                </div>
+                                <p className="text-xs text-slate-500">
+                                  Taxpayer Status: Regular · Active
+                                </p>
+                              </div>
                             ) : isGstChecked ? (
                               <>
                                 <p className="text-base font-semibold text-slate-900">
@@ -8107,7 +8237,8 @@ const resolveStageStatus = (
                                   type="button"
                                   variant="outline"
                                   onClick={() => {
-                                    setViewKycDataCachedVerif(gstVerif);
+                                    const activeGstVerif = gstBasicVerif ?? gstVerif ?? panToGstVerif;
+                                    setViewKycDataCachedVerif(activeGstVerif);
                                     setViewKycDataModalType("gst");
                                   }}
                                   className="text-xs px-2.5 py-1 h-auto font-medium text-slate-700 hover:text-blue-700 hover:bg-blue-50 border-slate-300 flex items-center gap-1 shadow-2xs"
