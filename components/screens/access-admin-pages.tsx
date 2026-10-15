@@ -7,7 +7,6 @@ import {
   Power,
   RefreshCw,
   RotateCcw,
-  ShieldCheck,
   Trash2,
   UserPlus,
 } from "lucide-react";
@@ -32,11 +31,11 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { formatDate } from "@/lib/utils";
 import type { Permission, Role, User, BranchRole } from "@/types/auth";
-import type { BranchOption } from "@/types/dsa";
+import type { BranchOption, RegionOption, SubRegionOption } from "@/types/dsa";
 
 interface AdminUserRow {
   branchCode: string;
-  branchRoleId: string;
+  subregionId: string;
   email: string;
   id: string;
   lastUpdated: string;
@@ -46,39 +45,38 @@ interface AdminUserRow {
   status: "Active" | "Deactivated";
   ticketNo: string;
   userId: number;
-  zoneCode: string;
 }
 
 interface UserFormState {
   branch_code: string;
-  branch_role_id: string;
+  sub_region_code: string;
+  region_code: string;
   email: string;
   name: string;
   password: string;
   phone: string;
   status: "active" | "deactivated";
   ticket_no: string;
-  zone_code: string;
 }
 
 function emptyUserForm(): UserFormState {
   return {
     branch_code: "",
-    branch_role_id: "",
+    sub_region_code: "",
+    region_code: "",
     email: "",
     name: "",
     password: "",
     phone: "",
     status: "active",
     ticket_no: "",
-    zone_code: "",
   };
 }
 
 function userToRow(user: User): AdminUserRow {
   return {
     branchCode: user.branch_code ?? "",
-    branchRoleId: user.branch_role_id ?? "",
+    subregionId: user.subregion_id ?? "",
     email: user.email,
     id: String(user.id),
     lastUpdated: user.updated_at ?? user.created_at ?? "",
@@ -88,35 +86,66 @@ function userToRow(user: User): AdminUserRow {
     status: user.deactivated_at ? "Deactivated" : "Active",
     ticketNo: user.ticket_no ?? "",
     userId: user.id,
-    zoneCode: user.zone_code ?? "",
   };
 }
 
-function rowToForm(row: AdminUserRow): UserFormState {
+function rowToForm(row: AdminUserRow, branches: BranchOption[], subRegions: SubRegionOption[]): UserFormState {
+  let branch_code = row.branchCode;
+  let sub_region_code = row.subregionId;
+  let region_code = "";
+
+  if (branch_code) {
+    const br = branches.find((b) => b.branch_code === branch_code);
+    if (br) {
+      if (br.sub_region_code && !sub_region_code) {
+        sub_region_code = br.sub_region_code;
+      }
+      if (br.region_code) {
+        region_code = br.region_code;
+      }
+    }
+  }
+
+  if (sub_region_code && !region_code) {
+    const sr = subRegions.find((s) => s.sub_region_code === sub_region_code);
+    if (sr?.region_code) {
+      region_code = sr.region_code;
+    }
+  }
+
   return {
-    branch_code: row.branchCode,
-    branch_role_id: row.branchRoleId,
+    branch_code,
+    sub_region_code,
+    region_code,
     email: row.email,
     name: row.name,
     password: "",
     phone: row.phone,
     status: row.status === "Active" ? "active" : "deactivated",
     ticket_no: row.ticketNo,
-    zone_code: row.zoneCode,
   };
 }
 
 function compactUserPayload(form: UserFormState, includePassword: boolean): UserPayload {
   return {
     branch_code: form.branch_code.trim() || undefined,
-    branch_role_id: form.branch_role_id.trim() || undefined,
+    subregion_id: form.sub_region_code.trim() || undefined,
     email: form.email.trim(),
     name: form.name.trim(),
     password: includePassword && form.password ? form.password : undefined,
     phone: form.phone.trim() || undefined,
     ticket_no: form.ticket_no.trim() || undefined,
-    zone_code: form.zone_code.trim() || undefined,
   };
+}
+
+function formatRoleDisplay(role: Role): string {
+  const formattedName = role.name
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+  if (role.description && role.description.trim()) {
+    return `${formattedName} (${role.description})`;
+  }
+  return formattedName;
 }
 
 function isMakerResponse(value: unknown): value is MakerCheckerActionResponse {
@@ -142,7 +171,8 @@ export function UsersPage() {
   const [rows, setRows] = useState<AdminUserRow[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [branches, setBranches] = useState<BranchOption[]>([]);
-  const [branchRoles, setBranchRoles] = useState<BranchRole[]>([]);
+  const [regions, setRegions] = useState<RegionOption[]>([]);
+  const [subRegions, setSubRegions] = useState<SubRegionOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"" | "active" | "deactivated">("");
@@ -150,9 +180,11 @@ export function UsersPage() {
   const [editing, setEditing] = useState<AdminUserRow | null>(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<UserFormState>(() => emptyUserForm());
-  const [selectedRoleNames, setSelectedRoleNames] = useState<string[]>([]);
+  const [selectedRole, setSelectedRole] = useState<string>("");
 
-  const roleOptions = useMemo(() => roles.map((role) => role.name).sort(), [roles]);
+  const roleOptions = useMemo(() => {
+    return [...roles].sort((a, b) => a.name.localeCompare(b.name));
+  }, [roles]);
 
   const filteredRows = useMemo(() => {
     if (!branchFilter) return rows;
@@ -162,19 +194,23 @@ export function UsersPage() {
   async function loadUsers() {
     setLoading(true);
     try {
-      const [page, roleList, branchRes, branchRoleRes] = await Promise.all([
+      const [page, roleList, branchRes, regionRes, subRegionRes] = await Promise.all([
         adminApi.getUsersPage({ per_page: 100, status: statusFilter || undefined }),
         adminApi.getRoles(),
         adminApi.getBranchesDropdown().catch(() => adminApi.getAdminBranchesDropdown()).catch(() => ({ data: [] })),
-        adminApi.getBranchRolesDropdown().catch(() => ({ data: [] })),
+        adminApi.getAdminRegionsDropdown().catch(() => adminApi.getRegionsDropdown()).catch(() => ({ data: [] })),
+        adminApi.getAdminSubRegionsDropdown().catch(() => adminApi.getSubRegionsDropdown()).catch(() => ({ data: [] })),
       ]);
       setRows(page.data.map(userToRow));
       setRoles(roleList);
       if (branchRes && Array.isArray((branchRes as any).data)) {
         setBranches((branchRes as any).data);
       }
-      if (branchRoleRes && Array.isArray((branchRoleRes as any).data)) {
-        setBranchRoles((branchRoleRes as any).data);
+      if (regionRes && Array.isArray((regionRes as any).data)) {
+        setRegions((regionRes as any).data);
+      }
+      if (subRegionRes && Array.isArray((subRegionRes as any).data)) {
+        setSubRegions((subRegionRes as any).data);
       }
     } catch (error: any) {
       toast({
@@ -193,14 +229,14 @@ export function UsersPage() {
 
   function openCreate() {
     setForm(emptyUserForm());
-    setSelectedRoleNames([]);
+    setSelectedRole("");
     setCreating(true);
   }
 
   function openEdit(row: AdminUserRow) {
     setEditing(row);
-    setForm(rowToForm(row));
-    setSelectedRoleNames(row.roles);
+    setForm(rowToForm(row, branches, subRegions));
+    setSelectedRole(row.roles[0] || "");
   }
 
   function closeForm() {
@@ -213,11 +249,109 @@ export function UsersPage() {
     setForm((current) => ({ ...current, [name]: value }));
   }
 
-  function toggleRole(roleName: string) {
-    setSelectedRoleNames((current) =>
-      current.includes(roleName) ? current.filter((item) => item !== roleName) : [...current, roleName],
-    );
+  function handleRegionChange(newRegionCode: string) {
+    setForm((current) => {
+      let nextSubRegion = current.sub_region_code;
+      let nextBranch = current.branch_code;
+
+      if (newRegionCode) {
+        if (nextSubRegion) {
+          const sr = subRegions.find((s) => s.sub_region_code === nextSubRegion);
+          if (sr && sr.region_code !== newRegionCode) {
+            nextSubRegion = "";
+          }
+        }
+        if (nextBranch) {
+          const br = branches.find((b) => b.branch_code === nextBranch);
+          const brRegion = br?.region_code || subRegions.find((s) => s.sub_region_code === br?.sub_region_code)?.region_code;
+          if (brRegion && brRegion !== newRegionCode) {
+            nextBranch = "";
+          }
+        }
+      }
+
+      return {
+        ...current,
+        region_code: newRegionCode,
+        sub_region_code: nextSubRegion,
+        branch_code: nextBranch,
+      };
+    });
   }
+
+  function handleSubRegionChange(newSubRegionCode: string) {
+    setForm((current) => {
+      let nextRegion = current.region_code;
+      let nextBranch = current.branch_code;
+
+      if (newSubRegionCode) {
+        const sr = subRegions.find((s) => s.sub_region_code === newSubRegionCode);
+        if (sr?.region_code) {
+          nextRegion = sr.region_code;
+        }
+        if (nextBranch) {
+          const br = branches.find((b) => b.branch_code === nextBranch);
+          if (br && br.sub_region_code && br.sub_region_code !== newSubRegionCode) {
+            nextBranch = "";
+          }
+        }
+      }
+
+      return {
+        ...current,
+        region_code: nextRegion,
+        sub_region_code: newSubRegionCode,
+        branch_code: nextBranch,
+      };
+    });
+  }
+
+  function handleBranchChange(newBranchCode: string) {
+    setForm((current) => {
+      let nextRegion = current.region_code;
+      let nextSubRegion = current.sub_region_code;
+
+      if (newBranchCode) {
+        const br = branches.find((b) => b.branch_code === newBranchCode);
+        if (br?.sub_region_code) {
+          nextSubRegion = br.sub_region_code;
+        }
+        if (br?.region_code) {
+          nextRegion = br.region_code;
+        } else if (nextSubRegion) {
+          const sr = subRegions.find((s) => s.sub_region_code === nextSubRegion);
+          if (sr?.region_code) {
+            nextRegion = sr.region_code;
+          }
+        }
+      }
+
+      return {
+        ...current,
+        region_code: nextRegion,
+        sub_region_code: nextSubRegion,
+        branch_code: newBranchCode,
+      };
+    });
+  }
+
+  const availableSubRegions = useMemo(() => {
+    if (!form.region_code) return subRegions;
+    return subRegions.filter((sr) => sr.region_code === form.region_code);
+  }, [subRegions, form.region_code]);
+
+  const availableBranches = useMemo(() => {
+    return branches.filter((b) => {
+      if (form.sub_region_code && b.sub_region_code && b.sub_region_code !== form.sub_region_code) {
+        return false;
+      }
+      const bRegion = b.region_code || subRegions.find((s) => s.sub_region_code === b.sub_region_code)?.region_code;
+      if (form.region_code && bRegion && bRegion !== form.region_code) {
+        return false;
+      }
+      return true;
+    });
+  }, [branches, subRegions, form.sub_region_code, form.region_code]);
 
   async function syncRoles(userId: number, previousNames: string[], nextNames: string[]) {
     const roleByName = new Map(roles.map((role) => [role.name, role]));
@@ -239,6 +373,8 @@ export function UsersPage() {
   async function saveUser() {
     setSaving(true);
     try {
+      const targetRoles = selectedRole ? [selectedRole] : [];
+
       if (editing) {
         const response = await adminApi.updateUser(
           editing.userId,
@@ -256,7 +392,7 @@ export function UsersPage() {
           return;
         }
 
-        await syncRoles(editing.userId, editing.roles, selectedRoleNames);
+        await syncRoles(editing.userId, editing.roles, targetRoles);
 
         if (editing.status === "Active" && form.status === "deactivated") {
           await adminApi.deactivateUser(editing.userId);
@@ -279,7 +415,7 @@ export function UsersPage() {
           return;
         }
 
-        await syncRoles(response.id, [], selectedRoleNames);
+        await syncRoles(response.id, [], targetRoles);
         if (form.status === "deactivated") await adminApi.deactivateUser(response.id);
         toast({ title: "User created", description: `${form.name} was added.`, variant: "success" });
       }
@@ -490,50 +626,100 @@ export function UsersPage() {
               <Input onChange={(event) => updateForm("ticket_no", event.target.value)} value={form.ticket_no} />
             </Field>
             <Field className="sm:col-span-1">
+              <Label>Region</Label>
+              <Select
+                onChange={(event) => handleRegionChange(event.target.value)}
+                value={form.region_code}
+              >
+                <option value="">Select Region (or None)</option>
+                {regions.map((r) => (
+                  <option key={r.region_code} value={r.region_code}>
+                    {r.region_name} ({r.region_code})
+                  </option>
+                ))}
+                {form.region_code && !regions.some((r) => r.region_code === form.region_code) && (
+                  <option value={form.region_code}>{form.region_code} (Current)</option>
+                )}
+              </Select>
+            </Field>
+
+            <Field className="sm:col-span-1">
+              <Label>Sub-Region</Label>
+              <Select
+                onChange={(event) => handleSubRegionChange(event.target.value)}
+                value={form.sub_region_code}
+              >
+                <option value="">Select Sub-Region (or None)</option>
+                {availableSubRegions.map((sr) => (
+                  <option key={sr.sub_region_code} value={sr.sub_region_code}>
+                    {sr.sub_region_name} ({sr.sub_region_code})
+                  </option>
+                ))}
+                {form.sub_region_code && !availableSubRegions.some((sr) => sr.sub_region_code === form.sub_region_code) && (
+                  <option value={form.sub_region_code}>{form.sub_region_code} (Current)</option>
+                )}
+              </Select>
+            </Field>
+
+            <Field className="sm:col-span-1">
               <Label>Branch</Label>
               <Select
-                onChange={(event) => updateForm("branch_code", event.target.value)}
+                onChange={(event) => handleBranchChange(event.target.value)}
                 value={form.branch_code}
               >
                 <option value="">Select Branch (or None)</option>
-                {branches.map((b) => (
+                {availableBranches.map((b) => (
                   <option key={b.branch_code} value={b.branch_code}>
                     {b.branch_name ? `${b.branch_name} (${b.branch_code})` : b.branch_code}
                   </option>
                 ))}
-                {form.branch_code && !branches.some((b) => b.branch_code === form.branch_code) && (
+                {form.branch_code && !availableBranches.some((b) => b.branch_code === form.branch_code) && (
                   <option value={form.branch_code}>{form.branch_code} (Current)</option>
                 )}
               </Select>
             </Field>
-            <Field className="sm:col-span-1">
-              <Label>Zone code</Label>
-              <Input onChange={(event) => updateForm("zone_code", event.target.value)} value={form.zone_code} />
-            </Field>
-            <Field className="sm:col-span-1">
-              <Label>Branch role</Label>
-              <Select
-                onChange={(event) => updateForm("branch_role_id", event.target.value)}
-                value={form.branch_role_id}
-              >
-                <option value="">Select Branch Role (or None)</option>
-                {branchRoles.map((br) => (
-                  <option key={br.branch_role_id} value={br.branch_role_id}>
-                    {br.rolename ? `${br.rolename} (${br.branch_role_id})` : br.branch_role_id}
-                  </option>
-                ))}
-                {form.branch_role_id && !branchRoles.some((br) => String(br.branch_role_id) === String(form.branch_role_id)) && (
-                  <option value={form.branch_role_id}>{form.branch_role_id} (Current)</option>
-                )}
-              </Select>
-            </Field>
+
             <Field className="sm:col-span-1">
               <Label>Status</Label>
-              <Select onChange={(event) => updateForm("status", event.target.value)} value={form.status}>
+              <Select onChange={(event) => updateForm("status", event.target.value as "active" | "deactivated")} value={form.status}>
                 <option value="active">Active</option>
                 <option value="deactivated">Deactivated</option>
               </Select>
             </Field>
+
+            <Field className="sm:col-span-2">
+              <Label>Role</Label>
+              <Select
+                onChange={(event) => setSelectedRole(event.target.value)}
+                value={selectedRole}
+              >
+                <option value="">Select Role (Single selection)</option>
+                {roleOptions.map((role) => (
+                  <option key={role.id} value={role.name}>
+                    {formatRoleDisplay(role)}
+                  </option>
+                ))}
+                {selectedRole && !roleOptions.some((r) => r.name === selectedRole) && (
+                  <option value={selectedRole}>{selectedRole} (Current)</option>
+                )}
+              </Select>
+            </Field>
+
+            {selectedRole && (
+              <div className="sm:col-span-2 rounded-lg border border-slate-200/80 bg-slate-50/70 p-3 text-xs text-slate-600">
+                <span className="font-semibold text-slate-900">Role Scope: </span>
+                {/maker|checker|branch/i.test(selectedRole) ? (
+                  <span>Branch User — Please ensure an assigned Branch is selected.</span>
+                ) : /sub_region|sub-region/i.test(selectedRole) ? (
+                  <span>Sub-Region Authority — Scope covers all branches in selected Sub-Region.</span>
+                ) : /region|dgm/i.test(selectedRole) ? (
+                  <span>Regional Authority — Scope covers all sub-regions and branches in selected Region.</span>
+                ) : (
+                  <span>Head Office / Administrative — Global scope across all regions and branches.</span>
+                )}
+              </div>
+            )}
+
             <Field className="sm:col-span-2">
               <Label>{editing ? "New password" : "Password"}</Label>
               <Input
@@ -543,29 +729,6 @@ export function UsersPage() {
                 value={form.password}
               />
             </Field>
-          </div>
-
-          <div className="rounded-lg border border-slate-200 p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-blue-600" />
-              <p className="text-sm font-semibold text-slate-950">Roles</p>
-            </div>
-            <div className="grid gap-3 grid-cols-2">
-              {roleOptions.map((roleName) => (
-                <label
-                  className="flex items-center gap-2 rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700"
-                  key={roleName}
-                >
-                  <input
-                    checked={selectedRoleNames.includes(roleName)}
-                    className="h-4 w-4 accent-blue-600"
-                    onChange={() => toggleRole(roleName)}
-                    type="checkbox"
-                  />
-                  {roleName.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())}
-                </label>
-              ))}
-            </div>
           </div>
 
           <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
