@@ -74,7 +74,6 @@ const INDIVIDUAL_DOCS: DocDef[] = [
   { type: "dsa_consent_dpdp", label: "DSA Consent Format (as per DPDP Act)", required: true, requirementLabel: "Mandatory" },
   { type: "visit_report", label: "Office Visit Report", required: (s) => s.mode === "branch", requirementLabel: "Mandatory", staffOnly: true },
   { type: "brief_profile", label: "Brief profile of DSA", required: false, requirementLabel: "Optional" },
-  { type: "itr_returns", label: "IT Returns with computation (last 2 F.Y.)", required: false, requirementLabel: "Optional" },
   { type: "other_document", label: "Any other document", required: false, requirementLabel: "Optional" },
 ];
 
@@ -84,15 +83,17 @@ const ENTITY_DOCS: DocDef[] = [
   { type: "stakeholder_pan_card", label: "At least one Key Person / Partner / Director — PAN Card", required: true, requirementLabel: "Mandatory" },
   { type: "stakeholder_aadhaar_card", label: "At least one Key Person / Partner / Director — Aadhaar Card", required: true, requirementLabel: "Mandatory" },
   { type: "dsa_consent_dpdp", label: "DSA Consent Format (as per DPDP Act)", required: true, requirementLabel: "Mandatory" },
+  { type: "partnership_deed", label: "Partnership Deed (if applicable)", required: false, requirementLabel: "Optional" },
   { type: "visit_report", label: "Office Visit Report", required: (s) => s.mode === "branch", requirementLabel: "Mandatory", staffOnly: true },
   { type: "brief_profile", label: "Brief profile of DSA entity", required: false, requirementLabel: "Optional" },
-  { type: "itr_returns", label: "IT Returns with computation (last 2 F.Y.)", required: false, requirementLabel: "Optional" },
   { type: "other_document", label: "Any other document", required: false, requirementLabel: "Optional" },
 ];
 
 const FALLBACK_TITLE_OPTIONS = [
   { key: "Mr.", label: "Mr." },
   { key: "Mrs.", label: "Mrs." },
+  { key: "Ms.", label: "Ms." },
+  { key: "M/s", label: "M/s" },
   { key: "Miss", label: "Miss" },
   { key: "Master", label: "Master" },
   { key: "Dr.", label: "Dr." },
@@ -501,7 +502,15 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     category?: string;
     email?: string;
     referenceId?: string;
+    panAutofilledFields?: {
+      firstName?: boolean;
+      lastName?: boolean;
+      dob?: boolean;
+      aadhaar?: boolean;
+      entityName?: boolean;
+    };
   } | null>(null);
+  const [extraItrYears, setExtraItrYears] = useState<number[]>([]);
   const [verifyingStakeholderIdx, setVerifyingStakeholderIdx] = useState<number | null>(null);
   const [email, setEmail] = useState<string>("");
   const [mobile, setMobile] = useState<string>("");
@@ -814,16 +823,23 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     return stateOptions;
   }, [officeStateName, stateOptions]);
 
-  // PAN autofill is authoritative for Aadhaar: once populated the field is locked so the
-  // masked value cannot be edited. If the PAN response carried no Aadhaar it stays blank
-  // and remains editable for manual entry.
-  const isAadhaarLocked = Boolean(aadhaarNo.trim());
+  // PAN autofill is authoritative for Aadhaar: once populated from verified PAN the field is locked.
+  // If the PAN response carried no Aadhaar it stays blank and remains completely editable for manual entry.
+  const isAadhaarLocked = Boolean(
+    panVerified &&
+    (panVerificationData?.panAutofilledFields?.aadhaar || panVerificationData?.maskedAadhaar)
+  );
 
-  // Age is shown read-only whenever it can be derived from DOB, and only becomes
-  // editable when DOB is blank. Derived value wins over any stored manual entry.
+  // Age is shown read-only whenever it can be derived from DOB, and remains
+  // completely editable when DOB is blank.
   const derivedAge = ageFromIsoDob(dateOfBirth);
   const resolvedAge = derivedAge || age;
-  const isAgeLocked = Boolean(resolvedAge);
+  const isAgeLocked = Boolean(derivedAge);
+
+  const isFirstNameLocked = Boolean(panVerified && panVerificationData?.panAutofilledFields?.firstName);
+  const isLastNameLocked = Boolean(panVerified && panVerificationData?.panAutofilledFields?.lastName);
+  const isDobLocked = Boolean(panVerified && panVerificationData?.panAutofilledFields?.dob);
+  const isEntityNameLocked = Boolean(panVerified && panVerificationData?.panAutofilledFields?.entityName);
 
   // Mirror DOB into age. Clearing DOB leaves a manual age editable; the derived value
   // always takes precedence so the two can never disagree.
@@ -1347,7 +1363,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
     // Insert dynamic business & experience documents before optional documents (IT returns, Other docs)
     let list = [...baseList];
-    const insertIdx = list.findIndex((d) => d.type === "itr_returns" || d.type === "other_document");
+    const insertIdx = list.findIndex((d) => d.type.startsWith("itr_") || d.type === "other_document");
     if (insertIdx !== -1) {
       list.splice(insertIdx, 0, ...dynamicDocs);
     } else {
@@ -1399,6 +1415,24 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     gstNumber,
     constitution,
   ]);
+
+  const allItrYears = useMemo(() => {
+    const base = [1, 2];
+    const combined = [...base, ...extraItrYears];
+    return Array.from(new Set(combined)).sort((a, b) => a - b);
+  }, [extraItrYears]);
+
+  const itrDocDefs: DocDef[] = useMemo(() => {
+    return allItrYears.map((yr) => {
+      const suffix = yr === 1 ? "st" : yr === 2 ? "nd" : yr === 3 ? "rd" : "th";
+      return {
+        type: `itr_year_${yr}`,
+        label: `${yr}${suffix} Year ITR with computation`,
+        required: false,
+        requirementLabel: "Optional",
+      };
+    });
+  }, [allItrYears]);
 
   const isDocRequired = (doc: DocDef) => {
     if (typeof doc.required === "function") {
@@ -1694,16 +1728,16 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           detailsData.entity_name ||
           "";
 
+        const autofilled: {
+          firstName?: boolean;
+          lastName?: boolean;
+          dob?: boolean;
+          aadhaar?: boolean;
+          entityName?: boolean;
+        } = {};
+
         setPan(trimmedPan);
         setPanVerified(true);
-        setPanVerificationData({
-          fullName: resolvedName,
-          aadhaarLinked: detailsData.aadhaarLinked,
-          maskedAadhaar: detailsData.maskedAadhaarNumber,
-          category: detailsData.category,
-          email: panApiEmail ? String(panApiEmail).trim() : undefined,
-          referenceId: resData?.reference_id || resData?.details?.referenceId,
-        });
 
         // 1. Name & Identity Population
         if (dsaType === "INDIVIDUAL") {
@@ -1752,9 +1786,15 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
             resolvedMiddle = "";
           }
 
-          if (resolvedFirst) setFirstName(resolvedFirst);
+          if (resolvedFirst) {
+            setFirstName(resolvedFirst);
+            autofilled.firstName = true;
+          }
           setMiddleName(resolvedMiddle);
-          if (resolvedLast) setLastName(resolvedLast);
+          if (resolvedLast) {
+            setLastName(resolvedLast);
+            autofilled.lastName = true;
+          }
           if (detailsData.gender) {
             const g = String(detailsData.gender).toLowerCase();
             if (g === "male" && !applicantTitle) setApplicantTitle("Mr.");
@@ -1765,6 +1805,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           if (resolvedName) {
             if (detailsData.category !== "P" || !entityName) {
               setEntityName(resolvedName);
+              autofilled.entityName = true;
             }
             if (!contactPerson) {
               setContactPerson(resolvedName);
@@ -1787,6 +1828,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           if (parsed) {
             setDateOfBirth(parsed.iso);
             setDisplayDob(parsed.display);
+            autofilled.dob = true;
           }
         }
 
@@ -1812,7 +1854,18 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           } else {
             setAadhaarNo(raw);
           }
+          autofilled.aadhaar = true;
         }
+
+        setPanVerificationData({
+          fullName: resolvedName,
+          aadhaarLinked: detailsData.aadhaarLinked,
+          maskedAadhaar: detailsData.maskedAadhaarNumber,
+          category: detailsData.category,
+          email: panApiEmail ? String(panApiEmail).trim() : undefined,
+          referenceId: resData?.reference_id || resData?.details?.referenceId,
+          panAutofilledFields: autofilled,
+        });
 
         // 4. Address Details (Step 2)
         const addrParts = [
@@ -2135,6 +2188,43 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         toast({ title: "Invalid IFSC Code", description: "Enter a valid 11-character IFSC code (e.g. COSB0000001).", variant: "warning" });
         return false;
       }
+
+      // Account Holder Name must match applicant name (Individual) or entity name (Entity)
+      // Exception: Proprietary firm where bank account may be in firm name or proprietor name
+      const cleanStr = (s: string) =>
+        s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+      const accClean = cleanStr(accountName);
+      const isProprietorship = dsaType === "ENTITY" && constitution.toLowerCase().includes("proprietor");
+
+      if (!isProprietorship) {
+        let expectedName = "";
+        let expectedLabel = "";
+        if (dsaType === "ENTITY") {
+          expectedName = entityName.trim();
+          expectedLabel = "entity legal name";
+        } else {
+          expectedName = `${firstName} ${lastName}`.trim() || (panVerificationData?.fullName || "").trim();
+          expectedLabel = "applicant name";
+        }
+
+        const expClean = cleanStr(expectedName);
+        if (expClean && accClean) {
+          const isExactOrSubstring = accClean === expClean || accClean.includes(expClean) || expClean.includes(accClean);
+          const accTokens = accClean.split(" ").filter((t) => t.length > 2);
+          const expTokens = expClean.split(" ").filter((t) => t.length > 2);
+          const overlap = accTokens.filter((t) => expTokens.includes(t));
+          const hasOverlap = overlap.length >= Math.min(dsaType === "ENTITY" ? 2 : 1, accTokens.length, expTokens.length);
+
+          if (!isExactOrSubstring && !hasOverlap) {
+            toast({
+              title: "Account Holder Name Mismatch",
+              description: `Account holder name ("${accountName}") must match the ${expectedLabel} ("${expectedName}").`,
+              variant: "warning",
+            });
+            return false;
+          }
+        }
+      }
       return true;
     }
 
@@ -2344,6 +2434,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     // Type-specific fields — only send what belongs to the chosen DSA type
     if (dsaType === "INDIVIDUAL") {
       if (applicantTitle) payload.applicant_title = applicantTitle;
+      payload.name = [applicantTitle, firstName, middleName, lastName].filter(Boolean).join(" ");
       payload.first_name = firstName;
       if (middleName) payload.middle_name = middleName;
       payload.last_name = lastName;
@@ -2572,7 +2663,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           <CardContent className="p-6 sm:p-8 space-y-6">
             <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-5 text-left space-y-3">
               <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                <span className="text-xs font-semibold uppercase text-slate-500">DSA Reference Code</span>
+                <span className="text-xs font-semibold uppercase text-slate-500">DSA Application Number</span>
                 <span className="font-mono text-base font-bold text-blue-700">
                   {submittedDsa.code || submittedDsa.dsa_code || "DSA-2026-PENDING"}
                 </span>
@@ -3153,9 +3244,15 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       <Input
                         id="first_name"
                         value={firstName}
-                        onChange={(e) => setFirstName(e.target.value)}
+                        onChange={(e) => {
+                          if (isFirstNameLocked) return;
+                          setFirstName(e.target.value);
+                        }}
+                        readOnly={isFirstNameLocked}
+                        aria-readonly={isFirstNameLocked}
+                        title={isFirstNameLocked ? "Verified from PAN record and locked." : undefined}
                         placeholder="e.g. Ramesh"
-                        className="mt-1.5 h-9 bg-white"
+                        className={`mt-1.5 h-9 ${isFirstNameLocked ? "bg-slate-100 text-slate-600 cursor-not-allowed" : "bg-white"}`}
                       />
                     </div>
                     <div className="flex flex-col">
@@ -3177,19 +3274,27 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       <Input
                         id="last_name"
                         value={lastName}
-                        onChange={(e) => setLastName(e.target.value)}
+                        onChange={(e) => {
+                          if (isLastNameLocked) return;
+                          setLastName(e.target.value);
+                        }}
+                        readOnly={isLastNameLocked}
+                        aria-readonly={isLastNameLocked}
+                        title={isLastNameLocked ? "Verified from PAN record and locked." : undefined}
                         placeholder="e.g. Sharma"
-                        className="mt-1.5 h-9 bg-white"
+                        className={`mt-1.5 h-9 ${isLastNameLocked ? "bg-slate-100 text-slate-600 cursor-not-allowed" : "bg-white"}`}
                       />
                     </div>
-                    <div className="flex flex-col">
+                    <div className="flex flex-col" title={isDobLocked ? "Verified from PAN record and locked." : undefined}>
                       <div className="h-5 flex items-center">
                         <Label htmlFor="date_of_birth" className="text-sm font-bold text-slate-700 leading-none">Date of Birth *</Label>
                       </div>
                       <DatePicker
                         id="date_of_birth"
                         value={dateOfBirth}
+                        disabled={isDobLocked}
                         onChange={(e) => {
+                          if (isDobLocked) return;
                           const v = e.target.value;
                           setDateOfBirth(v);
                           if (v) {
@@ -3201,7 +3306,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         }}
                         max={new Date().toISOString().slice(0, 10)}
                         placeholder="DD/MM/YYYY"
-                        className="mt-1.5"
+                        className={`mt-1.5 ${isDobLocked ? "bg-slate-100 text-slate-600 cursor-not-allowed" : ""}`}
                         required
                       />
                     </div>
@@ -3524,9 +3629,15 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         <Input
                           id="entity_name"
                           value={entityName}
-                          onChange={(e) => setEntityName(e.target.value)}
+                          onChange={(e) => {
+                            if (isEntityNameLocked) return;
+                            setEntityName(e.target.value);
+                          }}
+                          readOnly={isEntityNameLocked}
+                          aria-readonly={isEntityNameLocked}
+                          title={isEntityNameLocked ? "Verified from PAN record and locked." : undefined}
                           placeholder="e.g. Apex Financial Solutions Pvt Ltd"
-                          className="mt-1.5 h-9 bg-white text-sm"
+                          className={`mt-1.5 h-9 text-sm ${isEntityNameLocked ? "bg-slate-100 text-slate-600 cursor-not-allowed" : "bg-white"}`}
                         />
                       </div>
                       <div className="flex flex-col">
@@ -4454,17 +4565,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                 </div>
               </div>
 
-              {/* Office Visit Report note for Bank staff */}
-              {mode === "branch" && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-3 text-xs text-amber-900 flex items-start gap-2">
-                  <Info className="h-4 w-4 text-amber-700 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-bold">Bank Staff Requirement:</span> Office Visit Report is mandatory for branch onboarding.
-                    Enter verification remarks below and upload signed visit report.
-                  </div>
-                </div>
-              )}
-
               {/* Document Items Matrix */}
               <div className="border border-slate-200 rounded-xl divide-y divide-slate-200 overflow-hidden shadow-sm">
                 <div className="bg-slate-100/80 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-700 grid grid-cols-12 gap-3">
@@ -4472,79 +4572,201 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   <span className="col-span-4 sm:col-span-3 text-right">Action / Upload</span>
                 </div>
 
-                {currentDocList.map((doc) => {
-                  const required = isDocRequired(doc);
-                  const attached = uploadedDocs[doc.type];
+                {currentDocList
+                  .filter((d) => d.type !== "dsa_consent_dpdp" && !d.type.startsWith("itr_"))
+                  .map((doc) => {
+                    const required = isDocRequired(doc);
+                    const attached = uploadedDocs[doc.type];
 
-                  return (
-                    <div
-                      key={doc.type}
-                      className={`px-4 py-3.5 text-xs grid grid-cols-12 gap-3 items-center transition-colors ${
-                        attached ? "bg-emerald-50/30" : "bg-white hover:bg-slate-50/50"
-                      }`}
-                    >
-                      {/* Document Label */}
-                      <div className="col-span-8 sm:col-span-9">
-                        <div className="flex items-center gap-2">
-                          <FileText className={`h-4 w-4 flex-shrink-0 ${attached ? "text-emerald-600" : "text-slate-400"}`} />
-                          <span className="text-sm font-bold text-slate-800">
-                            {doc.label}{required && <span className="text-red-500 font-bold ml-0.5" style={{ color: "#ef4444" }}>*</span>}
-                          </span>
-                        </div>
-                        <span className="text-[10px] text-slate-400 block font-normal ml-6 mt-0.5">
-                          {doc.type === "recent_photograph" || doc.type === "stakeholder_photograph" || doc.type.toLowerCase().includes("photograph")
-                            ? "Allowed formats: .png, .jpeg, .jpg (Max 10MB)"
-                            : "Allowed formats: .pdf, .jpg, .jpeg, .png (Max 10MB)"}
-                        </span>
-                        {attached && (
-                          <span className="text-[11px] text-emerald-700 font-medium ml-6 block mt-0.5">
-                            ✓ {attached.name} ({attached.size})
-                          </span>
-                        )}
-                      </div>
-
-                      {/* File Upload Button / Remove Button */}
-                      <div className="col-span-4 sm:col-span-3 flex items-center justify-end gap-2">
-                        {attached ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                              Attached
+                    return (
+                      <div
+                        key={doc.type}
+                        className={`px-4 py-3.5 text-xs grid grid-cols-12 gap-3 items-center transition-colors ${
+                          attached ? "bg-emerald-50/30" : "bg-white hover:bg-slate-50/50"
+                        }`}
+                      >
+                        {/* Document Label */}
+                        <div className="col-span-8 sm:col-span-9">
+                          <div className="flex items-center gap-2">
+                            <FileText className={`h-4 w-4 flex-shrink-0 ${attached ? "text-emerald-600" : "text-slate-400"}`} />
+                            <span className="text-sm font-bold text-slate-800">
+                              {doc.label}{required && <span className="text-red-500 font-bold ml-0.5" style={{ color: "#ef4444" }}>*</span>}
                             </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 block font-normal ml-6 mt-0.5">
+                            {doc.type === "recent_photograph" || doc.type === "stakeholder_photograph" || doc.type.toLowerCase().includes("photograph")
+                              ? "Allowed formats: .png, .jpeg, .jpg (Max 10MB)"
+                              : "Allowed formats: .pdf, .jpg, .jpeg, .png (Max 10MB)"}
+                          </span>
+                          {attached && (
+                            <span className="text-[11px] text-emerald-700 font-medium ml-6 block mt-0.5">
+                              ✓ {attached.name} ({attached.size})
+                            </span>
+                          )}
+                        </div>
+
+                        {/* File Upload Button / Remove Button */}
+                        <div className="col-span-4 sm:col-span-3 flex items-center justify-end gap-2">
+                          {attached ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                                Attached
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => removeDoc(doc.type)}
+                                className="text-rose-600 hover:text-rose-800 p-1 rounded hover:bg-rose-50"
+                                title="Remove file"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <label className="cursor-pointer inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-400 transition-colors">
+                              <UploadCloud className="h-3.5 w-3.5 text-blue-600" />
+                              <span>Attach</span>
+                              <input
+                                type="file"
+                                accept={
+                                  doc.type === "recent_photograph" || doc.type === "stakeholder_photograph" || doc.type.toLowerCase().includes("photograph")
+                                    ? ".png,.jpeg,.jpg"
+                                    : ".pdf,.jpg,.jpeg,.png"
+                                }
+                                className="hidden"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) {
+                                    e.target.value = "";
+                                    handleFileUpload(doc.type, f);
+                                  }
+                                }}
+                              />
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+
+              {/* Separate Section: Income Tax Returns (ITR with computation) */}
+              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white divide-y divide-slate-200">
+                <div className="bg-slate-100/80 px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 rounded-lg bg-blue-600 text-white shadow-xs">
+                      <FileText className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-800">
+                        Income Tax Returns (ITR with computation)
+                      </h4>
+                      <p className="text-[11px] text-slate-500">
+                        Upload last 2 financial years ITR (and any additional years if applicable)
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-200/80 text-slate-600">
+                    Optional
+                  </span>
+                </div>
+
+                <div className="divide-y divide-slate-150">
+                  {itrDocDefs.map((doc, idx) => {
+                    const yrNum = allItrYears[idx];
+                    const attached = uploadedDocs[doc.type];
+                    const isExtraYear = yrNum > 2;
+
+                    return (
+                      <div
+                        key={doc.type}
+                        className={`px-4 py-3.5 text-xs grid grid-cols-12 gap-3 items-center transition-colors ${
+                          attached ? "bg-emerald-50/30" : "bg-white hover:bg-slate-50/50"
+                        }`}
+                      >
+                        {/* Document Label & Formats - matching Ref Pic 3 */}
+                        <div className="col-span-8 sm:col-span-9">
+                          <div className="flex items-center gap-2">
+                            <FileText className={`h-4 w-4 flex-shrink-0 ${attached ? "text-emerald-600" : "text-slate-400"}`} />
+                            <span className="text-sm font-bold text-slate-800">
+                              {doc.label}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 block font-normal ml-6 mt-0.5">
+                            Allowed formats: .pdf, .jpg, .jpeg, .png (Max 10MB)
+                          </span>
+                          {attached && (
+                            <span className="text-[11px] text-emerald-700 font-medium ml-6 block mt-0.5">
+                              ✓ {attached.name} ({attached.size})
+                            </span>
+                          )}
+                        </div>
+
+                        {/* File Upload Button / Remove Button */}
+                        <div className="col-span-4 sm:col-span-3 flex items-center justify-end gap-2">
+                          {isExtraYear && (
                             <button
                               type="button"
-                              onClick={() => removeDoc(doc.type)}
-                              className="text-rose-600 hover:text-rose-800 p-1 rounded hover:bg-rose-50"
-                              title="Remove file"
+                              onClick={() => {
+                                setExtraItrYears((prev) => prev.filter((y) => y !== yrNum));
+                                removeDoc(doc.type);
+                              }}
+                              className="text-slate-400 hover:text-rose-600 p-1 rounded"
+                              title="Remove this extra year"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
-                          </div>
-                        ) : (
-                          <label className="cursor-pointer inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-400 transition-colors">
-                            <UploadCloud className="h-3.5 w-3.5 text-blue-600" />
-                            <span>Attach</span>
-                            <input
-                              type="file"
-                              accept={
-                                doc.type === "recent_photograph" || doc.type === "stakeholder_photograph" || doc.type.toLowerCase().includes("photograph")
-                                  ? ".png,.jpeg,.jpg"
-                                  : ".pdf,.jpg,.jpeg,.png"
-                              }
-                              className="hidden"
-                              onChange={(e) => {
-                                const f = e.target.files?.[0];
-                                if (f) {
-                                  e.target.value = "";
-                                  handleFileUpload(doc.type, f);
-                                }
-                              }}
-                            />
-                          </label>
-                        )}
+                          )}
+                          {attached ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                                Attached
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => removeDoc(doc.type)}
+                                className="text-rose-600 hover:text-rose-800 p-1 rounded hover:bg-rose-50"
+                                title="Remove file"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <label className="cursor-pointer inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-400 transition-colors">
+                              <UploadCloud className="h-3.5 w-3.5 text-blue-600" />
+                              <span>Attach</span>
+                              <input
+                                type="file"
+                                accept=".pdf,.jpg,.jpeg,.png"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) {
+                                    e.target.value = "";
+                                    handleFileUpload(doc.type, f);
+                                  }
+                                }}
+                              />
+                            </label>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+
+                <div className="flex justify-end p-2.5 border-t border-slate-200 bg-slate-50/60">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextYear = extraItrYears.length > 0 ? Math.max(...extraItrYears) + 1 : 3;
+                      setExtraItrYears((prev) => [...prev, nextYear]);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-white border border-blue-300 rounded-md shadow-2xs hover:bg-blue-50 transition-colors"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    + Add Another Year ITR
+                  </button>
+                </div>
               </div>
 
               {/* 16. DSA Consent Form Download & Signed Upload */}

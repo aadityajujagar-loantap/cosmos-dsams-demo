@@ -868,40 +868,46 @@ export function DsaBasicDetailsTab({
                   </Label>
                   <Input
                     value={
-                      isAadhaarFieldFocused
-                        ? formData.aadhaar_no || ""
-                        : maskAadhaar(formData.aadhaar_no)
-                    }
-                    // Unmask only for the Maker while actively editing; re-mask on blur
-                    // and for every other role, so the first 8 digits never sit in the DOM.
-                    readOnly={!canEdit}
-                    title={
-                      !canEdit
-                        ? "Only the Maker can edit the Aadhaar number."
+                      Boolean(dsa.aadhaar_no || dsa.aadhaar)
+                        ? maskAadhaar(formData.aadhaar_no)
                         : isAadhaarFieldFocused
-                          ? "Editing: Aadhaar is temporarily unmasked. Click away to re-mask."
-                          : "Click to reveal for editing."
+                          ? formData.aadhaar_no || ""
+                          : maskAadhaar(formData.aadhaar_no)
+                    }
+                    readOnly={!canEdit || Boolean(dsa.aadhaar_no || dsa.aadhaar)}
+                    disabled={Boolean(dsa.aadhaar_no || dsa.aadhaar)}
+                    title={
+                      Boolean(dsa.aadhaar_no || dsa.aadhaar)
+                        ? "Aadhaar was verified during onboarding and cannot be edited."
+                        : !canEdit
+                          ? "Only the Maker can edit the Aadhaar number."
+                          : isAadhaarFieldFocused
+                            ? "Editing: Aadhaar is temporarily unmasked. Click away to re-mask."
+                            : "Click to reveal for editing."
                     }
                     onFocus={() => {
-                      if (canEdit) setIsAadhaarFieldFocused(true);
+                      if (canEdit && !Boolean(dsa.aadhaar_no || dsa.aadhaar)) setIsAadhaarFieldFocused(true);
                     }}
                     onBlur={() => setIsAadhaarFieldFocused(false)}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      if (Boolean(dsa.aadhaar_no || dsa.aadhaar)) return;
                       setFormData((prev) => ({
                         ...prev,
                         aadhaar_no: e.target.value.replace(/[^0-9Xx]/g, "").slice(0, 12),
-                      }))
-                    }
+                      }));
+                    }}
                     placeholder="12 digit Aadhaar"
                     maxLength={14}
                     className={
-                      canEdit && isAadhaarFieldFocused
-                        ? "font-mono bg-white"
-                        : "font-mono bg-slate-100 text-slate-600"
+                      Boolean(dsa.aadhaar_no || dsa.aadhaar)
+                        ? "font-mono bg-slate-100 text-slate-500 cursor-not-allowed"
+                        : canEdit && isAadhaarFieldFocused
+                          ? "font-mono bg-white"
+                          : "font-mono bg-slate-100 text-slate-600"
                     }
                   />
                   {errors.aadhaar_no && <p className="text-red-500 text-xs mt-1">{errors.aadhaar_no}</p>}
-                  {isFieldChanged("aadhaar_no", formData.aadhaar_no, dsa) && (
+                  {!Boolean(dsa.aadhaar_no || dsa.aadhaar) && isFieldChanged("aadhaar_no", formData.aadhaar_no, dsa) && (
                     <SupportingDocInput
                       field="aadhaar_no"
                       file={supportingFiles.aadhaar_no}
@@ -1229,13 +1235,23 @@ export function DsaBasicDetailsTab({
                 </Label>
                 <Input
                   value={formData.pan || ""}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, pan: e.target.value.toUpperCase() }))}
+                  onChange={(e) => {
+                    if (Boolean(dsa.pan)) return;
+                    setFormData((prev) => ({ ...prev, pan: e.target.value.toUpperCase() }));
+                  }}
+                  readOnly={Boolean(dsa.pan)}
+                  disabled={Boolean(dsa.pan)}
+                  title={Boolean(dsa.pan) ? "PAN was verified during onboarding and cannot be edited." : undefined}
                   placeholder="ABCDE1234F"
                   maxLength={10}
-                  className="font-mono uppercase font-bold"
+                  className={
+                    Boolean(dsa.pan)
+                      ? "font-mono uppercase font-bold bg-slate-100 text-slate-500 cursor-not-allowed"
+                      : "font-mono uppercase font-bold"
+                  }
                 />
                 {errors.pan && <p className="text-red-500 text-xs mt-1">{errors.pan}</p>}
-                {isFieldChanged("pan", formData.pan, dsa) && (
+                {!Boolean(dsa.pan) && isFieldChanged("pan", formData.pan, dsa) && (
                   <SupportingDocInput
                     field="pan"
                     file={supportingFiles.pan}
