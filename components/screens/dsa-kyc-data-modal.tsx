@@ -95,11 +95,14 @@ export function DsaKycDataModal({
           dsa_id: dsaIdNum,
         });
       } else if (type === "cibil") {
-        const isInd =
-          dsa.dsa_type === "INDIVIDUAL" || dsa.dsa_type === "Individual";
-        const code = isInd ? "CIBIL_CONSUMER" : "CIBIL_COMMERCIAL";
+        const isEntity =
+          (dsa.dsa_type || "").toUpperCase() === "ENTITY" ||
+          (dsa.entity_type || "").toUpperCase() === "ENTITY" ||
+          ((dsa.business_type || "").toUpperCase() !== "INDIVIDUAL" && (dsa.business_type || "").trim() !== "");
+        const code = isEntity ? "CIBIL_COMMERCIAL" : "CIBIL_CONSUMER";
         res = await adminApi.triggerCheckerVerification(dsa.id, code, {
           pan: dsa.pan,
+          entity_name: dsa.entity_name || dsa.name,
         });
       } else if (type === "aml") {
         res = await adminApi.triggerCheckerVerification(
