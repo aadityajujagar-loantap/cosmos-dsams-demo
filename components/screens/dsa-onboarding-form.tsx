@@ -2595,11 +2595,11 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   <Button
                     onClick={() => {
                       clearDraft();
-                      router.push("/dsa/management");
+                      router.push("/dashboard");
                     }}
                     className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white"
                   >
-                    View DSA Management Queue
+                    View Dashboard
                   </Button>
                   <Button
                     variant="outline"
@@ -2667,10 +2667,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         </h1>
         {mode === "branch" && (
           <Link
-            href="/dsa/management"
+            href="/dashboard"
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 border border-slate-300 rounded-lg px-3 py-2 bg-white shadow-sm transition-colors"
           >
-            <ArrowLeft className="h-3.5 w-3.5" /> Back to DSA Queue
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to Dashboard
           </Link>
         )}
       </div>

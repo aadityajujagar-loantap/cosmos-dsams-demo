@@ -6378,10 +6378,10 @@ const resolveStageStatus = (
       <div>
         <Link
           className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-blue-700"
-          href="/dsa/management"
+          href="/dashboard"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to Manage My Network
+          Back to Dashboard
         </Link>
         <PageHeader
           description="Lead collection, application sourcing, and payout activity for this network partner."
@@ -7261,10 +7261,10 @@ const resolveStageStatus = (
       <div className="space-y-4">
         <Link
           className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-blue-700"
-          href="/dsa/management"
+          href="/dashboard"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to DSA management
+          Back to Dashboard
         </Link>
         <EmptyState
           title={
@@ -7292,10 +7292,10 @@ const resolveStageStatus = (
 
       <Link
         className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-blue-700"
-        href="/dsa/management"
+        href="/dashboard"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to DSA management
+        Back to Dashboard
       </Link>
       <PageHeader
         action={
