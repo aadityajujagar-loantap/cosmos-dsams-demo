@@ -3392,7 +3392,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     <div className="flex flex-col">
                       <div className="h-5 flex items-center">
                         <Label htmlFor="experience_years" className="text-sm font-bold text-slate-700 leading-none">
-                          Applicant Prior Experience
+                          DSA Experience
                         </Label>
                       </div>
                       <Select
