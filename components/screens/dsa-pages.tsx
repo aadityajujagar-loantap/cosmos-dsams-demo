@@ -3642,9 +3642,19 @@ export function DsaProfilePage({ id }: { id: string }) {
   }, [deviationRules]);
 
   const handleSaveDeviationRemark = async (dev: any) => {
-    const devId = dev.id;
-    if (!devId || !dsa?.id) return;
-    const key = dev.id ?? dev.rule_code;
+    const dsaId = dsa?.id ?? (dsa as any)?.dsa_id;
+    const devId = dev.id ?? dev.deviation_id ?? dev.rule_code;
+    const key = dev.id ?? dev.rule_code ?? devId;
+
+    if (!devId || !dsaId) {
+      console.warn("Cannot save deviation remark: missing deviation ID or DSA ID", { dev, dsa });
+      setDeviationRemarkStatus((prev) => ({
+        ...prev,
+        [key]: { error: "Unable to identify deviation record. Please refresh report." },
+      }));
+      return;
+    }
+
     const currentRemark = deviationRemarksState[key] ?? dev.remark ?? "";
 
     if (currentRemark.length > 2000) {
@@ -3662,7 +3672,7 @@ export function DsaProfilePage({ id }: { id: string }) {
     }));
 
     try {
-      const res = await adminApi.saveCheckerDeviationRemark(dsa.id, devId, {
+      const res = await adminApi.saveCheckerDeviationRemark(dsaId, devId, {
         remark: currentRemark,
       });
 
