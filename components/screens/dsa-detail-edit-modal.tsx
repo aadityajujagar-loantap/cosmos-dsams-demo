@@ -71,22 +71,19 @@ export function DsaDetailEditModal({
 
       case "applicant":
         setFormData({
-          applicant_title: dsa.applicant_title || "Mr.",
+          applicant_title: dsa.applicant_title || "",
           first_name: dsa.first_name || "",
           middle_name: dsa.middle_name || "",
           last_name: dsa.last_name || "",
           entity_name: dsa.entity_name || dsa.name || "",
           contact_person: dsa.contact_person || "",
-          constitution:
-            dsa.constitution ||
-            (isEntity ? "Private Limited" : "Individual / Sole Proprietorship"),
-          business_type:
-            dsa.business_type || (isEntity ? "Corporate" : "Sole Proprietorship"),
-          nature_of_business: dsa.nature_of_business || "Direct Selling Agent / Retail Loan Sourcing",
+          constitution: dsa.constitution || "",
+          business_type: dsa.business_type || "",
+          nature_of_business: dsa.nature_of_business || "",
           registration_no_llpin_cin: dsa.registration_no_llpin_cin || "",
           date_of_birth: dsa.date_of_birth ? dsa.date_of_birth.substring(0, 10) : "",
           age: dsa.age || "",
-          education_qualification: dsa.education_qualification || "Graduate",
+          education_qualification: dsa.education_qualification || "",
           aadhaar_no: dsa.aadhaar_no || "",
         });
         break;
@@ -107,7 +104,7 @@ export function DsaDetailEditModal({
           pan: dsa.pan || "",
           gst_applicable: Boolean(dsa.gst_applicable),
           gst: dsa.gst || "",
-          registered_business_proof: dsa.registered_business_proof || "Shop Act, Udyam Registration",
+          registered_business_proof: dsa.registered_business_proof || "",
           business_license_type: dsa.business_license_type || "",
           business_license_no: dsa.business_license_no || "",
           udyam_no: dsa.udyam_no || "",
@@ -130,7 +127,7 @@ export function DsaDetailEditModal({
           city: dsa.city || "",
           state: dsa.state || "",
           pincode: dsa.pincode || "",
-          business_premises_ownership: dsa.business_premises_ownership || "Self Owned",
+          business_premises_ownership: dsa.business_premises_ownership || "",
           office_address_different: Boolean(dsa.office_address_different),
           office_address_line_1: dsa.office_address_line_1 || "",
           office_city: dsa.office_city || "",
@@ -143,10 +140,10 @@ export function DsaDetailEditModal({
 
       case "bank":
         setFormData({
-          bank_name: dsa.bank_name || "Cosmos Co-operative Bank",
+          bank_name: dsa.bank_name || "",
           account_name: dsa.account_name || dsa.name || "",
           account_number: dsa.account_number || "",
-          account_type: dsa.account_type || "Savings",
+          account_type: dsa.account_type || "",
           ifsc: dsa.ifsc || "",
           last_fy_net_sales: dsa.last_fy_net_sales || "",
           last_fy_net_profit_after_tax: dsa.last_fy_net_profit_after_tax || "",
@@ -167,7 +164,7 @@ export function DsaDetailEditModal({
           stakeholders: Array.isArray(dsa.stakeholders) && dsa.stakeholders.length > 0
             ? dsa.stakeholders.map((s: any) => ({
                 name: s.name || "",
-                stakeholder_type: s.stakeholder_type || "Partner / Director",
+                stakeholder_type: s.stakeholder_type || "",
                 mobile_no: s.mobile_no || "",
                 pan_no: s.pan_no || s.pan || "",
                 qualification: s.qualification || "",
@@ -179,10 +176,10 @@ export function DsaDetailEditModal({
             : [
                 {
                   name: "",
-                  stakeholder_type: "Partner / Director",
+                  stakeholder_type: "",
                   mobile_no: "",
                   pan_no: "",
-                  qualification: "Graduate",
+                  qualification: "",
                   date_of_birth: "",
                   email_id: "",
                   address: "",
@@ -198,7 +195,7 @@ export function DsaDetailEditModal({
             ? dsa.associate_concerns.map((a: any) => ({
                 associate_name: a.associate_name || a.name || a.entity_name || "",
                 associate_nature_of_business: a.associate_nature_of_business || a.nature_of_business || "",
-                associate_constitution: a.associate_constitution || a.constitution || "Partnership",
+                associate_constitution: a.associate_constitution || a.constitution || "",
                 associate_address: a.associate_address || a.address || "",
                 associate_establishment_year: a.associate_establishment_year || a.establishment_year || "",
                 associate_key_person_details: a.associate_key_person_details || "",
@@ -207,7 +204,7 @@ export function DsaDetailEditModal({
                 {
                   associate_name: "",
                   associate_nature_of_business: "",
-                  associate_constitution: "Partnership",
+                  associate_constitution: "",
                   associate_address: "",
                   associate_establishment_year: "",
                   associate_key_person_details: "",
@@ -450,9 +447,10 @@ export function DsaDetailEditModal({
               <Label htmlFor="dsa_type">DSA Partner Type</Label>
               <Select
                 id="dsa_type"
-                value={formData.dsa_type || "INDIVIDUAL"}
+                value={formData.dsa_type || ""}
                 onChange={(e) => handleChange("dsa_type", e.target.value)}
               >
+                <option value="">Select Partner Type</option>
                 <option value="INDIVIDUAL">Individual DSA</option>
                 <option value="ENTITY">Non-Individual (Entity / Firm)</option>
               </Select>
@@ -461,9 +459,10 @@ export function DsaDetailEditModal({
               <Label htmlFor="submission_mode">Sourcing Journey Mode</Label>
               <Select
                 id="submission_mode"
-                value={formData.submission_mode || "BRANCH"}
+                value={formData.submission_mode || ""}
                 onChange={(e) => handleChange("submission_mode", e.target.value)}
               >
+                <option value="">Select Journey Mode</option>
                 <option value="BRANCH">Branch Assisted Sourcing</option>
                 <option value="SELF">Self-Onboarding (Online Portal)</option>
               </Select>
@@ -481,9 +480,10 @@ export function DsaDetailEditModal({
                     <Label htmlFor="applicant_title">Title</Label>
                     <Select
                       id="applicant_title"
-                      value={formData.applicant_title || "Mr."}
+                      value={formData.applicant_title || ""}
                       onChange={(e) => handleChange("applicant_title", e.target.value)}
                     >
+                      <option value="">Select Title</option>
                       <option value="Mr.">Mr.</option>
                       <option value="Mrs.">Mrs.</option>
                       <option value="Ms.">Ms.</option>
@@ -544,9 +544,10 @@ export function DsaDetailEditModal({
                     <Label htmlFor="education_qualification">Educational Qualification</Label>
                     <Select
                       id="education_qualification"
-                      value={formData.education_qualification || "Graduate"}
+                      value={formData.education_qualification || ""}
                       onChange={(e) => handleChange("education_qualification", e.target.value)}
                     >
+                      <option value="">Select Qualification</option>
                       <option value="10th / Secondary">10th / Secondary</option>
                       <option value="12th / Higher Secondary">12th / Higher Secondary</option>
                       <option value="Diploma">Diploma</option>
@@ -627,9 +628,10 @@ export function DsaDetailEditModal({
                 <Label htmlFor="constitution">Legal Constitution</Label>
                 <Select
                   id="constitution"
-                  value={formData.constitution || "Individual / Sole Proprietorship"}
+                  value={formData.constitution || ""}
                   onChange={(e) => handleChange("constitution", e.target.value)}
                 >
+                  <option value="">Select Constitution</option>
                   <option value="Individual / Sole Proprietorship">Individual / Sole Proprietorship</option>
                   <option value="Sole Proprietorship">Sole Proprietorship</option>
                   <option value="Partnership">Partnership</option>
@@ -909,9 +911,10 @@ export function DsaDetailEditModal({
               <Label htmlFor="business_premises_ownership">Business Premises Ownership</Label>
               <Select
                 id="business_premises_ownership"
-                value={formData.business_premises_ownership || "Self Owned"}
+                value={formData.business_premises_ownership || ""}
                 onChange={(e) => handleChange("business_premises_ownership", e.target.value)}
               >
+                <option value="">Select Premises Ownership</option>
                 <option value="Self Owned">Self Owned</option>
                 <option value="Rented / Leased Premises">Rented / Leased Premises</option>
               </Select>
@@ -1015,9 +1018,10 @@ export function DsaDetailEditModal({
                 <Label htmlFor="account_type">Account Type</Label>
                 <Select
                   id="account_type"
-                  value={formData.account_type || "Savings"}
+                  value={formData.account_type || ""}
                   onChange={(e) => handleChange("account_type", e.target.value)}
                 >
+                  <option value="">Select Account Type</option>
                   <option value="Savings">Savings</option>
                   <option value="Current">Current</option>
                   <option value="Overdraft">Overdraft</option>
@@ -1162,9 +1166,10 @@ export function DsaDetailEditModal({
                     <div>
                       <Label>Designation / Role</Label>
                       <Select
-                        value={stk.stakeholder_type || "Partner / Director"}
+                        value={stk.stakeholder_type || ""}
                         onChange={(e) => handleStakeholderChange(i, "stakeholder_type", e.target.value)}
                       >
+                        <option value="">Select Stakeholder Role</option>
                         <option value="Partner / Director">Partner / Director</option>
                         <option value="Director">Director</option>
                         <option value="Partner">Partner</option>
@@ -1258,9 +1263,10 @@ export function DsaDetailEditModal({
                     <div>
                       <Label>Constitution</Label>
                       <Select
-                        value={asc.associate_constitution || "Partnership"}
+                        value={asc.associate_constitution || ""}
                         onChange={(e) => handleAssociateChange(i, "associate_constitution", e.target.value)}
                       >
+                        <option value="">Select Constitution</option>
                         <option value="Partnership">Partnership</option>
                         <option value="Private Limited">Private Limited</option>
                         <option value="Sole Proprietorship">Sole Proprietorship</option>

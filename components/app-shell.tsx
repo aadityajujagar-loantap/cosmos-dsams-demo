@@ -260,13 +260,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [currentUser, branches]);
 
   const branchNameDisplay = useMemo(() => {
-    const code = branchScope?.primaryBranchCode || currentUser?.code || "BR001";
-    let name = branchScope?.primaryBranchName || currentUser?.branchName;
-    if (!name) {
-      if (code === "BR002") name = "Deccan Branch";
-      else if (code === "BR003") name = "Connaught Place Branch";
-      else name = "Main Branch";
-    }
+    const code = branchScope?.primaryBranchCode || currentUser?.code || "";
+    const name = branchScope?.primaryBranchName || currentUser?.branchName || "";
     return { name, code };
   }, [branchScope, currentUser]);
 

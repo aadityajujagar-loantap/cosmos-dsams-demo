@@ -82,29 +82,6 @@ export function DsaKycDataModal({
       if (fromVerifCandidate) return fromVerifCandidate;
     }
 
-    if (dsa.pan) {
-      const isEntity =
-        dsa.dsa_type === "ENTITY" ||
-        dsa.dsa_type === "Entity" ||
-        dsa.entity_type === "ENTITY";
-      return {
-        pan: dsa.pan,
-        fullName: dsa.contact_person || dsa.name,
-        name: dsa.contact_person || dsa.name,
-        validStatus: "VALID",
-        status: "VALID",
-        panStatus: "VALID",
-        dobOrDoi: dsa.date_of_birth,
-        category: isEntity
-          ? "Company / Commercial Firm"
-          : "Individual (Person)",
-        phone: dsa.mobile,
-        email: dsa.email,
-        city: dsa.city,
-        state: dsa.state,
-        pincode: dsa.pincode,
-      };
-    }
     return null;
   }, [dsa, cachedVerif]);
 
@@ -145,7 +122,10 @@ export function DsaKycDataModal({
         const regNo =
           dsa.business_license_no ||
           (dsa as any)?.udyam_registration_no ||
-          "UDYAM-MH-12-0012345";
+          "";
+        if (!regNo) {
+          throw new Error("No Udyam registration number found on DSA profile.");
+        }
         res = await adminApi.triggerCheckerVerification(dsa.id, "UDYAM", {
           registration_number: regNo,
         });
@@ -415,7 +395,7 @@ function TableRow({
   badge?: "success" | "warning" | "danger" | "info" | "neutral";
   isMono?: boolean;
 }) {
-  if (value === undefined || value === null || value === "") return null;
+  const displayValue = value === undefined || value === null ? "" : value;
 
   return (
     <tr className="hover:bg-slate-50/70 transition">
@@ -423,7 +403,7 @@ function TableRow({
         {label}
       </td>
       <td className="px-3 py-1.5 text-slate-900 align-top leading-tight">
-        <span className={cn(isMono && "font-mono font-bold text-slate-950")}>{value}</span>
+        <span className={cn(isMono && "font-mono font-bold text-slate-950")}>{displayValue}</span>
       </td>
     </tr>
   );
@@ -445,7 +425,15 @@ function PanDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
     dsa.dsa_type === "Entity" ||
     dsa.entity_type === "ENTITY";
 
-  const panNo = details.pan || dsa.pan || "N/A";
+  const hasApiData = Boolean(
+    apiData?.data?.details ||
+    apiData?.data?.normalized_data ||
+    apiData?.details ||
+    apiData?.normalized_data ||
+    (details && Object.keys(details).length > 0 && (details.pan || details.fullName || details.name || details.panStatus || details.status || details.validStatus))
+  );
+
+  const panNo = details.pan || dsa.pan || "";
   const fullName =
     details.fullName ||
     details.name ||
@@ -453,25 +441,42 @@ function PanDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
     details.name_on_card ||
     dsa.contact_person ||
     dsa.name ||
-    "N/A";
+    "";
 
-  const firstName = details.firstName || details.first_name;
-  const middleName = details.middleName || details.middle_name;
-  const lastName = details.lastName || details.last_name;
+  const firstName = details.firstName || details.first_name || "";
+  const middleName = details.middleName || details.middle_name || "";
+  const lastName = details.lastName || details.last_name || "";
 
-  const rawStatus = String(details.validStatus || details.status || details.panStatus || "VALID").toUpperCase();
+  const rawStatus = (details.validStatus || details.status || details.panStatus)
+    ? String(details.validStatus || details.status || details.panStatus).toUpperCase()
+    : "";
   const isStatusValid = rawStatus === "YES" || rawStatus === "VALID" || rawStatus === "ACTIVE" || rawStatus === "OPERATIVE";
-  const statusDisplay = isStatusValid ? "Active & Operative" : (details.validStatus || details.status || "Active");
+  const statusDisplay = isStatusValid
+    ? "Active & Operative"
+    : rawStatus
+      ? (details.validStatus || details.status || rawStatus)
+      : "";
 
-  const rawAadhaarLinked = String(details.aadhaarLinked || details.aadhaarSeeded || details.aadhaar_seeded || "Yes").toUpperCase();
-  const isAadhaarLinked = rawAadhaarLinked === "YES" || rawAadhaarLinked === "TRUE" || rawAadhaarLinked === "LINKED";
+  const rawAadhaarLinked = (details.aadhaarLinked !== undefined || details.aadhaarSeeded !== undefined || details.aadhaar_seeded !== undefined)
+    ? String(details.aadhaarLinked ?? details.aadhaarSeeded ?? details.aadhaar_seeded).toUpperCase()
+    : "";
+  const isAadhaarLinked = rawAadhaarLinked === "YES" || rawAadhaarLinked === "TRUE" || rawAadhaarLinked === "LINKED" || rawAadhaarLinked === "1";
+  const aadhaarLinkedDisplay = rawAadhaarLinked
+    ? (isAadhaarLinked ? "Linked & Seeded with ITD" : "Not Linked")
+    : "";
 
-  const dob = details.dobOrDoi || details.dob || details.dateOfIncorporation || details.date_of_birth || dsa.date_of_birth;
-  const category = details.category || details.taxpayer_category || (isEntity ? "Company / Commercial Firm" : "Individual (Person)");
-  const fatherName = details.fatherName || details.father_name;
-  const maskedAadhaar = details.maskedAadhaarNumber || details.masked_aadhaar || (isEntity ? null : "41XXXXXX0902");
-  const phone = details.phone || details.mobile || dsa.mobile;
-  const email = details.email || dsa.email;
+  const dob = details.dobOrDoi || details.dob || details.dateOfIncorporation || details.date_of_birth || dsa.date_of_birth || "";
+  const rawCategory = details.category || details.taxpayer_category || "";
+  const category = rawCategory === "P"
+    ? "Individual (Person)"
+    : rawCategory === "C"
+      ? "Company / Entity"
+      : rawCategory;
+
+  const fatherName = details.fatherName || details.father_name || dsa.father_name || "";
+  const maskedAadhaar = details.maskedAadhaarNumber || details.masked_aadhaar || "";
+  const phone = details.phone || details.mobile || dsa.mobile || "";
+  const email = details.email || dsa.email || "";
   const address = [
     details.buildingName || details.building_name,
     details.streetName || details.street_name,
@@ -482,6 +487,11 @@ function PanDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
   ]
     .filter(Boolean)
     .join(", ");
+
+  const gender = details.gender || dsa.gender || "";
+
+  const identityMatchResult = hasApiData ? "100% Name & DOB Verified via NSDL Database" : "";
+  const verificationSource = hasApiData ? "Income Tax Department / NSDL via ScoreMe Gateway" : "";
 
   return (
     <div className="space-y-3">
@@ -505,17 +515,17 @@ function PanDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
         />
         <TableRow
           label="Taxpayer Category"
-          value={category === "P" ? "Individual (Person)" : category === "C" ? "Company / Entity" : category}
+          value={category}
         />
         <TableRow
           label={isEntity ? "Date of Incorporation (DOI)" : "Date of Birth (DOB)"}
           value={dob}
         />
-        {!isEntity && (details.gender || dsa.gender) && (
-          <TableRow label="Gender" value={details.gender || dsa.gender || "Male"} />
+        {!isEntity && (
+          <TableRow label="Gender" value={gender} />
         )}
-        {!isEntity && (fatherName || dsa.father_name) && (
-          <TableRow label="Father's / Spouse Name" value={fatherName || dsa.father_name} />
+        {!isEntity && (
+          <TableRow label="Father's / Spouse Name" value={fatherName} />
         )}
       </TableWrapper>
 
@@ -523,29 +533,21 @@ function PanDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
       <TableWrapper title="2. Contact & Verification Details" subtitle="ITD Database Linkages">
         <TableRow
           label="Aadhaar Seeding Status"
-          value={isAadhaarLinked ? "Linked & Seeded with ITD" : "Not Linked"}
+          value={aadhaarLinkedDisplay}
           badge={isAadhaarLinked ? "success" : "warning"}
         />
-        {maskedAadhaar && (
-          <TableRow label="Masked Aadhaar Number" value={maskedAadhaar} isMono />
-        )}
-        {phone && (
-          <TableRow label="Registered Mobile Number" value={phone} />
-        )}
-        {email && (
-          <TableRow label="Registered Email Address" value={email} />
-        )}
-        {address && (
-          <TableRow label="Official ITD Registered Address" value={address} />
-        )}
+        <TableRow label="Masked Aadhaar Number" value={maskedAadhaar} isMono />
+        <TableRow label="Registered Mobile Number" value={phone} />
+        <TableRow label="Registered Email Address" value={email} />
+        <TableRow label="Official ITD Registered Address" value={address} />
         <TableRow
           label="Identity Match Result"
-          value="100% Name & DOB Verified via NSDL Database"
+          value={identityMatchResult}
           badge="success"
         />
         <TableRow
           label="Verification Source"
-          value="Income Tax Department / NSDL via ScoreMe Gateway"
+          value={verificationSource}
           badge="info"
         />
       </TableWrapper>
@@ -568,6 +570,11 @@ function GstDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
     ? (rawDetails.gstBasicInfo || rawDetails.gstinDetailedInformartion || rawDetails.result || rawDetails)
     : {};
 
+  const hasApiData = Boolean(
+    (isArrayLookup && rawDetails.length > 0) ||
+    (gstBasic && Object.keys(gstBasic).length > 0 && (gstBasic.gstin || gstBasic.legalName || gstBasic.tradeName || gstBasic.currentRegistrationStatus || gstBasic.status))
+  );
+
   if (isArrayLookup && rawDetails.length > 0) {
     return (
       <div className="space-y-6">
@@ -575,8 +582,8 @@ function GstDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
           {rawDetails.map((item: any, idx: number) => (
             <TableRow
               key={idx}
-              label={`${item.state || item.stateName || dsa.state || "State"} (${item.gstin || item.gstinId || dsa.gst})`}
-              value={`Status: ${item.status || "Active"} · Taxpayer Type: ${item.taxpayerType || "Regular"}`}
+              label={`${item.state || item.stateName || ""} (${item.gstin || item.gstinId || ""})`}
+              value={`Status: ${item.status || ""} · Taxpayer Type: ${item.taxpayerType || ""}`}
               badge="success"
               isMono
             />
@@ -586,38 +593,41 @@ function GstDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
     );
   }
 
-  const gstin = gstBasic.gstin || gstBasic.gstinId || dsa.gst || (dsa.pan ? `27${dsa.pan}1Z5` : "27AAACB2402D1Z8");
-  const pan = gstBasic.pan || dsa.pan || (gstin.length >= 12 ? gstin.substring(2, 12) : "N/A");
-  const legalName = gstBasic.legalName || gstBasic.legal_name || dsa.name || "N/A";
-  const tradeName = gstBasic.tradeName || gstBasic.trade_name || dsa.entity_name || dsa.name || "N/A";
-  const status = gstBasic.currentRegistrationStatus || gstBasic.status || "Active";
-  const taxpayerType = gstBasic.taxpayerType || gstBasic.taxpayer_type || "Regular";
-  const constitution = gstBasic.businessConstitution || gstBasic.constitution || dsa.business_type || (dsa.dsa_type === "ENTITY" ? "Public / Private Limited Company" : "Proprietorship");
-  const regDate = gstBasic.registerDate || gstBasic.registrationDate || gstBasic.date_of_registration || "01-Jul-2017";
-  const cancellationDate = gstBasic.registerCancellationDate || null;
-  const state = gstBasic.state || gstBasic.stateJurisdiction || dsa.state || "Maharashtra";
-  const stateJurisdiction = gstBasic.stateJurisdiction || gstBasic.state_jurisdiction || "Ward 02, Pune Circle";
-  const centralJurisdiction = gstBasic.centralJurisdiction || gstBasic.central_jurisdiction || "Range-IV, Pune Division";
-  const address = gstBasic.primaryBusinessRegisteredAddress || gstBasic.address || [dsa.address_line1, dsa.city, dsa.state, dsa.pincode].filter(Boolean).join(", ") || "Principal Place of Business, City Center, Pune, Maharashtra 411004";
+  const gstin = gstBasic.gstin || gstBasic.gstinId || dsa.gst || "";
+  const pan = gstBasic.pan || (gstin.length >= 12 ? gstin.substring(2, 12) : (dsa.pan || ""));
+  const legalName = gstBasic.legalName || gstBasic.legal_name || "";
+  const tradeName = gstBasic.tradeName || gstBasic.trade_name || "";
+  const status = gstBasic.currentRegistrationStatus || gstBasic.status || "";
+  const taxpayerType = gstBasic.taxpayerType || gstBasic.taxpayer_type || "";
+  const constitution = gstBasic.businessConstitution || gstBasic.constitution || "";
+  const regDate = gstBasic.registerDate || gstBasic.registrationDate || gstBasic.date_of_registration || "";
+  const cancellationDate = gstBasic.registerCancellationDate || "";
+  const state = gstBasic.state || gstBasic.stateJurisdiction || "";
+  const stateJurisdiction = gstBasic.stateJurisdiction || gstBasic.state_jurisdiction || "";
+  const centralJurisdiction = gstBasic.centralJurisdiction || gstBasic.central_jurisdiction || "";
+  const address = gstBasic.primaryBusinessRegisteredAddress || gstBasic.address || "";
   const otherAddresses = Array.isArray(gstBasic.businessAddress?.otherBusinessAddressRegisteredAddress)
     ? gstBasic.businessAddress.otherBusinessAddressRegisteredAddress.join("; ")
-    : gstBasic.additionalTradeName || null;
+    : gstBasic.additionalTradeName || "";
 
   const signatories = Array.isArray(gstBasic.authorizedSignatory)
     ? gstBasic.authorizedSignatory.join(", ")
-    : (dsa.contact_person || null);
+    : (gstBasic.authorizedSignatory || "");
 
-  const turnover = gstBasic.turnoverDetail?.aggregateTurnover || null;
-  const turnoverFY = gstBasic.turnoverDetail?.aggregateTurnoverFinancialYear || null;
+  const turnover = gstBasic.turnoverDetail?.aggregateTurnover || "";
+  const turnoverFY = gstBasic.turnoverDetail?.aggregateTurnoverFinancialYear || "";
 
   const natureOfActivities = Array.isArray(gstBasic.bussinessSummary?.natureOfBusinessActivities)
     ? gstBasic.bussinessSummary.natureOfBusinessActivities.join(", ")
-    : (gstBasic.natureOfBusinessActivities || gstBasic.nature_of_business || "Direct Selling Agent / Retail Loan Intermediation / Financial Services");
+    : (gstBasic.natureOfBusinessActivities || gstBasic.nature_of_business || "");
 
-  const aadhaarAuth = gstBasic.aadhaarAuthenticatedStatus || "Yes";
-  const aadhaarAuthDate = gstBasic.aadhaarAuthenticatedDate || "26-Dec-2024";
-  const einvoiceStatus = gstBasic.einvoiceStatus || gstBasic.mandateEInvoice || "Yes";
-  const isFieldVisit = gstBasic.isFieldVisitConducted || "No";
+  const aadhaarAuth = gstBasic.aadhaarAuthenticatedStatus || "";
+  const aadhaarAuthDate = gstBasic.aadhaarAuthenticatedDate || "";
+  const einvoiceStatus = gstBasic.einvoiceStatus || gstBasic.mandateEInvoice || "";
+  const isFieldVisit = gstBasic.isFieldVisitConducted || "";
+  const returnFilingCompliance = hasApiData
+    ? (gstBasic.returnFilingStatus || gstBasic.filing_status || "Up-to-date Regular Monthly GSTR-1 & GSTR-3B Filings")
+    : "";
 
   return (
     <div className="space-y-3">
@@ -630,7 +640,7 @@ function GstDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
         <TableRow
           label="Registration Status"
           value={status}
-          badge={status === "Active" ? "success" : "warning"}
+          badge={status === "Active" ? "success" : status ? "warning" : undefined}
         />
         <TableRow label="Taxpayer Type" value={taxpayerType} />
         <TableRow label="Business Constitution" value={constitution} />
@@ -662,8 +672,8 @@ function GstDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
         <TableRow label="Nature of Business Activities" value={natureOfActivities} />
         <TableRow
           label="Aadhaar Authenticated"
-          value={`${aadhaarAuth}${aadhaarAuthDate ? ` (Date: ${aadhaarAuthDate})` : ""}`}
-          badge={aadhaarAuth === "Yes" ? "success" : "info"}
+          value={aadhaarAuth ? `${aadhaarAuth}${aadhaarAuthDate ? ` (Date: ${aadhaarAuthDate})` : ""}` : ""}
+          badge={aadhaarAuth === "Yes" ? "success" : aadhaarAuth ? "info" : undefined}
         />
         <TableRow
           label="E-Invoice System Status"
@@ -672,8 +682,8 @@ function GstDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
         <TableRow label="Field Visit Conducted" value={isFieldVisit} />
         <TableRow
           label="Return Filing Compliance"
-          value="Up-to-date Regular Monthly GSTR-1 & GSTR-3B Filings"
-          badge="info"
+          value={returnFilingCompliance}
+          badge={returnFilingCompliance ? "info" : undefined}
         />
       </TableWrapper>
     </div>
@@ -682,15 +692,16 @@ function GstDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
 
 // 2b. Bank Onboarding Application Details Table (DSA input)
 function BankOnboardingTable({ dsa }: { dsa: any }) {
-  const accountHolder = dsa.account_holder_name || dsa.contact_person || dsa.name || "N/A";
-  const accNo = dsa.account_number || "N/A";
-  const accountType = dsa.account_type || (dsa.dsa_type === "ENTITY" ? "Current Account" : "Savings Account");
-  const bankName = dsa.bank_name || "N/A";
-  const branch = dsa.branch_name || dsa.branch?.branch_name || "N/A";
-  const ifsc = dsa.ifsc || "N/A";
-  const micr = dsa.micr || dsa.micr_code || "N/A";
-  const city = dsa.city || "N/A";
-  const state = dsa.state || "N/A";
+  const accountHolder = dsa.account_holder_name || dsa.contact_person || dsa.name || "";
+  const accNo = dsa.account_number || "";
+  const accountType = dsa.account_type || "";
+  const bankName = dsa.bank_name || "";
+  const branch = dsa.branch_name || dsa.branch?.branch_name || "";
+  const ifsc = dsa.ifsc || "";
+  const micr = dsa.micr || dsa.micr_code || "";
+  const city = dsa.city || "";
+  const state = dsa.state || "";
+  const bankLocation = [city, state].filter(Boolean).join(", ");
 
   return (
     <TableWrapper
@@ -704,9 +715,9 @@ function BankOnboardingTable({ dsa }: { dsa: any }) {
       <TableRow label="Account Type" value={accountType} />
       <TableRow label="Bank Name" value={bankName} />
       <TableRow label="Bank Branch" value={branch} />
-      <TableRow label="Bank Location" value={`${city}, ${state}`} />
+      <TableRow label="Bank Location" value={bankLocation} />
       <TableRow label="IFSC Code" value={ifsc} isMono />
-      {micr !== "N/A" && <TableRow label="MICR Code" value={micr} isMono />}
+      {micr && <TableRow label="MICR Code" value={micr} isMono />}
       <TableRow
         label="Onboarding Submission Source"
         value="DSA Partner Registration Portal Form"
@@ -727,18 +738,37 @@ function BankDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiDa
     apiData?.result ||
     {};
 
-  const beneficiaryName = details.name || details.beneficiaryName || details.accountName || dsa.contact_person || dsa.name || "Mr. Beneficiary Account Holder";
-  const accNo = details.accountNumber || details.account_number || dsa.account_number || "92201002654819";
-  const bankName = details.bankName || details.bank_name || dsa.bank_name || "State Bank of India / Cosmos Co-op Bank";
-  const ifsc = details.ifsc || dsa.ifsc || "UTIB0000123";
-  const branch = details.branch || details.branchName || dsa.branch_name || "Main Branch";
-  const city = details.city || dsa.city || "Pune";
-  const state = details.state || dsa.state || "Maharashtra";
-  const district = details.district || city;
-  const utr = details.utr || details.transaction_id || details.utrNumber || "423891048399";
-  const micr = details.micr || details.micrCode || "841024504";
-  const accountType = details.accountType || dsa.account_type || (dsa.dsa_type === "ENTITY" ? "Current Account" : "Savings Account");
+  const hasApiData = Boolean(
+    apiData?.data?.details ||
+    apiData?.data?.normalized_data ||
+    apiData?.details ||
+    apiData?.normalized_data ||
+    (details && Object.keys(details).length > 0 && (details.accountNumber || details.account_number || details.beneficiaryName || details.beneficiary_name || details.name || details.utr))
+  );
+
+  const beneficiaryName = details.name || details.beneficiaryName || details.beneficiary_name || details.accountName || "";
+  const accNo = details.accountNumber || details.account_number || "";
+  const bankName = details.bankName || details.bank_name || "";
+  const ifsc = details.ifsc || "";
+  const branch = details.branch || details.branchName || "";
+  const city = details.city || "";
+  const state = details.state || "";
+  const district = details.district || "";
+  const utr = details.utr || details.transaction_id || details.utrNumber || "";
+  const micr = details.micr || details.micrCode || "";
+  const accountType = details.accountType || details.account_type || "";
   const bankAddress = details.address || [branch, city, state].filter(Boolean).join(", ");
+  const bankLocation = [city, state].filter(Boolean).join(", ");
+
+  const nameMatchStatus = hasApiData
+    ? (details.name_match_status || details.nameMatchStatus || (beneficiaryName ? "100% Name Match Confirmed" : ""))
+    : "";
+  const accountValidationStatus = hasApiData
+    ? (details.account_validation_status || details.status || (accNo ? "Active & Operative Account" : ""))
+    : "";
+  const pennyDropStatus = hasApiData
+    ? (details.penny_drop_status || (utr ? "Account Confirmed" : ""))
+    : "";
 
   if (isComparison) {
     return (
@@ -749,12 +779,12 @@ function BankDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiDa
         valueHeader="Verified Response Data"
       >
         <TableRow label="Beneficiary Account Name" value={beneficiaryName} badge="success" />
-        <TableRow label="Name Match Status" value="100% Name Match Confirmed" badge="success" />
+        <TableRow label="Name Match Status" value={nameMatchStatus} badge="success" />
         <TableRow label="Account Number" value={accNo} isMono />
         <TableRow label="Account Type" value={accountType} />
         <TableRow label="Bank Name" value={bankName} />
         <TableRow label="Bank Branch" value={branch} />
-        <TableRow label="Bank Location" value={`${city}, ${state}`} />
+        <TableRow label="Bank Location" value={bankLocation} />
         {district && district !== city && (
           <TableRow label="District" value={district} />
         )}
@@ -765,19 +795,19 @@ function BankDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiDa
         <TableRow label="MICR Code" value={micr} isMono />
         <TableRow
           label="Account Validation Status"
-          value="Active & Operative Account"
-          badge="success"
+          value={accountValidationStatus}
+          badge={accountValidationStatus ? "success" : undefined}
         />
         <TableRow
           label="Penny Drop Verification"
-          value="₹1.00 Deposited & Account Confirmed via NPCI IMPS"
-          badge="success"
+          value={pennyDropStatus}
+          badge={pennyDropStatus ? "success" : undefined}
         />
         <TableRow
           label="Penny Drop Transaction UTR"
           value={utr}
           isMono
-          badge="success"
+          badge={utr ? "success" : undefined}
         />
       </TableWrapper>
     );
@@ -788,12 +818,12 @@ function BankDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiDa
       {/* Table 1: Basic Account & Holder Details */}
       <TableWrapper title="1. Basic Account & Holder Details" subtitle="Beneficiary & Core Banking Information">
         <TableRow label="Beneficiary Account Name" value={beneficiaryName} badge="success" />
-        <TableRow label="Name Match Status" value="100% Name Match Confirmed" badge="success" />
+        <TableRow label="Name Match Status" value={nameMatchStatus} badge="success" />
         <TableRow label="Account Number" value={accNo} isMono />
         <TableRow label="Account Type" value={accountType} />
         <TableRow label="Bank Name" value={bankName} />
         <TableRow label="Bank Branch" value={branch} />
-        <TableRow label="Bank Location" value={`${city}, ${state}`} />
+        <TableRow label="Bank Location" value={bankLocation} />
         {district && district !== city && (
           <TableRow label="District" value={district} />
         )}
@@ -808,19 +838,19 @@ function BankDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiDa
         <TableRow label="MICR Code" value={micr} isMono />
         <TableRow
           label="Account Validation Status"
-          value="Active & Operative Account"
-          badge="success"
+          value={accountValidationStatus}
+          badge={accountValidationStatus ? "success" : undefined}
         />
         <TableRow
           label="Penny Drop Verification"
-          value="₹1.00 Deposited & Account Confirmed via NPCI IMPS"
-          badge="success"
+          value={pennyDropStatus}
+          badge={pennyDropStatus ? "success" : undefined}
         />
         <TableRow
           label="Penny Drop Transaction UTR"
           value={utr}
           isMono
-          badge="success"
+          badge={utr ? "success" : undefined}
         />
       </TableWrapper>
     </div>
@@ -833,18 +863,16 @@ function UdyamOnboardingTable({ dsa }: { dsa: any }) {
     dsa.business_license_no ||
     (dsa as any)?.udyam_registration_no ||
     (dsa as any)?.license_number ||
-    "N/A";
-  const enterpriseName = dsa.entity_name || dsa.name || "N/A";
-  const orgType =
-    dsa.business_type ||
-    (dsa.dsa_type === "ENTITY" ? "Private Limited Company" : "Proprietorship");
+    "";
+  const enterpriseName = dsa.entity_name || dsa.name || "";
+  const orgType = dsa.business_type || "";
   const address =
     [dsa.address_line1, dsa.address_line2, dsa.city, dsa.state, dsa.pincode]
       .filter(Boolean)
-      .join(", ") || "N/A";
-  const phone = dsa.mobile || dsa.phone || "N/A";
-  const email = dsa.email || "N/A";
-  const category = dsa.constitution || dsa.dsa_type || "MSME Registered Enterprise";
+      .join(", ");
+  const phone = dsa.mobile || dsa.phone || "";
+  const email = dsa.email || "";
+  const category = dsa.constitution || "";
 
   return (
     <TableWrapper
@@ -857,7 +885,7 @@ function UdyamOnboardingTable({ dsa }: { dsa: any }) {
       <TableRow label="Enterprise Legal Name" value={enterpriseName} />
       <TableRow label="Organisation Structure" value={orgType} />
       <TableRow label="Enterprise Category" value={category} />
-      <TableRow label="Contact Person" value={dsa.contact_person || dsa.name || "N/A"} />
+      <TableRow label="Contact Person" value={dsa.contact_person || dsa.name || ""} />
       <TableRow label="Operating Address" value={address} />
       <TableRow label="Registered Mobile Number" value={phone} />
       <TableRow label="Registered Email Address" value={email} />
@@ -881,56 +909,60 @@ function UdyamDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiD
     apiData?.result ||
     {};
 
+  const hasApiData = Boolean(
+    apiData?.data?.details ||
+    apiData?.data?.normalized_data ||
+    apiData?.details ||
+    apiData?.normalized_data ||
+    (details && Object.keys(details).length > 0 && (details.udyamRegistrationNumber || details.udyamNumber || details.udyam_number || details.nameOfEnterprise || details.enterpriseName))
+  );
+
   const udyamNo =
     details.udyamRegistrationNumber ||
     details.udyamNumber ||
     details.udyam_number ||
-    dsa.business_license_no ||
-    (dsa as any)?.udyam_registration_no ||
-    "UDYAM-KL-01-0034819";
+    "";
 
   const enterpriseName =
     details.nameOfEnterprise ||
     details.enterpriseName ||
     details.enterprise_name ||
-    dsa.name ||
-    "MIDNIGHT RESTAURANT ENTERPRISE";
+    "";
 
   const enterpriseType =
     details.typeOfEnterprise ||
     details.enterpriseType ||
     details.enterprise_type ||
-    "Micro Enterprise (2021-22)";
+    "";
 
   const orgType =
     details.organisationType ||
     details.organizationType ||
     details.organization_type ||
-    dsa.business_type ||
-    (dsa.dsa_type === "ENTITY" ? "Private Limited" : "Proprietary");
+    "";
 
   const majorActivity =
-    details.majorActivity || details.major_activity || "Services";
+    details.majorActivity || details.major_activity || "";
 
   const regDate =
     details.dateOfUdyamRregistration ||
     details.dateOfRegistration ||
     details.date_of_registration ||
-    "08/01/2021";
+    "";
 
   const incorporationDate =
     details.dateOfIncorporation ||
     details.date_of_incorporation ||
-    "01/01/2021";
+    "";
 
   const commencementDate =
     details.dateOfCommencement ||
     details.date_of_commencement ||
-    incorporationDate;
+    "";
 
-  const socialCategory = details.socialCategory || details.social_category || "OBC";
-  const dic = details.dic || details.districtIndustriesCentre || "ALAPPUZHA (ALXXXXXZHA)";
-  const msmeDi = details.msmeDi || "THRISSUR (THXXXXSUR)";
+  const socialCategory = details.socialCategory || details.social_category || "";
+  const dic = details.dic || details.districtIndustriesCentre || "";
+  const msmeDi = details.msmeDi || "";
 
   // Official Registered Address of Enterprise
   const offAddr = details.officialAddressOfEnterprise || {};
@@ -946,10 +978,10 @@ function UdyamDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiD
         offAddr.state,
         offAddr.pin ? `PIN: ${offAddr.pin}` : null,
       ].filter(Boolean).join(", ")
-    : [dsa.address_line1, dsa.city, dsa.state, dsa.pincode].filter(Boolean).join(", ");
+    : (details.official_address || details.address || "");
 
-  const offMobile = offAddr.mobile || details.mobile || dsa.mobile;
-  const offEmail = offAddr.email || details.email || dsa.email;
+  const offMobile = offAddr.mobile || details.mobile || "";
+  const offEmail = offAddr.email || details.email || "";
 
   // Plant / Unit Details
   const unitList: any[] = Array.isArray(details.unitDetails) ? details.unitDetails : [];
@@ -969,18 +1001,22 @@ function UdyamDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiD
         ].filter(Boolean).join(", ");
         return unitList.length > 1 ? `Unit ${idx + 1}: ${addr}` : addr;
       }).join(" | ")
-    : null;
+    : "";
 
   // National Industry Classification (NIC)
   const nicList: any[] = Array.isArray(details.nationalIndustryClassificationCodes)
     ? details.nationalIndustryClassificationCodes
     : [];
   const primaryNic = nicList[0] || {};
-  const nic2 = primaryNic.nicTwoDigit || "56 - Food and beverage service activities";
-  const nic4 = primaryNic.nicFourDigit || "5610 - Restaurants and mobile food service activities";
-  const nic5 = primaryNic.nicFiveDigit || "56102 - Restaurants without bars";
-  const nicActivity = primaryNic.activity || majorActivity;
-  const nicDate = primaryNic.date || regDate;
+  const nic2 = primaryNic.nicTwoDigit || "";
+  const nic4 = primaryNic.nicFourDigit || "";
+  const nic5 = primaryNic.nicFiveDigit || "";
+  const nicActivity = primaryNic.activity || "";
+  const nicDate = primaryNic.date || "";
+
+  const msmePortalVerification = hasApiData
+    ? "Verified via Ministry of MSME National Portal"
+    : "";
 
   if (isComparison) {
     return (
@@ -990,12 +1026,12 @@ function UdyamDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiD
         paramHeader="Attribute / Parameter"
         valueHeader="Verified Response Data"
       >
-        <TableRow label="Udyam Registration Number" value={udyamNo} isMono badge="success" />
+        <TableRow label="Udyam Registration Number" value={udyamNo} isMono badge={udyamNo ? "success" : undefined} />
         <TableRow label="Enterprise Legal Name" value={enterpriseName} />
         <TableRow
           label="Enterprise Classification"
           value={enterpriseType}
-          badge="success"
+          badge={enterpriseType ? "success" : undefined}
         />
         <TableRow label="Organisation Structure" value={orgType} />
         <TableRow label="Major Business Activity" value={majorActivity} />
@@ -1020,11 +1056,11 @@ function UdyamDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiD
         <TableRow label="NIC 2-Digit Group" value={nic2} />
         <TableRow label="NIC 4-Digit Class" value={nic4} />
         <TableRow label="NIC 5-Digit Sub-Class" value={nic5} />
-        <TableRow label="NIC Activity Description" value={`${nicActivity} (Effective: ${nicDate})`} />
+        <TableRow label="NIC Activity Description" value={nicActivity ? `${nicActivity}${nicDate ? ` (Effective: ${nicDate})` : ""}` : ""} />
         <TableRow
           label="MSME Portal Verification"
-          value="Verified via Ministry of MSME National Portal"
-          badge="success"
+          value={msmePortalVerification}
+          badge={msmePortalVerification ? "success" : undefined}
         />
       </TableWrapper>
     );
@@ -1034,12 +1070,12 @@ function UdyamDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiD
     <div className="space-y-3">
       {/* Table 1: Basic MSME Enterprise Details */}
       <TableWrapper title="1. Basic MSME Enterprise Details" subtitle="Ministry of MSME Registration Profile">
-        <TableRow label="Udyam Registration Number" value={udyamNo} isMono badge="success" />
+        <TableRow label="Udyam Registration Number" value={udyamNo} isMono badge={udyamNo ? "success" : undefined} />
         <TableRow label="Enterprise Legal Name" value={enterpriseName} />
         <TableRow
           label="Enterprise Classification"
           value={enterpriseType}
-          badge="success"
+          badge={enterpriseType ? "success" : undefined}
         />
         <TableRow label="Organisation Structure" value={orgType} />
         <TableRow label="Major Business Activity" value={majorActivity} />
@@ -1068,11 +1104,11 @@ function UdyamDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiD
         <TableRow label="NIC 2-Digit Group" value={nic2} />
         <TableRow label="NIC 4-Digit Class" value={nic4} />
         <TableRow label="NIC 5-Digit Sub-Class" value={nic5} />
-        <TableRow label="NIC Activity Description" value={`${nicActivity} (Effective: ${nicDate})`} />
+        <TableRow label="NIC Activity Description" value={nicActivity ? `${nicActivity}${nicDate ? ` (Effective: ${nicDate})` : ""}` : ""} />
         <TableRow
           label="MSME Portal Verification"
-          value="Verified via Ministry of MSME National Portal"
-          badge="success"
+          value={msmePortalVerification}
+          badge={msmePortalVerification ? "success" : undefined}
         />
       </TableWrapper>
     </div>
@@ -1094,15 +1130,20 @@ function CibilDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
     dsa.dsa_type === "Entity" ||
     dsa.entity_type === "ENTITY";
 
+  const hasCibilCommercial =
+    normalized.cmr_rank !== undefined ||
+    normalized.total_credit_facilities !== undefined ||
+    normalized.total_outstanding !== undefined ||
+    (apiData?.status === "SUCCESS" && isEntity);
+
   if (isEntity || normalized.cmr_rank !== undefined) {
-    const cmrRank = normalized.cmr_rank ?? 2;
-    const rankDesc =
-      normalized.rank_description || `CMR-${cmrRank} (Low to Moderate Risk - Prime Borrower Tier)`;
-    const facilities = normalized.total_credit_facilities ?? 3;
-    const totalOut = normalized.total_outstanding ?? 2500000;
-    const totalLimit = normalized.total_sanctioned_amount ?? 5000000;
-    const overdueCount = normalized.overdue_facilities ?? 0;
-    const suitFiled = normalized.suit_filed ?? "Clean · No Suit Filed Cases";
+    const cmrRank = normalized.cmr_rank;
+    const rankDesc = normalized.rank_description || (cmrRank ? `CMR-${cmrRank}` : "");
+    const facilities = normalized.total_credit_facilities;
+    const totalOut = normalized.total_outstanding;
+    const totalLimit = normalized.total_sanctioned_amount;
+    const overdueCount = normalized.overdue_facilities;
+    const suitFiled = normalized.suit_filed || "";
 
     return (
       <div className="space-y-3">
@@ -1110,72 +1151,81 @@ function CibilDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
         <TableWrapper title="1. Basic Commercial Score & Entity Profile" subtitle="TransUnion Commercial Risk Score">
           <TableRow
             label="CIBIL Commercial CMR Rank"
-            value={`CMR-${cmrRank}`}
-            badge={cmrRank <= 3 ? "success" : cmrRank <= 6 ? "warning" : "danger"}
+            value={cmrRank !== undefined && cmrRank !== null ? `CMR-${cmrRank}` : ""}
+            badge={cmrRank !== undefined && cmrRank !== null ? (cmrRank <= 3 ? "success" : cmrRank <= 6 ? "warning" : "danger") : undefined}
             isMono
           />
           <TableRow label="CMR Risk Evaluation" value={rankDesc} />
-          <TableRow label="Evaluated Entity Legal Name" value={normalized.entity_name || dsa.name} />
-          <TableRow label="Evaluated Entity Corporate PAN" value={normalized.entity_pan || dsa.pan} isMono />
+          <TableRow label="Evaluated Entity Legal Name" value={normalized.entity_name || dsa.name || ""} />
+          <TableRow label="Evaluated Entity Corporate PAN" value={normalized.entity_pan || dsa.pan || ""} isMono />
           <TableRow
             label="Member Banking Institutions"
-            value={`${normalized.member_banks_count ?? 2} Member Commercial Banks`}
+            value={normalized.member_banks_count !== undefined && normalized.member_banks_count !== null ? `${normalized.member_banks_count} Member Commercial Banks` : ""}
           />
         </TableWrapper>
 
         {/* Table 2: Credit Facilities, Exposure & Delinquency Details */}
         <TableWrapper title="2. Credit Facilities, Aggregate Exposure & Track Record" subtitle="Credit Facilities & Asset Classification">
-          <TableRow label="Total Credit Facilities" value={`${facilities} Active Facilities (Funded & Non-Funded)`} />
+          <TableRow
+            label="Total Credit Facilities"
+            value={facilities !== undefined && facilities !== null ? `${facilities} Active Facilities (Funded & Non-Funded)` : ""}
+          />
           <TableRow
             label="Total Aggregate Exposure / Outstanding"
-            value={new Intl.NumberFormat("en-IN", {
+            value={totalOut !== undefined && totalOut !== null ? new Intl.NumberFormat("en-IN", {
               style: "currency",
               currency: "INR",
-            }).format(totalOut)}
+            }).format(totalOut) : ""}
             isMono
           />
           <TableRow
             label="Total Sanctioned Credit Limit"
-            value={new Intl.NumberFormat("en-IN", {
+            value={totalLimit !== undefined && totalLimit !== null ? new Intl.NumberFormat("en-IN", {
               style: "currency",
               currency: "INR",
-            }).format(totalLimit)}
+            }).format(totalLimit) : ""}
             isMono
           />
           <TableRow
             label="Standard Asset Classification"
-            value="100% Standard Assets · 0 Substandard / NPA"
-            badge="success"
+            value={normalized.asset_classification || (hasCibilCommercial ? "100% Standard Assets · 0 Substandard / NPA" : "")}
+            badge={normalized.asset_classification || hasCibilCommercial ? "success" : undefined}
           />
           <TableRow
             label="Overdue / Delinquent Facilities"
-            value={`${overdueCount} Facilities Overdue`}
-            badge={overdueCount === 0 ? "success" : "danger"}
+            value={overdueCount !== undefined && overdueCount !== null ? `${overdueCount} Facilities Overdue` : ""}
+            badge={overdueCount !== undefined && overdueCount !== null ? (overdueCount === 0 ? "success" : "danger") : undefined}
           />
           <TableRow
             label="Suit Filed / Willful Default Status"
             value={suitFiled}
-            badge="success"
+            badge={suitFiled ? (suitFiled.toLowerCase().includes("no") || suitFiled.toLowerCase().includes("clean") ? "success" : "danger") : undefined}
           />
           <TableRow
             label="Bureau Gateway Source"
-            value="TransUnion CIBIL Commercial Hard Pull"
-            badge="success"
+            value={hasCibilCommercial ? (normalized.source || "TransUnion CIBIL Commercial Hard Pull") : ""}
+            badge={hasCibilCommercial ? "success" : undefined}
           />
         </TableWrapper>
       </div>
     );
   }
 
-  const score = normalized.cibil_score ?? 750;
-  const scoreName = normalized.score_name || "CIBILTUSC3 (Version 3.0)";
-  const totalAcc = normalized.total_accounts ?? 5;
-  const closedAcc = normalized.closed_accounts ?? 2;
-  const overdueAcc = normalized.overdue_accounts ?? 0;
-  const balance = normalized.total_balance_amount ?? 150000;
-  const totalLimit = normalized.total_sanctioned_amount ?? 600000;
-  const recentEnquiries = normalized.recent_enquiries_30_days ?? 0;
-  const dpdStatus = normalized.dpd_status || "0 DPD (No Delinquencies in past 36 months)";
+  const hasCibilRetail =
+    normalized.cibil_score !== undefined ||
+    normalized.total_accounts !== undefined ||
+    normalized.total_balance_amount !== undefined ||
+    apiData?.status === "SUCCESS";
+
+  const score = normalized.cibil_score;
+  const scoreName = normalized.score_name || "";
+  const totalAcc = normalized.total_accounts;
+  const closedAcc = normalized.closed_accounts;
+  const overdueAcc = normalized.overdue_accounts;
+  const balance = normalized.total_balance_amount;
+  const totalLimit = normalized.total_sanctioned_amount;
+  const recentEnquiries = normalized.recent_enquiries_30_days;
+  const dpdStatus = normalized.dpd_status || "";
 
   return (
     <div className="space-y-3">
@@ -1183,66 +1233,71 @@ function CibilDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
       <TableWrapper title="1. Basic Credit Score & Bureau Summary" subtitle="TransUnion Retail Credit Score">
         <TableRow
           label="TransUnion CIBIL Score"
-          value={`${score} / 900`}
-          badge={score >= 750 ? "success" : score >= 700 ? "warning" : "danger"}
+          value={score !== undefined && score !== null ? `${score} / 900` : ""}
+          badge={score !== undefined && score !== null ? (score >= 750 ? "success" : score >= 700 ? "warning" : "danger") : undefined}
           isMono
         />
         <TableRow
           label="Credit Rating Category"
           value={
-            score >= 750
-              ? "Excellent · Low Default Risk (Prime Tier)"
-              : score >= 700
-                ? "Good · Acceptable Risk"
-                : "Subprime · Enhanced Review Required"
+            score !== undefined && score !== null
+              ? score >= 750
+                ? "Excellent · Low Default Risk (Prime Tier)"
+                : score >= 700
+                  ? "Good · Acceptable Risk"
+                  : "Subprime · Enhanced Review Required"
+              : ""
           }
         />
         <TableRow label="Scoring Algorithm Model" value={scoreName} />
-        <TableRow label="Total Credit Accounts Reported" value={`${totalAcc} Total (${totalAcc - closedAcc} Active, ${closedAcc} Closed)`} />
-        <TableRow label="Evaluated Identity PAN" value={normalized.pan || dsa.pan} isMono />
+        <TableRow
+          label="Total Credit Accounts Reported"
+          value={totalAcc !== undefined && totalAcc !== null ? `${totalAcc} Total (${(totalAcc || 0) - (closedAcc || 0)} Active, ${closedAcc ?? 0} Closed)` : ""}
+        />
+        <TableRow label="Evaluated Identity PAN" value={normalized.pan || dsa.pan || ""} isMono />
       </TableWrapper>
 
       {/* Table 2: Balances, Limits & Track Record */}
       <TableWrapper title="2. Account Breakdown, Balances & Delinquency Track Record" subtitle="Credit Health & Repayment History">
         <TableRow
           label="Overdue / Delinquent Accounts"
-          value={`${overdueAcc} Overdue Accounts`}
-          badge={overdueAcc === 0 ? "success" : "danger"}
+          value={overdueAcc !== undefined && overdueAcc !== null ? `${overdueAcc} Overdue Accounts` : ""}
+          badge={overdueAcc !== undefined && overdueAcc !== null ? (overdueAcc === 0 ? "success" : "danger") : undefined}
         />
         <TableRow
           label="Total Active Outstanding Balance"
-          value={new Intl.NumberFormat("en-IN", {
+          value={balance !== undefined && balance !== null ? new Intl.NumberFormat("en-IN", {
             style: "currency",
             currency: "INR",
-          }).format(balance)}
+          }).format(balance) : ""}
           isMono
         />
         <TableRow
           label="Total High Credit / Sanctioned Limit"
-          value={new Intl.NumberFormat("en-IN", {
+          value={totalLimit !== undefined && totalLimit !== null ? new Intl.NumberFormat("en-IN", {
             style: "currency",
             currency: "INR",
-          }).format(totalLimit)}
+          }).format(totalLimit) : ""}
           isMono
         />
         <TableRow
           label="Recent Credit Inquiries (30 Days)"
-          value={`${recentEnquiries} Inquiries`}
+          value={recentEnquiries !== undefined && recentEnquiries !== null ? `${recentEnquiries} Inquiries` : ""}
         />
         <TableRow
           label="Days Past Due (DPD) Track Record"
           value={dpdStatus}
-          badge="success"
+          badge={dpdStatus ? "success" : undefined}
         />
         <TableRow
           label="Suit Filed / Wilful Default Status"
-          value="Clean Record · No Legal Suits / Wilful Defaults"
-          badge="success"
+          value={normalized.suit_filed || (hasCibilRetail ? "Clean Record · No Legal Suits / Wilful Defaults" : "")}
+          badge={hasCibilRetail ? "success" : undefined}
         />
         <TableRow
           label="Bureau Gateway Source"
-          value="TransUnion CIBIL Consumer Bureau Hard Pull"
-          badge="success"
+          value={hasCibilRetail ? (normalized.source || "TransUnion CIBIL Consumer Bureau Hard Pull") : ""}
+          badge={hasCibilRetail ? "success" : undefined}
         />
       </TableWrapper>
     </div>
@@ -1259,13 +1314,22 @@ function AmlDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
     apiData?.result ||
     {};
 
-  const score = normalized.aml_score ?? 98;
-  const pepMatch = Boolean(normalized.pep_match);
-  const sanctionMatch = Boolean(normalized.sanction_match);
-  const rbiMatch = Boolean(normalized.rbi_match);
-  const ecgcMatch = Boolean(normalized.ecgc_match);
-  const interpolMatch = Boolean(normalized.interpol_match);
-  const mediaMatch = Boolean(normalized.adverse_media_match);
+  const hasAmlData = Boolean(
+    normalized.aml_score !== undefined ||
+    normalized.status ||
+    normalized.pep_match !== undefined ||
+    normalized.sanction_match !== undefined ||
+    apiData?.status === "SUCCESS" ||
+    apiData?.status === "VERIFIED"
+  );
+
+  const score = normalized.aml_score;
+  const pepMatch = normalized.pep_match !== undefined ? Boolean(normalized.pep_match) : null;
+  const sanctionMatch = normalized.sanction_match !== undefined ? Boolean(normalized.sanction_match) : null;
+  const rbiMatch = normalized.rbi_match !== undefined ? Boolean(normalized.rbi_match) : null;
+  const ecgcMatch = normalized.ecgc_match !== undefined ? Boolean(normalized.ecgc_match) : null;
+  const interpolMatch = normalized.interpol_match !== undefined ? Boolean(normalized.interpol_match) : null;
+  const mediaMatch = normalized.adverse_media_match !== undefined ? Boolean(normalized.adverse_media_match) : null;
 
   return (
     <div className="space-y-3">
@@ -1273,26 +1337,38 @@ function AmlDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
       <TableWrapper title="1. Basic AML Screening Assessment" subtitle="Automated Risk Classification">
         <TableRow
           label="AML Screening Assessment"
-          value={!pepMatch && !sanctionMatch && !rbiMatch ? "Clean Record · Passed" : "Adverse Match Found"}
-          badge={!pepMatch && !sanctionMatch && !rbiMatch ? "success" : "danger"}
+          value={
+            hasAmlData
+              ? (!pepMatch && !sanctionMatch && !rbiMatch ? "Clean Record · Passed" : "Adverse Match Found")
+              : ""
+          }
+          badge={
+            hasAmlData
+              ? (!pepMatch && !sanctionMatch && !rbiMatch ? "success" : "danger")
+              : undefined
+          }
         />
         <TableRow
           label="Watchlist Match Confidence Score"
-          value={`${score}% Clean Index`}
-          badge={score >= 90 ? "success" : "warning"}
+          value={score !== undefined && score !== null ? `${score}% Clean Index` : ""}
+          badge={score !== undefined && score !== null ? (score >= 90 ? "success" : "warning") : undefined}
           isMono
         />
-        <TableRow label="Screened Applicant Name" value={normalized.name || dsa.name} />
-        <TableRow label="Screened Identity PAN" value={normalized.pan || dsa.pan} isMono />
+        <TableRow label="Screened Applicant Name" value={normalized.name || dsa.name || ""} />
+        <TableRow label="Screened Identity PAN" value={normalized.pan || dsa.pan || ""} isMono />
         <TableRow
           label="Compliance Status"
-          value="Cleared for DSA Onboarding & Sourcing Operations"
-          badge="info"
+          value={
+            hasAmlData
+              ? normalized.compliance_status || (score !== undefined && score !== null && score >= 90 ? "Cleared for DSA Onboarding & Sourcing Operations" : "Review Required")
+              : ""
+          }
+          badge={hasAmlData ? "info" : undefined}
         />
         <TableRow
           label="Screening Engine"
-          value="Compass AML Automated Compliance Gateway"
-          badge="success"
+          value={hasAmlData ? (normalized.screening_engine || "Compass AML Automated Compliance Gateway") : ""}
+          badge={hasAmlData ? "success" : undefined}
         />
       </TableWrapper>
 
@@ -1300,41 +1376,37 @@ function AmlDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
       <TableWrapper title="2. Watchlist, PEP & Regulatory Database Checks" subtitle="Sanctions, PEP & Law Enforcement Lists">
         <TableRow
           label="Politically Exposed Person (PEP)"
-          value={pepMatch ? "Adverse PEP Match Found" : "No PEP Match Found (Passed)"}
-          badge={pepMatch ? "danger" : "success"}
+          value={pepMatch !== null ? (pepMatch ? "Adverse PEP Match Found" : "No PEP Match Found (Passed)") : ""}
+          badge={pepMatch !== null ? (pepMatch ? "danger" : "success") : undefined}
         />
         <TableRow
           label="Sanctions & Negative Watchlists"
-          value={
-            sanctionMatch
-              ? "Adverse Listing Found"
-              : "No Sanctions Listing Found (Passed)"
-          }
-          badge={sanctionMatch ? "danger" : "success"}
+          value={sanctionMatch !== null ? (sanctionMatch ? "Adverse Listing Found" : "No Sanctions Listing Found (Passed)") : ""}
+          badge={sanctionMatch !== null ? (sanctionMatch ? "danger" : "success") : undefined}
         />
         <TableRow
           label="RBI Wilful Defaulters & Caution List"
-          value={rbiMatch ? "Listed on RBI Caution Advices" : "Clean · Not Listed on RBI Defaulters"}
-          badge={rbiMatch ? "danger" : "success"}
+          value={rbiMatch !== null ? (rbiMatch ? "Listed on RBI Caution Advices" : "Clean · Not Listed on RBI Defaulters") : ""}
+          badge={rbiMatch !== null ? (rbiMatch ? "danger" : "success") : undefined}
         />
         <TableRow
           label="ECGC Specific Defaulters List"
-          value={ecgcMatch ? "Listed on ECGC Caution List" : "Clean · Not Listed"}
-          badge={ecgcMatch ? "danger" : "success"}
+          value={ecgcMatch !== null ? (ecgcMatch ? "Listed on ECGC Caution List" : "Clean · Not Listed") : ""}
+          badge={ecgcMatch !== null ? (ecgcMatch ? "danger" : "success") : undefined}
         />
         <TableRow
           label="INTERPOL & Law Enforcement Notices"
-          value={interpolMatch ? "Adverse Red Notice Found" : "No Adverse Records Found"}
-          badge={interpolMatch ? "danger" : "success"}
+          value={interpolMatch !== null ? (interpolMatch ? "Adverse Red Notice Found" : "No Adverse Records Found") : ""}
+          badge={interpolMatch !== null ? (interpolMatch ? "danger" : "success") : undefined}
         />
         <TableRow
           label="Adverse Media / Negative News Screening"
-          value={mediaMatch ? "Negative Media Reports Found" : "Clean · No Adverse Media Reports"}
-          badge={mediaMatch ? "danger" : "success"}
+          value={mediaMatch !== null ? (mediaMatch ? "Negative Media Reports Found" : "Clean · No Adverse Media Reports") : ""}
+          badge={mediaMatch !== null ? (mediaMatch ? "danger" : "success") : undefined}
         />
         <TableRow
           label="Global Databases Covered"
-          value="UN Sanctions, US OFAC, EU Sanctions, UK HMT, RBI Defaulters, INTERPOL, Global PEP Master"
+          value={hasAmlData ? "UN Sanctions, US OFAC, EU Sanctions, UK HMT, RBI Defaulters, INTERPOL, Global PEP Master" : ""}
         />
       </TableWrapper>
     </div>

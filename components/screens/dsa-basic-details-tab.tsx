@@ -293,19 +293,15 @@ export function DsaBasicDetailsTab({
 
       case "applicant":
         setFormData({
-          applicant_title: dsa.applicant_title || "Mr.",
+          applicant_title: dsa.applicant_title || "",
           first_name: dsa.first_name || "",
           middle_name: dsa.middle_name || "",
           last_name: dsa.last_name || "",
           entity_name: dsa.entity_name || dsa.name || "",
           contact_person: dsa.contact_person || "",
-          constitution:
-            dsa.constitution ||
-            (isEntity ? "Private Limited" : "Individual / Sole Proprietorship"),
-          business_type:
-            dsa.business_type || (isEntity ? "Corporate" : "Sole Proprietorship"),
-          nature_of_business:
-            dsa.nature_of_business || "Direct Selling Agent / Retail Loan Sourcing",
+          constitution: dsa.constitution || "",
+          business_type: dsa.business_type || "",
+          nature_of_business: dsa.nature_of_business || "",
           registration_no_llpin_cin: dsa.registration_no_llpin_cin || "",
           date_of_birth: dsa.date_of_birth
             ? String(dsa.date_of_birth).substring(0, 10)
@@ -313,7 +309,7 @@ export function DsaBasicDetailsTab({
               ? String(dsa.dob || dsa.doi || dsa.date_of_incorporation).substring(0, 10)
               : "",
           age: dsa.age || "",
-          education_qualification: dsa.education_qualification || "Graduate",
+          education_qualification: dsa.education_qualification || "",
           aadhaar_no: dsa.aadhaar_no || dsa.aadhaar || "",
         });
         break;
@@ -342,7 +338,7 @@ export function DsaBasicDetailsTab({
               : "",
           udyam_no: cleanLicenseValue(dsa.udyam_no) || "",
           shop_act_no: cleanLicenseValue(dsa.shop_act_no) || "",
-          business_premises_ownership: dsa.business_premises_ownership || "Self Owned",
+          business_premises_ownership: dsa.business_premises_ownership || "",
         });
         break;
 
@@ -358,7 +354,7 @@ export function DsaBasicDetailsTab({
           city: dsa.city || "",
           state: dsa.state || "",
           pincode: dsa.pincode || "",
-          business_premises_ownership: dsa.business_premises_ownership || "Self Owned",
+          business_premises_ownership: dsa.business_premises_ownership || "",
           office_address_different: Boolean(dsa.office_address_different),
           office_address_line_1: dsa.office_address_line_1 || "",
           office_city: dsa.office_city || "",
@@ -369,10 +365,10 @@ export function DsaBasicDetailsTab({
 
       case "bank":
         setFormData({
-          bank_name: dsa.bank_name || "Cosmos Co-operative Bank",
+          bank_name: dsa.bank_name || "",
           account_name: dsa.account_name || dsa.name || "",
           account_number: dsa.account_number || "",
-          account_type: dsa.account_type || "Savings",
+          account_type: dsa.account_type || "",
           ifsc: dsa.ifsc || "",
           last_fy_net_sales: dsa.last_fy_net_sales || "",
           last_fy_net_profit_after_tax: dsa.last_fy_net_profit_after_tax || "",
@@ -393,7 +389,7 @@ export function DsaBasicDetailsTab({
           stakeholders: Array.isArray(dsa.stakeholders) && dsa.stakeholders.length > 0
             ? dsa.stakeholders.map((sh: any) => ({
                 name: sh.name || "",
-                stakeholder_type: sh.stakeholder_type || "Partner / Director",
+                stakeholder_type: sh.stakeholder_type || "",
                 mobile_no: sh.mobile_no || "",
                 pan_no: sh.pan || sh.pan_no || "",
                 qualification: sh.qualification || "",
@@ -402,7 +398,7 @@ export function DsaBasicDetailsTab({
             : [
                 {
                   name: "",
-                  stakeholder_type: "Partner / Director",
+                  stakeholder_type: "",
                   mobile_no: "",
                   pan_no: "",
                   qualification: "",
@@ -418,14 +414,14 @@ export function DsaBasicDetailsTab({
             ? dsa.associate_concerns.map((ac: any) => ({
                 associate_name: ac.name || ac.associate_name || ac.entity_name || "",
                 associate_nature_of_business: ac.nature_of_business || ac.associate_nature_of_business || ac.activity || "",
-                associate_constitution: ac.relationship || ac.associate_constitution || "Associate Concern",
+                associate_constitution: ac.relationship || ac.associate_constitution || "",
                 associate_key_person_details: ac.bank_name || ac.associate_key_person_details || "",
               }))
             : [
                 {
                   associate_name: "",
                   associate_nature_of_business: "",
-                  associate_constitution: "Associate Concern",
+                  associate_constitution: "",
                   associate_key_person_details: "",
                 },
               ],
@@ -796,7 +792,7 @@ export function DsaBasicDetailsTab({
                 <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3 shadow-2xs">
                   <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Title</Label>
                   <Input
-                    value={formData.applicant_title || "Mr."}
+                    value={formData.applicant_title || ""}
                     disabled
                     readOnly
                     className="bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200"
@@ -857,9 +853,10 @@ export function DsaBasicDetailsTab({
                 <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
                   <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Qualification</Label>
                   <Select
-                    value={formData.education_qualification || "Graduate"}
+                    value={formData.education_qualification || ""}
                     onChange={(e) => setFormData((prev) => ({ ...prev, education_qualification: e.target.value }))}
                   >
+                    <option value="">Select Qualification</option>
                     <option value="Graduate">Graduate</option>
                     <option value="Post Graduate">Post Graduate</option>
                     <option value="Undergraduate">Undergraduate</option>
@@ -915,9 +912,10 @@ export function DsaBasicDetailsTab({
                 <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
                   <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Legal Constitution</Label>
                   <Select
-                    value={formData.constitution || "Private Limited"}
+                    value={formData.constitution || ""}
                     onChange={(e) => setFormData((prev) => ({ ...prev, constitution: e.target.value }))}
                   >
+                    <option value="">Select Constitution</option>
                     <option value="Private Limited">Private Limited Company</option>
                     <option value="Public Limited">Public Limited Company</option>
                     <option value="Limited Liability Partnership (LLP)">Limited Liability Partnership (LLP)</option>
@@ -1028,7 +1026,7 @@ export function DsaBasicDetailsTab({
             {!isEntity && (
               <DetailItem
                 label="Educational Qualification"
-                value={dsa.education_qualification || "Graduate"}
+                value={dsa.education_qualification || "—"}
               />
             )}
             {isEntity ? (
@@ -1524,7 +1522,7 @@ export function DsaBasicDetailsTab({
                   currentBranchOption?.branch_code ||
                   dsa.branch?.branch_code ||
                   dsa.branch_code ||
-                  "COSMOS-BR"
+                  "—"
                 }
               />
               <DetailItem
@@ -1533,7 +1531,7 @@ export function DsaBasicDetailsTab({
                   currentBranchOption?.sub_region_code ||
                   dsa.branch?.sub_region_code ||
                   dsa.subregion_id ||
-                  "Pune Sub-Region"
+                  "—"
                 }
               />
             </div>
@@ -1545,24 +1543,24 @@ export function DsaBasicDetailsTab({
               value={
                 dsa.branch?.branch_name ||
                 dsa.branch_name ||
-                (dsa.branchId === 2 ? "Deccan Branch" : "Main Branch")
+                "—"
               }
             />
             <DetailItem
               label="Branch Code"
-              value={dsa.branch?.branch_code || dsa.branch_code || "COSMOS-BR"}
+              value={dsa.branch?.branch_code || dsa.branch_code || "—"}
             />
             <DetailItem
               label="Region / Sub-Region Territory"
               value={
                 dsa.branch?.sub_region_code ||
                 dsa.subregion_id ||
-                "Pune Sub-Region"
+                "—"
               }
             />
             <DetailItem
               label="Branch Sourcing Officer"
-              value={dsa.manager || "Branch Operations"}
+              value={dsa.manager || "—"}
             />
           </DetailGrid>
         )}
@@ -1631,9 +1629,10 @@ export function DsaBasicDetailsTab({
                   Premises Ownership
                 </Label>
                 <Select
-                  value={formData.business_premises_ownership || "Self Owned"}
+                  value={formData.business_premises_ownership || ""}
                   onChange={(e) => setFormData((prev) => ({ ...prev, business_premises_ownership: e.target.value }))}
                 >
+                  <option value="">Select Premises Ownership</option>
                   <option value="Self Owned">Self Owned</option>
                   <option value="Rented / Leased Premises">Rented / Leased Premises</option>
                 </Select>
@@ -1729,7 +1728,7 @@ export function DsaBasicDetailsTab({
             />
             <DetailItem
               label="Business Premises Ownership"
-              value={<span className="font-semibold text-slate-900">{dsa.business_premises_ownership || "Self Owned"}</span>}
+              value={<span className="font-semibold text-slate-900">{dsa.business_premises_ownership || "—"}</span>}
             />
             <DetailItem
               label="Operating Premises Status"
@@ -1790,9 +1789,10 @@ export function DsaBasicDetailsTab({
               <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
                 <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Account Type</Label>
                 <Select
-                  value={formData.account_type || "Savings"}
+                  value={formData.account_type || ""}
                   onChange={(e) => setFormData((prev) => ({ ...prev, account_type: e.target.value }))}
                 >
+                  <option value="">Select Account Type</option>
                   <option value="Savings">Savings Account</option>
                   <option value="Current">Current Account</option>
                   <option value="Overdraft">Overdraft Account</option>
@@ -1839,7 +1839,7 @@ export function DsaBasicDetailsTab({
           <DetailGrid>
             <DetailItem
               label="Settlement Bank Name"
-              value={dsa.bank_name || "Cosmos Co-operative Bank"}
+              value={dsa.bank_name || "—"}
             />
             <DetailItem
               label="Beneficiary Account Name"
@@ -1851,7 +1851,7 @@ export function DsaBasicDetailsTab({
             />
             <DetailItem
               label="Account Type"
-              value={dsa.account_type || "Savings"}
+              value={dsa.account_type || "—"}
             />
             <DetailItem
               label="IFSC Code"
@@ -2015,7 +2015,7 @@ export function DsaBasicDetailsTab({
                         </td>
                         <td className="p-2">
                           <Select
-                            value={sh.stakeholder_type || "Partner / Director"}
+                            value={sh.stakeholder_type || ""}
                             onChange={(e) => {
                               const list = [...formData.stakeholders];
                               list[idx] = { ...list[idx], stakeholder_type: e.target.value };
@@ -2023,6 +2023,7 @@ export function DsaBasicDetailsTab({
                             }}
                             className="h-8 text-xs"
                           >
+                            <option value="">Select Role</option>
                             <option value="Director">Director</option>
                             <option value="Partner / Director">Partner / Director</option>
                             <option value="Managing Partner">Managing Partner</option>
@@ -2097,7 +2098,7 @@ export function DsaBasicDetailsTab({
                     const list = [...(formData.stakeholders || [])];
                     list.push({
                       name: "",
-                      stakeholder_type: "Partner / Director",
+                      stakeholder_type: "",
                       mobile_no: "",
                       pan_no: "",
                       qualification: "",
@@ -2128,7 +2129,7 @@ export function DsaBasicDetailsTab({
                     dsa.stakeholders.map((sh: any, idx: number) => (
                       <tr key={idx} className="hover:bg-slate-50/60">
                         <td className="p-2.5 font-semibold text-slate-900">{sh.name}</td>
-                        <td className="p-2.5 text-slate-600">{sh.stakeholder_type || "Partner / Director"}</td>
+                        <td className="p-2.5 text-slate-600">{sh.stakeholder_type || "—"}</td>
                         <td className="p-2.5 text-slate-600">{sh.mobile_no || "—"}</td>
                         <td className="p-2.5 font-mono text-slate-700">{sh.pan || sh.pan_no || "—"}</td>
                         <td className="p-2.5 font-mono text-slate-600">
@@ -2255,7 +2256,7 @@ export function DsaBasicDetailsTab({
                     list.push({
                       associate_name: "",
                       associate_nature_of_business: "",
-                      associate_constitution: "Associate Concern",
+                      associate_constitution: "",
                       associate_key_person_details: "",
                     });
                     setFormData((prev) => ({ ...prev, associate_concerns: list }));
@@ -2283,7 +2284,7 @@ export function DsaBasicDetailsTab({
                       <tr key={idx} className="hover:bg-slate-50/60">
                         <td className="p-2.5 font-semibold text-slate-900">{ac.name || ac.associate_name || ac.entity_name || "—"}</td>
                         <td className="p-2.5 text-slate-600">{ac.nature_of_business || ac.associate_nature_of_business || ac.activity || "—"}</td>
-                        <td className="p-2.5 text-slate-600">{ac.relationship || ac.associate_constitution || "Associate Concern"}</td>
+                        <td className="p-2.5 text-slate-600">{ac.relationship || ac.associate_constitution || "—"}</td>
                         <td className="p-2.5 text-slate-600">{ac.bank_name || ac.associate_key_person_details || "—"}</td>
                       </tr>
                     ))

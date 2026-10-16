@@ -4454,8 +4454,8 @@ export function DsaProfilePage({ id }: { id: string }) {
       `Generated At:        ${new Date().toLocaleString()}`,
       `DSA Code:            ${getEffectiveDsaCode(dsa)}`,
       `Partner Name:        ${dsa.name}`,
-      `DSA Type:            ${dsa.dsa_type || "INDIVIDUAL"}`,
-      `Branch:              ${dsa.branch?.branch_name || dsa.branch_name || "Main Branch"}`,
+      `DSA Type:            ${dsa.dsa_type || ""}`,
+      `Branch:              ${dsa.branch?.branch_name || dsa.branch_name || "—"}`,
       `Evaluation Ref:      ${evalId}`,
       `Evaluated Timestamp: ${bre?.evaluated_at || "N/A"}`,
       `Overall Decision:    ${overallDecision}`,
@@ -4557,7 +4557,7 @@ export function DsaProfilePage({ id }: { id: string }) {
       `Generated At:            ${new Date().toLocaleString()}`,
       `DSA Code:                ${getEffectiveDsaCode(dsa)}`,
       `Partner Name:            ${dsa.name}`,
-      `Branch:                  ${dsa.branch?.branch_name || dsa.branch_name || "Main Branch"}`,
+      `Branch:                  ${dsa.branch?.branch_name || dsa.branch_name || "—"}`,
       `Submitted By:            Checker (User ID: ${note?.checker_user_id || "Checker Authority"})`,
       `Submitted At:            ${note?.submitted_at || "N/A"}`,
       `Checker Recommendation:  ${note?.recommendation || "RECOMMEND"}`,
@@ -6664,7 +6664,7 @@ const resolveStageStatus = (
       rep?.branch_name ||
       dsa?.branch?.branch_name ||
       dsa?.branch_name ||
-      "Main Branch";
+      "";
 
     const dsaAppCode =
       (typeof rep?.dsa_code === "object"
@@ -6847,7 +6847,7 @@ const resolveStageStatus = (
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Constitution</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.constitution || "Private Limited"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.constitution || "—"}</td>
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Registered Office Full Address</td>
@@ -6855,7 +6855,7 @@ const resolveStageStatus = (
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Ownership</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.ownership || "Owned"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.ownership || "—"}</td>
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Branch Office Address (if any)</td>
@@ -6895,7 +6895,7 @@ const resolveStageStatus = (
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Expected Monthly Business Commitment</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.expected_monthly_business_commitment || "25 Lakhs"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.expected_monthly_business_commitment || "—"}</td>
                   </tr>
                 </>
               ) : (
@@ -6906,7 +6906,7 @@ const resolveStageStatus = (
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Constitution</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.constitution || "Individual"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.constitution || "—"}</td>
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Date of Birth</td>
@@ -6922,7 +6922,7 @@ const resolveStageStatus = (
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Ownership</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.ownership || "Owned"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.ownership || "—"}</td>
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Contact Number</td>
@@ -6954,7 +6954,7 @@ const resolveStageStatus = (
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Expected Monthly Business Commitment (INR)</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.expected_monthly_business_commitment || "10 Lakhs"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.expected_monthly_business_commitment || "—"}</td>
                   </tr>
                 </>
               )}
@@ -7466,7 +7466,11 @@ const resolveStageStatus = (
             ) : null}
           </div>
         }
-        title={dsa.name}
+        title={
+          String(dsa.dsa_type || (dsa as any).entity_type || (dsa as any).business_type || "").toUpperCase() === "ENTITY"
+            ? ((dsa as any).entity_name || (dsa as any).company_name || (dsa.name !== dsa.applicant_title ? dsa.name : "") || dsa.contact_person || dsa.code || "DSA Partner")
+            : (dsa.name || dsa.contact_person || dsa.code || "DSA Partner")
+        }
       />
 
       {canViewDsaLifecycleReason && dsa.status_reason ? (
@@ -8333,11 +8337,12 @@ const resolveStageStatus = (
                           </div>
                           <div>
                             <p className="text-sm font-bold text-slate-900">
-                              {dsa.bank_name || "Cosmos Co-op Bank"}
+                              {dsa.bank_name || ""}
                             </p>
                             <p className="text-xs font-mono text-slate-600 mt-0.5">
-                              A/C: {dsa.account_number || "••••••••4812"} ·
-                              IFSC: {dsa.ifsc || "COSB0000012"}
+                              {dsa.account_number ? `A/C: ${dsa.account_number}` : ""}
+                              {dsa.account_number && dsa.ifsc ? " · " : ""}
+                              {dsa.ifsc ? `IFSC: ${dsa.ifsc}` : ""}
                             </p>
                           </div>
                           <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
@@ -8418,14 +8423,16 @@ const resolveStageStatus = (
                             />
                           </div>
                           <div>
-                            {isUdyamChecked || (dsa as any)?.udyam_registration_no ? (
+                            {isUdyamChecked || (dsa as any)?.udyam_registration_no || dsa.business_license_no ? (
                               <>
                                 <p className="text-sm font-bold text-slate-900">
-                                  {(dsa as any)?.udyam_registration_no || dsa.business_type || "MSME Registered Enterprise"}
+                                  {(dsa as any)?.udyam_registration_no || dsa.business_license_no || ""}
                                 </p>
-                                <p className="text-xs text-slate-600 mt-0.5">
-                                  Category: MSME Registered Enterprise
-                                </p>
+                                {(dsa.constitution || dsa.business_type) && (
+                                  <p className="text-xs text-slate-600 mt-0.5">
+                                    Category: {dsa.constitution || dsa.business_type}
+                                  </p>
+                                )}
                               </>
                             ) : (
                               <p className="text-sm text-slate-400 italic">

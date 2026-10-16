@@ -456,7 +456,7 @@ export function ActiveDsasPage() {
 
                       {/* Branch / City */}
                       <td className="p-4 text-xs text-slate-700">
-                        <p className="font-medium text-slate-900">{item.branch_name || "Main Branch"}</p>
+                        <p className="font-medium text-slate-900">{item.branch_name || "—"}</p>
                         <p className="text-slate-500">{item.city}, {item.state}</p>
                       </td>
 

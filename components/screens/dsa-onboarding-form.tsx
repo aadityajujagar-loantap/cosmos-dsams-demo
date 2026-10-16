@@ -604,7 +604,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
             if (curr && list.some((b: any) => String(b.id ?? b.branch_id) === String(curr))) {
               return curr;
             }
-            return String(list[0].id ?? list[0].branch_id ?? "1");
+            return String(list[0].id ?? list[0].branch_id ?? "");
           });
         }
       })
@@ -865,7 +865,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     if (branches.length > 0) {
       const exists = branches.some((b: any) => String(b.id ?? b.branch_id) === String(branchId));
       if (!exists) {
-        setBranchId(String(branches[0].id ?? branches[0].branch_id ?? "1"));
+        setBranchId(String(branches[0].id ?? branches[0].branch_id ?? ""));
       }
     }
   }, [branches, branchId]);
@@ -1015,7 +1015,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
     // Reset OTP verification state
     if (mode === "self") {
-      setBranchId(branches.length > 0 ? String(branches[0].id ?? branches[0].branch_id ?? "1") : "");
+      setBranchId(branches.length > 0 ? String(branches[0].id ?? branches[0].branch_id ?? "") : "");
       setOtpSent(false);
       setOtpVerified(false);
       setOtpValue("");
@@ -2941,14 +2941,17 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         {loadingBranches ? (
                           <option value="">Loading branches...</option>
                         ) : (
-                          branches.map((b, idx) => {
-                            const val = String(b.id ?? b.branch_id ?? idx + 1);
-                            return (
-                              <option key={val} value={val}>
-                                {`${b.branch_name} (${b.branch_code || "BR00"})`}
-                              </option>
-                            );
-                          })
+                          <>
+                            <option value="">Select Home Branch</option>
+                            {branches.map((b, idx) => {
+                              const val = String(b.id ?? b.branch_id ?? idx + 1);
+                              return (
+                                <option key={val} value={val}>
+                                  {b.branch_name}{b.branch_code ? ` (${b.branch_code})` : ""}
+                                </option>
+                              );
+                            })}
+                          </>
                         )}
                       </Select>
                     </div>
@@ -5077,7 +5080,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Account Number:</td>
                         <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-mono font-bold text-slate-900">{accountNumber || "N/A"}</td>
                         <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Account Type:</td>
-                        <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-semibold text-slate-900">{accountType || "Savings"}</td>
+                        <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-semibold text-slate-900">{accountType || ""}</td>
                       </tr>
                       <tr>
                         <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">IFSC Code:</td>

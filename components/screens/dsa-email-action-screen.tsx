@@ -257,7 +257,7 @@ export function DsaEmailActionScreen({ token }: DsaEmailActionScreenProps) {
                       <span className="text-[10px] font-semibold text-slate-500 block">Branch</span>
                       <span className="font-semibold text-slate-800 flex items-center gap-1">
                         <Building2 className="h-3 w-3 text-slate-400" />
-                        {details.branch_name || "Assigned Branch"}
+                        {details.branch_name || "—"}
                       </span>
                     </div>
                     <div>
@@ -270,7 +270,7 @@ export function DsaEmailActionScreen({ token }: DsaEmailActionScreenProps) {
                       <span className="text-[10px] font-semibold text-slate-500 block">Reviewer</span>
                       <span className="font-medium text-slate-700 flex items-center gap-1">
                         <UserCheck className="h-3 w-3 text-slate-400" />
-                        {details.designated_user || "Assigned Authority"}
+                        {details.designated_user || "—"}
                       </span>
                     </div>
                     <div className="col-span-2">

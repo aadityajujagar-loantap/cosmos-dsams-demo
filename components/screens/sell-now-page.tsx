@@ -2223,9 +2223,9 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
         {
           application_id: journeyApplicationId,
           section_id: "branch_selection",
-          state: selectedStateName || selectedStateCode || "Maharashtra",
-          district: selectedDistrictName || selectedDistrictCode || "Mumbai",
-          branch: selectedBranchName || selectedBranchCode || "Main Branch",
+          state: selectedStateName || selectedStateCode || "",
+          district: selectedDistrictName || selectedDistrictCode || "",
+          branch: selectedBranchName || selectedBranchCode || "",
         },
         "PERSONAL_LOAN"
       );
@@ -2412,8 +2412,8 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
         throw new Error("No branches found in backend. Please sync or create branches first.");
       }
       const firstBranch = branchList[0];
-      const branchCode = "BR001";
-      const subregionId = "SR001";
+      const branchCode = firstBranch?.branch_code || "";
+      const subregionId = firstBranch?.sub_region_code || "";
 
 
       // Check if we already have a valid lead token in localStorage for this mobile
@@ -4017,8 +4017,8 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
     return configs;
   }, [realDsas, realProducts, store.dsaProductConfigs, isDsaPartner, currentUser]);
 
-  const fallbackDsaId = activeConfigs[0]?.dsaId || "dsa-1";
-  const fallbackProduct = activeConfigs[0]?.product || "Personal Loan";
+  const fallbackDsaId = activeConfigs[0]?.dsaId || "";
+  const fallbackProduct = activeConfigs[0]?.product || "";
 
   const effectiveDsaId = publicCustomerMode
     ? (selectedDsaId || fallbackDsaId)
@@ -4036,18 +4036,16 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
 
   const defaultPublicConfig: DsaProductConfig = {
     id: "cfg-public-default",
-    dsaId: effectiveDsaId || "dsa-1",
-    dsaCode: urlDsaCode || "APEX01",
-    dsaName: urlDsaName || "Apex Solutions",
-    product: (effectiveProduct || "Personal Loan") as Product,
+    dsaId: effectiveDsaId || "",
+    dsaCode: urlDsaCode || "",
+    dsaName: urlDsaName || "",
+    product: (effectiveProduct || "") as Product,
     commissionType: "Percentage-based",
     status: "Active",
-    ranges: [
-      { id: "r1", min: 100000, max: 2500000, rate: 1.5, effectiveDate: "2026-01-01", endDate: "2099-12-31", frequency: "Monthly" }
-    ],
+    ranges: [],
     loanUrl: "",
     configuredAt: new Date().toISOString(),
-    configuredBy: "Admin",
+    configuredBy: "",
   };
 
   const effectiveConfig = activeConfigs.find(
@@ -4224,10 +4222,10 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
 
     setCreatingLead(true);
     try {
-      let dsaCodeToUse = effectiveConfig?.dsaCode;
-      let dsaState = "Maharashtra";
-      let branchCode = "BR001";
-      let subregionId = "SR001";
+      let dsaCodeToUse = effectiveConfig?.dsaCode || "";
+      let dsaState = "";
+      let branchCode = "";
+      let subregionId = "";
 
       try {
         const dsasRes = await adminApi.getDsas({ per_page: 50 });
@@ -4237,7 +4235,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
             (d) => d.name?.toLowerCase() === effectiveConfig?.dsaName?.toLowerCase()
           ) ?? backendDsas[0];
           if (matchedDsa) {
-            dsaCodeToUse = dsaCodeToUse || matchedDsa.dsa_code || matchedDsa.code;
+            dsaCodeToUse = dsaCodeToUse || matchedDsa.dsa_code || matchedDsa.code || "";
             if (matchedDsa.state) dsaState = matchedDsa.state;
           }
         }
@@ -4245,9 +4243,16 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
         console.warn("Could not fetch DSAs for lead creation", e);
       }
 
-      // Set valid branch and subregion codes from location master
-      branchCode = "BR001";
-      subregionId = "SR001";
+      try {
+        const branchesPage = await adminApi.getBranches({ per_page: 1 });
+        const branchList = branchesPage?.data ?? [];
+        if (branchList.length > 0) {
+          branchCode = branchList[0]?.branch_code || "";
+          subregionId = branchList[0]?.sub_region_code || "";
+        }
+      } catch (e) {
+        console.warn("Could not fetch branches for lead creation", e);
+      }
 
       const payload = {
         CustName: applicant.customer.trim(),
@@ -4257,7 +4262,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
         state: dsaState,
         Branch_id: branchCode,
         subregion_id: subregionId,
-        DSACode: dsaCodeToUse || "APEX01",
+        DSACode: dsaCodeToUse,
       };
 
       const leadRes: any = await adminApi.createLead(payload);
@@ -4349,8 +4354,8 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
         return;
       }
       const firstBranch = branchList[0];
-      const branchCode = "BR001";
-      const subregionId = "SR001";
+      const branchCode = firstBranch?.branch_code || "";
+      const subregionId = firstBranch?.sub_region_code || "";
 
 
       const leadRes = await adminApi.createLead({

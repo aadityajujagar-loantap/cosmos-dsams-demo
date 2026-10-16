@@ -92,21 +92,6 @@ export function getUserBranchScopeSync(
     }
   }
 
-  // Fallback defaults for well-known test branches if dropdown has not loaded yet
-  if (!primaryBranchName && primaryCode === "BR001") {
-    primaryBranchName = "Main Branch";
-    if (!branchIds.includes(1)) branchIds.push(1);
-    if (!branchNames.includes("main branch")) branchNames.push("main branch");
-  } else if (!primaryBranchName && primaryCode === "BR002") {
-    primaryBranchName = "Deccan Branch";
-    if (!branchIds.includes(2)) branchIds.push(2);
-    if (!branchNames.includes("deccan branch")) branchNames.push("deccan branch");
-  } else if (!primaryBranchName && primaryCode === "BR003") {
-    primaryBranchName = "Connaught Place Branch";
-    if (!branchIds.includes(3)) branchIds.push(3);
-    if (!branchNames.includes("connaught place branch")) branchNames.push("connaught place branch");
-  }
-
   return {
     isBranchRestricted: true,
     branchCodes,
