@@ -605,9 +605,9 @@ function GstDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
   );
 }
 
-// 2b. Bank Onboarding Application Details Table (DSA input)
+// 2b. Bank Onboarding Application Details Table (DSA record)
 function BankOnboardingTable({ dsa }: { dsa: any }) {
-  const accountHolder = dsa.account_holder_name || dsa.contact_person || dsa.name || "N/A";
+  const accountHolder = dsa.account_name || dsa.account_holder_name || dsa.contact_person || dsa.name || "N/A";
   const accNo = dsa.account_number || "N/A";
   const accountType = dsa.account_type || (dsa.dsa_type === "ENTITY" ? "Current Account" : "Savings Account");
   const bankName = dsa.bank_name || "N/A";
@@ -619,12 +619,12 @@ function BankOnboardingTable({ dsa }: { dsa: any }) {
 
   return (
     <TableWrapper
-      title="Details from Onboarding Form"
-      subtitle="Applicant Submission"
-      paramHeader="Submitted Parameter"
-      valueHeader="DSA Application Input"
+      title="Details from DSA Application"
+      subtitle="Application Profile (Account name synchronized with verified beneficiary upon BAV completion)"
+      paramHeader="Parameter"
+      valueHeader="DSA Application Record"
     >
-      <TableRow label="Account Holder Name" value={accountHolder} />
+      <TableRow label="Account Name (DSA Record)" value={accountHolder} />
       <TableRow label="Account Number" value={accNo} isMono />
       <TableRow label="Account Type" value={accountType} />
       <TableRow label="Bank Name" value={bankName} />
@@ -633,8 +633,8 @@ function BankOnboardingTable({ dsa }: { dsa: any }) {
       <TableRow label="IFSC Code" value={ifsc} isMono />
       {micr !== "N/A" && <TableRow label="MICR Code" value={micr} isMono />}
       <TableRow
-        label="Onboarding Submission Source"
-        value="DSA Partner Registration Portal Form"
+        label="Account Name Source"
+        value="Synchronized with verified beneficiary name (original entry overwritten)"
         badge="neutral"
       />
     </TableWrapper>
