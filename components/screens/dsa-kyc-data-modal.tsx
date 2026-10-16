@@ -692,15 +692,17 @@ function GstDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
 
 // 2b. Bank Onboarding Application Details Table (DSA record)
 function BankOnboardingTable({ dsa }: { dsa: any }) {
-  const accountHolder = dsa.account_name || dsa.account_holder_name || dsa.contact_person || dsa.name || "N/A";
-  const accNo = dsa.account_number || "N/A";
+  const accountHolder = dsa.account_name || dsa.account_holder_name || dsa.contact_person || dsa.name || "";
+  const accNo = dsa.account_number || "";
   const accountType = dsa.account_type || (dsa.dsa_type === "ENTITY" ? "Current Account" : "Savings Account");
-  const bankName = dsa.bank_name || "N/A";
-  const branch = dsa.branch_name || dsa.branch?.branch_name || "N/A";
-  const ifsc = dsa.ifsc || "N/A";
-  const micr = dsa.micr || dsa.micr_code || "N/A";
-  const city = dsa.city || "N/A";
-  const state = dsa.state || "N/A";
+  const bankName = dsa.bank_name || "";
+  const branch = dsa.branch_name || dsa.branch?.branch_name || "";
+  const ifsc = dsa.ifsc || "";
+  const micr = dsa.micr || dsa.micr_code || "";
+  const city = dsa.city || "";
+  const state = dsa.state || "";
+  const bankLocation = [city, state].filter(Boolean).join(", ");
+
 
   return (
     <TableWrapper
