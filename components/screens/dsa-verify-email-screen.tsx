@@ -517,7 +517,7 @@ export function DsaVerifyEmailScreen({ token, type, applicationId }: DsaVerifyEm
                   ) : result.dsaCode ? (
                     <div className="flex items-center justify-between border-b border-emerald-200/60 pb-3">
                       <span className="text-xs font-semibold uppercase text-emerald-900">
-                        DSA Reference Code
+                        DSA Application Number
                       </span>
                       <span className="font-mono text-base font-bold text-emerald-800 bg-white px-3 py-1 rounded-md border border-emerald-200">
                         {result.dsaCode}
