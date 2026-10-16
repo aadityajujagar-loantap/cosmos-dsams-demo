@@ -331,7 +331,9 @@ function getDocumentUrl(
 
   // DSA Application Form documents: bust cache with timestamp
   if (isApplicationFormDocument(doc)) {
-    const ts = doc._timestamp || Date.now();
+    const ts =
+      doc._timestamp ||
+      (doc.updated_at ? new Date(doc.updated_at).getTime() : (doc.uploaded_at ? new Date(doc.uploaded_at).getTime() : 1));
     if (
       !useStorageFallback &&
       targetDsaId &&
@@ -367,7 +369,9 @@ function getDocumentUrl(
 
   // Due Diligence Review Report documents: bust cache with timestamp
   if (isDdReviewReportDocument(doc)) {
-    const ts = doc._timestamp || Date.now();
+    const ts =
+      doc._timestamp ||
+      (doc.updated_at ? new Date(doc.updated_at).getTime() : (doc.uploaded_at ? new Date(doc.uploaded_at).getTime() : 1));
     if (
       !useStorageFallback &&
       targetDsaId &&
@@ -610,6 +614,74 @@ export function getDocumentCategory(docOrType?: any): DocumentSubTab {
 
   // 3. Other Documents: consent dpdp, other, visit report, brief profile of dsa, rent, any other
   return "other";
+}
+
+function CheckerDdNoteModal({
+  open,
+  onClose,
+  initialNote,
+  hasCheckerDdNote,
+  submitting,
+  onSubmit,
+}: {
+  open: boolean;
+  onClose: () => void;
+  initialNote: string;
+  hasCheckerDdNote: boolean;
+  submitting: boolean;
+  onSubmit: (note: string) => Promise<void> | void;
+}) {
+  const [localNote, setLocalNote] = useState(initialNote);
+
+  useEffect(() => {
+    if (open) {
+      setLocalNote(initialNote);
+    }
+  }, [open, initialNote]);
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Checker Due Diligence Note *"
+      width="max-w-xl"
+    >
+      <div className="space-y-4">
+        <textarea
+          rows={5}
+          className="w-full rounded-md border border-slate-200 bg-white p-3 text-xs text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 font-sans leading-relaxed"
+          value={localNote}
+          onChange={(e) => setLocalNote(e.target.value)}
+          placeholder="Enter your due diligence observations here..."
+          autoFocus
+        />
+        <div className="flex justify-end items-center gap-2 pt-1">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={onClose}
+            className="h-8 text-xs"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            disabled={
+              submitting ||
+              (!localNote.trim() && !hasCheckerDdNote)
+            }
+            onClick={() => onSubmit(localNote)}
+            className="h-8 text-xs px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5"
+          >
+            <Check className="h-3.5 w-3.5" />
+            {submitting ? "Submitting..." : "Submit DD Note"}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
 }
 
 export function DocumentViewerBody({
@@ -4555,8 +4627,8 @@ export function DsaProfilePage({ id }: { id: string }) {
       `Generated At:        ${new Date().toLocaleString()}`,
       `DSA Code:            ${getEffectiveDsaCode(dsa)}`,
       `Partner Name:        ${dsa.name}`,
-      `DSA Type:            ${dsa.dsa_type || "INDIVIDUAL"}`,
-      `Branch:              ${dsa.branch?.branch_name || dsa.branch_name || "Main Branch"}`,
+      `DSA Type:            ${dsa.dsa_type || ""}`,
+      `Branch:              ${dsa.branch?.branch_name || dsa.branch_name || "—"}`,
       `Evaluation Ref:      ${evalId}`,
       `Evaluated Timestamp: ${bre?.evaluated_at || "N/A"}`,
       `Overall Decision:    ${overallDecision}`,
@@ -4658,7 +4730,7 @@ export function DsaProfilePage({ id }: { id: string }) {
       `Generated At:            ${new Date().toLocaleString()}`,
       `DSA Code:                ${getEffectiveDsaCode(dsa)}`,
       `Partner Name:            ${dsa.name}`,
-      `Branch:                  ${dsa.branch?.branch_name || dsa.branch_name || "Main Branch"}`,
+      `Branch:                  ${dsa.branch?.branch_name || dsa.branch_name || "—"}`,
       `Submitted By:            Checker (User ID: ${note?.checker_user_id || "Checker Authority"})`,
       `Submitted At:            ${note?.submitted_at || "N/A"}`,
       `Checker Recommendation:  ${note?.recommendation || "RECOMMEND"}`,
@@ -5624,11 +5696,16 @@ const resolveStageStatus = (
     }
   };
 
-  const handleSubmitCheckerDdReport = async () => {
+  const handleSubmitCheckerDdReport = async (noteOverride?: string) => {
     if (!dsa) return;
 
+    const noteText = typeof noteOverride === "string" ? noteOverride : checkerDdNote;
+    if (typeof noteOverride === "string") {
+      setCheckerDdNote(noteOverride);
+    }
+
     const effectiveObs =
-      checkerDdNote.trim() ||
+      noteText.trim() ||
       savedCheckerDdNote?.observations ||
       dsa?.latest_due_diligence_note?.observations ||
       dsa?.due_diligence_notes?.[0]?.observations ||
@@ -5781,6 +5858,16 @@ const resolveStageStatus = (
     dsa?.latest_due_diligence_note?.submitted_at ||
     Boolean(deviationReportData?.pdf?.document_id) ||
     Boolean(deviationReportData?.metadata?.pdf_generated),
+  );
+
+  const defaultDdReviewReportDoc = useMemo(
+    () => ({
+      document_type: "DUE_DILIGENCE_REVIEW_REPORT",
+      file_name: `dsa_dd_review_report_${dsa?.id || ""}.pdf`,
+      owner_name: dsa?.name,
+      status: hasCheckerGeneratedReport ? "Checked" : "Uploaded",
+    }),
+    [dsa?.id, dsa?.name, hasCheckerGeneratedReport],
   );
 
   const allDisplayDocs: any[] = rawDocList
@@ -6765,7 +6852,7 @@ const resolveStageStatus = (
       rep?.branch_name ||
       dsa?.branch?.branch_name ||
       dsa?.branch_name ||
-      "Main Branch";
+      "";
 
     const dsaAppCode =
       (typeof rep?.dsa_code === "object"
@@ -6949,7 +7036,7 @@ const resolveStageStatus = (
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Constitution</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.constitution || "Private Limited"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.constitution || "—"}</td>
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Registered Office Full Address</td>
@@ -6957,7 +7044,7 @@ const resolveStageStatus = (
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Ownership</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.ownership || "Owned"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.ownership || "—"}</td>
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Branch Office Address (if any)</td>
@@ -6997,7 +7084,7 @@ const resolveStageStatus = (
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Expected Monthly Business Commitment</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.expected_monthly_business_commitment || "25 Lakhs"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.expected_monthly_business_commitment || "—"}</td>
                   </tr>
                 </>
               ) : (
@@ -7008,7 +7095,7 @@ const resolveStageStatus = (
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Constitution</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.constitution || "Individual"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.constitution || "—"}</td>
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Date of Birth</td>
@@ -7024,7 +7111,7 @@ const resolveStageStatus = (
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Ownership</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.ownership || "Owned"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.ownership || "—"}</td>
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Contact Number</td>
@@ -7056,7 +7143,7 @@ const resolveStageStatus = (
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Expected Monthly Business Commitment (INR)</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.expected_monthly_business_commitment || "10 Lakhs"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.expected_monthly_business_commitment || "—"}</td>
                   </tr>
                 </>
               )}
@@ -7568,7 +7655,11 @@ const resolveStageStatus = (
             ) : null}
           </div>
         }
-        title={dsa.name}
+        title={
+          String(dsa.dsa_type || (dsa as any).entity_type || (dsa as any).business_type || "").toUpperCase() === "ENTITY"
+            ? ((dsa as any).entity_name || (dsa as any).company_name || (dsa.name !== dsa.applicant_title ? dsa.name : "") || dsa.contact_person || dsa.code || "DSA Partner")
+            : (dsa.name || dsa.contact_person || dsa.code || "DSA Partner")
+        }
       />
 
       {canViewDsaLifecycleReason && dsa.status_reason ? (
@@ -8469,11 +8560,12 @@ const resolveStageStatus = (
                           </div>
                           <div>
                             <p className="text-sm font-bold text-slate-900">
-                              {dsa.bank_name || "Cosmos Co-op Bank"}
+                              {dsa.bank_name || ""}
                             </p>
                             <p className="text-xs font-mono text-slate-600 mt-0.5">
-                              A/C: {dsa.account_number || "••••••••4812"} ·
-                              IFSC: {dsa.ifsc || "COSB0000012"}
+                              {dsa.account_number ? `A/C: ${dsa.account_number}` : ""}
+                              {dsa.account_number && dsa.ifsc ? " · " : ""}
+                              {dsa.ifsc ? `IFSC: ${dsa.ifsc}` : ""}
                             </p>
                           </div>
                           <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
@@ -8554,14 +8646,16 @@ const resolveStageStatus = (
                             />
                           </div>
                           <div>
-                            {isUdyamChecked || (dsa as any)?.udyam_registration_no ? (
+                            {isUdyamChecked || (dsa as any)?.udyam_registration_no || dsa.business_license_no ? (
                               <>
                                 <p className="text-sm font-bold text-slate-900">
-                                  {(dsa as any)?.udyam_registration_no || dsa.business_type || "MSME Registered Enterprise"}
+                                  {(dsa as any)?.udyam_registration_no || dsa.business_license_no || ""}
                                 </p>
-                                <p className="text-xs text-slate-600 mt-0.5">
-                                  Category: MSME Registered Enterprise
-                                </p>
+                                {(dsa.constitution || dsa.business_type) && (
+                                  <p className="text-xs text-slate-600 mt-0.5">
+                                    Category: {dsa.constitution || dsa.business_type}
+                                  </p>
+                                )}
                               </>
                             ) : (
                               <p className="text-sm text-slate-400 italic">
@@ -8829,53 +8923,23 @@ const resolveStageStatus = (
                     <div className="space-y-4">
                       {/* DD Note Modal for Checker */}
                       {isCheckerRole && !isMakerUser && (
-                        <Modal
+                        <CheckerDdNoteModal
                           open={isDdNoteModalOpen}
                           onClose={() => setIsDdNoteModalOpen(false)}
-                          title="Checker Due Diligence Note *"
-                          width="max-w-xl"
-                        >
-                          <div className="space-y-4">
-                            <textarea
-                              rows={5}
-                              className="w-full rounded-md border border-slate-200 bg-white p-3 text-xs text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 font-sans leading-relaxed"
-                              value={checkerDdNote}
-                              onChange={(e) => setCheckerDdNote(e.target.value)}
-                              placeholder="Enter your due diligence observations here..."
-                              autoFocus
-                            />
-                            <div className="flex justify-end items-center gap-2 pt-1">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setIsDdNoteModalOpen(false)}
-                                className="h-8 text-xs"
-                              >
-                                Cancel
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                disabled={
-                                  submittingCheckerReport ||
-                                  (!checkerDdNote.trim() && !hasCheckerDdNote) ||
-                                  kycVerifiedCount < 6
-                                }
-                                onClick={() => {
-                                  handleSubmitCheckerDdReport();
-                                  setIsDdNoteModalOpen(false);
-                                }}
-                                className="h-8 text-xs px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5"
-                              >
-                                <Check className="h-3.5 w-3.5" />
-                                {submittingCheckerReport
-                                  ? "Submitting..."
-                                  : "Submit DD Note"}
-                              </Button>
-                            </div>
-                          </div>
-                        </Modal>
+                          initialNote={
+                            checkerDdNote ||
+                            savedCheckerDdNote?.observations ||
+                            dsa?.latest_due_diligence_note?.observations ||
+                            deviationReportData?.dd_note?.observations ||
+                            ""
+                          }
+                          hasCheckerDdNote={hasCheckerDdNote}
+                          submitting={submittingCheckerReport}
+                          onSubmit={async (note) => {
+                            await handleSubmitCheckerDdReport(note);
+                            setIsDdNoteModalOpen(false);
+                          }}
+                        />
                       )}
 
                       {/* Due Diligence Review Report Card */}
@@ -8975,12 +9039,7 @@ const resolveStageStatus = (
                           <div className="p-4 min-h-[780px] h-[780px]">
                             <DocumentViewerBody
                               previewDoc={
-                                backendDocs.find(isDdReviewReportDocument) || {
-                                  document_type: "DUE_DILIGENCE_REVIEW_REPORT",
-                                  file_name: `dsa_dd_review_report_${dsa?.id || ""}.pdf`,
-                                  owner_name: dsa?.name,
-                                  status: hasCheckerGeneratedReport ? "Checked" : "Uploaded",
-                                }
+                                backendDocs.find(isDdReviewReportDocument) || defaultDdReviewReportDoc
                               }
                               dsaId={dsa?.id}
                               isBankUser={isBankUser}

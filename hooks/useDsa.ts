@@ -74,18 +74,13 @@ export function normalizeDsaData(dsa: any): any {
   }
 
   // 3. Education qualification fallback
-  const education = dsa.education_qualification || "Graduate";
+  const education = dsa.education_qualification || "";
 
   // 4. Constitution fallback
-  const constitution =
-    dsa.constitution ||
-    (dsa.dsa_type === "NON_INDIVIDUAL"
-      ? "Commercial Entity / Firm"
-      : "Individual / Sole Proprietorship");
+  const constitution = dsa.constitution || "";
 
   // 5. Nature of business fallback
-  const natureOfBusiness =
-    dsa.nature_of_business || "Direct Selling Agent / Retail Loan Sourcing";
+  const natureOfBusiness = dsa.nature_of_business || "";
 
   // 6. Registered Business Proof & Selected Licenses
   let registeredBusinessProof = dsa.registered_business_proof;
@@ -101,9 +96,7 @@ export function normalizeDsaData(dsa: any): any {
     dsa.business_license_type ||
     (registeredBusinessProof
       ? registeredBusinessProof.split(",").map((s: string) => s.trim()).join(", ")
-      : isGstApplicable
-        ? "GST Registered Entity"
-        : "Shop & Establishment / MSME");
+      : "");
 
   const cleanLicense = (val: any) => {
     if (!val || typeof val !== "string") return null;
@@ -120,35 +113,46 @@ export function normalizeDsaData(dsa: any): any {
 
   const udyamNo =
     rawUdyam ||
-    (proofsStr.includes("UDYAM") ? (rawBizLicense || "UDYAM-MH-12-0012345") : null);
+    (proofsStr.includes("UDYAM") ? rawBizLicense : null);
   const shopActNo =
     rawShopAct ||
-    (proofsStr.includes("SHOP") ? (rawBizLicense || "SHOP-PUN-2026-001") : null);
+    (proofsStr.includes("SHOP") ? rawBizLicense : null);
 
   const businessLicenseNo =
     rawBizLicense ||
     [udyamNo, shopActNo].filter(Boolean).join(", ") ||
     (registeredBusinessProof
       ? `Registered Proofs on File (${registeredBusinessProof.split(",").join(", ")})`
-      : "Standard Regulatory Compliance");
+      : "");
 
   // 8. Contact person & name
-  const fullName =
-    dsa.name ||
-    [dsa.applicant_title, dsa.first_name, dsa.middle_name, dsa.last_name].filter(Boolean).join(" ") ||
-    dsa.contact_person ||
-    "";
-  const contactPerson = dsa.contact_person || fullName || "Primary Contact";
+  const isEntity =
+    String(dsa.dsa_type || dsa.entity_type || (dsa as any).business_type || "").toUpperCase() === "ENTITY";
+
+  const entityName = (dsa as any).entity_name || (dsa as any).company_name || "";
+
+  const individualName =
+    [dsa.first_name, dsa.middle_name, dsa.last_name].filter(Boolean).length > 0
+      ? [dsa.applicant_title, dsa.first_name, dsa.middle_name, dsa.last_name].filter(Boolean).join(" ")
+      : "";
+
+  const cleanName = dsa.name && dsa.name !== dsa.applicant_title ? dsa.name : "";
+
+  const fullName = isEntity
+    ? (entityName || cleanName || dsa.contact_person || "")
+    : (individualName || cleanName || entityName || dsa.contact_person || "");
+
+  const contactPerson = dsa.contact_person || (!isEntity ? fullName : "") || "";
 
   // 9. Branch name
   const branchName =
     dsa.branch_name ||
     dsa.branch?.branch_name ||
-    (dsa.branch_id === 1 ? "Main Branch" : "Deccan Branch");
-  const branchCode = dsa.branch_code || dsa.branch?.branch_code || "BR001";
+    "";
+  const branchCode = dsa.branch_code || dsa.branch?.branch_code || "";
 
   // 10. Business premises ownership
-  const businessPremisesOwnership = dsa.business_premises_ownership || "Rented / Leased Premises";
+  const businessPremisesOwnership = dsa.business_premises_ownership || "";
 
   // 11. Prior experience
   const applicantPriorExperience =

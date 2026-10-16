@@ -411,16 +411,16 @@ export function LeadManagementScreen() {
   const [createForm, setCreateForm] = useState<Partial<LeadData>>({
     DSACode: "",
     dsa_code: "",
-    constitution: "Individual",
-    pincode: "400001",
-    city: "Mumbai",
-    state: "Maharashtra",
+    constitution: "",
+    pincode: "",
+    city: "",
+    state: "",
     Branch_id: "",
-    title: "MR",
+    title: "",
     first_name: "",
     middle_name: "",
     last_name: "",
-    gender: "MALE",
+    gender: "",
     dob: "",
     age: undefined,
     address: "",
@@ -1172,19 +1172,19 @@ const setFilters = (newFilters: {
   const handleOpenEditModal = (lead: LeadData) => {
     setSelectedLead(lead);
     setEditForm({
-      constitution: lead.constitution || "Individual",
+      constitution: lead.constitution || "",
       first_name: lead.first_name || "",
       middle_name: lead.middle_name || "",
       last_name: lead.last_name || "",
       CustName: lead.CustName || "",
       mobile: lead.mobile || "",
       email: lead.email || "",
-      gender: lead.gender || "MALE",
+      gender: lead.gender || "",
       dob: parseDobToIso(lead.dob || (lead as any).date_of_birth),
       address: lead.address || "",
-      city: lead.city || "Mumbai",
-      state: lead.state || "Maharashtra",
-      pincode: lead.pincode || "400001",
+      city: lead.city || "",
+      state: lead.state || "",
+      pincode: lead.pincode || "",
       employment_type: lead.employment_type || "",
       occupation_type: lead.occupation_type || "",
       employer_business_name: lead.employer_business_name || "",
@@ -1419,17 +1419,17 @@ const setFilters = (newFilters: {
                               lead.constitution?.toLowerCase() === "individual" ? "bg-blue-500" : "bg-purple-500"
                             )}
                           />
-                          {lead.constitution || "Individual"}
+                          {lead.constitution || "—"}
                         </span>
                       </td>
 
                       {/* Product & Type */}
                       <td className="py-3.5 px-4">
                         <p className="font-semibold text-slate-900 text-xs leading-snug">
-                          {lead.product?.name || "Loan Product"}
+                          {lead.product?.name || "—"}
                         </p>
                         <p className="text-slate-500 text-[11px] mt-0.5 font-medium">
-                          {lead.loan_type?.name || lead.loanType?.name || "Standard"}
+                          {lead.loan_type?.name || lead.loanType?.name || "—"}
                         </p>
                       </td>
 
@@ -1789,10 +1789,11 @@ const setFilters = (newFilters: {
                       </Label>
                     </div>
                     <Select
-                      value={createForm.constitution || "Individual"}
+                      value={createForm.constitution || ""}
                       onChange={(e) => setCreateForm({ ...createForm, constitution: e.target.value as any })}
                       className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
                     >
+                      <option value="">-- Choose Constitution --</option>
                       {constitutions.length > 0 ? (
                         constitutions.map((c: any) => (
                           <option key={c.meta_key || c.id} value={c.meta_key || c.meta_value}>
@@ -2083,10 +2084,11 @@ const setFilters = (newFilters: {
                             </Label>
                           </div>
                           <Select
-                            value={createForm.title || "MR"}
+                            value={createForm.title || ""}
                             onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
                             className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
                           >
+                            <option value="">-- Choose Title --</option>
                             {titles.map((t: any) => (
                               <option key={t.meta_key || t.id} value={t.meta_key || t.meta_value}>{t.meta_value}</option>
                             ))}
@@ -2146,10 +2148,11 @@ const setFilters = (newFilters: {
                             </Label>
                           </div>
                           <Select
-                            value={createForm.gender || "MALE"}
+                            value={createForm.gender || ""}
                             onChange={(e) => setCreateForm({ ...createForm, gender: e.target.value })}
                             className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
                           >
+                            <option value="">-- Choose Gender --</option>
                             {genders.map((g: any) => (
                               <option key={g.meta_key || g.id} value={g.meta_key || g.meta_value}>{g.meta_value}</option>
                             ))}
@@ -2719,23 +2722,23 @@ const setFilters = (newFilters: {
                 </div>
                 <div className="rounded-lg bg-slate-50/80 border border-slate-200/60 p-2.5">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Product & Type</p>
-                  <p className="font-semibold text-slate-800 text-xs mt-0.5 truncate" title={`${selectedLead.product?.name || "Loan"} • ${selectedLead.loan_type?.name || selectedLead.loanType?.name || "Standard"}`}>
-                    {selectedLead.product?.name || "Loan"} • {selectedLead.loan_type?.name || selectedLead.loanType?.name || "Standard"}
+                  <p className="font-semibold text-slate-800 text-xs mt-0.5 truncate" title={`${selectedLead.product?.name || "—"} • ${selectedLead.loan_type?.name || selectedLead.loanType?.name || "—"}`}>
+                    {selectedLead.product?.name || "—"} • {selectedLead.loan_type?.name || selectedLead.loanType?.name || "—"}
                   </p>
                 </div>
                 <div className="rounded-lg bg-slate-50/80 border border-slate-200/60 p-2.5">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Sourcing Partner</p>
-                  <p className="font-semibold text-slate-800 text-xs mt-0.5 truncate" title={selectedLead.dsa?.entity_name || selectedLead.dsa?.name || selectedLead.DSACode || "DSA Partner"}>
-                    {selectedLead.dsa?.entity_name || selectedLead.dsa?.name || "DSA Partner"}
+                  <p className="font-semibold text-slate-800 text-xs mt-0.5 truncate" title={selectedLead.dsa?.entity_name || selectedLead.dsa?.name || selectedLead.DSACode || "—"}>
+                    {selectedLead.dsa?.entity_name || selectedLead.dsa?.name || selectedLead.DSACode || "—"}
                     <span className="font-mono text-slate-500 text-[10px] ml-1">
-                      ({selectedLead.DSACode || selectedLead.dsa_code || selectedLead.dsa?.dsa_code || selectedLead.dsa?.code || "N/A"})
+                      ({selectedLead.DSACode || selectedLead.dsa_code || selectedLead.dsa?.dsa_code || selectedLead.dsa?.code || "—"})
                     </span>
                   </p>
                 </div>
                 <div className="rounded-lg bg-slate-50/80 border border-slate-200/60 p-2.5">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Branch Location</p>
                   <p className="font-semibold text-slate-800 text-xs mt-0.5 truncate">
-                    {selectedLead.branch?.branch_name || selectedLead.Branch_id || "BR001"}
+                    {selectedLead.branch?.branch_name || selectedLead.Branch_id || "—"}
                   </p>
                 </div>
               </div>
@@ -2848,9 +2851,9 @@ const setFilters = (newFilters: {
                       verified_at: selectedLead.created_at
                     },
                     cbs_branch_mapping: {
-                      branch_code: selectedLead.Branch_id || "BR001",
-                      sub_region_code: selectedLead.subregion_id || "SR001",
-                      dsa_code: selectedLead.DSACode || "DSA_TEST_001"
+                      branch_code: selectedLead.Branch_id || "",
+                      sub_region_code: selectedLead.subregion_id || "",
+                      dsa_code: selectedLead.DSACode || ""
                     }
                   }, null, 2)}
                 </pre>
@@ -2860,8 +2863,8 @@ const setFilters = (newFilters: {
             {/* SECTION 1: Sourcing & Branch Information */}
             <LeadSectionBlock icon={Building2} title="Sourcing & Branch Information">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <LeadDetailItem label="Branch Location" value={selectedLead.branch?.branch_name || selectedLead.Branch_id || "BR001"} />
-                <LeadDetailItem label="DSA Partner Code" value={selectedLead.DSACode || (selectedLead as any).dsa_code || selectedLead.dsa?.dsa_code || "N/A"} />
+                <LeadDetailItem label="Branch Location" value={selectedLead.branch?.branch_name || selectedLead.Branch_id || "—"} />
+                <LeadDetailItem label="DSA Partner Code" value={selectedLead.DSACode || (selectedLead as any).dsa_code || selectedLead.dsa?.dsa_code || "—"} />
                 <LeadDetailItem label="City & State" value={`${selectedLead.city || "—"}, ${selectedLead.state || "—"}`} />
                 <LeadDetailItem label="Pincode" value={selectedLead.pincode || "—"} />
               </div>
