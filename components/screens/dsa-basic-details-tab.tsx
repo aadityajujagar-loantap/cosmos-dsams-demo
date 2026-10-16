@@ -307,7 +307,11 @@ export function DsaBasicDetailsTab({
           nature_of_business:
             dsa.nature_of_business || "Direct Selling Agent / Retail Loan Sourcing",
           registration_no_llpin_cin: dsa.registration_no_llpin_cin || "",
-          date_of_birth: dsa.date_of_birth ? dsa.date_of_birth.substring(0, 10) : "",
+          date_of_birth: dsa.date_of_birth
+            ? String(dsa.date_of_birth).substring(0, 10)
+            : dsa.dob || dsa.doi || dsa.date_of_incorporation
+              ? String(dsa.dob || dsa.doi || dsa.date_of_incorporation).substring(0, 10)
+              : "",
           age: dsa.age || "",
           education_qualification: dsa.education_qualification || "Graduate",
           aadhaar_no: dsa.aadhaar_no || dsa.aadhaar || "",
@@ -460,13 +464,13 @@ export function DsaBasicDetailsTab({
 
     if (block === "applicant") {
       if (isEntity) {
-        if (!formData.entity_name?.trim()) errs.entity_name = "Entity Name is required";
+        if (!formData.entity_name?.trim() && !dsa.entity_name) errs.entity_name = "Entity Name is required";
         if (!formData.contact_person?.trim()) errs.contact_person = "Contact Person is required";
       } else {
-        if (!formData.first_name?.trim()) errs.first_name = "First Name is required";
-        if (!formData.last_name?.trim()) errs.last_name = "Last Name is required";
-        if (formData.aadhaar_no && !/^\d{12}$/.test(formData.aadhaar_no.replace(/\s/g, ""))) {
-          errs.aadhaar_no = "Aadhaar must be exactly 12 digits";
+        if (!formData.first_name?.trim() && !dsa.first_name) errs.first_name = "First Name is required";
+        if (!formData.last_name?.trim() && !dsa.last_name) errs.last_name = "Last Name is required";
+        if (formData.aadhaar_no && !/^[0-9Xx* -]{4,14}$/.test(formData.aadhaar_no.trim())) {
+          errs.aadhaar_no = "Invalid Aadhaar format";
         }
       }
     }
@@ -566,6 +570,10 @@ export function DsaBasicDetailsTab({
         } else {
           payload.name = payload.entity_name;
         }
+      }
+
+      if (payload.aadhaar_no && (payload.aadhaar_no.includes("X") || payload.aadhaar_no.includes("*"))) {
+        delete payload.aadhaar_no;
       }
 
       if (block === "branch" && payload.branch_id) {
@@ -785,59 +793,64 @@ export function DsaBasicDetailsTab({
           <div className="bg-slate-50/70 p-4 rounded-lg border border-slate-200 space-y-4">
             {!isEntity ? (
               <div className="grid gap-3 sm:grid-cols-4">
-                <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
+                <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3 shadow-2xs">
                   <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Title</Label>
-                  <Select
+                  <Input
                     value={formData.applicant_title || "Mr."}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, applicant_title: e.target.value }))}
-                  >
-                    <option value="Mr.">Mr.</option>
-                    <option value="Mrs.">Mrs.</option>
-                    <option value="Ms.">Ms.</option>
-                    <option value="Dr.">Dr.</option>
-                  </Select>
+                    disabled
+                    readOnly
+                    className="bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200"
+                  />
                 </div>
-                <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
-                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">First Name *</Label>
+                <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3 shadow-2xs">
+                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">First Name</Label>
                   <Input
                     value={formData.first_name || ""}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, first_name: e.target.value }))}
+                    disabled
+                    readOnly
+                    className="bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200"
                     placeholder="First name"
                   />
-                  {errors.first_name && <p className="text-red-500 text-xs mt-1">{errors.first_name}</p>}
                 </div>
-                <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
+                <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3 shadow-2xs">
                   <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Middle Name</Label>
                   <Input
                     value={formData.middle_name || ""}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, middle_name: e.target.value }))}
+                    disabled
+                    readOnly
+                    className="bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200"
                     placeholder="Middle name"
                   />
                 </div>
-                <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
-                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Last Name *</Label>
+                <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3 shadow-2xs">
+                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Last Name</Label>
                   <Input
                     value={formData.last_name || ""}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, last_name: e.target.value }))}
+                    disabled
+                    readOnly
+                    className="bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200"
                     placeholder="Last name"
                   />
-                  {errors.last_name && <p className="text-red-500 text-xs mt-1">{errors.last_name}</p>}
                 </div>
 
-                <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
-                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Date of Birth</Label>
+                <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3 shadow-2xs">
+                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Date of Birth (DOB)</Label>
                   <Input
                     type="date"
                     value={formData.date_of_birth || ""}
-                    onChange={(e) => handleDobChange(e.target.value)}
+                    disabled
+                    readOnly
+                    className="bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200"
                   />
                 </div>
-                <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
+                <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3 shadow-2xs">
                   <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Age (Years)</Label>
                   <Input
                     type="number"
                     value={formData.age || ""}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, age: e.target.value }))}
+                    disabled
+                    readOnly
+                    className="bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200"
                     placeholder="Age"
                   />
                 </div>
@@ -862,65 +875,31 @@ export function DsaBasicDetailsTab({
                     />
                   )}
                 </div>
-                <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
+                <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3 shadow-2xs">
                   <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">
                     Aadhaar (12 Digits)
                   </Label>
                   <Input
-                    value={
-                      isAadhaarFieldFocused
-                        ? formData.aadhaar_no || ""
-                        : maskAadhaar(formData.aadhaar_no)
-                    }
-                    // Unmask only for the Maker while actively editing; re-mask on blur
-                    // and for every other role, so the first 8 digits never sit in the DOM.
-                    readOnly={!canEdit}
-                    title={
-                      !canEdit
-                        ? "Only the Maker can edit the Aadhaar number."
-                        : isAadhaarFieldFocused
-                          ? "Editing: Aadhaar is temporarily unmasked. Click away to re-mask."
-                          : "Click to reveal for editing."
-                    }
-                    onFocus={() => {
-                      if (canEdit) setIsAadhaarFieldFocused(true);
-                    }}
-                    onBlur={() => setIsAadhaarFieldFocused(false)}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        aadhaar_no: e.target.value.replace(/[^0-9Xx]/g, "").slice(0, 12),
-                      }))
-                    }
+                    value={maskAadhaar(formData.aadhaar_no || dsa.aadhaar_no || dsa.aadhaar)}
+                    readOnly
+                    disabled
+                    title="Aadhaar cannot be edited."
                     placeholder="12 digit Aadhaar"
-                    maxLength={14}
-                    className={
-                      canEdit && isAadhaarFieldFocused
-                        ? "font-mono bg-white"
-                        : "font-mono bg-slate-100 text-slate-600"
-                    }
+                    className="font-mono bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200"
                   />
-                  {errors.aadhaar_no && <p className="text-red-500 text-xs mt-1">{errors.aadhaar_no}</p>}
-                  {isFieldChanged("aadhaar_no", formData.aadhaar_no, dsa) && (
-                    <SupportingDocInput
-                      field="aadhaar_no"
-                      file={supportingFiles.aadhaar_no}
-                      onPick={(f) => pickSupportingFile("aadhaar_no", f)}
-                      onClear={() => clearSupportingFile("aadhaar_no")}
-                    />
-                  )}
                 </div>
               </div>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs sm:col-span-2">
-                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Entity / Firm Name *</Label>
+                <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3 shadow-2xs sm:col-span-2">
+                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Entity / Firm Name</Label>
                   <Input
                     value={formData.entity_name || ""}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, entity_name: e.target.value }))}
+                    disabled
+                    readOnly
+                    className="bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200"
                     placeholder="Registered business or firm name"
                   />
-                  {errors.entity_name && <p className="text-red-500 text-xs mt-1">{errors.entity_name}</p>}
                 </div>
 
                 <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
@@ -966,21 +945,25 @@ export function DsaBasicDetailsTab({
                   />
                 </div>
 
-                <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
-                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Incorporation Date</Label>
+                <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3 shadow-2xs">
+                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Incorporation Date (DOB / DOI)</Label>
                   <Input
                     type="date"
                     value={formData.date_of_birth || ""}
-                    onChange={(e) => handleDobChange(e.target.value)}
+                    disabled
+                    readOnly
+                    className="bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200"
                   />
                 </div>
 
-                <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
+                <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3 shadow-2xs">
                   <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Vintage / Age (Years)</Label>
                   <Input
                     type="number"
                     value={formData.age || ""}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, age: e.target.value }))}
+                    disabled
+                    readOnly
+                    className="bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200"
                     placeholder="Years in business"
                   />
                 </div>
@@ -1033,10 +1016,10 @@ export function DsaBasicDetailsTab({
               }
             />
             <DetailItem
-              label={isEntity ? "Incorporation Date / Age" : "Date of Birth / Age"}
+              label={isEntity ? "Incorporation Date / Age (DOI)" : "Date of Birth / Age (DOB)"}
               value={
-                dsa.date_of_birth
-                  ? `${formatDate(dsa.date_of_birth)}${dsa.age ? ` (${dsa.age} yrs)` : ""}`
+                (dsa.date_of_birth || dsa.dob || dsa.doi || dsa.date_of_incorporation)
+                  ? `${formatDate(dsa.date_of_birth || dsa.dob || dsa.doi || dsa.date_of_incorporation)}${dsa.age ? ` (${dsa.age} yrs)` : ""}`
                   : dsa.age
                     ? `${dsa.age} years`
                     : "—"
@@ -1229,13 +1212,23 @@ export function DsaBasicDetailsTab({
                 </Label>
                 <Input
                   value={formData.pan || ""}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, pan: e.target.value.toUpperCase() }))}
+                  onChange={(e) => {
+                    if (Boolean(dsa.pan)) return;
+                    setFormData((prev) => ({ ...prev, pan: e.target.value.toUpperCase() }));
+                  }}
+                  readOnly={Boolean(dsa.pan)}
+                  disabled={Boolean(dsa.pan)}
+                  title={Boolean(dsa.pan) ? "PAN was verified during onboarding and cannot be edited." : undefined}
                   placeholder="ABCDE1234F"
                   maxLength={10}
-                  className="font-mono uppercase font-bold"
+                  className={
+                    Boolean(dsa.pan)
+                      ? "font-mono uppercase font-bold bg-slate-100 text-slate-500 cursor-not-allowed"
+                      : "font-mono uppercase font-bold"
+                  }
                 />
                 {errors.pan && <p className="text-red-500 text-xs mt-1">{errors.pan}</p>}
-                {isFieldChanged("pan", formData.pan, dsa) && (
+                {!Boolean(dsa.pan) && isFieldChanged("pan", formData.pan, dsa) && (
                   <SupportingDocInput
                     field="pan"
                     file={supportingFiles.pan}

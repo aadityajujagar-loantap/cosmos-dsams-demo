@@ -295,35 +295,37 @@ export function DashboardPage() {
       const caseLevel = Number(dsa.current_approval_level);
 
       const isRevertedByMe =
-        ((dsa.status_reason_action === "REVERTED" || dsa.status_reason_action === "QUERY_RAISED") &&
+        statusStr !== "REJECTED" &&
+        (((dsa.status_reason_action === "REVERTED" ||
+          dsa.status_reason_action === "QUERY_RAISED" ||
+          statusStr === "REVERTED" ||
+          statusStr === "DOCUMENT_PENDING") &&
           (!userId ||
             String(dsa.status_reason_by) === String(userId) ||
             (userLevel && caseLevel < userLevel) ||
             (userLevel === 1 && caseLevel === 1))) ||
-        (Array.isArray(dsa.approvals) &&
-          dsa.approvals.some(
-            (a: any) =>
-              (a.status === "REVERTED" ||
-                a.action === "REVERT" ||
-                a.status === "QUERY" ||
-                a.action === "QUERY") &&
-              ((userId && String(a.actioned_by) === String(userId)) ||
-                (userLevel && Number(a.approval_level) === userLevel) ||
-                (userLevel === 1 && Number(a.approval_level) === 1)),
-          ));
-
-      const isRejectedByMe =
-        statusStr === "REJECTED" &&
-        (userLevel === 1 ||
-          !userLevel ||
-          (userId && String(dsa.status_reason_by) === String(userId)) ||
           (Array.isArray(dsa.approvals) &&
             dsa.approvals.some(
               (a: any) =>
-                (a.status === "REJECTED" || a.action === "REJECT") &&
+                (a.status === "REVERTED" ||
+                  a.action === "REVERT" ||
+                  a.status === "QUERY" ||
+                  a.action === "QUERY") &&
                 ((userId && String(a.actioned_by) === String(userId)) ||
-                  (userLevel && Number(a.approval_level) === userLevel)),
+                  (userLevel && Number(a.approval_level) === userLevel) ||
+                  (userLevel === 1 && Number(a.approval_level) === 1)),
             )));
+
+      const isRejectedByMe =
+        statusStr === "REJECTED" ||
+        String(dsa.status_reason_action || "").toUpperCase() === "REJECTED" ||
+        (Array.isArray(dsa.approvals) &&
+          dsa.approvals.some(
+            (a: any) =>
+              (a.status === "REJECTED" || a.action === "REJECT") &&
+              ((userId && String(a.actioned_by) === String(userId)) ||
+                (userLevel && Number(a.approval_level) === userLevel)),
+          ));
 
       const isCallableBackByMe = Boolean(
         userId &&
@@ -351,36 +353,41 @@ export function DashboardPage() {
 
       const isApprovedByMe =
         !isCallableBackByMe &&
+        statusStr !== "REJECTED" &&
         (statusStr === "APPROVED" ||
           statusStr === "AGREEMENT_PENDING" ||
           statusStr === "AGREEMENT_COMPLETED" ||
           opStatus === "ACTIVE" ||
           (userLevel &&
-            userLevel >= 2 &&
-            Array.isArray(dsa.approvals) &&
-            dsa.approvals.some(
-              (a: any) =>
-                (a.status === "APPROVED" ||
-                  a.status === "RECOMMENDED" ||
-                  a.action === "APPROVE" ||
-                  a.action === "RECOMMEND") &&
-                ((userId && String(a.actioned_by) === String(userId)) ||
-                  Number(a.approval_level) === userLevel),
-            )));
+            userLevel >= 1 &&
+            ((caseLevel > userLevel) ||
+              (Array.isArray(dsa.approvals) &&
+                dsa.approvals.some(
+                  (a: any) =>
+                    (a.status === "APPROVED" ||
+                      a.status === "RECOMMENDED" ||
+                      a.action === "APPROVE" ||
+                      a.action === "RECOMMEND") &&
+                    ((userId && String(a.actioned_by) === String(userId)) ||
+                      Number(a.approval_level) === userLevel),
+                )) ||
+              (String(dsa.status_reason_action || "").toUpperCase() === "RECOMMENDED" &&
+                (!userId || String(dsa.status_reason_by) === String(userId) || caseLevel > userLevel)))));
 
       const isInProcessForMe =
-        userLevel && userLevel >= 2
-          ? ((caseLevel === userLevel && statusStr !== "REJECTED" && statusStr !== "APPROVED") || isCallableBackByMe)
-          : access.allowed;
+        statusStr !== "REJECTED" &&
+        (userLevel && userLevel >= 2
+          ? ((caseLevel === userLevel && statusStr !== "APPROVED") || isCallableBackByMe)
+          : (access.allowed && !isApprovedByMe));
 
       if (isRejectedByMe) {
         rejected++;
+      } else if (isApprovedByMe) {
+        approved++;
       } else if (isRevertedByMe) {
         reverted++;
       } else if (isInProcessForMe) {
         inProcess++;
-      } else if (isApprovedByMe) {
-        approved++;
       }
     });
 
@@ -424,35 +431,37 @@ export function DashboardPage() {
       const caseLevel = Number(dsa.current_approval_level);
 
       const isRevertedByMe =
-        ((dsa.status_reason_action === "REVERTED" || dsa.status_reason_action === "QUERY_RAISED") &&
+        statusStr !== "REJECTED" &&
+        (((dsa.status_reason_action === "REVERTED" ||
+          dsa.status_reason_action === "QUERY_RAISED" ||
+          statusStr === "REVERTED" ||
+          statusStr === "DOCUMENT_PENDING") &&
           (!userId ||
             String(dsa.status_reason_by) === String(userId) ||
             (userLevel && caseLevel < userLevel) ||
             (userLevel === 1 && caseLevel === 1))) ||
-        (Array.isArray(dsa.approvals) &&
-          dsa.approvals.some(
-            (a: any) =>
-              (a.status === "REVERTED" ||
-                a.action === "REVERT" ||
-                a.status === "QUERY" ||
-                a.action === "QUERY") &&
-              ((userId && String(a.actioned_by) === String(userId)) ||
-                (userLevel && Number(a.approval_level) === userLevel) ||
-                (userLevel === 1 && Number(a.approval_level) === 1)),
-          ));
-
-      const isRejectedByMe =
-        statusStr === "REJECTED" &&
-        (userLevel === 1 ||
-          !userLevel ||
-          (userId && String(dsa.status_reason_by) === String(userId)) ||
           (Array.isArray(dsa.approvals) &&
             dsa.approvals.some(
               (a: any) =>
-                (a.status === "REJECTED" || a.action === "REJECT") &&
+                (a.status === "REVERTED" ||
+                  a.action === "REVERT" ||
+                  a.status === "QUERY" ||
+                  a.action === "QUERY") &&
                 ((userId && String(a.actioned_by) === String(userId)) ||
-                  (userLevel && Number(a.approval_level) === userLevel)),
+                  (userLevel && Number(a.approval_level) === userLevel) ||
+                  (userLevel === 1 && Number(a.approval_level) === 1)),
             )));
+
+      const isRejectedByMe =
+        statusStr === "REJECTED" ||
+        String(dsa.status_reason_action || "").toUpperCase() === "REJECTED" ||
+        (Array.isArray(dsa.approvals) &&
+          dsa.approvals.some(
+            (a: any) =>
+              (a.status === "REJECTED" || a.action === "REJECT") &&
+              ((userId && String(a.actioned_by) === String(userId)) ||
+                (userLevel && Number(a.approval_level) === userLevel)),
+          ));
 
       const isCallableBackByMe = Boolean(
         userId &&
@@ -480,27 +489,32 @@ export function DashboardPage() {
 
       const isApprovedByMe =
         !isCallableBackByMe &&
+        statusStr !== "REJECTED" &&
         (statusStr === "APPROVED" ||
           statusStr === "AGREEMENT_PENDING" ||
           statusStr === "AGREEMENT_COMPLETED" ||
           opStatus === "ACTIVE" ||
           (userLevel &&
-            userLevel >= 2 &&
-            Array.isArray(dsa.approvals) &&
-            dsa.approvals.some(
-              (a: any) =>
-                (a.status === "APPROVED" ||
-                  a.status === "RECOMMENDED" ||
-                  a.action === "APPROVE" ||
-                  a.action === "RECOMMEND") &&
-                ((userId && String(a.actioned_by) === String(userId)) ||
-                  Number(a.approval_level) === userLevel),
-            )));
+            userLevel >= 1 &&
+            ((caseLevel > userLevel) ||
+              (Array.isArray(dsa.approvals) &&
+                dsa.approvals.some(
+                  (a: any) =>
+                    (a.status === "APPROVED" ||
+                      a.status === "RECOMMENDED" ||
+                      a.action === "APPROVE" ||
+                      a.action === "RECOMMEND") &&
+                    ((userId && String(a.actioned_by) === String(userId)) ||
+                      Number(a.approval_level) === userLevel),
+                )) ||
+              (String(dsa.status_reason_action || "").toUpperCase() === "RECOMMENDED" &&
+                (!userId || String(dsa.status_reason_by) === String(userId) || caseLevel > userLevel)))));
 
       const isInProcessForMe =
-        userLevel && userLevel >= 2
-          ? ((caseLevel === userLevel && statusStr !== "REJECTED" && statusStr !== "APPROVED") || isCallableBackByMe)
-          : access.allowed;
+        statusStr !== "REJECTED" &&
+        (userLevel && userLevel >= 2
+          ? ((caseLevel === userLevel && statusStr !== "APPROVED") || isCallableBackByMe)
+          : (access.allowed && !isApprovedByMe));
 
       if (authorityTab === "in_process") {
         if (!isInProcessForMe) return false;
