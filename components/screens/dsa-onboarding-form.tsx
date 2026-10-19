@@ -57,6 +57,11 @@ interface Stakeholder {
   state?: string;
   city?: string;
   pinCode?: string;
+  date_of_birth?: string;
+  qualification?: string;
+  pan_verified?: boolean;
+  name_locked?: boolean;
+  dob_locked?: boolean;
 }
 
 interface DocDef {
@@ -71,7 +76,7 @@ const INDIVIDUAL_DOCS: DocDef[] = [
   { type: "recent_photograph", label: "Recent photograph", required: true, requirementLabel: "Mandatory" },
   { type: "pan_card", label: "PAN Card", required: true, requirementLabel: "Mandatory" },
   { type: "aadhaar_card", label: "Aadhaar Card", required: true, requirementLabel: "Mandatory" },
-  { type: "education_certificate", label: "Educational qualification certificate (highest)", required: true, requirementLabel: "Mandatory" },
+  { type: "education_certificate", label: "Educational Qualification Certificate (Graduation)", required: true, requirementLabel: "Mandatory" },
   { type: "dsa_consent_dpdp", label: "DSA Consent Format (as per DPDP Act)", required: true, requirementLabel: "Mandatory" },
   { type: "visit_report", label: "Office Visit Report", required: false, requirementLabel: "Optional (Maker Review)", staffOnly: true },
   { type: "brief_profile", label: "Brief profile of DSA", required: false, requirementLabel: "Optional" },
@@ -83,6 +88,7 @@ const ENTITY_DOCS: DocDef[] = [
   { type: "stakeholder_photograph", label: "At least one Key Person / Partner / Director — Photograph", required: true, requirementLabel: "Mandatory" },
   { type: "stakeholder_pan_card", label: "At least one Key Person / Partner / Director — PAN Card", required: true, requirementLabel: "Mandatory" },
   { type: "stakeholder_aadhaar_card", label: "At least one Key Person / Partner / Director — Aadhaar Card", required: true, requirementLabel: "Mandatory" },
+  { type: "education_certificate", label: "Educational Qualification Certificate (Graduation)", required: true, requirementLabel: "Mandatory" },
   { type: "dsa_consent_dpdp", label: "DSA Consent Format (as per DPDP Act)", required: true, requirementLabel: "Mandatory" },
   { type: "partnership_deed", label: "Partnership Deed (if applicable)", required: false, requirementLabel: "Optional" },
   { type: "visit_report", label: "Office Visit Report", required: false, requirementLabel: "Optional (Maker Review)", staffOnly: true },
@@ -391,15 +397,17 @@ function getDocDisplayLabel(key: string, docList?: DocDef[]): string {
   const map: Record<string, string> = {
     pan_card: "PAN Card",
     aadhaar_card: "Aadhaar Card",
+    aadhaar_card_front: "Aadhaar Card (Front Side)",
+    aadhaar_card_back: "Aadhaar Card (Back Side)",
     recent_photograph: "Recent Photograph",
-    education_certificate: "Educational Qualification Certificate",
+    education_certificate: "Educational Qualification Certificate (Graduation)",
     dsa_consent_dpdp: "DSA Consent & Declaration (DPDP Act)",
     visit_report: "Office Visit Report",
     brief_profile: "Brief Profile of DSA",
     itr_returns: "IT Returns (Last 2 F.Y.)",
     other_document: "Other Supporting Document",
     gst_certificate: "GST Certificate",
-    rent_agreement: "Rental Proof / Rent Agreement",
+    rent_agreement: "Rent Agreement (Residence / office as applicable)",
     address_proof: "Address Proof",
     experience_certificate: "Experience / Empanelment Certificate",
     board_resolution: "Board Resolution",
@@ -410,6 +418,8 @@ function getDocDisplayLabel(key: string, docList?: DocDef[]): string {
     stakeholder_photograph: "Key Person / Director Photograph",
     stakeholder_pan_card: "Key Person / Director PAN Card",
     stakeholder_aadhaar_card: "Key Person / Director Aadhaar Card",
+    stakeholder_aadhaar_card_front: "Key Person / Director Aadhaar Card (Front Side)",
+    stakeholder_aadhaar_card_back: "Key Person / Director Aadhaar Card (Back Side)",
     bank_proof: "Bank Account Proof / Cancelled Cheque",
   };
 
@@ -837,10 +847,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   const resolvedAge = derivedAge || age;
   const isAgeLocked = Boolean(derivedAge);
 
-  const isFirstNameLocked = Boolean(panVerified && panVerificationData?.panAutofilledFields?.firstName);
-  const isLastNameLocked = Boolean(panVerified && panVerificationData?.panAutofilledFields?.lastName);
-  const isDobLocked = Boolean(panVerified && panVerificationData?.panAutofilledFields?.dob);
-  const isEntityNameLocked = Boolean(panVerified && panVerificationData?.panAutofilledFields?.entityName);
+  const isFirstNameLocked = Boolean(panVerified && (panVerificationData?.panAutofilledFields?.firstName || firstName));
+  const isLastNameLocked = Boolean(panVerified && (panVerificationData?.panAutofilledFields?.lastName || lastName));
+  const isDobLocked = Boolean(panVerified && (panVerificationData?.panAutofilledFields?.dob || dateOfBirth));
+  const isEntityNameLocked = Boolean(panVerified && (panVerificationData?.panAutofilledFields?.entityName || entityName));
 
   // Mirror DOB into age. Clearing DOB leaves a manual age editable; the derived value
   // always takes precedence so the two can never disagree.
@@ -1376,7 +1386,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       const otherDocIdx = list.findIndex((d) => d.type === "other_document");
       const rentalDoc: DocDef = {
         type: "rent_agreement",
-        label: "Rental Proof / Rent Agreement",
+        label: "Rent Agreement (Residence / office as applicable)",
         required: true,
         requirementLabel: "Mandatory",
       };
@@ -1429,8 +1439,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       return {
         type: `itr_year_${yr}`,
         label: `${yr}${suffix} Year ITR with computation`,
-        required: false,
-        requirementLabel: "Optional",
+        required: yr <= 2,
+        requirementLabel: yr <= 2 ? "Mandatory" : "Optional",
       };
     });
   }, [allItrYears]);
@@ -1445,9 +1455,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   const handleFileUpload = (docType: string, file: File) => {
     if (file.size > 10 * 1024 * 1024) {
       toast({
-        title: "File too large",
-        description: "Maximum allowed file size is 10MB.",
-        variant: "warning",
+        title: "File Size Exceeds Limit",
+        description: `"${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds the maximum allowed limit of 10MB. Please select a smaller file.`,
+        variant: "destructive",
       });
       return;
     }
@@ -1498,6 +1508,53 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       delete copy[docType];
       return copy;
     });
+  };
+
+  const removeAadhaarDocs = (baseType: string) => {
+    setUploadedDocs((prev) => {
+      const copy = { ...prev };
+      delete copy[`${baseType}_front`];
+      delete copy[`${baseType}_back`];
+      delete copy[baseType];
+      return copy;
+    });
+  };
+
+  const handleAadhaarMultiUpload = (baseType: string, filesList: FileList | File[]) => {
+    const files = Array.from(filesList);
+    if (!files.length) return;
+
+    if (files.length > 2) {
+      toast({
+        title: "Too many files",
+        description: "Please select at most 2 files (Front and Back side).",
+        variant: "warning",
+      });
+      return;
+    }
+
+    for (const f of files) {
+      if (f.size > 10 * 1024 * 1024) {
+        toast({
+          title: "File Size Exceeds Limit",
+          description: `"${f.name}" (${(f.size / (1024 * 1024)).toFixed(1)}MB) exceeds the maximum allowed limit of 10MB. Please select a smaller file.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    if (files.length === 2) {
+      handleFileUpload(`${baseType}_front`, files[0]);
+      handleFileUpload(`${baseType}_back`, files[1]);
+    } else if (files.length === 1) {
+      const hasFront = Boolean(uploadedDocs[`${baseType}_front`] || uploadedDocs[baseType]);
+      if (!hasFront) {
+        handleFileUpload(`${baseType}_front`, files[0]);
+      } else {
+        handleFileUpload(`${baseType}_back`, files[0]);
+      }
+    }
   };
 
   const handleSendOtp = async () => {
@@ -1938,7 +1995,20 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         setStakeholders((prev) => {
           const next = [...prev];
           const updated = { ...next[index] };
-          if (detailsData.fullName) updated.name = detailsData.fullName;
+          const resolvedStakeholderName = detailsData.fullName || detailsData.name;
+          if (resolvedStakeholderName) {
+            updated.name = resolvedStakeholderName;
+            updated.name_locked = true;
+          }
+          const rawDob = detailsData.dob || detailsData.dobOrDoi || detailsData.dateOfBirth;
+          if (rawDob) {
+            const parsed = parseDobOrDoi(rawDob);
+            if (parsed) {
+              updated.date_of_birth = parsed.iso;
+              updated.dob_locked = true;
+            }
+          }
+          updated.pan_verified = true;
           if (detailsData.phone && !updated.mobile_no) {
             updated.mobile_no = String(detailsData.phone).replace(/\D/g, "").slice(0, 10);
           }
@@ -2026,6 +2096,11 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         state: "",
         city: "",
         pinCode: "",
+        date_of_birth: "",
+        qualification: "",
+        pan_verified: false,
+        name_locked: false,
+        dob_locked: false,
       },
     ]);
   };
@@ -2041,7 +2116,13 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   const handleUpdateStakeholder = (idx: number, key: keyof Stakeholder, val: string) => {
     setStakeholders((prev) => {
       const copy = [...prev];
+      const prevPan = copy[idx]?.pan;
       copy[idx] = { ...copy[idx], [key]: val };
+      if (key === "pan" && val !== prevPan) {
+        copy[idx].pan_verified = false;
+        copy[idx].name_locked = false;
+        copy[idx].dob_locked = false;
+      }
       return copy;
     });
   };
@@ -2290,9 +2371,31 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     }
 
     if (currentStep === 5) {
-      const missing = currentDocList
-        .filter((d) => isDocRequired(d) && !uploadedDocs[d.type])
-        .map((d) => d.label);
+      const missing: string[] = [];
+      for (const d of currentDocList) {
+        if (!isDocRequired(d) || d.type === "visit_report") continue;
+
+        if (d.type === "aadhaar_card" || d.type === "stakeholder_aadhaar_card") {
+          const hasFront = Boolean(uploadedDocs[`${d.type}_front`] || uploadedDocs[d.type]);
+          const hasBack = Boolean(uploadedDocs[`${d.type}_back`]);
+          if (!hasFront && !hasBack) {
+            missing.push(`${d.label} (Front & Back sides)`);
+          } else if (!hasFront) {
+            missing.push(`${d.label} (Front side)`);
+          } else if (!hasBack) {
+            missing.push(`${d.label} (Back side)`);
+          }
+        } else if (!uploadedDocs[d.type]) {
+          missing.push(d.label);
+        }
+      }
+
+      if (!uploadedDocs["itr_year_1"]) {
+        missing.push("1st Year ITR with computation");
+      }
+      if (!uploadedDocs["itr_year_2"]) {
+        missing.push("2nd Year ITR with computation");
+      }
 
       if (!uploadedDocs["dsa_consent_dpdp"]) {
         missing.push("DSA Consent Form (signed)");
@@ -2458,6 +2561,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       payload.stakeholders = stakeholders.map((s) => ({
         stakeholder_type: s.stakeholder_type,
         name: s.name,
+        date_of_birth: s.date_of_birth || undefined,
+        qualification: s.qualification || undefined,
         mobile_no: s.mobile_no,
         pan: s.pan.toUpperCase(),
         aadhaar: s.aadhaar || undefined,
@@ -2471,6 +2576,19 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     }
 
     try {
+      for (const [, docData] of Object.entries(uploadedDocs)) {
+        if (docData.file && docData.file.size > 10 * 1024 * 1024) {
+          toast({
+            title: "File Size Exceeds Limit",
+            description: `Document "${docData.name}" (${(docData.file.size / (1024 * 1024)).toFixed(1)}MB) exceeds 10MB limit. Please re-upload a smaller file before submitting.`,
+            variant: "destructive",
+          });
+          setStep(5);
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
       let resultDsa: any = null;
       let dsaId: number | string = "";
 
@@ -4377,12 +4495,25 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                             </Select>
                           </div>
                           <div>
-                            <Label className="text-sm font-bold text-slate-700 leading-none">Full Name *</Label>
+                            <div className="flex items-center justify-between">
+                              <Label className="text-sm font-bold text-slate-700 leading-none">Full Name *</Label>
+                              {s.name_locked && (
+                                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                  PAN Verified
+                                </span>
+                              )}
+                            </div>
                             <Input
                               value={s.name}
-                              onChange={(e) => handleUpdateStakeholder(idx, "name", e.target.value)}
+                              onChange={(e) => {
+                                if (s.name_locked) return;
+                                handleUpdateStakeholder(idx, "name", e.target.value);
+                              }}
+                              readOnly={Boolean(s.name_locked)}
+                              aria-readonly={Boolean(s.name_locked)}
+                              title={s.name_locked ? "Auto-populated from PAN record and locked." : undefined}
                               placeholder="e.g. Vikram Malhotra"
-                              className="mt-1.5 text-sm"
+                              className={`mt-1.5 text-sm ${s.name_locked ? "bg-slate-100 text-slate-600 cursor-not-allowed" : "bg-white"}`}
                             />
                           </div>
                           <div>
@@ -4399,7 +4530,14 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
                           <div>
-                            <Label className="text-sm font-bold text-slate-700 leading-none">Individual PAN *</Label>
+                            <div className="flex items-center justify-between">
+                              <Label className="text-sm font-bold text-slate-700 leading-none">Individual PAN *</Label>
+                              {s.pan_verified && (
+                                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                  Verified
+                                </span>
+                              )}
+                            </div>
                             <div className="mt-1.5 flex items-center gap-1.5">
                               <Input
                                 value={s.pan}
@@ -4425,6 +4563,49 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                             </div>
                           </div>
                           <div>
+                            <div className="flex items-center justify-between">
+                              <Label className="text-sm font-bold text-slate-700 leading-none">Date of Birth</Label>
+                              {s.dob_locked && (
+                                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                  PAN Verified
+                                </span>
+                              )}
+                            </div>
+                            <DatePicker
+                              value={s.date_of_birth || ""}
+                              disabled={Boolean(s.dob_locked)}
+                              onChange={(e) => {
+                                if (s.dob_locked) return;
+                                handleUpdateStakeholder(idx, "date_of_birth", e.target.value);
+                              }}
+                              max={new Date().toISOString().slice(0, 10)}
+                              placeholder="DD/MM/YYYY"
+                              className={`mt-1.5 ${s.dob_locked ? "bg-slate-100 text-slate-600 cursor-not-allowed" : ""}`}
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-sm font-bold text-slate-700 leading-none">Education Qualification</Label>
+                            <Select
+                              value={s.qualification || ""}
+                              onChange={(e) => handleUpdateStakeholder(idx, "qualification", e.target.value)}
+                              className="mt-1.5 text-sm bg-white"
+                            >
+                              <option value="">Select Qualification</option>
+                              {educationOptions.map((opt) => (
+                                <option key={opt.key} value={opt.key}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                              {s.qualification && !educationOptions.some((o) => o.key === s.qualification) && (
+                                <option value={s.qualification}>{s.qualification}</option>
+                              )}
+                            </Select>
+                          </div>
+                        </div>
+
+                        {/* Row 3: Aadhaar, DIN & Gender */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+                          <div>
                             <Label className="text-sm font-bold text-slate-700 leading-none">Aadhaar Number *</Label>
                             <Input
                               value={s.aadhaar}
@@ -4449,10 +4630,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                               className="mt-1.5 text-sm font-mono"
                             />
                           </div>
-                        </div>
-
-                        {/* Row 3: Gender & Address */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
                           <div>
                             <Label className="text-sm font-bold text-slate-700 leading-none">Gender</Label>
                             <Select
@@ -4466,7 +4643,11 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                               <option value="Other">Other</option>
                             </Select>
                           </div>
-                          <div className="sm:col-span-2">
+                        </div>
+
+                        {/* Row 4: Address */}
+                        <div className="grid grid-cols-1 gap-3 mt-3">
+                          <div>
                             <Label className="text-sm font-bold text-slate-700 leading-none">Address</Label>
                             <Input
                               value={s.address || ""}
@@ -4566,7 +4747,12 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     </h3>
                   </div>
                   <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-blue-50 text-blue-800 border border-blue-200">
-                    Attached: {currentDocList.filter((d) => Boolean(uploadedDocs[d.type])).length} / {currentDocList.length}
+                    Attached: {currentDocList.filter((d) => {
+                      if (d.type === "aadhaar_card" || d.type === "stakeholder_aadhaar_card") {
+                        return Boolean(uploadedDocs[`${d.type}_front`] || uploadedDocs[d.type]) && Boolean(uploadedDocs[`${d.type}_back`]);
+                      }
+                      return Boolean(uploadedDocs[d.type]);
+                    }).length} / {currentDocList.length}
                   </span>
                 </div>
               </div>
@@ -4582,6 +4768,118 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   .filter((d) => d.type !== "dsa_consent_dpdp" && !d.type.startsWith("itr_"))
                   .map((doc) => {
                     const required = isDocRequired(doc);
+                    const isAadhaar = doc.type === "aadhaar_card" || doc.type === "stakeholder_aadhaar_card";
+
+                    if (isAadhaar) {
+                      const frontDoc = uploadedDocs[`${doc.type}_front`] || uploadedDocs[doc.type];
+                      const backDoc = uploadedDocs[`${doc.type}_back`];
+                      const isComplete = Boolean(frontDoc && backDoc);
+                      const isPartial = Boolean(frontDoc || backDoc);
+
+                      return (
+                        <div
+                          key={doc.type}
+                          className={`px-4 py-3.5 text-xs grid grid-cols-12 gap-3 items-center transition-colors ${
+                            isComplete ? "bg-emerald-50/30" : isPartial ? "bg-amber-50/20" : "bg-white hover:bg-slate-50/50"
+                          }`}
+                        >
+                          {/* Document Label */}
+                          <div className="col-span-8 sm:col-span-9">
+                            <div className="flex items-center gap-2">
+                              <FileText className={`h-4 w-4 flex-shrink-0 ${isComplete ? "text-emerald-600" : isPartial ? "text-amber-500" : "text-slate-400"}`} />
+                              <span className="text-sm font-bold text-slate-800">
+                                {doc.label}{required && <span className="text-red-500 font-bold ml-0.5" style={{ color: "#ef4444" }}>*</span>}
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-slate-400 block font-normal ml-6 mt-0.5">
+                              Allowed formats: .pdf, .jpg, .jpeg, .png (Max 10MB) • (Front &amp; Back)
+                            </span>
+                            <div className="ml-6 mt-1 space-y-0.5">
+                              {frontDoc && (
+                                <span className="text-[11px] text-emerald-700 font-medium block">
+                                  ✓ Front: {frontDoc.name} ({frontDoc.size})
+                                </span>
+                              )}
+                              {backDoc && (
+                                <span className="text-[11px] text-emerald-700 font-medium block">
+                                  ✓ Back: {backDoc.name} ({backDoc.size})
+                                </span>
+                              )}
+                              {!isComplete && isPartial && (
+                                <span className="text-[11px] text-amber-600 font-normal block">
+                                  • 1 of 2 files attached. Attach 2nd file to complete.
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Single Action / Upload Field */}
+                          <div className="col-span-4 sm:col-span-3 flex items-center justify-end gap-2">
+                            {isComplete ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                                  2 Files Attached
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => removeAadhaarDocs(doc.type)}
+                                  className="text-rose-600 hover:text-rose-800 p-1 rounded hover:bg-rose-50"
+                                  title="Remove files"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            ) : isPartial ? (
+                              <div className="flex items-center gap-1.5">
+                                <label className="cursor-pointer inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50/50 px-2.5 py-1 text-[11px] font-semibold text-amber-900 shadow-sm hover:bg-amber-100 transition-colors">
+                                  <UploadCloud className="h-3.5 w-3.5 text-amber-700" />
+                                  <span>Attach 2nd File</span>
+                                  <input
+                                    type="file"
+                                    accept=".pdf,.jpg,.jpeg,.png"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      const files = e.target.files;
+                                      if (files && files.length > 0) {
+                                        e.target.value = "";
+                                        handleAadhaarMultiUpload(doc.type, files);
+                                      }
+                                    }}
+                                  />
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => removeAadhaarDocs(doc.type)}
+                                  className="text-rose-600 hover:text-rose-800 p-1 rounded hover:bg-rose-50"
+                                  title="Remove file"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <label className="cursor-pointer inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-400 transition-colors">
+                                <UploadCloud className="h-3.5 w-3.5 text-blue-600" />
+                                <span>Attach (2 Files)</span>
+                                <input
+                                  type="file"
+                                  multiple
+                                  accept=".pdf,.jpg,.jpeg,.png"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const files = e.target.files;
+                                    if (files && files.length > 0) {
+                                      e.target.value = "";
+                                      handleAadhaarMultiUpload(doc.type, files);
+                                    }
+                                  }}
+                                />
+                              </label>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    }
+
                     const attached = uploadedDocs[doc.type];
 
                     return (
@@ -4671,8 +4969,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       </p>
                     </div>
                   </div>
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-200/80 text-slate-600">
-                    Optional
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-blue-100 text-blue-700">
+                    Mandatory (Last 2 F.Y.)
                   </span>
                 </div>
 
@@ -4694,7 +4992,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           <div className="flex items-center gap-2">
                             <FileText className={`h-4 w-4 flex-shrink-0 ${attached ? "text-emerald-600" : "text-slate-400"}`} />
                             <span className="text-sm font-bold text-slate-800">
-                              {doc.label}
+                              {doc.label} {doc.required && <span className="text-red-500 font-bold ml-0.5" style={{ color: "#ef4444" }}>*</span>}
                             </span>
                           </div>
                           <span className="text-[10px] text-slate-400 block font-normal ml-6 mt-0.5">
@@ -4833,7 +5131,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           className="hidden"
                           onChange={(e) => {
                             const f = e.target.files?.[0];
-                            if (f) handleFileUpload("dsa_consent_dpdp", f);
+                            if (f) {
+                              e.target.value = "";
+                              handleFileUpload("dsa_consent_dpdp", f);
+                            }
                           }}
                         />
                       </label>

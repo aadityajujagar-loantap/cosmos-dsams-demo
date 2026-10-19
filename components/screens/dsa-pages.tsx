@@ -518,6 +518,11 @@ export function formatDocumentType(type?: string): string {
   }
   const map: Record<string, string> = {
     aadhaar_card: "Aadhaar Card",
+    aadhaar_card_front: "Aadhaar Card (Front)",
+    aadhaar_card_back: "Aadhaar Card (Back)",
+    stakeholder_aadhaar_card: "Key Person Aadhaar Card",
+    stakeholder_aadhaar_card_front: "Key Person Aadhaar Card (Front)",
+    stakeholder_aadhaar_card_back: "Key Person Aadhaar Card (Back)",
     pan_card: "PAN Card",
     gst_certificate: "GST Certificate",
     msme_certificate: "MSME Certificate",
