@@ -73,7 +73,7 @@ const INDIVIDUAL_DOCS: DocDef[] = [
   { type: "aadhaar_card", label: "Aadhaar Card", required: true, requirementLabel: "Mandatory" },
   { type: "education_certificate", label: "Educational qualification certificate (highest)", required: true, requirementLabel: "Mandatory" },
   { type: "dsa_consent_dpdp", label: "DSA Consent Format (as per DPDP Act)", required: true, requirementLabel: "Mandatory" },
-  { type: "visit_report", label: "Office Visit Report", required: (s) => s.mode === "branch", requirementLabel: "Mandatory", staffOnly: true },
+  { type: "visit_report", label: "Office Visit Report", required: false, requirementLabel: "Optional (Maker Review)", staffOnly: true },
   { type: "brief_profile", label: "Brief profile of DSA", required: false, requirementLabel: "Optional" },
   { type: "other_document", label: "Any other document", required: false, requirementLabel: "Optional" },
 ];
@@ -85,7 +85,7 @@ const ENTITY_DOCS: DocDef[] = [
   { type: "stakeholder_aadhaar_card", label: "At least one Key Person / Partner / Director — Aadhaar Card", required: true, requirementLabel: "Mandatory" },
   { type: "dsa_consent_dpdp", label: "DSA Consent Format (as per DPDP Act)", required: true, requirementLabel: "Mandatory" },
   { type: "partnership_deed", label: "Partnership Deed (if applicable)", required: false, requirementLabel: "Optional" },
-  { type: "visit_report", label: "Office Visit Report", required: (s) => s.mode === "branch", requirementLabel: "Mandatory", staffOnly: true },
+  { type: "visit_report", label: "Office Visit Report", required: false, requirementLabel: "Optional (Maker Review)", staffOnly: true },
   { type: "brief_profile", label: "Brief profile of DSA entity", required: false, requirementLabel: "Optional" },
   { type: "other_document", label: "Any other document", required: false, requirementLabel: "Optional" },
 ];
@@ -2530,7 +2530,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         const checklist = checklistRes?.data ?? checklistRes;
         if (checklist && checklist.is_complete === false && checklist.missing_mandatory_count > 0) {
           const missing = (checklist.missing_mandatory_documents ?? []).filter((docName: string) => {
-            if (mode === "self" && docName.toLowerCase().includes("visit report")) return false;
+            if (docName.toLowerCase().includes("visit report")) return false;
             return true;
           });
           if (missing.length > 0) {
