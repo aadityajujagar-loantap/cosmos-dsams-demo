@@ -514,6 +514,11 @@ export function formatDocumentType(type?: string): string {
   }
   const map: Record<string, string> = {
     aadhaar_card: "Aadhaar Card",
+    aadhaar_card_front: "Aadhaar Card (Front)",
+    aadhaar_card_back: "Aadhaar Card (Back)",
+    stakeholder_aadhaar_card: "Key Person Aadhaar Card",
+    stakeholder_aadhaar_card_front: "Key Person Aadhaar Card (Front)",
+    stakeholder_aadhaar_card_back: "Key Person Aadhaar Card (Back)",
     pan_card: "PAN Card",
     gst_certificate: "GST Certificate",
     msme_certificate: "MSME Certificate",
@@ -526,8 +531,8 @@ export function formatDocumentType(type?: string): string {
     board_resolution: "Board Resolution",
     partnership_deed: "Partnership Deed",
     moa_aoa: "MOA / AOA",
-    rent_agreement: "Rent Agreement",
-    rental_agreement: "Rent Agreement",
+    rent_agreement: "Residence / office as applicable",
+    rental_agreement: "Residence / office as applicable",
   };
   const key = String(type).toLowerCase().trim();
   if (map[key]) return map[key];
