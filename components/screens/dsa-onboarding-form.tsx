@@ -35,6 +35,7 @@ import { useMockStore } from "@/lib/store";
 import { useToast } from "@/components/ui/toast";
 import { Button, Card, CardContent, DatePicker, Input, Label, Select } from "@/components/ui/primitives";
 import { cn, formatDate, generateDsaId } from "@/lib/utils";
+import { withBasePath } from "@/lib/base-path";
 
 export type OnboardingMode = "branch" | "self";
 export type DsaType = "INDIVIDUAL" | "ENTITY";
@@ -4791,8 +4792,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   <div className="flex items-center flex-wrap gap-3 sm:justify-end">
                     {/* Download option */}
                     <a
-                      href="/documents/Cosmos_Bank_DSA_Consent_Form.pdf"
+                      href={withBasePath("/documents/Cosmos_Bank_DSA_Consent_Form.pdf")}
                       download="Cosmos_Bank_DSA_Consent_Form.pdf"
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-700 shadow-sm hover:bg-blue-50 hover:border-blue-400 transition-colors"
                     >
                       <Download className="h-3.5 w-3.5 text-blue-600" />
