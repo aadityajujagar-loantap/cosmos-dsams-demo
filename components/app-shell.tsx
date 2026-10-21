@@ -27,6 +27,7 @@ import {
 import { ReactNode, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { Button, Modal } from "@/components/ui/primitives";
+import { useToast } from "@/components/ui/toast";
 import { UserAccountModal } from "@/components/user-account-modal";
 import { useMockStore } from "@/lib/store";
 import { withBasePath } from "@/lib/base-path";
@@ -140,7 +141,20 @@ function isPathAllowedForRole(role: string, pathname: string) {
     );
   }
 
-  if (role === "Branch User" || role === "Checker") {
+  if (role === "Checker") {
+    return (
+      (pathname.startsWith("/dsa/") &&
+        !["/dsa/management", "/dsa/product-setting", "/dsa/onboarding"].some(
+          (path) => pathname === path || pathname.startsWith(`${path}/`),
+        )) ||
+      pathname === "/leads" ||
+      pathname.startsWith("/leads/") ||
+      pathname === "/applications" ||
+      pathname.startsWith("/applications/")
+    );
+  }
+
+  if (role === "Branch User" || role === "Maker") {
     return (
       (pathname.startsWith("/dsa/") &&
         !["/dsa/management", "/dsa/product-setting"].some(
@@ -215,6 +229,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [flyoutGroup, setFlyoutGroup] = useState<string | null>(null);
   const [flyoutPos, setFlyoutPos] = useState<{ top: number; left: number } | null>(null);
   const { store, currentUser, logout, hasPermission } = useMockStore();
+  const { toast } = useToast();
 
   useEffect(() => {
     try {
@@ -293,9 +308,16 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
 
     if (!isPathAllowedForRole(currentUser.role, pathname)) {
+      if (pathname === "/dsa/onboarding" || pathname.startsWith("/dsa/onboarding")) {
+        toast({
+          title: "Access Denied",
+          description: "Only Maker can onboard a DSA. Checker is not authorized.",
+          variant: "destructive",
+        });
+      }
       router.replace(defaultPathForRole(currentUser.role));
     }
-  }, [currentUser, pathname, router, mounted, logout]);
+  }, [currentUser, pathname, router, mounted, logout, toast]);
 
   const readNotificationIds = useMemo(() => {
     if (readNotificationsVersion < 0) return [];
@@ -396,7 +418,18 @@ export function AppShell({ children }: { children: ReactNode }) {
           label: "Overview",
         },
       ];
-    } else if (currentUser.role === "Branch User" || currentUser.role === "Checker") {
+    } else if (currentUser.role === "Checker") {
+      return [
+        {
+          items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
+          label: "Overview",
+        },
+        {
+          items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications & Leads" }],
+          label: "Sourcing",
+        },
+      ];
+    } else if (currentUser.role === "Branch User" || currentUser.role === "Maker") {
       return [
         {
           items: [{ href: "/", icon: LayoutDashboard, label: "Dashboard" }],
