@@ -396,6 +396,7 @@ export function LeadManagementScreen() {
   const [verifyingPan, setVerifyingPan] = useState(false);
   const [panVerified, setPanVerified] = useState(false);
   const [panMessage, setPanMessage] = useState<string | null>(null);
+  const [isMobileFromPan, setIsMobileFromPan] = useState(false);
 
   // Mobile OTP State
   const [sendingOtp, setSendingOtp] = useState(false);
@@ -668,6 +669,20 @@ const setFilters = (newFilters: {
         const stateName = detailsData.state || "Maharashtra";
         const pinCodeVal = detailsData.pinCode || detailsData.pincode || "400001";
 
+        const panMobileRaw = String(
+          detailsData.phoneNumber ||
+          detailsData.phone_number ||
+          detailsData.mobile ||
+          detailsData.mobileNumber ||
+          detailsData.phone ||
+          detailsData.contactNo ||
+          detailsData.contact_no ||
+          ""
+        ).trim().replace(/\D/g, "");
+        const panMobile = panMobileRaw.length >= 10 ? panMobileRaw.slice(-10) : "";
+
+        setIsMobileFromPan(Boolean(panMobile));
+
         setCreateForm((prev) => ({
           ...prev,
           pan_no: pan,
@@ -684,13 +699,16 @@ const setFilters = (newFilters: {
           city: cityName,
           state: stateName,
           pincode: pinCodeVal,
+          mobile: panMobile || prev.mobile,
         }));
       } else {
         setPanVerified(false);
+        setIsMobileFromPan(false);
         setPanMessage(res?.message || "PAN verification returned invalid status");
       }
     } catch (err: any) {
       setPanVerified(false);
+      setIsMobileFromPan(false);
       setPanMessage(err?.response?.data?.message || err?.message || "PAN verification failed");
     } finally {
       setVerifyingPan(false);
@@ -828,6 +846,26 @@ const setFilters = (newFilters: {
     if (!createForm.loan_amount_required || Number(createForm.loan_amount_required) < 1000) {
       toast({ title: "Validation Error", description: "Please enter valid loan amount (min ₹1,000)", variant: "error" });
       return;
+    }
+    if (Number(createForm.loan_amount_required) > 30000000) {
+      toast({ title: "Validation Error", description: "The loan amount should not exceed ₹3 Crore.", variant: "error" });
+      return;
+    }
+
+    if (createForm.constitution === "Individual") {
+      const grossMonthly = Number(createForm.avg_gross_monthly_income || 0);
+      const netMonthly = Number(createForm.avg_net_monthly_income || 0);
+      if (createForm.avg_gross_monthly_income && createForm.avg_net_monthly_income && grossMonthly <= netMonthly) {
+        toast({ title: "Validation Error", description: "Gross Income should be greater than Net Income.", variant: "error" });
+        return;
+      }
+    } else {
+      const grossAnnual = Number(createForm.avg_annual_gross_income || 0);
+      const netAnnual = Number(createForm.avg_annual_net_income || 0);
+      if (createForm.avg_annual_gross_income && createForm.avg_annual_net_income && grossAnnual <= netAnnual) {
+        toast({ title: "Validation Error", description: "Annual Gross Income should be greater than Annual Net Income.", variant: "error" });
+        return;
+      }
     }
 
     try {
@@ -1935,17 +1973,23 @@ const setFilters = (newFilters: {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6 items-start">
                     <div className="flex flex-col">
-                      <div className="h-5 flex items-center">
+                      <div className="h-5 flex items-center justify-between">
                         <Label className="text-xs font-bold text-slate-700 leading-none">
                           Mobile Number <span className="text-rose-500 font-bold">*</span>
                         </Label>
+                        {isMobileFromPan && (
+                          <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3 text-emerald-600" /> From PAN API
+                          </span>
+                        )}
                       </div>
                       <div className="flex gap-2.5 mt-1.5">
                         <Input
                           type="text"
                           required
                           maxLength={10}
-                          disabled={otpVerified}
+                          disabled={otpVerified || isMobileFromPan}
+                          readOnly={isMobileFromPan}
                           placeholder="10-digit mobile"
                           value={createForm.mobile || ""}
                           onChange={(e) => {
@@ -1953,7 +1997,10 @@ const setFilters = (newFilters: {
                             setOtpSent(false);
                             setOtpVerified(false);
                           }}
-                          className="flex-1 font-mono text-xs sm:text-sm h-9 bg-white disabled:opacity-60"
+                          className={cn(
+                            "flex-1 font-mono text-xs sm:text-sm h-9 bg-white disabled:opacity-60",
+                            isMobileFromPan && "bg-slate-50 text-slate-600 cursor-not-allowed"
+                          )}
                         />
                         {!otpVerified && (
                           <Button
@@ -1965,7 +2012,27 @@ const setFilters = (newFilters: {
                             {sendingOtp ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Send OTP"}
                           </Button>
                         )}
+                        {otpVerified && !isMobileFromPan && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              setOtpVerified(false);
+                              setOtpSent(false);
+                              setOtpCode("");
+                              setOtpMessage(null);
+                            }}
+                            className="h-9 px-3 text-xs text-blue-600 hover:text-blue-800 border-blue-200 shrink-0"
+                          >
+                            Edit
+                          </Button>
+                        )}
                       </div>
+                      {panVerified && !isMobileFromPan && (
+                        <p className="text-[11px] text-slate-500 mt-1">
+                          Mobile not received in PAN response. Enter/edit manually.
+                        </p>
+                      )}
                     </div>
                     <div className="flex flex-col">
                       <div className="h-5 flex items-center">
@@ -2072,9 +2139,10 @@ const setFilters = (newFilters: {
                             type="text"
                             required
                             placeholder="First Name"
+                            readOnly={panVerified && Boolean(createForm.first_name)}
                             value={createForm.first_name || ""}
                             onChange={(e) => setCreateForm({ ...createForm, first_name: e.target.value })}
-                            className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                            className={cn("mt-1.5 text-xs sm:text-sm h-9 bg-white", panVerified && createForm.first_name && "bg-slate-50 text-slate-600 cursor-not-allowed")}
                           />
                         </div>
                         <div className="flex flex-col">
@@ -2086,9 +2154,10 @@ const setFilters = (newFilters: {
                           <Input
                             type="text"
                             placeholder="Middle Name"
+                            readOnly={panVerified && Boolean(createForm.middle_name)}
                             value={createForm.middle_name || ""}
                             onChange={(e) => setCreateForm({ ...createForm, middle_name: e.target.value })}
-                            className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                            className={cn("mt-1.5 text-xs sm:text-sm h-9 bg-white", panVerified && createForm.middle_name && "bg-slate-50 text-slate-600 cursor-not-allowed")}
                           />
                         </div>
                         <div className="flex flex-col">
@@ -2101,9 +2170,10 @@ const setFilters = (newFilters: {
                             type="text"
                             required
                             placeholder="Last Name"
+                            readOnly={panVerified && Boolean(createForm.last_name)}
                             value={createForm.last_name || ""}
                             onChange={(e) => setCreateForm({ ...createForm, last_name: e.target.value })}
-                            className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                            className={cn("mt-1.5 text-xs sm:text-sm h-9 bg-white", panVerified && createForm.last_name && "bg-slate-50 text-slate-600 cursor-not-allowed")}
                           />
                         </div>
                       </div>
@@ -2135,13 +2205,14 @@ const setFilters = (newFilters: {
                           <Input
                             type="date"
                             required
+                            readOnly={panVerified && Boolean(createForm.dob)}
                             value={createForm.dob || ""}
                             onChange={(e) => {
                               const dobVal = e.target.value;
                               const ageVal = calculateAgeFromDob(dobVal);
                               setCreateForm((prev) => ({ ...prev, dob: dobVal, age: ageVal }));
                             }}
-                            className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                            className={cn("mt-1.5 text-xs sm:text-sm h-9 bg-white", panVerified && createForm.dob && "bg-slate-50 text-slate-600 cursor-not-allowed")}
                           />
                         </div>
                         <div className="flex flex-col">
@@ -2292,6 +2363,11 @@ const setFilters = (newFilters: {
                           />
                         </div>
                       </div>
+                      {createForm.avg_gross_monthly_income && createForm.avg_net_monthly_income && Number(createForm.avg_gross_monthly_income) <= Number(createForm.avg_net_monthly_income) && (
+                        <p className="text-xs text-rose-600 font-semibold mt-1">
+                          ⚠️ Gross Income should be greater than Net Income.
+                        </p>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -2313,9 +2389,10 @@ const setFilters = (newFilters: {
                             type="text"
                             required
                             placeholder="Legal company or firm name"
+                            readOnly={panVerified && Boolean(createForm.entity_name)}
                             value={createForm.entity_name || ""}
                             onChange={(e) => setCreateForm({ ...createForm, entity_name: e.target.value })}
-                            className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                            className={cn("mt-1.5 text-xs sm:text-sm h-9 bg-white", panVerified && createForm.entity_name && "bg-slate-50 text-slate-600 cursor-not-allowed")}
                           />
                         </div>
                         <div className="flex flex-col">
@@ -2327,9 +2404,10 @@ const setFilters = (newFilters: {
                           <Input
                             type="date"
                             required
+                            readOnly={panVerified && Boolean(createForm.doi)}
                             value={createForm.doi || ""}
                             onChange={(e) => setCreateForm({ ...createForm, doi: e.target.value })}
-                            className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                            className={cn("mt-1.5 text-xs sm:text-sm h-9 bg-white", panVerified && createForm.doi && "bg-slate-50 text-slate-600 cursor-not-allowed")}
                           />
                         </div>
                       </div>
@@ -2431,6 +2509,11 @@ const setFilters = (newFilters: {
                           />
                         </div>
                       </div>
+                      {createForm.avg_annual_gross_income && createForm.avg_annual_net_income && Number(createForm.avg_annual_gross_income) <= Number(createForm.avg_annual_net_income) && (
+                        <p className="text-xs text-rose-600 font-semibold mt-1">
+                          ⚠️ Annual Gross Income should be greater than Annual Net Income.
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
@@ -2539,11 +2622,17 @@ const setFilters = (newFilters: {
                       type="number"
                       required
                       min={1000}
+                      max={30000000}
                       placeholder="100000"
                       value={createForm.loan_amount_required || ""}
                       onChange={(e) => setCreateForm({ ...createForm, loan_amount_required: Number(e.target.value) })}
                       className="mt-1.5 font-mono text-xs sm:text-sm h-9 bg-white"
                     />
+                    {Number(createForm.loan_amount_required) > 30000000 && (
+                      <p className="text-xs text-rose-600 font-semibold mt-1">
+                        ⚠️ The loan amount should not exceed ₹3 Crore (₹3,00,00,000).
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex flex-col">

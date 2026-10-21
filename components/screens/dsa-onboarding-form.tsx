@@ -2378,13 +2378,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
         if (d.type === "aadhaar_card" || d.type === "stakeholder_aadhaar_card") {
           const hasFront = Boolean(uploadedDocs[`${d.type}_front`] || uploadedDocs[d.type]);
-          const hasBack = Boolean(uploadedDocs[`${d.type}_back`]);
-          if (!hasFront && !hasBack) {
-            missing.push(`${d.label} (Front & Back sides)`);
-          } else if (!hasFront) {
-            missing.push(`${d.label} (Front side)`);
-          } else if (!hasBack) {
-            missing.push(`${d.label} (Back side)`);
+          // Back side is optional — only front (or any single file) is mandatory
+          if (!hasFront) {
+            missing.push(d.label);
           }
         } else if (!uploadedDocs[d.type]) {
           missing.push(d.label);
@@ -4748,7 +4744,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-blue-50 text-blue-800 border border-blue-200">
                     Attached: {currentDocList.filter((d) => {
                       if (d.type === "aadhaar_card" || d.type === "stakeholder_aadhaar_card") {
-                        return Boolean(uploadedDocs[`${d.type}_front`] || uploadedDocs[d.type]) && Boolean(uploadedDocs[`${d.type}_back`]);
+                        return Boolean(uploadedDocs[`${d.type}_front`] || uploadedDocs[d.type]);
                       }
                       return Boolean(uploadedDocs[d.type]);
                     }).length} / {currentDocList.length}
@@ -4772,8 +4768,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     if (isAadhaar) {
                       const frontDoc = uploadedDocs[`${doc.type}_front`] || uploadedDocs[doc.type];
                       const backDoc = uploadedDocs[`${doc.type}_back`];
-                      const isComplete = Boolean(frontDoc && backDoc);
-                      const isPartial = Boolean(frontDoc || backDoc);
+                      // Attached once at least 1 file is uploaded; back side is optional-extra
+                      const isComplete = Boolean(frontDoc);
+                      const isPartial = Boolean(backDoc && !frontDoc); // only back without front (edge case)
 
                       return (
                         <div
@@ -4791,12 +4788,12 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                               </span>
                             </div>
                             <span className="text-[10px] text-slate-400 block font-normal ml-6 mt-0.5">
-                              Allowed formats: .pdf, .jpg, .jpeg, .png (Max 10MB) • (Front &amp; Back)
+                              Allowed formats: .pdf, .jpg, .jpeg, .png (Max 10MB) • (Front &amp; Back optional)
                             </span>
                             <div className="ml-6 mt-1 space-y-0.5">
                               {frontDoc && (
                                 <span className="text-[11px] text-emerald-700 font-medium block">
-                                  ✓ Front: {frontDoc.name} ({frontDoc.size})
+                                  ✓ {backDoc ? "Front" : "Aadhaar"}: {frontDoc.name} ({frontDoc.size})
                                 </span>
                               )}
                               {backDoc && (
@@ -4804,9 +4801,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                                   ✓ Back: {backDoc.name} ({backDoc.size})
                                 </span>
                               )}
-                              {!isComplete && isPartial && (
-                                <span className="text-[11px] text-amber-600 font-normal block">
-                                  • 1 of 2 files attached. Attach 2nd file to complete.
+                              {frontDoc && !backDoc && (
+                                <span className="text-[11px] text-slate-400 font-normal block">
+                                  • Back side optional — attach if available
                                 </span>
                               )}
                             </div>
@@ -4817,8 +4814,24 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                             {isComplete ? (
                               <div className="flex items-center gap-1.5">
                                 <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                                  2 Files Attached
+                                  {backDoc ? "2 Files Attached" : "Attached"}
                                 </span>
+                                {!backDoc && (
+                                  <label className="cursor-pointer inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors" title="Add back side (optional)">
+                                    <UploadCloud className="h-3 w-3 text-slate-500" />
+                                    <span>+Back</span>
+                                    <input
+                                      type="file"
+                                      accept=".pdf,.jpg,.jpeg,.png"
+                                      className="hidden"
+                                      onChange={(e) => {
+                                        const files = Array.from(e.target.files ?? []);
+                                        e.target.value = "";
+                                        if (files.length > 0) handleAadhaarMultiUpload(doc.type, files);
+                                      }}
+                                    />
+                                  </label>
+                                )}
                                 <button
                                   type="button"
                                   onClick={() => removeAadhaarDocs(doc.type)}
@@ -4829,20 +4842,19 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                                 </button>
                               </div>
                             ) : isPartial ? (
+                              // Edge case: back uploaded but no front — show re-attach
                               <div className="flex items-center gap-1.5">
                                 <label className="cursor-pointer inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50/50 px-2.5 py-1 text-[11px] font-semibold text-amber-900 shadow-sm hover:bg-amber-100 transition-colors">
                                   <UploadCloud className="h-3.5 w-3.5 text-amber-700" />
-                                  <span>Attach 2nd File</span>
+                                  <span>Attach Front</span>
                                   <input
                                     type="file"
                                     accept=".pdf,.jpg,.jpeg,.png"
                                     className="hidden"
                                     onChange={(e) => {
-                                      const files = e.target.files;
-                                      if (files && files.length > 0) {
-                                        e.target.value = "";
-                                        handleAadhaarMultiUpload(doc.type, files);
-                                      }
+                                      const files = Array.from(e.target.files ?? []);
+                                      e.target.value = "";
+                                      if (files.length > 0) handleAadhaarMultiUpload(doc.type, files);
                                     }}
                                   />
                                 </label>
@@ -4858,18 +4870,16 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                             ) : (
                               <label className="cursor-pointer inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-400 transition-colors">
                                 <UploadCloud className="h-3.5 w-3.5 text-blue-600" />
-                                <span>Attach (2 Files)</span>
+                                <span>Attach Front &amp; Back</span>
                                 <input
                                   type="file"
                                   multiple
                                   accept=".pdf,.jpg,.jpeg,.png"
                                   className="hidden"
                                   onChange={(e) => {
-                                    const files = e.target.files;
-                                    if (files && files.length > 0) {
-                                      e.target.value = "";
-                                      handleAadhaarMultiUpload(doc.type, files);
-                                    }
+                                    const files = Array.from(e.target.files ?? []);
+                                    e.target.value = "";
+                                    if (files.length > 0) handleAadhaarMultiUpload(doc.type, files);
                                   }}
                                 />
                               </label>

@@ -23,7 +23,7 @@ import {
 import { fetchPublicTokenInfo, submitCustomerLeadPublic, sendLeadOtp, verifyLeadOtp, LeadData } from '@/apis/lead';
 import { fetchLoanProducts, fetchLoanTypesByProduct, getMasterValues, verifyPanAdvance, fetchBranchesDropdown } from '@/apis/admin';
 import { getLoanPurposeOptionsFromApi } from '@/lib/loan-purpose';
-import { formatCurrency, parseDobToIso, calculateAgeFromDob } from '@/lib/utils';
+import { formatCurrency, parseDobToIso, calculateAgeFromDob, cn } from '@/lib/utils';
 import { withBasePath } from '@/lib/base-path';
 import {
   Button,
@@ -50,6 +50,7 @@ export default function CustomerSelfFillPage() {
   const [verifyingPan, setVerifyingPan] = useState(false);
   const [panVerified, setPanVerified] = useState(false);
   const [panMessage, setPanMessage] = useState<string | null>(null);
+  const [isMobileFromPan, setIsMobileFromPan] = useState(false);
 
   // Mobile OTP State
   const [sendingOtp, setSendingOtp] = useState(false);
@@ -285,6 +286,20 @@ export default function CustomerSelfFillPage() {
         const stateName = detailsData.state || 'Maharashtra';
         const pinCodeVal = detailsData.pinCode || detailsData.pincode || '400001';
 
+        const panMobileRaw = String(
+          detailsData.phoneNumber ||
+          detailsData.phone_number ||
+          detailsData.mobile ||
+          detailsData.mobileNumber ||
+          detailsData.phone ||
+          detailsData.contactNo ||
+          detailsData.contact_no ||
+          ''
+        ).trim().replace(/\D/g, '');
+        const panMobile = panMobileRaw.length >= 10 ? panMobileRaw.slice(-10) : '';
+
+        setIsMobileFromPan(Boolean(panMobile));
+
         setFormData((prev) => ({
           ...prev,
           pan_no: pan,
@@ -301,13 +316,16 @@ export default function CustomerSelfFillPage() {
           city: cityName,
           state: stateName,
           pincode: pinCodeVal,
+          mobile: panMobile || prev.mobile,
         }));
       } else {
         setPanVerified(false);
+        setIsMobileFromPan(false);
         setPanMessage(res?.message || 'PAN Verification returned invalid status.');
       }
     } catch (err: any) {
       setPanVerified(false);
+      setIsMobileFromPan(false);
       setPanMessage(err?.response?.data?.message || err?.message || 'PAN Verification failed.');
     } finally {
       setVerifyingPan(false);
@@ -383,8 +401,29 @@ export default function CustomerSelfFillPage() {
       setError('Please enter a valid 10-character PAN Number.');
       return;
     }
-    if (constitution === 'Individual' && formData.age !== undefined && (formData.age < 18 || formData.age > 70)) {
-      setError(`Applicant age must be between 18 and 70 years. Current calculated age: ${formData.age}`);
+    if (constitution === 'Individual') {
+      const gross = Number(formData.avg_gross_monthly_income || 0);
+      const net = Number(formData.avg_net_monthly_income || 0);
+      if (formData.avg_gross_monthly_income && formData.avg_net_monthly_income && gross <= net) {
+        setError('Gross Income should be greater than Net Income.');
+        return;
+      }
+      if (formData.age !== undefined && (formData.age < 18 || formData.age > 70)) {
+        setError(`Applicant age must be between 18 and 70 years. Current calculated age: ${formData.age}`);
+        return;
+      }
+    } else {
+      const gross = Number(formData.avg_annual_gross_income || 0);
+      const net = Number(formData.avg_annual_net_income || 0);
+      if (formData.avg_annual_gross_income && formData.avg_annual_net_income && gross <= net) {
+        setError('Annual Gross Income should be greater than Annual Net Income.');
+        return;
+      }
+    }
+
+    const loanAmount = Number(formData.loan_amount_required || 0);
+    if (loanAmount > 30000000) {
+      setError('The loan amount should not exceed ₹3 Crore.');
       return;
     }
 
@@ -760,23 +799,34 @@ export default function CustomerSelfFillPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="flex flex-col">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                      Mobile Number *
-                    </Label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 leading-none">
+                        Mobile Number *
+                      </Label>
+                      {isMobileFromPan && (
+                        <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-1">
+                          <CheckCircle2 className="h-3 w-3 text-emerald-600" /> From PAN API
+                        </span>
+                      )}
+                    </div>
                     <div className="flex gap-2">
                       <Input
                         type="text"
                         required
                         maxLength={10}
                         placeholder="10-digit mobile"
-                        disabled={otpVerified}
+                        disabled={otpVerified || isMobileFromPan}
+                        readOnly={isMobileFromPan}
                         value={formData.mobile || ''}
                         onChange={(e) => {
                           handleChange('mobile', e.target.value.replace(/\D/g, ''));
                           setOtpSent(false);
                           setOtpVerified(false);
                         }}
-                        className="flex-1 h-10 text-sm font-mono"
+                        className={cn(
+                          "flex-1 h-10 text-sm font-mono",
+                          isMobileFromPan && "bg-slate-50 text-slate-600 cursor-not-allowed"
+                        )}
                       />
                       {!otpVerified && (
                         <Button
@@ -788,7 +838,27 @@ export default function CustomerSelfFillPage() {
                           {sendingOtp ? 'Sending...' : 'Send OTP'}
                         </Button>
                       )}
+                      {otpVerified && !isMobileFromPan && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            setOtpVerified(false);
+                            setOtpSent(false);
+                            setOtpCode('');
+                            setOtpMessage(null);
+                          }}
+                          className="h-10 px-3 text-xs text-blue-600 hover:text-blue-800 border-blue-200 shrink-0"
+                        >
+                          Edit
+                        </Button>
+                      )}
                     </div>
+                    {panVerified && !isMobileFromPan && (
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        Mobile not received in PAN response. Enter/edit manually.
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex flex-col">
@@ -908,9 +978,10 @@ export default function CustomerSelfFillPage() {
                         type="text"
                         required
                         placeholder="First Name"
+                        readOnly={panVerified && Boolean(formData.first_name)}
                         value={formData.first_name || ''}
                         onChange={(e) => handleChange('first_name', e.target.value)}
-                        className="h-10 text-sm"
+                        className={cn("h-10 text-sm", panVerified && formData.first_name && "bg-slate-50 text-slate-700 cursor-not-allowed")}
                       />
                     </div>
                     <div className="flex flex-col">
@@ -920,9 +991,10 @@ export default function CustomerSelfFillPage() {
                       <Input
                         type="text"
                         placeholder="Middle Name"
+                        readOnly={panVerified && Boolean(formData.middle_name)}
                         value={formData.middle_name || ''}
                         onChange={(e) => handleChange('middle_name', e.target.value)}
-                        className="h-10 text-sm"
+                        className={cn("h-10 text-sm", panVerified && formData.middle_name && "bg-slate-50 text-slate-700 cursor-not-allowed")}
                       />
                     </div>
                     <div className="flex flex-col">
@@ -933,9 +1005,10 @@ export default function CustomerSelfFillPage() {
                         type="text"
                         required
                         placeholder="Last Name"
+                        readOnly={panVerified && Boolean(formData.last_name)}
                         value={formData.last_name || ''}
                         onChange={(e) => handleChange('last_name', e.target.value)}
-                        className="h-10 text-sm"
+                        className={cn("h-10 text-sm", panVerified && formData.last_name && "bg-slate-50 text-slate-700 cursor-not-allowed")}
                       />
                     </div>
                   </div>
@@ -972,9 +1045,10 @@ export default function CustomerSelfFillPage() {
                       <Input
                         type="date"
                         required
+                        readOnly={panVerified && Boolean(formData.dob)}
                         value={formData.dob || ''}
                         onChange={(e) => handleChange('dob', e.target.value)}
-                        className="h-10 text-sm"
+                        className={cn("h-10 text-sm", panVerified && formData.dob && "bg-slate-50 text-slate-700 cursor-not-allowed")}
                       />
                     </div>
 
@@ -1102,6 +1176,11 @@ export default function CustomerSelfFillPage() {
                       />
                     </div>
                   </div>
+                  {formData.avg_gross_monthly_income && formData.avg_net_monthly_income && Number(formData.avg_gross_monthly_income) <= Number(formData.avg_net_monthly_income) && (
+                    <p className="text-xs text-rose-600 font-semibold mt-2">
+                      ⚠️ Gross Income should be greater than Net Income.
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-5 space-y-4">
@@ -1128,9 +1207,10 @@ export default function CustomerSelfFillPage() {
                         type="text"
                         required
                         placeholder="Registered Legal Entity Name"
+                        readOnly={panVerified && Boolean(formData.entity_name)}
                         value={formData.entity_name || ''}
                         onChange={(e) => handleChange('entity_name', e.target.value)}
-                        className="h-10 text-sm"
+                        className={cn("h-10 text-sm", panVerified && formData.entity_name && "bg-slate-50 text-slate-700 cursor-not-allowed")}
                       />
                     </div>
                     <div className="flex flex-col">
@@ -1140,9 +1220,10 @@ export default function CustomerSelfFillPage() {
                       <Input
                         type="date"
                         required
+                        readOnly={panVerified && Boolean(formData.doi)}
                         value={formData.doi || ''}
                         onChange={(e) => handleChange('doi', e.target.value)}
-                        className="h-10 text-sm"
+                        className={cn("h-10 text-sm", panVerified && formData.doi && "bg-slate-50 text-slate-700 cursor-not-allowed")}
                       />
                     </div>
                   </div>
@@ -1231,6 +1312,11 @@ export default function CustomerSelfFillPage() {
                       />
                     </div>
                   </div>
+                  {formData.avg_annual_gross_income && formData.avg_annual_net_income && Number(formData.avg_annual_gross_income) <= Number(formData.avg_annual_net_income) && (
+                    <p className="text-xs text-rose-600 font-semibold mt-2">
+                      ⚠️ Annual Gross Income should be greater than Annual Net Income.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -1335,6 +1421,7 @@ export default function CustomerSelfFillPage() {
                       type="number"
                       required
                       min={1000}
+                      max={30000000}
                       placeholder="e.g. 500000"
                       value={formData.loan_amount_required || ''}
                       onChange={(e) => handleChange('loan_amount_required', e.target.value)}
@@ -1343,6 +1430,11 @@ export default function CustomerSelfFillPage() {
                     {formData.loan_amount_required && Number(formData.loan_amount_required) > 0 && (
                       <p className="text-[11px] text-blue-700 font-mono mt-1 font-bold">
                         Amount: {formatCurrency(Number(formData.loan_amount_required))}
+                      </p>
+                    )}
+                    {Number(formData.loan_amount_required) > 30000000 && (
+                      <p className="text-xs text-rose-600 font-semibold mt-1">
+                        ⚠️ The loan amount should not exceed ₹3 Crore (₹3,00,00,000).
                       </p>
                     )}
                   </div>
