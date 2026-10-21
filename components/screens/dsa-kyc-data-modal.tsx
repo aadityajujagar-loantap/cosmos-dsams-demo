@@ -587,15 +587,23 @@ function GstDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
           title="1. Registered GSTIN Entity List"
           subtitle="Multi-State Tax Registrations"
         >
-          {rawDetails.map((item: any, idx: number) => (
-            <TableRow
-              key={idx}
-              label={`${item.state || item.stateName || ""} (${item.gstin || item.gstinId || ""})`}
-              value={`Status: ${item.status || ""} · Taxpayer Type: ${item.taxpayerType || ""}`}
-              badge="success"
-              isMono
-            />
-          ))}
+          {rawDetails.map((item: any, idx: number) => {
+            const state = item.state || item.stateName || item.gstBasicInfo?.state || "";
+            const gstin = item.gstin || item.gstinId || item.gstBasicInfo?.gstin || "";
+            const status = item.status || item.gstBasicInfo?.currentRegistrationStatus || "";
+            const taxpayerType = item.taxpayerType || item.gstBasicInfo?.taxpayerType || "";
+            const legalName = item.legalName || item.gstBasicInfo?.legalName || "";
+
+            return (
+              <TableRow
+                key={idx}
+                label={`${state || "GSTIN"} (${gstin})`}
+                value={`Status: ${status || "N/A"} · Taxpayer Type: ${taxpayerType || "Regular"}${legalName ? ` · Legal: ${legalName}` : ""}`}
+                badge="success"
+                isMono
+              />
+            );
+          })}
         </TableWrapper>
       </div>
     );
