@@ -237,6 +237,10 @@ export function DsaDetailEditModal({
         }
       }
 
+      if (field === "gst_applicable" && !value) {
+        next.gst = "";
+      }
+
       return next;
     });
 
@@ -345,6 +349,15 @@ export function DsaDetailEditModal({
           .join(" ");
       } else {
         payload.name = payload.entity_name;
+      }
+    }
+
+    if (block === "statutory") {
+      if (!payload.gst_applicable) {
+        payload.gst = "";
+      }
+      if (payload.experience_years !== undefined) {
+        payload.experience_years = payload.experience_years ? String(payload.experience_years) : "0";
       }
     }
 

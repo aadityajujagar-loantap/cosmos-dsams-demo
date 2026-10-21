@@ -393,10 +393,6 @@ export default function CustomerSelfFillPage() {
       setError('Please enter a valid 10-digit mobile number.');
       return;
     }
-    if (!otpVerified) {
-      setError('Please verify your Mobile OTP before submitting.');
-      return;
-    }
     if (!formData.pan_no || formData.pan_no.length !== 10) {
       setError('Please enter a valid 10-character PAN Number.');
       return;
@@ -597,7 +593,7 @@ export default function CustomerSelfFillPage() {
                       <Building2 className="h-4 w-4" />
                     </div>
                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                      1. Preferred Branch Location & Constitution
+                      1. Preferred Branch Location
                     </h3>
                   </div>
                   <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider bg-white px-2 py-0.5 rounded border border-slate-200">
@@ -605,63 +601,24 @@ export default function CustomerSelfFillPage() {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="flex flex-col">
-                    <Label htmlFor="branch_select" className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                      Select Preferred Branch *
-                    </Label>
-                    <Select
-                      id="branch_select"
-                      required
-                      value={formData.Branch_id || ''}
-                      onChange={(e) => handleChange('Branch_id', e.target.value)}
-                      placeholder="-- Select Preferred Cosmos Branch --"
-                    >
-                      <option value="">-- Select Preferred Cosmos Branch --</option>
-                      {branches.map((b) => (
-                        <option key={b.branch_code || b.id} value={b.branch_code || b.id}>
-                          {b.branch_name || b.name} ({b.branch_code || b.code})
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-
-                  <div className="flex flex-col">
-                    <Label htmlFor="constitution_select" className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                      Constitution Type *
-                    </Label>
-                    <Select
-                      id="constitution_select"
-                      required
-                      value={formData.constitution || 'Individual'}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        const isInd = (val === 'Individual' || val === 'Individual Applicant');
-                        setConstitution(isInd ? 'Individual' : (val as any));
-                        handleChange('constitution', val);
-                      }}
-                      placeholder="-- Select Constitution Type --"
-                    >
-                      {constitutions.length > 0 ? (
-                        constitutions.map((c: any) => (
-                          <option key={c.meta_key || c.id} value={c.meta_key || c.meta_value}>
-                            {c.meta_value}
-                          </option>
-                        ))
-                      ) : (
-                        <>
-                          <option value="Individual">Individual</option>
-                          <option value="Proprietory">Proprietory Firm</option>
-                          <option value="Partnership">Partnership Firm</option>
-                          <option value="Limited Liability Partnership">Limited Liability Partnership (LLP)</option>
-                          <option value="Pvt. Ltd. Company">Pvt. Ltd. Company</option>
-                          <option value="Public Ltd. Company">Public Ltd. Company</option>
-                          <option value="Charitable Trust">Charitable Trust</option>
-                          <option value="Co-op. Society">Co-op. Society</option>
-                        </>
-                      )}
-                    </Select>
-                  </div>
+                <div className="flex flex-col">
+                  <Label htmlFor="branch_select" className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                    Select Preferred Branch *
+                  </Label>
+                  <Select
+                    id="branch_select"
+                    required
+                    value={formData.Branch_id || ''}
+                    onChange={(e) => handleChange('Branch_id', e.target.value)}
+                    placeholder="-- Select Preferred Cosmos Branch --"
+                  >
+                    <option value="">-- Select Preferred Cosmos Branch --</option>
+                    {branches.map((b) => (
+                      <option key={b.branch_code || b.id} value={b.branch_code || b.id}>
+                        {b.branch_name || b.name} ({b.branch_code || b.code})
+                      </option>
+                    ))}
+                  </Select>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -775,7 +732,7 @@ export default function CustomerSelfFillPage() {
                 </div>
               </div>
 
-              {/* SECTION 3: Mobile OTP Authentication */}
+              {/* SECTION 3: Contact Information */}
               <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-5 space-y-4">
                 <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
                   <div className="flex items-center gap-2.5">
@@ -783,18 +740,12 @@ export default function CustomerSelfFillPage() {
                       <Smartphone className="h-4 w-4" />
                     </div>
                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                      3. Mobile OTP Authentication
+                      3. Contact Information
                     </h3>
                   </div>
-                  {otpVerified ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-300">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Verified
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider bg-white px-2 py-0.5 rounded border border-slate-200">
-                      Step 3 of 5
-                    </span>
-                  )}
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider bg-white px-2 py-0.5 rounded border border-slate-200">
+                    Step 3 of 5
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -809,51 +760,15 @@ export default function CustomerSelfFillPage() {
                         </span>
                       )}
                     </div>
-                    <div className="flex gap-2">
-                      <Input
-                        type="text"
-                        required
-                        maxLength={10}
-                        placeholder="10-digit mobile"
-                        disabled={otpVerified || isMobileFromPan}
-                        readOnly={isMobileFromPan}
-                        value={formData.mobile || ''}
-                        onChange={(e) => {
-                          handleChange('mobile', e.target.value.replace(/\D/g, ''));
-                          setOtpSent(false);
-                          setOtpVerified(false);
-                        }}
-                        className={cn(
-                          "flex-1 h-10 text-sm font-mono",
-                          isMobileFromPan && "bg-slate-50 text-slate-600 cursor-not-allowed"
-                        )}
-                      />
-                      {!otpVerified && (
-                        <Button
-                          type="button"
-                          disabled={sendingOtp || (formData.mobile || '').length !== 10}
-                          onClick={handleSendOtp}
-                          className="h-10 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 rounded-lg shadow-sm shrink-0 disabled:opacity-50"
-                        >
-                          {sendingOtp ? 'Sending...' : 'Send OTP'}
-                        </Button>
-                      )}
-                      {otpVerified && !isMobileFromPan && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => {
-                            setOtpVerified(false);
-                            setOtpSent(false);
-                            setOtpCode('');
-                            setOtpMessage(null);
-                          }}
-                          className="h-10 px-3 text-xs text-blue-600 hover:text-blue-800 border-blue-200 shrink-0"
-                        >
-                          Edit
-                        </Button>
-                      )}
-                    </div>
+                    <Input
+                      type="text"
+                      required
+                      maxLength={10}
+                      placeholder="10-digit mobile"
+                      value={formData.mobile || ''}
+                      onChange={(e) => handleChange('mobile', e.target.value.replace(/\D/g, ''))}
+                      className="h-10 text-sm font-mono"
+                    />
                     {panVerified && !isMobileFromPan && (
                       <p className="text-[11px] text-slate-500 mt-1">
                         Mobile not received in PAN response. Enter/edit manually.
@@ -875,57 +790,6 @@ export default function CustomerSelfFillPage() {
                     />
                   </div>
                 </div>
-
-                {/* OTP Code Entry Card */}
-                {otpSent && !otpVerified && (
-                  <div className="rounded-xl border border-blue-200/80 bg-blue-50/40 p-4 space-y-3">
-                    <div className="flex items-center justify-between border-b border-blue-100 pb-2">
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-blue-950">
-                        <Sparkles className="h-3.5 w-3.5 text-blue-600" />
-                        Enter 6-Digit OTP sent to +91 {formData.mobile}
-                      </div>
-                      <span className="text-[10px] text-blue-600 font-medium">Valid for 10 minutes</span>
-                    </div>
-                    <div className="flex flex-col sm:flex-row items-center gap-3">
-                      <Input
-                        type="text"
-                        maxLength={6}
-                        placeholder="• • • • • •"
-                        value={otpCode}
-                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                        className="w-full sm:w-48 text-center font-mono tracking-[0.3em] font-bold text-base h-10 bg-white"
-                      />
-                      <Button
-                        type="button"
-                        disabled={verifyingOtp || otpCode.length !== 6}
-                        onClick={handleVerifyOtp}
-                        className="w-full sm:w-auto h-10 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-6 rounded-lg shadow-sm disabled:opacity-50"
-                      >
-                        {verifyingOtp ? (
-                          <>
-                            <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" /> Verifying...
-                          </>
-                        ) : (
-                          'Verify OTP'
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {otpVerified && (
-                  <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-xl text-xs font-bold flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                    <span>Mobile Number Verified Successfully</span>
-                  </div>
-                )}
-
-                {otpMessage && !otpVerified && (
-                  <div className="text-xs text-amber-900 bg-amber-50 border border-amber-200 p-3 rounded-xl font-medium flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
-                    <span>{otpMessage}</span>
-                  </div>
-                )}
               </div>
 
               {/* SECTION 4: Applicant Details (Individual vs Non-Individual) */}
@@ -1459,7 +1323,7 @@ export default function CustomerSelfFillPage() {
               {/* Submit Button */}
               <Button
                 type="submit"
-                disabled={submitting || !otpVerified}
+                disabled={submitting}
                 className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-md shadow-blue-600/20 transition-all hover:shadow-lg active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 {submitting ? (
