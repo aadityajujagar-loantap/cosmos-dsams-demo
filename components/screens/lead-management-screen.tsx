@@ -800,7 +800,7 @@ const setFilters = (newFilters: {
         return;
       }
       if (!createForm.employment_type) {
-        toast({ title: "Validation Error", description: "Please select employment type", variant: "error" });
+        toast({ title: "Validation Error", description: "Please select occupation type", variant: "error" });
         return;
       }
     } else {
@@ -2188,7 +2188,7 @@ const setFilters = (newFilters: {
                         <div className="flex flex-col">
                           <div className="h-5 flex items-center">
                             <Label className="text-xs font-bold text-slate-700 leading-none">
-                              Employment Type <span className="text-rose-500 font-bold">*</span>
+                              Occupation Type <span className="text-rose-500 font-bold">*</span>
                             </Label>
                           </div>
                           <Select
@@ -2197,7 +2197,7 @@ const setFilters = (newFilters: {
                             onChange={(e) => setCreateForm({ ...createForm, employment_type: e.target.value })}
                             className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
                           >
-                            <option value="">-- Choose Employment --</option>
+                            <option value="">-- Choose Occupation Type --</option>
                             {employmentTypes.map((item: any) => (
                               <option key={item.meta_key || item.id} value={item.meta_key || item.meta_value}>{item.meta_value}</option>
                             ))}
@@ -2206,7 +2206,7 @@ const setFilters = (newFilters: {
                         <div className="flex flex-col">
                           <div className="h-5 flex items-center">
                             <Label className="text-xs font-bold text-slate-700 leading-none">
-                              Occupation Type <span className="text-rose-500 font-bold">*</span>
+                              Nature of Business Activities <span className="text-rose-500 font-bold">*</span>
                             </Label>
                           </div>
                           <Select
@@ -2217,7 +2217,7 @@ const setFilters = (newFilters: {
                             className="mt-1.5 text-xs sm:text-sm h-9 bg-white disabled:opacity-50"
                           >
                             <option value="">
-                              {!createForm.employment_type ? "-- Choose Employment First --" : "-- Choose Occupation --"}
+                              {!createForm.employment_type ? "-- Choose Occupation Type First --" : "-- Choose Nature of Business Activities --"}
                             </option>
                             {activeOccupationTypes.map((item: any) => (
                               <option key={item.meta_key || item.id} value={item.meta_key || item.meta_value}>{item.meta_value}</option>
@@ -2884,7 +2884,10 @@ const setFilters = (newFilters: {
                   <LeadDetailItem label="Age" value={selectedLead.age !== undefined ? `${selectedLead.age} Years` : "N/A"} />
                   <LeadDetailItem className="sm:col-span-2" label="Residential Address" value={selectedLead.address || "N/A"} />
                   <LeadDetailItem label="Employer / Business Name" value={selectedLead.employer_business_name || "N/A"} />
-                  <LeadDetailItem label="Employment Type" value={selectedLead.employment_type || "Salaried"} />
+                  <LeadDetailItem label="Occupation Type" value={selectedLead.employment_type || "Salaried"} />
+                  {selectedLead.occupation_type && (
+                    <LeadDetailItem label="Nature of Business Activities" value={selectedLead.occupation_type} />
+                  )}
                   <LeadDetailItem
                     label="Gross Monthly Income"
                     value={<span className="font-mono font-bold text-emerald-600">{formatCurrency(Number(selectedLead.avg_gross_monthly_income || 0))}</span>}
@@ -3574,7 +3577,7 @@ const setFilters = (newFilters: {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Employment Type
+                    Occupation Type
                   </label>
                   <input
                     type="text"
