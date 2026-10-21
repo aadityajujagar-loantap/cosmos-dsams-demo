@@ -274,7 +274,30 @@ export function DsaBasicDetailsTab({
       applicant: ["education_qualification", "aadhaar_no"],
       statutory: ["pan", "gst", "udyam_no", "shop_act_no", "experience_years", "applicant_prior_experience"],
     };
-    return (fieldsByBlock[block] || []).filter((f) => isFieldChanged(f, formData[f], dsa));
+    return (fieldsByBlock[block] || []).filter((f) => {
+      if (f === "gst") {
+        const isApp = Boolean(formData.gst_applicable);
+        if (!isApp) return false;
+        const gstVal = String(formData.gst || "").trim();
+        if (!gstVal) return false;
+        const wasApp = Boolean(dsa?.gst_applicable);
+        return !wasApp || isFieldChanged("gst", formData.gst, dsa);
+      }
+      if (f === "experience_years") {
+        const expNum = Number(formData.experience_years);
+        const hasExp = !isNaN(expNum) && expNum > 0;
+        if (!hasExp) return false;
+        const hadExp = dsa?.experience_years !== undefined && dsa?.experience_years !== null && Number(dsa.experience_years) > 0;
+        return !hadExp || isFieldChanged("experience_years", formData.experience_years, dsa);
+      }
+      if (f === "applicant_prior_experience") {
+        const expVal = String(formData.applicant_prior_experience || "").trim().toLowerCase();
+        const hasExp = expVal !== "" && !expVal.includes("fresher") && !expVal.includes("no prior");
+        if (!hasExp) return false;
+        return isFieldChanged("applicant_prior_experience", formData.applicant_prior_experience, dsa);
+      }
+      return isFieldChanged(f, formData[f], dsa);
+    });
   };
 
   // Initialize block form data when entering edit mode
@@ -576,8 +599,13 @@ export function DsaBasicDetailsTab({
         payload.branch_id = Number(payload.branch_id);
       }
 
-      if (block === "statutory" && payload.experience_years !== undefined) {
-        payload.experience_years = payload.experience_years ? String(payload.experience_years) : null;
+      if (block === "statutory") {
+        if (!payload.gst_applicable) {
+          payload.gst = "";
+        }
+        if (payload.experience_years !== undefined) {
+          payload.experience_years = payload.experience_years ? String(payload.experience_years) : "0";
+        }
       }
 
       const files: SupportingFile[] = changed.map((f) => ({
@@ -1244,6 +1272,9 @@ export function DsaBasicDetailsTab({
                   value={formData.gst_applicable ? "YES" : "NO"}
                   onChange={(e) => {
                     const isApp = e.target.value === "YES";
+                    if (!isApp) {
+                      clearSupportingFile("gst");
+                    }
                     setFormData((prev) => ({
                       ...prev,
                       gst_applicable: isApp,
@@ -1270,7 +1301,7 @@ export function DsaBasicDetailsTab({
                     className="font-mono uppercase font-bold"
                   />
                   {errors.gst && <p className="text-red-500 text-xs mt-1">{errors.gst}</p>}
-                  {isFieldChanged("gst", formData.gst, dsa) && (
+                  {(!dsa?.gst_applicable || isFieldChanged("gst", formData.gst, dsa)) && (
                     <SupportingDocInput
                       field="gst"
                       file={supportingFiles.gst}
@@ -1338,10 +1369,21 @@ export function DsaBasicDetailsTab({
                 </Label>
                 <Input
                   value={formData.applicant_prior_experience || ""}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, applicant_prior_experience: e.target.value }))}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const lower = val.trim().toLowerCase();
+                    if (!val.trim() || lower.includes("fresher") || lower.includes("no prior")) {
+                      clearSupportingFile("applicant_prior_experience");
+                    }
+                    setFormData((prev) => ({ ...prev, applicant_prior_experience: val }));
+                  }}
                   placeholder="e.g. Retail loan sourcing, DSA empanelment"
                 />
-                {isFieldChanged("applicant_prior_experience", formData.applicant_prior_experience, dsa) && (
+                {Boolean(
+                  formData.applicant_prior_experience &&
+                  !/fresher|no prior/i.test(formData.applicant_prior_experience) &&
+                  isFieldChanged("applicant_prior_experience", formData.applicant_prior_experience, dsa)
+                ) && (
                   <SupportingDocInput
                     field="applicant_prior_experience"
                     file={supportingFiles.applicant_prior_experience}
@@ -1358,10 +1400,18 @@ export function DsaBasicDetailsTab({
                 <Input
                   type="number"
                   value={formData.experience_years || ""}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, experience_years: e.target.value }))}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const num = Number(val);
+                    if (isNaN(num) || num <= 0) {
+                      clearSupportingFile("experience_years");
+                    }
+                    setFormData((prev) => ({ ...prev, experience_years: val }));
+                  }}
                   placeholder="Years"
                 />
-                {isFieldChanged("experience_years", formData.experience_years, dsa) && (
+                {Number(formData.experience_years) > 0 &&
+                  (!dsa?.experience_years || Number(dsa.experience_years) <= 0 || isFieldChanged("experience_years", formData.experience_years, dsa)) && (
                   <SupportingDocInput
                     field="experience_years"
                     file={supportingFiles.experience_years}
