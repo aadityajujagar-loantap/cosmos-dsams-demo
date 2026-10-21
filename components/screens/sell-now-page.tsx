@@ -3102,7 +3102,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
                     </Field>
 
                     <Field>
-                      <Label htmlFor="occupationSel">EMPLOYMENT TYPE <span className="text-red-500">*</span></Label>
+                      <Label htmlFor="occupationSel">OCCUPATION TYPE <span className="text-red-500">*</span></Label>
                       <Select id="occupationSel" value={occupation} onChange={(e) => setOccupation(e.target.value)}>
                         <option value="">Select Option</option>
                         <option value="Salaried">Salaried</option>
@@ -3113,7 +3113,7 @@ export function SellNowPage({ publicCustomerMode = false }: { publicCustomerMode
                     </Field>
 
                     <Field className="col-span-2">
-                      <Label htmlFor="occTypeSel">OCCUPATION TYPE <span className="text-red-500">*</span></Label>
+                      <Label htmlFor="occTypeSel">NATURE OF BUSINESS ACTIVITIES <span className="text-red-500">*</span></Label>
                       <Select id="occTypeSel" value={occupationType} onChange={(e) => setOccupationType(e.target.value)}>
                         <option value="Salary / Wage Class">Salary / Wage Class</option>
                         <option value="Business Owner">Business Owner</option>

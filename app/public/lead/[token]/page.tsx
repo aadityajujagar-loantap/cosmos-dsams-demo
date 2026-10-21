@@ -1010,15 +1010,15 @@ export default function CustomerSelfFillPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="flex flex-col">
                       <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                        Employment Type *
+                        Occupation Type *
                       </Label>
                       <Select
                         required
                         value={formData.employment_type || ''}
                         onChange={(e) => handleChange('employment_type', e.target.value)}
-                        placeholder="-- Select Employment Type --"
+                        placeholder="-- Select Occupation Type --"
                       >
-                        <option value="">-- Select Employment Type --</option>
+                        <option value="">-- Select Occupation Type --</option>
                         {employmentTypes.map((item: any) => (
                           <option key={item.meta_key || item.id} value={item.meta_key || item.meta_value}>
                             {item.meta_value}
@@ -1028,16 +1028,16 @@ export default function CustomerSelfFillPage() {
                     </div>
                     <div className="flex flex-col">
                       <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                        Occupation Type *
+                        Nature of Business Activities *
                       </Label>
                       <Select
                         required
                         disabled={!formData.employment_type}
                         value={formData.occupation_type || ''}
                         onChange={(e) => handleChange('occupation_type', e.target.value)}
-                        placeholder={!formData.employment_type ? '-- Select Employment Type First --' : '-- Select Occupation Type --'}
+                        placeholder={!formData.employment_type ? '-- Select Occupation Type First --' : '-- Select Nature of Business Activities --'}
                       >
-                        <option value="">{!formData.employment_type ? '-- Select Employment Type First --' : '-- Select Occupation Type --'}</option>
+                        <option value="">{!formData.employment_type ? '-- Select Occupation Type First --' : '-- Select Nature of Business Activities --'}</option>
                         {occupationTypes.map((item: any) => (
                           <option key={item.meta_key || item.id} value={item.meta_key || item.meta_value}>
                             {item.meta_value}
