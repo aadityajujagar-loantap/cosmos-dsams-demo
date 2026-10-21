@@ -531,8 +531,8 @@ export function formatDocumentType(type?: string): string {
     board_resolution: "Board Resolution",
     partnership_deed: "Partnership Deed",
     moa_aoa: "MOA / AOA",
-    rent_agreement: "Residence / office as applicable",
-    rental_agreement: "Residence / office as applicable",
+    rent_agreement: "Rent Agreement (Residence / office as applicable)",
+    rental_agreement: "Rent Agreement (Residence / office as applicable)",
   };
   const key = String(type).toLowerCase().trim();
   if (map[key]) return map[key];
@@ -5229,6 +5229,16 @@ const resolveStageStatus = (
     ...(docChecklist?.checklist?.filter((item: any) => {
       // Rely solely on the checklist API's is_uploaded flag (authoritative)
       if (item.is_uploaded) return false;
+      if (item.document_type === "gst_certificate" && !dsa?.gst_applicable)
+        return false;
+      const hasExp = Boolean(
+        (dsa?.experience_years && String(dsa.experience_years) !== "0") ||
+          (dsa?.applicant_prior_experience &&
+            !/fresher|no prior/i.test(String(dsa.applicant_prior_experience))) ||
+          dsa?.bank_or_institution_name,
+      );
+      if (item.document_type === "experience_certificate" && !hasExp)
+        return false;
       const isVisitReport = isVisitReportDocument(item) || item.staff_only;
       if (isVisitReport && Boolean((dsa as any)?.visit_report_file))
         return false;
@@ -5367,7 +5377,7 @@ const resolveStageStatus = (
         desc: "Validates corporate / entity PAN authenticity and legal name match",
       };
 
-  const requiredCheckerVerifications = isIndividualDsa
+  const gstCheckerVerif = Boolean(dsa?.gst_applicable)
     ? [
         {
           code: "GST",
@@ -5378,6 +5388,12 @@ const resolveStageStatus = (
           ifAdverse: "Deviation generated",
           desc: "Validates active GST status and regular return filing history from GSTN",
         },
+      ]
+    : [];
+
+  const requiredCheckerVerifications = isIndividualDsa
+    ? [
+        ...gstCheckerVerif,
         {
           code: "UDYAM",
           label: "Udyam Verification",
@@ -5407,15 +5423,7 @@ const resolveStageStatus = (
         },
       ]
     : [
-        {
-          code: "GST",
-          label: "PAN to GST / GST Verification",
-          dsaType: "Both",
-          triggeredBy: "Checker",
-          ifFail: "Continue; remark in DD note",
-          ifAdverse: "Deviation generated",
-          desc: "Validates active GST status and regular return filing history from GSTN",
-        },
+        ...gstCheckerVerif,
         {
           code: "UDYAM",
           label: "Udyam Verification",
@@ -5482,6 +5490,7 @@ const resolveStageStatus = (
         return true;
     }
     if (codeUpper === "GST") {
+      if (!dsa?.gst_applicable) return true;
       if (verifiedKyc.gst || failedKyc.gst) return true;
     }
     if (codeUpper === "UDYAM") {
@@ -7713,14 +7722,16 @@ const resolveStageStatus = (
                                 key: string;
                                 promise: Promise<any>;
                               }[] = [];
-                              tasks.push({
-                                key: "gst",
-                                promise: triggerCheckerVerification(
-                                  dsa.id,
-                                  "GST",
-                                  { gstin: dsa.gst, pan: dsa.pan },
-                                ),
-                              });
+                              if (dsa.gst_applicable && dsa.gst) {
+                                tasks.push({
+                                  key: "gst",
+                                  promise: triggerCheckerVerification(
+                                    dsa.id,
+                                    "GST",
+                                    { gstin: dsa.gst, pan: dsa.pan },
+                                  ),
+                                });
+                              }
                               if (dsa.account_number && dsa.ifsc) {
                                 tasks.push({
                                   key: "bank",
@@ -8131,7 +8142,13 @@ const resolveStageStatus = (
                               GSTIN Verification
                             </span>
                             <StatusBadge
-                              status={isGstChecked ? "Verified" : "Pending"}
+                              status={
+                                isGstChecked
+                                  ? "Verified"
+                                  : dsa?.gst_applicable
+                                    ? "Pending"
+                                    : "Not Applicable"
+                              }
                             />
                           </div>
                           <div>

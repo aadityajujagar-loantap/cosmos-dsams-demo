@@ -411,7 +411,7 @@ export function LeadManagementScreen() {
   const [createForm, setCreateForm] = useState<Partial<LeadData>>({
     DSACode: "",
     dsa_code: "",
-    constitution: "",
+    constitution: "Individual",
     pincode: "",
     city: "",
     state: "",
@@ -451,6 +451,7 @@ export function LeadManagementScreen() {
 
   const [sanctionAmount, setSanctionAmount] = useState<number>(0);
   const [sanctionLetterNo, setSanctionLetterNo] = useState("");
+  const [sanctionDate, setSanctionDate] = useState(new Date().toISOString().split("T")[0]);
   const [sanctionRemarks, setSanctionRemarks] = useState("");
 
   const [rejectionReason, setRejectionReason] = useState("");
@@ -1008,6 +1009,7 @@ const setFilters = (newFilters: {
       const res = await sanctionLead(selectedLead.id!, {
         sanction_amount: sanctionAmount,
         sanction_letter_no: sanctionLetterNo,
+        sanction_date: sanctionDate,
         remarks: sanctionRemarks,
       });
       if (res?.status === "success") {
@@ -1507,6 +1509,24 @@ const setFilters = (newFilters: {
                             <Eye className="h-3.5 w-3.5 text-slate-500" />
                             <span>View</span>
                           </Button>
+                          {isBankChecker && normStatus === "IN_PROCESS" && (
+                            <Button
+                              size="sm"
+                              className="h-8 px-3 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs gap-1.5 transition-all"
+                              onClick={() => {
+                                setSelectedLead(lead);
+                                const prefilledAmt = Number(lead.sanction_amount || lead.loan_amount_required || (lead as any).loan_amount || 0);
+                                setSanctionAmount(prefilledAmt);
+                                setSanctionLetterNo(lead.sanction_letter_no || "");
+                                setSanctionDate(lead.sanction_date ? String(lead.sanction_date).split("T")[0] : new Date().toISOString().split("T")[0]);
+                                setSanctionRemarks("");
+                                setIsSanctionModalOpen(true);
+                              }}
+                            >
+                              <FileCheck className="h-3.5 w-3.5" />
+                              <span>Sanction</span>
+                            </Button>
+                          )}
                           {isBankUser && lead.status === "NEW" && (
                             <Button
                               size="sm"
@@ -1746,7 +1766,7 @@ const setFilters = (newFilters: {
                     </div>
                     <div>
                       <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                        Branch Location & Constitution
+                        Branch Location
                       </h4>
                     </div>
                   </div>
@@ -1766,61 +1786,26 @@ const setFilters = (newFilters: {
                     </div>
                   )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
-                  <div className="flex flex-col">
-                    <div className="h-5 flex items-center">
-                      <Label className="text-xs font-bold text-slate-700 leading-none">
-                        Branch Location <span className="text-rose-500 font-bold">*</span>
-                      </Label>
-                    </div>
-                    <Select
-                      searchable
-                      searchPlaceholder="Search branch name or code..."
-                      value={createForm.Branch_id || ""}
-                      onChange={(e) => setCreateForm({ ...createForm, Branch_id: e.target.value })}
-                      className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
-                    >
-                      <option value="">-- Choose Branch Location --</option>
-                      {branches.map((b) => (
-                        <option key={b.branch_code || b.id} value={b.branch_code || b.id}>
-                          {b.branch_name || b.name} ({b.branch_code || b.code})
-                        </option>
-                      ))}
-                    </Select>
+                <div className="flex flex-col">
+                  <div className="h-5 flex items-center">
+                    <Label className="text-xs font-bold text-slate-700 leading-none">
+                      Branch Location <span className="text-rose-500 font-bold">*</span>
+                    </Label>
                   </div>
-
-                  <div className="flex flex-col">
-                    <div className="h-5 flex items-center">
-                      <Label className="text-xs font-bold text-slate-700 leading-none">
-                        Constitution Type <span className="text-rose-500 font-bold">*</span>
-                      </Label>
-                    </div>
-                    <Select
-                      value={createForm.constitution || ""}
-                      onChange={(e) => setCreateForm({ ...createForm, constitution: e.target.value as any })}
-                      className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
-                    >
-                      <option value="">-- Choose Constitution --</option>
-                      {constitutions.length > 0 ? (
-                        constitutions.map((c: any) => (
-                          <option key={c.meta_key || c.id} value={c.meta_key || c.meta_value}>
-                            {c.meta_value}
-                          </option>
-                        ))
-                      ) : (
-                        <>
-                          <option value="Individual">Individual</option>
-                          <option value="Proprietory">Proprietory Firm</option>
-                          <option value="Partnership">Partnership Firm</option>
-                          <option value="Limited Liability Partnership">Limited Liability Partnership (LLP)</option>
-                          <option value="Pvt. Ltd. Company">Pvt. Ltd. Company</option>
-                          <option value="Public Ltd. Company">Public Ltd. Company</option>
-                          <option value="Charitable Trust">Charitable Trust</option>
-                          <option value="Co-op. Society">Co-op. Society</option>
-                        </>
-                      )}
-                    </Select>
-                  </div>
+                  <Select
+                    searchable
+                    searchPlaceholder="Search branch name or code..."
+                    value={createForm.Branch_id || ""}
+                    onChange={(e) => setCreateForm({ ...createForm, Branch_id: e.target.value })}
+                    className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                  >
+                    <option value="">-- Choose Branch Location --</option>
+                    {branches.map((b) => (
+                      <option key={b.branch_code || b.id} value={b.branch_code || b.id}>
+                        {b.branch_name || b.name} ({b.branch_code || b.code})
+                      </option>
+                    ))}
+                  </Select>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
@@ -1963,13 +1948,7 @@ const setFilters = (newFilters: {
                 {/* Mobile & Contact Widget */}
                 <div className="rounded-xl border border-blue-100 bg-blue-50/30 p-5 space-y-5">
                   <div className="flex items-center justify-between border-b border-blue-100/70 pb-3">
-                    <span className="text-xs font-bold text-blue-950 uppercase tracking-wider">Contact & Mobile Verification</span>
-                    {otpVerified && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 border border-emerald-300">
-                        <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                        {formatStatusLabel("Mobile Verified")}
-                      </span>
-                    )}
+                    <span className="text-xs font-bold text-blue-950 uppercase tracking-wider">Contact Details</span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6 items-start">
                     <div className="flex flex-col">
@@ -1983,51 +1962,17 @@ const setFilters = (newFilters: {
                           </span>
                         )}
                       </div>
-                      <div className="flex gap-2.5 mt-1.5">
-                        <Input
-                          type="text"
-                          required
-                          maxLength={10}
-                          disabled={otpVerified || isMobileFromPan}
-                          readOnly={isMobileFromPan}
-                          placeholder="10-digit mobile"
-                          value={createForm.mobile || ""}
-                          onChange={(e) => {
-                            setCreateForm({ ...createForm, mobile: e.target.value.replace(/\D/g, "") });
-                            setOtpSent(false);
-                            setOtpVerified(false);
-                          }}
-                          className={cn(
-                            "flex-1 font-mono text-xs sm:text-sm h-9 bg-white disabled:opacity-60",
-                            isMobileFromPan && "bg-slate-50 text-slate-600 cursor-not-allowed"
-                          )}
-                        />
-                        {!otpVerified && (
-                          <Button
-                            type="button"
-                            disabled={sendingOtp || (createForm.mobile || "").length !== 10}
-                            onClick={handleSendOtp}
-                            className="h-9 px-3.5 text-xs bg-blue-600 hover:bg-blue-700 text-white font-medium shrink-0"
-                          >
-                            {sendingOtp ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Send OTP"}
-                          </Button>
-                        )}
-                        {otpVerified && !isMobileFromPan && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => {
-                              setOtpVerified(false);
-                              setOtpSent(false);
-                              setOtpCode("");
-                              setOtpMessage(null);
-                            }}
-                            className="h-9 px-3 text-xs text-blue-600 hover:text-blue-800 border-blue-200 shrink-0"
-                          >
-                            Edit
-                          </Button>
-                        )}
-                      </div>
+                      <Input
+                        type="text"
+                        required
+                        maxLength={10}
+                        placeholder="10-digit mobile"
+                        value={createForm.mobile || ""}
+                        onChange={(e) => {
+                          setCreateForm({ ...createForm, mobile: e.target.value.replace(/\D/g, "") });
+                        }}
+                        className="mt-1.5 font-mono text-xs sm:text-sm h-9 bg-white"
+                      />
                       {panVerified && !isMobileFromPan && (
                         <p className="text-[11px] text-slate-500 mt-1">
                           Mobile not received in PAN response. Enter/edit manually.
@@ -2049,43 +1994,6 @@ const setFilters = (newFilters: {
                       />
                     </div>
                   </div>
-
-                  {otpSent && !otpVerified && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6 items-center">
-                      <div className="flex gap-2.5">
-                        <Input
-                          type="text"
-                          maxLength={6}
-                          placeholder="Enter 6-digit OTP"
-                          value={otpCode}
-                          onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
-                          className="flex-1 font-mono text-center tracking-widest text-xs sm:text-sm h-9 bg-white"
-                        />
-                        <Button
-                          type="button"
-                          disabled={verifyingOtp || otpCode.length !== 6}
-                          onClick={handleVerifyOtp}
-                          className="h-9 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-md shrink-0 shadow-2xs"
-                        >
-                          {verifyingOtp ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Verify OTP"}
-                        </Button>
-                      </div>
-                      {otpMessage ? (
-                        <div className="flex items-center">
-                          <span className="text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg inline-flex items-center">
-                            {otpMessage}
-                          </span>
-                        </div>
-                      ) : (
-                        <div />
-                      )}
-                    </div>
-                  )}
-                  {!otpSent && otpMessage && !otpVerified && (
-                    <p className="text-xs text-amber-800 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
-                      {otpMessage}
-                    </p>
-                  )}
                 </div>
               </div>
               {/* 3. Applicant Profile Details */}
@@ -2700,7 +2608,7 @@ const setFilters = (newFilters: {
                       PAN: <span className="font-mono font-medium">{createForm.pan_no || "Pending"}</span>
                     </span>
                     <span className="flex items-center gap-1.5">
-                      {otpVerified ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> : <div className="h-2 w-2 rounded-full bg-slate-300" />}
+                      {(createForm.mobile || "").length === 10 ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> : <div className="h-2 w-2 rounded-full bg-slate-300" />}
                       Mobile: <span className="font-mono font-medium">{createForm.mobile || "Pending"}</span>
                     </span>
                   </div>
@@ -2805,7 +2713,7 @@ const setFilters = (newFilters: {
             {(() => {
               const normStatus = getNormalizedStatus(selectedLead.status);
               return (
-                <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-slate-50 rounded-xl border border-slate-200/80">
+                <div className="">
                   <div className="flex flex-wrap items-center gap-2">
                     {(isBankMaker || isBankUser) && normStatus === "NEW" && (
                       <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs" onClick={() => handleProcessLead(selectedLead.id!)}>
@@ -2823,7 +2731,11 @@ const setFilters = (newFilters: {
 
                     {isBankChecker && normStatus === "IN_PROCESS" && (
                       <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs" onClick={() => {
-                        setSanctionAmount(selectedLead.loan_amount_required || 0);
+                        const prefilledAmt = Number(selectedLead.sanction_amount || selectedLead.loan_amount_required || (selectedLead as any).loan_amount || 0);
+                        setSanctionAmount(prefilledAmt);
+                        setSanctionLetterNo(selectedLead.sanction_letter_no || "");
+                        setSanctionDate(selectedLead.sanction_date ? String(selectedLead.sanction_date).split("T")[0] : new Date().toISOString().split("T")[0]);
+                        setSanctionRemarks("");
                         setIsSanctionModalOpen(true);
                       }}>
                         <FileCheck className="h-3.5 w-3.5 mr-1" />
@@ -2869,53 +2781,9 @@ const setFilters = (newFilters: {
                       </Button>
                     )}
                   </div>
-
-                  <Button size="sm" variant="outline" onClick={() => setShowRawJson(!showRawJson)} className="text-slate-600 border-slate-300 hover:bg-white text-xs">
-                    <FileText className="h-3.5 w-3.5 mr-1 text-slate-500" />
-                    {showRawJson ? "Hide API Log" : "API Log"}
-                  </Button>
                 </div>
               );
             })()}
-
-            {/* RAW API VERIFICATION JSON PAYLOAD PANEL */}
-            {showRawJson && (
-              <div className="bg-slate-950 text-slate-200 p-4 rounded-xl font-mono text-[11px] border border-slate-800 space-y-2">
-                <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                  <span className="text-emerald-400 font-bold uppercase tracking-wider">API Audit Log</span>
-                  <span className="text-slate-500 text-[10px]">{selectedLead.created_at || new Date().toISOString()}</span>
-                </div>
-                <pre className="overflow-x-auto p-2 bg-slate-900 rounded text-emerald-300 leading-relaxed max-h-60">
-                  {JSON.stringify({
-                    lead_uuid: selectedLead.lead_uuid,
-                    constitution: selectedLead.constitution,
-                    advanced_pan_api: {
-                      status: "SUCCESS",
-                      pan_number: selectedLead.pan_no,
-                      name_on_card: selectedLead.CustName || selectedLead.entity_name || `${selectedLead.first_name || ""} ${selectedLead.last_name || ""}`.trim(),
-                      pan_type: selectedLead.constitution === "Individual" ? "Individual" : "Business Entity",
-                      dob_or_doi: selectedLead.dob || selectedLead.doi,
-                      registered_address: selectedLead.address || selectedLead.business_address,
-                      city: selectedLead.city,
-                      state: selectedLead.state,
-                      pincode: selectedLead.pincode,
-                      provider: "ScoreMe Advanced PAN Verification API v2"
-                    },
-                    mobile_otp_verification: {
-                      status: "VERIFIED",
-                      mobile_number: selectedLead.mobile,
-                      auth_channel: "SMS OTP",
-                      verified_at: selectedLead.created_at
-                    },
-                    cbs_branch_mapping: {
-                      branch_code: selectedLead.Branch_id || "",
-                      sub_region_code: selectedLead.subregion_id || "",
-                      dsa_code: selectedLead.DSACode || ""
-                    }
-                  }, null, 2)}
-                </pre>
-              </div>
-            )}
 
             {/* SECTION 1: Sourcing & Branch Information */}
             <LeadSectionBlock icon={Building2} title="Sourcing & Branch Information">
@@ -3075,7 +2943,11 @@ const setFilters = (newFilters: {
                     label="Sanction Amount"
                     value={<span className="font-mono font-bold text-emerald-600">{formatCurrency(Number(selectedLead.sanction_amount || 0))}</span>}
                   />
-                  <LeadDetailItem label="Sanction Letter No" value={<span className="font-mono">{selectedLead.sanction_letter_no || "N/A"}</span>} />
+                  <LeadDetailItem label="Sanction Status" value={<StatusBadge status={selectedLead.status || "SANCTIONED"} />} />
+                  <LeadDetailItem label="Sanction Date" value={selectedLead.sanction_date ? formatDate(selectedLead.sanction_date) : "N/A"} />
+                  {!isDsa && (
+                    <LeadDetailItem label="Sanction Number" value={<span className="font-mono">{selectedLead.sanction_letter_no || "N/A"}</span>} />
+                  )}
                   <LeadDetailItem
                     label="Total Disbursed"
                     value={<span className="font-mono font-bold text-indigo-700">{formatCurrency(Number(selectedLead.disbursed_amount || 0))}</span>}
@@ -3264,38 +3136,69 @@ const setFilters = (newFilters: {
       {/* Sanction Modal */}
       <Modal open={isSanctionModalOpen} onClose={() => setIsSanctionModalOpen(false)} title="Sanction Lead Application">
         <form onSubmit={handleSanctionSubmit} className="space-y-4 text-sm">
-          <div className="flex items-center gap-3 p-3.5 rounded-xl border border-emerald-200/80 bg-emerald-50/70 text-emerald-900">
-            <div className="p-2 bg-emerald-100 rounded-lg text-emerald-700 shrink-0">
-              <Banknote className="h-5 w-5" />
+          <div className="flex items-center justify-between p-3.5 rounded-xl border border-emerald-200/80 bg-emerald-50/70 text-emerald-900">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-emerald-100 rounded-lg text-emerald-700 shrink-0">
+                <Banknote className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-bold text-sm sm:text-base text-emerald-950">Sanction Status</p>
+                <p className="text-xs text-emerald-700 font-medium">Application will transition to SANCTIONED</p>
+              </div>
             </div>
-            <p className="font-bold text-sm sm:text-base text-emerald-950">Sanction Approval</p>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold tracking-wide bg-emerald-100 text-emerald-800 border border-emerald-300 uppercase">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              SANCTIONED
+            </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                Sanction Amount (₹) *
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Sanction Amount (₹) *
+                </label>
+                {Boolean(selectedLead?.loan_amount_required) && (
+                  <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded font-medium">
+                    Requested: ₹{Number(selectedLead?.loan_amount_required).toLocaleString("en-IN")}
+                  </span>
+                )}
+              </div>
               <input
                 type="number"
                 required
-                value={sanctionAmount}
+                min={1}
+                value={sanctionAmount || ""}
                 onChange={(e) => setSanctionAmount(Number(e.target.value))}
                 className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-bold font-mono text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
               />
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                Sanction Letter Number
+                Sanction Number *
               </label>
               <input
                 type="text"
+                required
                 placeholder="e.g. SL-2026-9081"
                 value={sanctionLetterNo}
                 onChange={(e) => setSanctionLetterNo(e.target.value)}
                 className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold font-mono text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+              Sanction Date *
+            </label>
+            <input
+              type="date"
+              required
+              value={sanctionDate}
+              onChange={(e) => setSanctionDate(e.target.value)}
+              className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all cursor-pointer"
+            />
           </div>
 
           <div>

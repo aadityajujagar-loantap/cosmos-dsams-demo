@@ -25,6 +25,7 @@ import {
   Mail,
   Smartphone,
   Send,
+  ShieldAlert,
   ShieldCheck,
   CreditCard,
   Sparkles,
@@ -2461,6 +2462,15 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   };
 
   const handleSubmit = async () => {
+    if (mode === "branch" && (currentUser?.role === "Checker" || currentUser?.role?.toLowerCase() === "checker")) {
+      toast({
+        title: "Unauthorized Action",
+        description: "Only Maker can onboard a DSA. Checker is not authorized.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!uploadedDocs["dsa_consent_dpdp"]) {
       toast({
         title: "DSA Consent Form Required",
@@ -2506,6 +2516,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       mobile,
       contact_person: contactPerson || undefined,
       applicant_prior_experience: resolvedPriorExperience,
+      experience_years: experienceYears || "0",
       registered_business_proof: resolvedBusinessProof,
       gst_applicable: gstApplicable,
       gst: gstApplicable && gstNumber ? gstNumber.trim().toUpperCase() : undefined,
@@ -2756,6 +2767,23 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
             <span className="text-xs text-slate-500 font-medium">Loading onboarding application...</span>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (mode === "branch" && (currentUser?.role === "Checker" || currentUser?.role?.toLowerCase() === "checker")) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center">
+        <div className="rounded-full bg-rose-100 p-4 mb-4 text-rose-600">
+          <ShieldAlert className="h-12 w-12" />
+        </div>
+        <h1 className="text-2xl font-bold text-slate-900 mb-2">Access Denied (403 Forbidden)</h1>
+        <p className="text-slate-600 max-w-md mb-6 text-sm">
+          Only Maker can onboard a DSA. Checker accounts are not authorized to onboard a DSA or access this form.
+        </p>
+        <Link href="/">
+          <Button variant="primary">Return to Dashboard</Button>
+        </Link>
       </div>
     );
   }
@@ -4285,7 +4313,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         }}
                         className="h-4 w-4 text-blue-600 focus:ring-blue-500 cursor-pointer"
                       />
-                      <span>Residence / office as applicable</span>
+                      <span>Rent Agreement (Residence / office as applicable)</span>
                     </label>
                   </div>
                 </div>
