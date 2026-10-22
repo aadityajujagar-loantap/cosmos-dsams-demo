@@ -56,20 +56,18 @@ export function DsaKycDataModal({
               dsa_id: dsaIdNum,
             });
       } else if (type === "gst") {
-        if (dsa.gst) {
-          res = await adminApi.verifyGstInfo({
-            gstin: dsa.gst,
-            flag: 1,
-            dsa_id: dsaIdNum,
-          });
-        } else if (dsa.pan) {
-          res = await adminApi.resolvePanToGstin({
+        const gstVal =
+          (dsa.gst ? String(dsa.gst).split(/[,;\s]+/)[0].trim() : "") ||
+          dsa.gstin ||
+          dsa.gst;
+        res = await adminApi.triggerCheckerVerification(
+          dsa.id,
+          "GST_BASIC_DETAILS",
+          {
+            gstin: gstVal || undefined,
             pan: dsa.pan,
-            dsa_id: dsaIdNum,
-          });
-        } else {
-          throw new Error("Neither GSTIN nor PAN available on DSA profile.");
-        }
+          },
+        );
       } else if (type === "bank") {
         if (!dsa.account_number || !dsa.ifsc) {
           throw new Error("Bank Account Number and IFSC code are required.");
@@ -134,12 +132,18 @@ export function DsaKycDataModal({
     if (open && type) {
       // If we already have cached verif details for this type, initialize state immediately
       const initialCachedDetails =
+        cachedVerif?.normalized_data ||
         cachedVerif?.details ||
         cachedVerif?.response_payload ||
         cachedVerif?.raw_response ||
         (cachedVerif as any)?.data?.details;
       if (initialCachedDetails) {
-        setApiData({ data: { details: initialCachedDetails } });
+        setApiData({
+          data: {
+            details: initialCachedDetails,
+            normalized_data: cachedVerif?.normalized_data,
+          },
+        });
       }
       fetchKycData();
     } else {
@@ -552,6 +556,13 @@ function PanDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
 
 // 2. GST Verification Table (2 Categorized Tables)
 function GstDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
+  const normData =
+    apiData?.data?.normalized_data ||
+    apiData?.normalized_data ||
+    apiData?.data?.details?.normalized_data ||
+    (apiData?.data?.details && !apiData?.data?.details?.data && !apiData?.data?.details?.responseCode && apiData?.data?.details?.gst_status ? apiData.data.details : null) ||
+    {};
+
   const rawDetails =
     apiData?.data?.details?.data ||
     apiData?.data?.details?.result ||
@@ -561,7 +572,7 @@ function GstDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
     {};
 
   const isArrayLookup = Array.isArray(rawDetails);
-  const gstBasic =
+  const detailedInfo =
     rawDetails && typeof rawDetails === "object" && !isArrayLookup
       ? rawDetails.gstBasicInfo ||
         rawDetails.gstinDetailedInformartion ||
@@ -569,15 +580,20 @@ function GstDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
         rawDetails
       : {};
 
+  const gstBasic = { ...normData, ...(typeof detailedInfo === "object" ? detailedInfo : {}) };
+
   const hasApiData = Boolean(
     (isArrayLookup && rawDetails.length > 0) ||
-    (gstBasic &&
-      Object.keys(gstBasic).length > 0 &&
-      (gstBasic.gstin ||
-        gstBasic.legalName ||
-        gstBasic.tradeName ||
-        gstBasic.currentRegistrationStatus ||
-        gstBasic.status)),
+      (gstBasic &&
+        Object.keys(gstBasic).length > 0 &&
+        (gstBasic.gstin ||
+          gstBasic.legalName ||
+          gstBasic.legal_name ||
+          gstBasic.tradeName ||
+          gstBasic.trade_name ||
+          gstBasic.currentRegistrationStatus ||
+          gstBasic.status ||
+          gstBasic.gst_status)),
   );
 
   if (isArrayLookup && rawDetails.length > 0) {
@@ -615,13 +631,14 @@ function GstDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
     (gstin.length >= 12 ? gstin.substring(2, 12) : dsa.pan || "");
   const legalName = gstBasic.legalName || gstBasic.legal_name || "";
   const tradeName = gstBasic.tradeName || gstBasic.trade_name || "";
-  const status = gstBasic.currentRegistrationStatus || gstBasic.status || "";
+  const status = gstBasic.currentRegistrationStatus || gstBasic.gst_status || gstBasic.status || "";
   const taxpayerType = gstBasic.taxpayerType || gstBasic.taxpayer_type || "";
   const constitution =
     gstBasic.businessConstitution || gstBasic.constitution || "";
   const regDate =
     gstBasic.registerDate ||
     gstBasic.registrationDate ||
+    gstBasic.registration_date ||
     gstBasic.date_of_registration ||
     "";
   const cancellationDate = gstBasic.registerCancellationDate || "";
