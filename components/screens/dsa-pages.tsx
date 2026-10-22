@@ -6124,41 +6124,13 @@ const resolveStageStatus = (
   const getRevertTargetInfo = (level: number) => {
     switch (level) {
       case 3:
-        return {
-          targetLevel: 2,
-          targetRole: "Checker",
-          label: "Revert to Checker",
-          isDynamic: false,
-        };
       case 4:
-        return {
-          targetLevel: 3,
-          targetRole: "Sub-Region Head",
-          label: "Revert to Sub-Region Head",
-          isDynamic: false,
-        };
       case 5:
-        if (isDgmPostedForBranch) {
-          return {
-            targetLevel: 4,
-            targetRole: "DGM",
-            label: "Revert to DGM",
-            isDynamic: true,
-            dgmPosted: true,
-          };
-        }
-        return {
-          targetLevel: 3,
-          targetRole: "Sub-Region Head",
-          label: "Revert to Sub-Region Head",
-          isDynamic: true,
-          dgmPosted: false,
-        };
       case 6:
         return {
-          targetLevel: 5,
-          targetRole: "Region Head",
-          label: "Revert to Region Head",
+          targetLevel: 1,
+          targetRole: "Maker",
+          label: "Revert to Maker",
           isDynamic: false,
         };
       default:
@@ -12292,7 +12264,7 @@ const resolveStageStatus = (
                     currentRevertTarget?.targetRole || "Previous Reviewer";
                   toast({
                     title: "Application Reverted",
-                    description: `Application has been sent back to ${targetLabel}.`,
+                    description: `Application has been sent back to ${targetLabel}'s bucket.`,
                     variant: "warning",
                   });
                   closeDecisionModals();
