@@ -3789,8 +3789,12 @@ export function DsaProfilePage({ id }: { id: string }) {
           setFailedKyc((prev) => ({ ...prev, pan: true }));
         }
       } else if (type === "gst") {
-        const res = await triggerCheckerVerification(dsa.id, "GST", {
-          gstin: dsa.gst,
+        const gstVal =
+          (dsa.gst ? String(dsa.gst).split(/[,;\s]+/)[0].trim() : "") ||
+          dsa.gstin ||
+          dsa.gst;
+        const res = await triggerCheckerVerification(dsa.id, "GST_BASIC_DETAILS", {
+          gstin: gstVal || undefined,
           pan: dsa.pan,
         });
         await loadKycHistory(dsa.id);
@@ -4848,7 +4852,7 @@ export function DsaProfilePage({ id }: { id: string }) {
       // exactTypes prevents PAN_TO_GSTIN from satisfying the GST slot: its type
       // contains "GST", so a plain substring match made a PAN check appear to
       // verify GST as well.
-      isKycTypeVerified("gst", ["GST"], true, ["GST_BASIC"]));
+      isKycTypeVerified("gst", ["GST"], true, ["GST_BASIC", "GST_BASIC_DETAILS", "GST"]));
   const isBankChecked =
     !failedKyc.bank &&
     (Boolean(verifiedKyc.bank) || isKycTypeVerified("bank", ["BANK", "BAV"]));
@@ -7699,7 +7703,7 @@ const resolveStageStatus = (
                                   key: "gst",
                                   promise: triggerCheckerVerification(
                                     dsa.id,
-                                    "GST",
+                                    "GST_BASIC_DETAILS",
                                     { gstin: dsa.gst, pan: dsa.pan },
                                   ),
                                 });
@@ -8124,76 +8128,17 @@ const resolveStageStatus = (
                             />
                           </div>
                           <div>
-                            {allDiscoveredGsts.length > 0 ? (
-                              <div className="space-y-2">
-                                <div>
-                                  <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block mb-1">
-                                    Select GSTIN ({allDiscoveredGsts.length} found)
-                                  </label>
-                                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                                    <select
-                                      value={
-                                        selectedGstin ||
-                                        allDiscoveredGsts.find((g) => !fetchedGstinSet.has(g.toUpperCase())) ||
-                                        allDiscoveredGsts[0]
-                                      }
-                                      onChange={(e) => setSelectedGstin(e.target.value)}
-                                      className="flex-1 text-xs font-mono font-bold rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-800 focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500 shadow-2xs"
-                                    >
-                                      {allDiscoveredGsts.map((gst) => {
-                                        const isFetched = fetchedGstinSet.has(gst.toUpperCase());
-                                        return (
-                                          <option key={gst} value={gst} disabled={isFetched}>
-                                            {gst} {isFetched ? "— Fetched" : ""}
-                                          </option>
-                                        );
-                                      })}
-                                    </select>
-                                    {canCheckerVerifyKyc && (
-                                      <Button
-                                        size="sm"
-                                        type="button"
-                                        disabled={
-                                          fetchingGstDetails ||
-                                          !(
-                                            selectedGstin ||
-                                            allDiscoveredGsts.find((g) => !fetchedGstinSet.has(g.toUpperCase())) ||
-                                            allDiscoveredGsts[0]
-                                          ) ||
-                                          fetchedGstinSet.has(
-                                            (
-                                              selectedGstin ||
-                                              allDiscoveredGsts.find((g) => !fetchedGstinSet.has(g.toUpperCase())) ||
-                                              allDiscoveredGsts[0]
-                                            ).toUpperCase(),
-                                          )
-                                        }
-                                        onClick={() =>
-                                          handleFetchGstDetails(
-                                            selectedGstin ||
-                                            allDiscoveredGsts.find((g) => !fetchedGstinSet.has(g.toUpperCase())) ||
-                                            allDiscoveredGsts[0],
-                                          )
-                                        }
-                                        className="text-xs px-3 py-2 h-auto font-semibold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center gap-1.5 whitespace-nowrap shadow-2xs disabled:bg-slate-200 disabled:text-slate-400"
-                                      >
-                                        {fetchingGstDetails ? (
-                                          <>
-                                            <Loader2 className="h-3 w-3 animate-spin" />
-                                            Fetching...
-                                          </>
-                                        ) : (
-                                          <>
-                                            <ShieldCheck className="h-3 w-3" />
-                                            Fetch GST Details
-                                          </>
-                                        )}
-                                      </Button>
-                                    )}
-                                  </div>
-                                </div>
-                                <p className="text-xs text-slate-500">
-                                  Taxpayer Status: Regular · Active
+                            {resolvedGstNumber ? (
+                              <div>
+                                <p className="text-lg font-mono font-bold text-slate-900">
+                                  {resolvedGstNumber}
+                                </p>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                  {isGstChecked
+                                    ? "Taxpayer Status: Regular · Active"
+                                    : dsa.gst_applicable
+                                      ? "GST Applicable (Certificate on File)"
+                                      : "Taxpayer Status: Pending Verification"}
                                 </p>
                               </div>
                             ) : isGstChecked ? (
@@ -8236,7 +8181,7 @@ const resolveStageStatus = (
                                     ? "GSTN Master Database"
                                     : isMakerUser
                                       ? "Pending Checker Verification"
-                                      : "ScoreMe PAN-to-GSTIN"}
+                                      : "ScoreMe GST Basic Details"}
                             </span>
                             <div className="flex items-center gap-1.5">
                               {canViewGstKycData && (
@@ -8255,76 +8200,39 @@ const resolveStageStatus = (
                                   View Data
                                 </Button>
                               )}
-                              {canCheckerVerifyKyc &&
-                                (dsa.gst ? (
-                                  <Button
-                                    size="sm"
-                                    type="button"
-                                    disabled={verifyingKyc.gst}
-                                    onClick={() =>
-                                      handleVerifyKyc("gst", "GSTIN")
-                                    }
-                                    className={cn(
-                                      "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
-                                      isGstChecked
-                                        ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                                        : "bg-blue-600 hover:bg-blue-700 text-white",
-                                    )}
-                                  >
-                                    {verifyingKyc.gst ? (
-                                      <>
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                        Checking...
-                                      </>
-                                    ) : isGstChecked ? (
-                                      <>
-                                        <Check className="h-3 w-3 text-emerald-600" />
-                                        Re-Check GSTIN
-                                      </>
-                                    ) : (
-                                      <>
-                                        <ShieldCheck className="h-3 w-3" />
-                                        Check GSTIN
-                                      </>
-                                    )}
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    size="sm"
-                                    type="button"
-                                    disabled={verifyingKyc.gst}
-                                    onClick={() =>
-                                      handleVerifyKyc(
-                                        "gst",
-                                        "PAN to GSTIN",
-                                        "pan_to_gstin",
-                                      )
-                                    }
-                                    className={cn(
-                                      "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
-                                      isGstChecked
-                                        ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                                        : "bg-blue-600 hover:bg-blue-700 text-white",
-                                    )}
-                                  >
-                                    {verifyingKyc.gst ? (
-                                      <>
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                        Looking up...
-                                      </>
-                                    ) : isGstChecked ? (
-                                      <>
-                                        <Check className="h-3 w-3 text-emerald-600" />
-                                        Re-Check GSTIN
-                                      </>
-                                    ) : (
-                                      <>
-                                        <ShieldCheck className="h-3 w-3" />
-                                        Resolve from PAN
-                                      </>
-                                    )}
-                                  </Button>
-                                ))}
+                              {canCheckerVerifyKyc && (
+                                <Button
+                                  size="sm"
+                                  type="button"
+                                  disabled={verifyingKyc.gst}
+                                  onClick={() =>
+                                    handleVerifyKyc("gst", "GSTIN")
+                                  }
+                                  className={cn(
+                                    "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
+                                    isGstChecked
+                                      ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                                      : "bg-blue-600 hover:bg-blue-700 text-white",
+                                  )}
+                                >
+                                  {verifyingKyc.gst ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                      Checking...
+                                    </>
+                                  ) : isGstChecked ? (
+                                    <>
+                                      <Check className="h-3 w-3 text-emerald-600" />
+                                      Re-Check GSTIN
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ShieldCheck className="h-3 w-3" />
+                                      Check GSTIN
+                                    </>
+                                  )}
+                                </Button>
+                              )}
                             </div>
                           </div>
                         </div>
