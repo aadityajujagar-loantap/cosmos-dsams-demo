@@ -2272,40 +2272,56 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         return false;
       }
 
-      // Account Holder Name must match applicant name (Individual) or entity name (Entity)
-      // Exception: Proprietary firm where bank account may be in firm name or proprietor name
+      // Account Holder Name must match applicant name (Individual) or entity name / contact person (Entity)
       const cleanStr = (s: string) =>
         s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
       const accClean = cleanStr(accountName);
-      const isProprietorship = dsaType === "ENTITY" && constitution.toLowerCase().includes("proprietor");
 
-      if (!isProprietorship) {
-        let expectedName = "";
-        let expectedLabel = "";
-        if (dsaType === "ENTITY") {
-          expectedName = entityName.trim();
-          expectedLabel = "entity legal name";
-        } else {
-          expectedName = `${firstName} ${lastName}`.trim() || (panVerificationData?.fullName || "").trim();
-          expectedLabel = "applicant name";
+      const checkMatch = (targetName: string, minTokens = 1): boolean => {
+        const targetClean = cleanStr(targetName);
+        if (!targetClean || !accClean) return false;
+        if (accClean === targetClean) return true;
+        if (accClean.includes(targetClean)) return true;
+
+        const accTokens = accClean.split(" ").filter((t) => t.length >= 2);
+        const targetTokens = targetClean.split(" ").filter((t) => t.length >= 2);
+        if (accTokens.length === 0 || targetTokens.length === 0) return false;
+
+        const overlap = accTokens.filter((t) => targetTokens.includes(t));
+        const requiredOverlap = Math.min(minTokens, targetTokens.length);
+        return requiredOverlap > 0 && overlap.length >= requiredOverlap && accTokens.length >= requiredOverlap;
+      };
+
+      if (dsaType === "ENTITY") {
+        const entName = entityName.trim();
+        const contactName = contactPerson.trim();
+        const entMatch = entName ? checkMatch(entName, 2) : false;
+        const contactMatch = contactName ? checkMatch(contactName, 1) : false;
+
+        if (!entMatch && !contactMatch) {
+          const desc = entName && contactName && cleanStr(entName) !== cleanStr(contactName)
+            ? `Account holder name ("${accountName}") must match entity name ("${entName}") or contact person ("${contactName}").`
+            : `Account holder name ("${accountName}") must match entity legal name ("${entName || contactName}").`;
+
+          toast({
+            title: "Account Holder Name Mismatch",
+            description: desc,
+            variant: "warning",
+          });
+          return false;
         }
-
-        const expClean = cleanStr(expectedName);
-        if (expClean && accClean) {
-          const isExactOrSubstring = accClean === expClean || accClean.includes(expClean) || expClean.includes(accClean);
-          const accTokens = accClean.split(" ").filter((t) => t.length > 2);
-          const expTokens = expClean.split(" ").filter((t) => t.length > 2);
-          const overlap = accTokens.filter((t) => expTokens.includes(t));
-          const hasOverlap = overlap.length >= Math.min(dsaType === "ENTITY" ? 2 : 1, accTokens.length, expTokens.length);
-
-          if (!isExactOrSubstring && !hasOverlap) {
-            toast({
-              title: "Account Holder Name Mismatch",
-              description: `Account holder name ("${accountName}") must match the ${expectedLabel} ("${expectedName}").`,
-              variant: "warning",
-            });
-            return false;
-          }
+      } else {
+        const fullName = (
+          `${firstName} ${middleName ? `${middleName} ` : ""}${lastName}`.replace(/\s+/g, " ").trim() ||
+          (panVerificationData?.fullName || "").trim()
+        );
+        if (fullName && !checkMatch(fullName, 1)) {
+          toast({
+            title: "Account Holder Name Mismatch",
+            description: `Account holder name ("${accountName}") must match applicant name ("${fullName}").`,
+            variant: "warning",
+          });
+          return false;
         }
       }
       return true;
