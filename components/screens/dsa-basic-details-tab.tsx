@@ -536,7 +536,7 @@ export function DsaBasicDetailsTab({
       if (formData.ifsc) {
         const cleanIfsc = formData.ifsc.trim().toUpperCase();
         if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(cleanIfsc)) {
-          errs.ifsc = "IFSC format must be IDFC0000123";
+          errs.ifsc = "IFSC must follow standard format (e.g. COSB0000123)";
         }
       }
     }
@@ -606,6 +606,14 @@ export function DsaBasicDetailsTab({
         if (payload.experience_years !== undefined) {
           payload.experience_years = payload.experience_years ? String(payload.experience_years) : "0";
         }
+      }
+
+      if (block === "address" && isEntity) {
+        payload.office_address_line_1 = payload.address;
+        payload.office_city = payload.city;
+        payload.office_state = payload.state;
+        payload.office_pincode = payload.pincode;
+        payload.office_address_different = false;
       }
 
       const files: SupportingFile[] = changed.map((f) => ({
@@ -1630,15 +1638,17 @@ export function DsaBasicDetailsTab({
           <div className="bg-slate-50/70 p-4 rounded-lg border border-slate-200 space-y-4">
             <div>
               <p className="text-xs font-bold text-slate-700 uppercase tracking-wide mb-2">
-                Registered / Residential Address
+                {isEntity ? "Office Address" : "Registered / Residential Address"}
               </p>
               <div className="grid gap-3 sm:grid-cols-4">
                 <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs sm:col-span-4">
-                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Street Address *</Label>
+                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">
+                    {isEntity ? "Office Street Address *" : "Street Address *"}
+                  </Label>
                   <Input
                     value={formData.address || ""}
                     onChange={(e) => setFormData((prev) => ({ ...prev, address: e.target.value }))}
-                    placeholder="Flat / Building / Street address"
+                    placeholder={isEntity ? "Office / Building / Street address" : "Flat / Building / Street address"}
                   />
                   {errors.address && <p className="text-red-500 text-xs mt-1">{errors.address}</p>}
                 </div>
@@ -1688,25 +1698,27 @@ export function DsaBasicDetailsTab({
                 </Select>
               </div>
 
-              <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs flex flex-col justify-center">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(formData.office_address_different)}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, office_address_different: e.target.checked }))}
-                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="text-xs font-semibold text-slate-800">
-                    Separate Commercial Office Address (Different from Residence)
-                  </span>
-                </label>
-                <p className="text-[11px] text-slate-500 mt-1 pl-6">
-                  Check if operating from a distinct commercial office location.
-                </p>
-              </div>
+              {!isEntity && (
+                <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs flex flex-col justify-center">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(formData.office_address_different)}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, office_address_different: e.target.checked }))}
+                      className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-xs font-semibold text-slate-800">
+                      Separate Commercial Office Address (Different from Residence)
+                    </span>
+                  </label>
+                  <p className="text-[11px] text-slate-500 mt-1 pl-6">
+                    Check if operating from a distinct commercial office location.
+                  </p>
+                </div>
+              )}
             </div>
 
-            {formData.office_address_different ? (
+            {!isEntity && formData.office_address_different ? (
               <div className="pt-2 border-t border-slate-200">
                 <p className="text-xs font-bold text-slate-700 uppercase tracking-wide mb-2">
                   Office / Commercial Operating Premises Address
@@ -1752,42 +1764,69 @@ export function DsaBasicDetailsTab({
           </div>
         ) : (
           <DetailGrid>
-            <DetailItem
-              label="Registered / Residential Address"
-              value={`${dsa.address}, ${dsa.city}, ${dsa.state} ${dsa.pincode}`}
-            />
-            <DetailItem
-              label="Office / Operating Premises Address"
-              value={
-                dsa.office_address_different && dsa.office_address_line_1
-                  ? `${dsa.office_address_line_1}, ${dsa.office_city || dsa.city}, ${dsa.office_state || dsa.state} ${dsa.office_pincode || dsa.pincode}`
-                  : `Same as Registered Address (${dsa.address}, ${dsa.city})`
-              }
-            />
-            <DetailItem
-              label="Residential Location &amp; Pincode"
-              value={`${dsa.city}, ${dsa.state} - ${dsa.pincode}`}
-            />
-            <DetailItem
-              label="Office Location &amp; Pincode"
-              value={
-                dsa.office_address_different && dsa.office_city
-                  ? `${dsa.office_city}, ${dsa.office_state || dsa.state} - ${dsa.office_pincode || dsa.pincode}`
-                  : `${dsa.city}, ${dsa.state} - ${dsa.pincode} (Same as Residence)`
-              }
-            />
-            <DetailItem
-              label="Business Premises Ownership"
-              value={<span className="font-semibold text-slate-900">{dsa.business_premises_ownership || "—"}</span>}
-            />
-            <DetailItem
-              label="Operating Premises Status"
-              value={
-                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                  {dsa.office_address_different ? "Separate Commercial Office" : "Operating from Registered Residence"}
-                </span>
-              }
-            />
+            {isEntity ? (
+              <>
+                <DetailItem
+                  label="Office Address"
+                  value={`${dsa.office_address_line_1 || dsa.address || "—"}, ${dsa.office_city || dsa.city || ""}, ${dsa.office_state || dsa.state || ""} ${dsa.office_pincode || dsa.pincode || ""}`.replace(/^,\s*/, "")}
+                />
+                <DetailItem
+                  label="Office Location &amp; Pincode"
+                  value={`${dsa.office_city || dsa.city || "—"}, ${dsa.office_state || dsa.state || "—"} - ${dsa.office_pincode || dsa.pincode || "—"}`}
+                />
+                <DetailItem
+                  label="Business Premises Ownership"
+                  value={<span className="font-semibold text-slate-900">{dsa.business_premises_ownership || "—"}</span>}
+                />
+                <DetailItem
+                  label="Operating Premises Status"
+                  value={
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                      Corporate / Commercial Office
+                    </span>
+                  }
+                />
+              </>
+            ) : (
+              <>
+                <DetailItem
+                  label="Registered / Residential Address"
+                  value={`${dsa.address}, ${dsa.city}, ${dsa.state} ${dsa.pincode}`}
+                />
+                <DetailItem
+                  label="Office / Operating Premises Address"
+                  value={
+                    dsa.office_address_different && dsa.office_address_line_1
+                      ? `${dsa.office_address_line_1}, ${dsa.office_city || dsa.city}, ${dsa.office_state || dsa.state} ${dsa.office_pincode || dsa.pincode}`
+                      : `Same as Registered Address (${dsa.address}, ${dsa.city})`
+                  }
+                />
+                <DetailItem
+                  label="Residential Location &amp; Pincode"
+                  value={`${dsa.city}, ${dsa.state} - ${dsa.pincode}`}
+                />
+                <DetailItem
+                  label="Office Location &amp; Pincode"
+                  value={
+                    dsa.office_address_different && dsa.office_city
+                      ? `${dsa.office_city}, ${dsa.office_state || dsa.state} - ${dsa.office_pincode || dsa.pincode}`
+                      : `${dsa.city}, ${dsa.state} - ${dsa.pincode} (Same as Residence)`
+                  }
+                />
+                <DetailItem
+                  label="Business Premises Ownership"
+                  value={<span className="font-semibold text-slate-900">{dsa.business_premises_ownership || "—"}</span>}
+                />
+                <DetailItem
+                  label="Operating Premises Status"
+                  value={
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                      {dsa.office_address_different ? "Separate Commercial Office" : "Operating from Registered Residence"}
+                    </span>
+                  }
+                />
+              </>
+            )}
           </DetailGrid>
         )}
       </SectionBlock>
