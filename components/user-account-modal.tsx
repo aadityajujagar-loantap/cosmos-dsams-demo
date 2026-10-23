@@ -6,6 +6,7 @@ import {
   LogOut,
   Mail,
   Phone,
+  ShieldCheck,
 } from "lucide-react";
 
 import { authApi } from "@/apis/auth";
@@ -96,6 +97,7 @@ export function UserAccountModal({
 
   const displayName = fieldValue(user?.name ?? fallbackUser.name);
   const displayEmail = fieldValue(user?.email ?? fallbackUser.email);
+  const displayRole = resolvedRoles.length ? resolvedRoles.join(", ") : fallbackUser.role || "User";
 
   return (
     <Modal
@@ -108,7 +110,7 @@ export function UserAccountModal({
         <div className="space-y-4">
           <div className="flex flex-col items-center justify-center rounded-xl border border-slate-200/80 bg-slate-50/60 p-10 text-center min-h-[260px]">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-slate-800 mb-3" />
-            <h4 className="text-xs @font-semibold text-slate-800">Loading user profile...</h4>
+            <h4 className="text-xs font-semibold text-slate-800">Loading user profile...</h4>
             <p className="mt-1 text-[11px] text-slate-400">
               Fetching session details and account info
             </p>
@@ -144,9 +146,9 @@ export function UserAccountModal({
               <h3 className="truncate text-sm font-semibold text-slate-900">
                 {displayName}
               </h3>
-              <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-slate-500">
-                <Mail className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                <span className="truncate">{displayEmail}</span>
+              <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs font-medium text-slate-500">
+                <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                <span className="truncate">{displayRole}</span>
               </p>
             </div>
           </div>
@@ -154,7 +156,25 @@ export function UserAccountModal({
           {/* Assignment & Scope Details */}
           <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 space-y-3">
             <div className="grid grid-cols-2 gap-2.5">
+              <div className="rounded-lg border border-slate-200/80 bg-white p-2.5">
+                <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
+                  <ShieldCheck className="h-3 w-3 text-slate-400" />
+                  <span>Role</span>
+                </div>
+                <p className="mt-1 text-xs font-semibold text-slate-800 truncate" title={displayRole}>
+                  {displayRole}
+                </p>
+              </div>
 
+              <div className="rounded-lg border border-slate-200/80 bg-white p-2.5">
+                <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
+                  <Mail className="h-3 w-3 text-slate-400" />
+                  <span>Email</span>
+                </div>
+                <p className="mt-1 text-xs font-medium text-slate-800 truncate" title={displayEmail}>
+                  {displayEmail}
+                </p>
+              </div>
 
               <div className="rounded-lg border border-slate-200/80 bg-white p-2.5">
                 <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">

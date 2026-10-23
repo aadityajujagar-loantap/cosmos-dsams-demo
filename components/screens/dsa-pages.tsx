@@ -3703,28 +3703,62 @@ export function DsaProfilePage({ id }: { id: string }) {
     isCheckerLevel && (isCheckerRole || isAdminOrSuperAdmin)
   );
 
+  const getDeviationKey = (dev: any, fallbackIdx?: number): string | number => {
+    return (
+      dev?.id ??
+      dev?.deviation_id ??
+      dev?.deviationId ??
+      dev?.dsa_bre_result_id ??
+      dev?.rule_code ??
+      dev?.ruleCode ??
+      dev?.code ??
+      dev?.rule ??
+      dev?.rule_name ??
+      dev?.parameter ??
+      (fallbackIdx !== undefined ? fallbackIdx : "")
+    );
+  };
+
   useEffect(() => {
     if (deviationRules?.length) {
       setDeviationRemarksState((prev) => {
         const next = { ...prev };
-        for (const dev of deviationRules) {
-          const key = dev.id ?? dev.rule_code;
-          if (key && next[key] === undefined && dev.remark !== undefined) {
+        deviationRules.forEach((dev: any, idx: number) => {
+          const key = getDeviationKey(dev, idx);
+          if (key !== "" && next[key] === undefined && dev.remark !== undefined) {
             next[key] = dev.remark || "";
           }
-        }
+        });
         return next;
       });
     }
   }, [deviationRules]);
 
-  const handleSaveDeviationRemark = async (dev: any) => {
-    const dsaId = dsa?.id ?? (dsa as any)?.dsa_id;
-    const devId = dev.id ?? dev.deviation_id ?? dev.rule_code;
-    const key = dev.id ?? dev.rule_code ?? devId;
+  const handleSaveDeviationRemark = async (dev: any, fallbackIdx?: number) => {
+    const dsaId =
+      dsa?.id ??
+      (dsa as any)?.dsa_id ??
+      deviationReportData?.dsa_id ??
+      (deviationReportData as any)?.dsaId ??
+      dev?.dsa_id ??
+      id;
+
+    const devId =
+      dev?.id ??
+      dev?.deviation_id ??
+      dev?.deviationId ??
+      dev?.dsa_bre_result_id ??
+      dev?.rule_code ??
+      dev?.ruleCode ??
+      dev?.code ??
+      dev?.rule ??
+      dev?.rule_name ??
+      dev?.parameter;
+
+    const key = getDeviationKey(dev, fallbackIdx);
 
     if (!devId || !dsaId) {
-      console.warn("Cannot save deviation remark: missing deviation ID or DSA ID", { dev, dsa });
+      console.warn("Cannot save deviation remark: missing deviation ID or DSA ID", { dev, dsa, dsaId, devId });
       setDeviationRemarkStatus((prev) => ({
         ...prev,
         [key]: { error: "Unable to identify deviation record. Please refresh report." },
@@ -12332,7 +12366,7 @@ const resolveStageStatus = (
                     </td>
                   </tr>
                   {deviationRules.map((dev: any, idx: number) => {
-                    const key = dev.id ?? dev.rule_code ?? idx;
+                    const key = getDeviationKey(dev, idx);
                     const remarkVal = deviationRemarksState[key] ?? dev.remark ?? "";
                     const isSaving = savingDeviationId === key;
                     const status = deviationRemarkStatus[key];
@@ -12392,7 +12426,7 @@ const resolveStageStatus = (
                                   type="button"
                                   size="sm"
                                   disabled={isSaving || remarkVal.length > 2000}
-                                  onClick={() => handleSaveDeviationRemark(dev)}
+                                  onClick={() => handleSaveDeviationRemark(dev, idx)}
                                   className="h-6 px-2 text-[11px] bg-amber-600 hover:bg-amber-700 text-white font-medium"
                                 >
                                   {isSaving ? (
