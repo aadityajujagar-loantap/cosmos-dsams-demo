@@ -293,13 +293,13 @@ export function DsaDetailEditModal({
     }
 
     if (block === "address") {
-      if (!formData.address?.trim()) errs.address = "Address is required";
+      if (!formData.address?.trim()) errs.address = isEntity ? "Office address is required" : "Address is required";
       if (!formData.city?.trim()) errs.city = "City is required";
       if (!formData.state?.trim()) errs.state = "State is required";
       if (formData.pincode && !/^\d{6}$/.test(formData.pincode.trim())) {
         errs.pincode = "Pincode must be 6 digits";
       }
-      if (formData.office_address_different && formData.office_pincode && !/^\d{6}$/.test(formData.office_pincode.trim())) {
+      if (!isEntity && formData.office_address_different && formData.office_pincode && !/^\d{6}$/.test(formData.office_pincode.trim())) {
         errs.office_pincode = "Office pincode must be 6 digits";
       }
     }
@@ -311,7 +311,7 @@ export function DsaDetailEditModal({
       if (formData.ifsc) {
         const cleanIfsc = formData.ifsc.trim().toUpperCase();
         if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(cleanIfsc)) {
-          errs.ifsc = "IFSC must follow standard format (e.g. IDFC0000123)";
+          errs.ifsc = "IFSC must follow standard format (e.g. COSB0000123)";
         }
       }
     }
@@ -359,6 +359,14 @@ export function DsaDetailEditModal({
       if (payload.experience_years !== undefined) {
         payload.experience_years = payload.experience_years ? String(payload.experience_years) : "0";
       }
+    }
+
+    if (block === "address" && isEntity) {
+      payload.office_address_line_1 = payload.address;
+      payload.office_city = payload.city;
+      payload.office_state = payload.state;
+      payload.office_pincode = payload.pincode;
+      payload.office_address_different = false;
     }
 
     await onSave(payload);
@@ -878,10 +886,10 @@ export function DsaDetailEditModal({
         {block === "address" && (
           <div className="space-y-4">
             <div>
-              <Label htmlFor="address">Registered / Residential Address *</Label>
+              <Label htmlFor="address">{isEntity ? "Office Address *" : "Residential Address *"}</Label>
               <Input
                 id="address"
-                placeholder="Flat / Building, Road, Area"
+                placeholder={isEntity ? "Office / Building, Road, Area" : "Flat / Building, Road, Area"}
                 value={formData.address || ""}
                 onChange={(e) => handleChange("address", e.target.value)}
               />
@@ -933,21 +941,23 @@ export function DsaDetailEditModal({
               </Select>
             </div>
 
-            <div className="pt-2 border-t border-slate-100">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
-                  checked={Boolean(formData.office_address_different)}
-                  onChange={(e) => handleChange("office_address_different", e.target.checked)}
-                />
-                <span className="text-xs font-semibold text-slate-800">
-                  Separate Commercial Office / Operating Address
-                </span>
-              </label>
-            </div>
+            {!isEntity && (
+              <div className="pt-2 border-t border-slate-100">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                    checked={Boolean(formData.office_address_different)}
+                    onChange={(e) => handleChange("office_address_different", e.target.checked)}
+                  />
+                  <span className="text-xs font-semibold text-slate-800">
+                    Separate Commercial Office / Operating Address
+                  </span>
+                </label>
+              </div>
+            )}
 
-            {formData.office_address_different && (
+            {!isEntity && formData.office_address_different && (
               <div className="space-y-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
                 <div>
                   <Label htmlFor="office_address_line_1">Office Address Line</Label>

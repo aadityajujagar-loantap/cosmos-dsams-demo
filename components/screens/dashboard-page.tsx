@@ -245,7 +245,8 @@ export function DashboardPage() {
         name: applicantName,
         businessType: item.business_type || item.dsa_type || "",
         dsa_type: item.dsa_type || item.business_type || "",
-        pan: item.pan || "N/A",
+        pan: item.pan || (item as any).pan_no || "N/A",
+        mobile: item.mobile || (item as any).mobile_no || (item as any).phone || "",
         gst_applicable: Boolean(item.gst_applicable || item.gst),
         approval_rate: item.approval_rate || 0,
         commission_earned: item.commission_earned || 0,
@@ -543,12 +544,13 @@ export function DashboardPage() {
 
       if (authoritySearch.trim()) {
         const q = authoritySearch.toLowerCase().trim();
-        const n = String(dsa.name || "").toLowerCase();
+        const n = String(dsa.name || (dsa as any).entity_name || "").toLowerCase();
         const c = String(dsa.code || dsa.dsa_code || "").toLowerCase();
-        const p = String(dsa.pan || "").toLowerCase();
+        const p = String(dsa.pan || (dsa as any).pan_no || "").toLowerCase();
+        const m = String(dsa.mobile || (dsa as any).mobile_no || (dsa as any).phone || "").toLowerCase();
         const ct = String(dsa.city || "").toLowerCase();
         const cp = String(dsa.contact_person || "").toLowerCase();
-        if (!n.includes(q) && !c.includes(q) && !p.includes(q) && !ct.includes(q) && !cp.includes(q)) {
+        if (!n.includes(q) && !c.includes(q) && !p.includes(q) && !m.includes(q) && !ct.includes(q) && !cp.includes(q)) {
           return false;
         }
       }
@@ -1323,8 +1325,10 @@ export function DashboardPage() {
                   <table className="w-full border-collapse text-sm table-fixed">
                     <thead>
                       <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-bold uppercase tracking-wider text-slate-500">
-                        <th className="w-20 px-3 py-4 text-center whitespace-nowrap">Sr No.</th>
+                        <th className="w-16 px-3 py-4 text-center whitespace-nowrap">Sr No.</th>
                         <th className="p-4 text-center">DSA Name</th>
+                        <th className="p-4 text-center whitespace-nowrap">Mobile No.</th>
+                        <th className="p-4 text-center whitespace-nowrap">PAN</th>
                         <th className="p-4 text-center">DSA Type</th>
                         <th className="p-4 text-center">Status</th>
                         <th className="p-4 text-center whitespace-nowrap">Actions</th>
@@ -1338,7 +1342,7 @@ export function DashboardPage() {
                           : ((dsa as any).entity_name || (dsa as any).company_name || dsa.name || dsa.contact_person || dsa.code);
                         return (
                           <tr key={dsa.id} className="hover:bg-slate-50/40 transition">
-                            <td className="w-20 px-3 py-4 text-center whitespace-nowrap">
+                            <td className="w-16 px-3 py-4 text-center whitespace-nowrap">
                               <span className="font-medium text-slate-700">
                                 {index + 1}
                               </span>
@@ -1347,6 +1351,12 @@ export function DashboardPage() {
                               <p className="font-semibold text-blue-700 hover:underline">
                                 {displayName}
                               </p>
+                            </td>
+                            <td className="p-4 text-center whitespace-nowrap font-mono text-xs text-slate-700">
+                              {dsa.mobile || (dsa as any).mobile_no || (dsa as any).phone || "—"}
+                            </td>
+                            <td className="p-4 text-center whitespace-nowrap font-mono text-xs uppercase font-semibold text-slate-700">
+                              {dsa.pan && dsa.pan !== "N/A" ? dsa.pan : ((dsa as any).pan_no || "—")}
                             </td>
                             <td className="p-4 text-center">
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 capitalize">
@@ -1850,7 +1860,7 @@ export function DashboardPage() {
                   setAuthoritySearch(e.target.value);
                   setAuthorityPage(1);
                 }}
-                placeholder="Search by name, code, pan, city..."
+                placeholder="Search by name, code, PAN, mobile..."
                 value={authoritySearch}
                 className="w-full bg-white shadow-2xs"
               />
@@ -1915,8 +1925,10 @@ export function DashboardPage() {
                 <table className="w-full border-collapse text-sm table-fixed">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-bold uppercase tracking-wider text-slate-500">
-                      <th className="w-20 px-3 py-4 text-center whitespace-nowrap">Sr No.</th>
+                      <th className="w-16 px-3 py-4 text-center whitespace-nowrap">Sr No.</th>
                       <th className="p-4 text-center">DSA Name</th>
+                      <th className="p-4 text-center whitespace-nowrap">Mobile No.</th>
+                      <th className="p-4 text-center whitespace-nowrap">PAN</th>
                       <th className="p-4 text-center">DSA Type</th>
                       <th className="p-4 text-center">Status</th>
                       <th className="p-4 text-center whitespace-nowrap">Actions</th>
@@ -1973,7 +1985,7 @@ export function DashboardPage() {
                           )}
                           key={dsa.id}
                         >
-                          <td className="w-20 px-3 py-4 text-center whitespace-nowrap">
+                          <td className="w-16 px-3 py-4 text-center whitespace-nowrap">
                             <span className="font-medium text-slate-700">
                               {(authorityPage - 1) * authorityPageSize + index + 1}
                             </span>
@@ -1982,6 +1994,12 @@ export function DashboardPage() {
                             <p className={cn("font-semibold", locked ? "text-slate-500" : "text-blue-700 hover:underline")}>
                               {displayName}
                             </p>
+                          </td>
+                          <td className="p-4 text-center whitespace-nowrap font-mono text-xs text-slate-700">
+                            {dsa.mobile || (dsa as any).mobile_no || (dsa as any).phone || "—"}
+                          </td>
+                          <td className="p-4 text-center whitespace-nowrap font-mono text-xs uppercase font-semibold text-slate-700">
+                            {dsa.pan && dsa.pan !== "N/A" ? dsa.pan : ((dsa as any).pan_no || "—")}
                           </td>
                           <td className="p-4 text-center">
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 capitalize">

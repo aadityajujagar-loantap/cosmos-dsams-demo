@@ -256,20 +256,24 @@ export function resolveStageBypass(params: {
   const GENERIC_BYPASS =
     "Skipped — case routed past this level without review";
 
+  // Any row this stage actually actioned (non-SKIPPED)? Then it genuinely
+  // participated — even if an older SKIPPED row exists from a prior bypass
+  // cycle. This must be checked BEFORE explicitlySkipped so that a DGM who
+  // acts on the second pass isn't masked by an old SKIPPED record.
+  const actioned = rows.filter(
+    (a) =>
+      String(a?.status ?? "").toUpperCase() !== "SKIPPED" &&
+      (Boolean(a?.actioned_at) ||
+        (a?.status && String(a.status).toUpperCase() !== "PENDING")),
+  );
+  if (actioned.length > 0) return null;
+
   const explicitlySkipped = rows.some(
     (a) => String(a?.status ?? "").toUpperCase() === "SKIPPED",
   );
   if (explicitlySkipped) {
     return level === 4 ? DGM_BYPASS : "Skipped per workflow rule";
   }
-
-  // Any row this stage actually actioned? Then it was reviewed.
-  const actioned = rows.filter(
-    (a) =>
-      Boolean(a?.actioned_at) ||
-      (a?.status && String(a.status).toUpperCase() !== "PENDING"),
-  );
-  if (actioned.length > 0) return null;
 
   // Nothing pending here and the case is already further along => routed past.
   const cur = Number(currentLevel);

@@ -76,7 +76,8 @@ interface DocDef {
 const INDIVIDUAL_DOCS: DocDef[] = [
   { type: "recent_photograph", label: "Recent photograph", required: true, requirementLabel: "Mandatory" },
   { type: "pan_card", label: "PAN Card", required: true, requirementLabel: "Mandatory" },
-  { type: "aadhaar_card", label: "Aadhaar Card", required: true, requirementLabel: "Mandatory" },
+  { type: "aadhaar_card_front", label: "Aadhaar Card (Front / Both Sides)", required: true, requirementLabel: "Mandatory" },
+  { type: "aadhaar_card_back", label: "Aadhaar Card (Back Side)", required: false, requirementLabel: "Optional" },
   { type: "education_certificate", label: "Educational Qualification Certificate (Graduation)", required: true, requirementLabel: "Mandatory" },
   { type: "dsa_consent_dpdp", label: "DSA Consent Format (as per DPDP Act)", required: true, requirementLabel: "Mandatory" },
   { type: "visit_report", label: "Office Visit Report", required: false, requirementLabel: "Optional (Maker Review)", staffOnly: true },
@@ -88,7 +89,8 @@ const ENTITY_DOCS: DocDef[] = [
   { type: "entity_pan_card", label: "Business Entity PAN Card", required: true, requirementLabel: "Mandatory" },
   { type: "stakeholder_photograph", label: "At least one Key Person / Partner / Director — Photograph", required: true, requirementLabel: "Mandatory" },
   { type: "stakeholder_pan_card", label: "At least one Key Person / Partner / Director — PAN Card", required: true, requirementLabel: "Mandatory" },
-  { type: "stakeholder_aadhaar_card", label: "At least one Key Person / Partner / Director — Aadhaar Card", required: true, requirementLabel: "Mandatory" },
+  { type: "stakeholder_aadhaar_card_front", label: "At least one Key Person / Partner / Director — Aadhaar Card (Front / Both Sides)", required: true, requirementLabel: "Mandatory" },
+  { type: "stakeholder_aadhaar_card_back", label: "At least one Key Person / Partner / Director — Aadhaar Card (Back Side)", required: false, requirementLabel: "Optional" },
   { type: "education_certificate", label: "Educational Qualification Certificate (Graduation)", required: true, requirementLabel: "Mandatory" },
   { type: "dsa_consent_dpdp", label: "DSA Consent Format (as per DPDP Act)", required: true, requirementLabel: "Mandatory" },
   { type: "partnership_deed", label: "Partnership Deed (if applicable)", required: false, requirementLabel: "Optional" },
@@ -398,7 +400,7 @@ function getDocDisplayLabel(key: string, docList?: DocDef[]): string {
   const map: Record<string, string> = {
     pan_card: "PAN Card",
     aadhaar_card: "Aadhaar Card",
-    aadhaar_card_front: "Aadhaar Card (Front Side)",
+    aadhaar_card_front: "Aadhaar Card (Front / Both Sides)",
     aadhaar_card_back: "Aadhaar Card (Back Side)",
     recent_photograph: "Recent Photograph",
     education_certificate: "Educational Qualification Certificate (Graduation)",
@@ -419,7 +421,7 @@ function getDocDisplayLabel(key: string, docList?: DocDef[]): string {
     stakeholder_photograph: "Key Person / Director Photograph",
     stakeholder_pan_card: "Key Person / Director PAN Card",
     stakeholder_aadhaar_card: "Key Person / Director Aadhaar Card",
-    stakeholder_aadhaar_card_front: "Key Person / Director Aadhaar Card (Front Side)",
+    stakeholder_aadhaar_card_front: "Key Person / Director Aadhaar Card (Front / Both Sides)",
     stakeholder_aadhaar_card_back: "Key Person / Director Aadhaar Card (Back Side)",
     bank_proof: "Bank Account Proof / Cancelled Cheque",
   };
@@ -523,6 +525,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     };
   } | null>(null);
   const [extraItrYears, setExtraItrYears] = useState<number[]>([]);
+  const [showAadhaarBack, setShowAadhaarBack] = useState<boolean>(false);
   const [verifyingStakeholderIdx, setVerifyingStakeholderIdx] = useState<number | null>(null);
   const [email, setEmail] = useState<string>("");
   const [mobile, setMobile] = useState<string>("");
@@ -859,18 +862,26 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     if (derivedAge) setAge(derivedAge);
   }, [derivedAge]);
 
-  // Keep office address in sync when "Keep same as residential" toggle is active.
-  // Only copies residential -> office. It must never write while the toggle is off,
-  // otherwise editing the residential address would wipe what the user typed into the
-  // office fields. Clearing on untoggle is handled by the toggle's onClick.
+  // Keep office address in sync when "Keep same as residential" toggle is active (Individual only).
   useEffect(() => {
-    if (isOfficeSameAsResidence) {
+    if (dsaType === "INDIVIDUAL" && isOfficeSameAsResidence) {
       setOfficeAddress(address);
       setOfficeStateName(stateName);
       setOfficeCity(city);
       setOfficePincode(pincode);
     }
-  }, [isOfficeSameAsResidence, address, stateName, city, pincode]);
+  }, [dsaType, isOfficeSameAsResidence, address, stateName, city, pincode]);
+
+  // For Entity DSA, keep address in sync with officeAddress so that any internal consumers or validation
+  // referring to address always see the office address.
+  useEffect(() => {
+    if (dsaType === "ENTITY") {
+      setAddress(officeAddress);
+      setStateName(officeStateName);
+      setCity(officeCity);
+      setPincode(officePincode);
+    }
+  }, [dsaType, officeAddress, officeStateName, officeCity, officePincode]);
 
   // Ensure branchId always resolves to a valid existing branch
   useEffect(() => {
@@ -983,6 +994,29 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         else if (data.currentStateName !== undefined) setOfficeStateName(data.currentStateName);
         if (data.officePincode !== undefined) setOfficePincode(data.officePincode);
         else if (data.currentPincode !== undefined) setOfficePincode(data.currentPincode);
+        if (data.dsaType === "ENTITY") {
+          const effOfficeAddr = data.officeAddress || data.address || "";
+          const effOfficeCity = data.officeCity || data.city || "";
+          const effOfficeState = data.officeStateName || data.stateName || "";
+          const effOfficePin = data.officePincode || data.pincode || "";
+          if (effOfficeAddr) {
+            setOfficeAddress(effOfficeAddr);
+            setAddress(effOfficeAddr);
+          }
+          if (effOfficeCity) {
+            setOfficeCity(effOfficeCity);
+            setCity(effOfficeCity);
+          }
+          if (effOfficeState) {
+            setOfficeStateName(effOfficeState);
+            setStateName(effOfficeState);
+          }
+          if (effOfficePin) {
+            setOfficePincode(effOfficePin);
+            setPincode(effOfficePin);
+          }
+          setIsOfficeSameAsResidence(false);
+        }
         if (data.businessPremisesOwnership !== undefined) setBusinessPremisesOwnership(data.businessPremisesOwnership);
         if (data.bankName !== undefined) setBankName(data.bankName);
         if (data.accountName !== undefined) setAccountName(data.accountName);
@@ -1090,7 +1124,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     setCity("");
     setStateName("");
     setPincode("");
-    setIsOfficeSameAsResidence(true);
+    setIsOfficeSameAsResidence(newType === "INDIVIDUAL");
     setOfficeAddress("");
     setOfficeCity("");
     setOfficeStateName("");
@@ -1113,6 +1147,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
     // Reset Documents & Declaration
     setUploadedDocs({});
+    setShowAadhaarBack(false);
+    setExtraItrYears([]);
     setVisitReportRemarks("");
     setDeclarationAgreed(false);
     setCreatedDsaId(null);
@@ -1306,8 +1342,20 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     has_license: hasLicense,
   };
 
+  const isAadhaarBackVisible =
+    showAadhaarBack ||
+    Boolean(
+      uploadedDocs[dsaType === "INDIVIDUAL" ? "aadhaar_card_back" : "stakeholder_aadhaar_card_back"]
+    );
+
   const currentDocList = useMemo(() => {
     const baseList = (dsaType === "INDIVIDUAL" ? INDIVIDUAL_DOCS : ENTITY_DOCS).filter((d) => {
+      if (
+        (d.type === "aadhaar_card_back" || d.type === "stakeholder_aadhaar_card_back") &&
+        !isAadhaarBackVisible
+      ) {
+        return false;
+      }
       if (
         d.type === "experience_certificate" ||
         d.type === "business_license" ||
@@ -1426,6 +1474,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     gstApplicable,
     gstNumber,
     constitution,
+    isAadhaarBackVisible,
   ]);
 
   const allItrYears = useMemo(() => {
@@ -1445,6 +1494,45 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       };
     });
   }, [allItrYears]);
+
+  const aadhaarDocDefs: DocDef[] = useMemo(() => {
+    if (dsaType === "INDIVIDUAL") {
+      const list: DocDef[] = [
+        {
+          type: "aadhaar_card_front",
+          label: "Aadhaar Card (Front / Both Sides)",
+          required: true,
+          requirementLabel: "Mandatory",
+        },
+      ];
+      if (isAadhaarBackVisible) {
+        list.push({
+          type: "aadhaar_card_back",
+          label: "Aadhaar Card (Back Side)",
+          required: false,
+          requirementLabel: "Optional",
+        });
+      }
+      return list;
+    }
+    const list: DocDef[] = [
+      {
+        type: "stakeholder_aadhaar_card_front",
+        label: "Aadhaar Card (Front / Both Sides)",
+        required: true,
+        requirementLabel: "Mandatory",
+      },
+    ];
+    if (isAadhaarBackVisible) {
+      list.push({
+        type: "stakeholder_aadhaar_card_back",
+        label: "Aadhaar Card (Back Side)",
+        required: false,
+        requirementLabel: "Optional",
+      });
+    }
+    return list;
+  }, [dsaType, isAadhaarBackVisible]);
 
   const isDocRequired = (doc: DocDef) => {
     if (typeof doc.required === "function") {
@@ -1509,53 +1597,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       delete copy[docType];
       return copy;
     });
-  };
-
-  const removeAadhaarDocs = (baseType: string) => {
-    setUploadedDocs((prev) => {
-      const copy = { ...prev };
-      delete copy[`${baseType}_front`];
-      delete copy[`${baseType}_back`];
-      delete copy[baseType];
-      return copy;
-    });
-  };
-
-  const handleAadhaarMultiUpload = (baseType: string, filesList: FileList | File[]) => {
-    const files = Array.from(filesList);
-    if (!files.length) return;
-
-    if (files.length > 2) {
-      toast({
-        title: "Too many files",
-        description: "Please select at most 2 files (Front and Back side).",
-        variant: "warning",
-      });
-      return;
-    }
-
-    for (const f of files) {
-      if (f.size > 10 * 1024 * 1024) {
-        toast({
-          title: "File Size Exceeds Limit",
-          description: `"${f.name}" (${(f.size / (1024 * 1024)).toFixed(1)}MB) exceeds the maximum allowed limit of 10MB. Please select a smaller file.`,
-          variant: "destructive",
-        });
-        return;
-      }
-    }
-
-    if (files.length === 2) {
-      handleFileUpload(`${baseType}_front`, files[0]);
-      handleFileUpload(`${baseType}_back`, files[1]);
-    } else if (files.length === 1) {
-      const hasFront = Boolean(uploadedDocs[`${baseType}_front`] || uploadedDocs[baseType]);
-      if (!hasFront) {
-        handleFileUpload(`${baseType}_front`, files[0]);
-      } else {
-        handleFileUpload(`${baseType}_back`, files[0]);
-      }
-    }
   };
 
   const handleSendOtp = async () => {
@@ -1934,14 +1975,30 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         ].filter(Boolean);
         const combinedAddress = addrParts.join(", ");
 
-        if (combinedAddress) setAddress(combinedAddress);
-        if (detailsData.state) setStateName(detailsData.state);
-        if (detailsData.city) setCity(detailsData.city);
-        if (detailsData.pinCode) setPincode(String(detailsData.pinCode).slice(0, 6));
-
-        // Office address is deliberately NOT auto-filled here. When "keep same as
-        // residential" is off the office fields must stay blank for manual entry;
-        // seeding them from the PAN response would look pre-filled and mask the toggle.
+        if (isEntity) {
+          if (combinedAddress) {
+            setOfficeAddress(combinedAddress);
+            setAddress(combinedAddress);
+          }
+          if (detailsData.state) {
+            setOfficeStateName(detailsData.state);
+            setStateName(detailsData.state);
+          }
+          if (detailsData.city) {
+            setOfficeCity(detailsData.city);
+            setCity(detailsData.city);
+          }
+          if (detailsData.pinCode) {
+            const pin = String(detailsData.pinCode).slice(0, 6);
+            setOfficePincode(pin);
+            setPincode(pin);
+          }
+        } else {
+          if (combinedAddress) setAddress(combinedAddress);
+          if (detailsData.state) setStateName(detailsData.state);
+          if (detailsData.city) setCity(detailsData.city);
+          if (detailsData.pinCode) setPincode(String(detailsData.pinCode).slice(0, 6));
+        }
 
         toast({
           title: isEntity ? "Entity PAN Verified & Auto-Populated" : "PAN Verified & Auto-Populated",
@@ -2232,17 +2289,28 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     }
 
     if (currentStep === 2) {
-      if (!address.trim() || !city.trim() || !stateName.trim() || !pincode.trim()) {
-        toast({ title: "Residence Address Required", description: "Complete residence address, city, state, and pincode are mandatory.", variant: "warning" });
-        return false;
-      }
-      if (pincode.trim().length !== 6 || !/^\d{6}$/.test(pincode.trim())) {
-        toast({ title: "Residence Pincode Invalid", description: "Residence pincode must be exactly 6 digits.", variant: "warning" });
-        return false;
-      }
-      if (!isOfficeSameAsResidence) {
+      if (dsaType === "INDIVIDUAL") {
+        if (!address.trim() || !city.trim() || !stateName.trim() || !pincode.trim()) {
+          toast({ title: "Residence Address Required", description: "Complete residence address, city, state, and pincode are mandatory.", variant: "warning" });
+          return false;
+        }
+        if (pincode.trim().length !== 6 || !/^\d{6}$/.test(pincode.trim())) {
+          toast({ title: "Residence Pincode Invalid", description: "Residence pincode must be exactly 6 digits.", variant: "warning" });
+          return false;
+        }
+        if (!isOfficeSameAsResidence) {
+          if (!officeAddress.trim() || !officeCity.trim() || !officeStateName.trim() || !officePincode.trim()) {
+            toast({ title: "Office Address Required", description: "Complete office address, city, state, and pincode are mandatory when distinct.", variant: "warning" });
+            return false;
+          }
+          if (officePincode.trim().length !== 6 || !/^\d{6}$/.test(officePincode.trim())) {
+            toast({ title: "Office Pincode Invalid", description: "Office address pincode must be exactly 6 digits.", variant: "warning" });
+            return false;
+          }
+        }
+      } else {
         if (!officeAddress.trim() || !officeCity.trim() || !officeStateName.trim() || !officePincode.trim()) {
-          toast({ title: "Office Address Required", description: "Complete office address, city, state, and pincode are mandatory when distinct.", variant: "warning" });
+          toast({ title: "Office Address Required", description: "Complete office address, city, state, and pincode are mandatory.", variant: "warning" });
           return false;
         }
         if (officePincode.trim().length !== 6 || !/^\d{6}$/.test(officePincode.trim())) {
@@ -2393,9 +2461,13 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       for (const d of currentDocList) {
         if (!isDocRequired(d) || d.type === "visit_report") continue;
 
-        if (d.type === "aadhaar_card" || d.type === "stakeholder_aadhaar_card") {
-          const hasFront = Boolean(uploadedDocs[`${d.type}_front`] || uploadedDocs[d.type]);
-          // Back side is optional — only front (or any single file) is mandatory
+        if (d.type === "aadhaar_card_front") {
+          const hasFront = Boolean(uploadedDocs["aadhaar_card_front"] || uploadedDocs["aadhaar_card"]);
+          if (!hasFront) {
+            missing.push(d.label);
+          }
+        } else if (d.type === "stakeholder_aadhaar_card_front") {
+          const hasFront = Boolean(uploadedDocs["stakeholder_aadhaar_card_front"] || uploadedDocs["stakeholder_aadhaar_card"]);
           if (!hasFront) {
             missing.push(d.label);
           }
@@ -2542,15 +2614,15 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         shopActNumber.trim() || null,
         udyamNumber.trim() || null,
       ].filter(Boolean).join(", ") || undefined) : undefined,
-      address,
-      city,
-      state: stateName,
-      pincode,
-      office_address_different: !isOfficeSameAsResidence,
-      office_address_line_1: isOfficeSameAsResidence ? address : officeAddress,
-      office_city: isOfficeSameAsResidence ? city : officeCity,
-      office_state: isOfficeSameAsResidence ? stateName : officeStateName,
-      office_pincode: isOfficeSameAsResidence ? pincode : officePincode,
+      address: dsaType === "ENTITY" ? officeAddress : address,
+      city: dsaType === "ENTITY" ? officeCity : city,
+      state: dsaType === "ENTITY" ? officeStateName : stateName,
+      pincode: dsaType === "ENTITY" ? officePincode : pincode,
+      office_address_different: dsaType === "ENTITY" ? false : !isOfficeSameAsResidence,
+      office_address_line_1: dsaType === "ENTITY" ? officeAddress : (isOfficeSameAsResidence ? address : officeAddress),
+      office_city: dsaType === "ENTITY" ? officeCity : (isOfficeSameAsResidence ? city : officeCity),
+      office_state: dsaType === "ENTITY" ? officeStateName : (isOfficeSameAsResidence ? stateName : officeStateName),
+      office_pincode: dsaType === "ENTITY" ? officePincode : (isOfficeSameAsResidence ? pincode : officePincode),
       business_premises_ownership: resolvedPremisesOwnership,
       bank_name: bankName,
       account_name: accountName,
@@ -2695,9 +2767,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         code: String(resultDsa?.dsa_code || resultDsa?.code || `DSA-2026-${Math.floor(10000 + Math.random() * 90000)}`),
         name: applicantName,
         businessType: dsaType === "INDIVIDUAL" ? "Individual" : constitution,
-        city,
-        state: stateName,
-        pincode,
         contactPerson: contactPerson || applicantName,
         email,
         mobile,
@@ -2720,12 +2789,15 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           accountNumber,
           ifsc: ifsc.toUpperCase(),
         },
-        address,
-        office_address_different: !isOfficeSameAsResidence,
-        office_address_line_1: isOfficeSameAsResidence ? address : officeAddress,
-        office_city: isOfficeSameAsResidence ? city : officeCity,
-        office_state: isOfficeSameAsResidence ? stateName : officeStateName,
-        office_pincode: isOfficeSameAsResidence ? pincode : officePincode,
+        address: dsaType === "ENTITY" ? officeAddress : address,
+        city: dsaType === "ENTITY" ? officeCity : city,
+        state: dsaType === "ENTITY" ? officeStateName : stateName,
+        pincode: dsaType === "ENTITY" ? officePincode : pincode,
+        office_address_different: dsaType === "ENTITY" ? false : !isOfficeSameAsResidence,
+        office_address_line_1: dsaType === "ENTITY" ? officeAddress : (isOfficeSameAsResidence ? address : officeAddress),
+        office_city: dsaType === "ENTITY" ? officeCity : (isOfficeSameAsResidence ? city : officeCity),
+        office_state: dsaType === "ENTITY" ? officeStateName : (isOfficeSameAsResidence ? stateName : officeStateName),
+        office_pincode: dsaType === "ENTITY" ? officePincode : (isOfficeSameAsResidence ? pincode : officePincode),
         dsa_type: dsaType,
         documents: Object.keys(uploadedDocs).map((t) => ({
           document_type: t,
@@ -4045,124 +4117,126 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
             <div className="space-y-4">
               <h3 className="text-lg font-bold text-slate-900">Address Details</h3>
               <div className="space-y-4">
-                {/* Residence Address Section */}
-                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-5 space-y-4 shadow-sm">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="p-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl flex items-center justify-center">
-                        <Home className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-                          Residence Address
-                        </h4>
+                {/* Residence Address Section (Only for INDIVIDUAL) */}
+                {dsaType === "INDIVIDUAL" && (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-5 space-y-4 shadow-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl flex items-center justify-center">
+                          <Home className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+                            Residence Address
+                          </h4>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="space-y-3">
-                    <div className="flex flex-col">
-                      <div className="h-5 flex items-center">
-                        <Label htmlFor="address" className="text-sm font-bold text-slate-700 leading-none">Residence Address *</Label>
-                      </div>
-                      <textarea
-                        id="address"
-                        rows={3}
-                        value={address}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setAddress(val);
-                          if (isOfficeSameAsResidence) {
-                            setOfficeAddress(val);
-                          }
-                        }}
-                        placeholder="House/Flat No., Building, Street, Landmark"
-                        className="mt-1.5 w-full rounded-md border border-slate-300 p-2.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
+                    <div className="space-y-3">
                       <div className="flex flex-col">
                         <div className="h-5 flex items-center">
-                          <Label htmlFor="state" className="text-sm font-bold text-slate-700 leading-none">State *</Label>
+                          <Label htmlFor="address" className="text-sm font-bold text-slate-700 leading-none">Residence Address *</Label>
                         </div>
-                        <Select
-                          id="state"
-                          value={stateName}
-                          onChange={(e) => handleStateChange(e.target.value)}
-                          className="mt-1.5 bg-white"
-                          disabled={loadingStates}
-                        >
-                          <option value="">{loadingStates ? "Loading states..." : "Select State"}</option>
-                          {resolvedStateOptions.map((s) => (
-                            <option key={s.key} value={s.key}>
-                              {s.label}
-                            </option>
-                          ))}
-                        </Select>
-                      </div>
-                      <div className="flex flex-col">
-                        <div className="h-5 flex items-center">
-                          <Label htmlFor="city" className="text-sm font-bold text-slate-700 leading-none">City *</Label>
-                        </div>
-                        <Select
-                          id="city"
-                          value={city}
+                        <textarea
+                          id="address"
+                          rows={3}
+                          value={address}
                           onChange={(e) => {
                             const val = e.target.value;
-                            setCity(val);
+                            setAddress(val);
                             if (isOfficeSameAsResidence) {
-                              setOfficeCity(val);
+                              setOfficeAddress(val);
                             }
                           }}
-                          className="mt-1.5 bg-white"
-                          disabled={!stateName || loadingCities}
-                        >
-                          <option value="">
-                            {!stateName
-                              ? "Select State first"
-                              : loadingCities
-                              ? "Loading cities..."
-                              : "Select City"}
-                          </option>
-                          {resolvedResidenceCityOptions.map((c) => (
-                            <option key={c.key} value={c.key}>
-                              {c.label}
-                            </option>
-                          ))}
-                        </Select>
-                      </div>
-                      <div className="flex flex-col">
-                        <div className="h-5 flex items-center">
-                          <Label htmlFor="pincode" className="text-sm font-bold text-slate-700 leading-none">Pincode (6 digits) *</Label>
-                        </div>
-                        <Input
-                          id="pincode"
-                          value={pincode}
-                          onChange={(e) => {
-                            const val = e.target.value.replace(/\D/g, "").slice(0, 6);
-                            setPincode(val);
-                            if (isOfficeSameAsResidence) {
-                              setOfficePincode(val);
-                            }
-                          }}
-                          placeholder="400001"
-                          className="mt-1.5 font-mono bg-white"
-                          maxLength={6}
+                          placeholder="House/Flat No., Building, Street, Landmark"
+                          className="mt-1.5 w-full rounded-md border border-slate-300 p-2.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
                         />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label htmlFor="state" className="text-sm font-bold text-slate-700 leading-none">State *</Label>
+                          </div>
+                          <Select
+                            id="state"
+                            value={stateName}
+                            onChange={(e) => handleStateChange(e.target.value)}
+                            className="mt-1.5 bg-white"
+                            disabled={loadingStates}
+                          >
+                            <option value="">{loadingStates ? "Loading states..." : "Select State"}</option>
+                            {resolvedStateOptions.map((s) => (
+                              <option key={s.key} value={s.key}>
+                                {s.label}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label htmlFor="city" className="text-sm font-bold text-slate-700 leading-none">City *</Label>
+                          </div>
+                          <Select
+                            id="city"
+                            value={city}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setCity(val);
+                              if (isOfficeSameAsResidence) {
+                                setOfficeCity(val);
+                              }
+                            }}
+                            className="mt-1.5 bg-white"
+                            disabled={!stateName || loadingCities}
+                          >
+                            <option value="">
+                              {!stateName
+                                ? "Select State first"
+                                : loadingCities
+                                ? "Loading cities..."
+                                : "Select City"}
+                            </option>
+                            {resolvedResidenceCityOptions.map((c) => (
+                              <option key={c.key} value={c.key}>
+                                {c.label}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label htmlFor="pincode" className="text-sm font-bold text-slate-700 leading-none">Pincode (6 digits) *</Label>
+                          </div>
+                          <Input
+                            id="pincode"
+                            value={pincode}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/\D/g, "").slice(0, 6);
+                              setPincode(val);
+                              if (isOfficeSameAsResidence) {
+                                setOfficePincode(val);
+                              }
+                            }}
+                            placeholder="400001"
+                            className="mt-1.5 font-mono bg-white"
+                            maxLength={6}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {/* Office Address Section */}
                 <div className={cn(
                   "rounded-xl border border-slate-200 bg-slate-50/70 p-5 shadow-sm transition-all",
-                  !isOfficeSameAsResidence && "space-y-4"
+                  (dsaType === "ENTITY" || !isOfficeSameAsResidence) && "space-y-4"
                 )}>
                   <div className={cn(
                     "flex flex-col sm:flex-row sm:items-center justify-between gap-2",
-                    !isOfficeSameAsResidence && "border-b border-slate-200/80 pb-3"
+                    (dsaType === "ENTITY" || !isOfficeSameAsResidence) && "border-b border-slate-200/80 pb-3"
                   )}>
                     <div className="flex items-center gap-2.5">
                       <div className="p-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl flex items-center justify-center">
@@ -4175,44 +4249,46 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-sm font-bold text-slate-800">Keep same as residential</span>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={isOfficeSameAsResidence}
-                        onClick={() => {
-                          const next = !isOfficeSameAsResidence;
-                          setIsOfficeSameAsResidence(next);
-                          if (next) {
-                            setOfficeAddress(address);
-                            setOfficeStateName(stateName);
-                            setOfficeCity(city);
-                            setOfficePincode(pincode);
-                          } else {
-                            // Clear immediately so the fields read as blank the moment the
-                            // toggle flips, without waiting for the sync effect above.
-                            setOfficeAddress("");
-                            setOfficeStateName("");
-                            setOfficeCity("");
-                            setOfficePincode("");
-                          }
-                        }}
-                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${
-                          isOfficeSameAsResidence ? "bg-blue-600" : "bg-slate-300"
-                        }`}
-                      >
-                        <span
-                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                            isOfficeSameAsResidence ? "translate-x-5" : "translate-x-0"
+                    {dsaType === "INDIVIDUAL" && (
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-sm font-bold text-slate-800">Keep same as residential</span>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={isOfficeSameAsResidence}
+                          onClick={() => {
+                            const next = !isOfficeSameAsResidence;
+                            setIsOfficeSameAsResidence(next);
+                            if (next) {
+                              setOfficeAddress(address);
+                              setOfficeStateName(stateName);
+                              setOfficeCity(city);
+                              setOfficePincode(pincode);
+                            } else {
+                              // Clear immediately so the fields read as blank the moment the
+                              // toggle flips, without waiting for the sync effect above.
+                              setOfficeAddress("");
+                              setOfficeStateName("");
+                              setOfficeCity("");
+                              setOfficePincode("");
+                            }
+                          }}
+                          className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${
+                            isOfficeSameAsResidence ? "bg-blue-600" : "bg-slate-300"
                           }`}
-                        />
-                      </button>
-                    </div>
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              isOfficeSameAsResidence ? "translate-x-5" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Office Address Fields (Hidden when toggled same as residential) */}
-                  {!isOfficeSameAsResidence && (
+                  {/* Office Address Fields (Hidden when toggled same as residential for INDIVIDUAL, always shown for ENTITY) */}
+                  {(dsaType === "ENTITY" || !isOfficeSameAsResidence) && (
                     <div className="space-y-3">
                       <div className="flex flex-col">
                         <div className="h-5 flex items-center">
@@ -4222,7 +4298,13 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           id="office_address"
                           rows={3}
                           value={officeAddress}
-                          onChange={(e) => setOfficeAddress(e.target.value)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setOfficeAddress(val);
+                            if (dsaType === "ENTITY") {
+                              setAddress(val);
+                            }
+                          }}
                           placeholder="House/Flat No., Building, Street, Landmark"
                           className="mt-1.5 w-full rounded-md border border-slate-300 p-2.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
                         />
@@ -4236,7 +4318,13 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           <Select
                             id="office_state"
                             value={officeStateName}
-                            onChange={(e) => handleOfficeStateChange(e.target.value)}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              handleOfficeStateChange(val);
+                              if (dsaType === "ENTITY") {
+                                setStateName(val);
+                              }
+                            }}
                             className="mt-1.5 bg-white"
                             disabled={loadingStates}
                           >
@@ -4255,7 +4343,13 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           <Select
                             id="office_city"
                             value={officeCity}
-                            onChange={(e) => setOfficeCity(e.target.value)}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setOfficeCity(val);
+                              if (dsaType === "ENTITY") {
+                                setCity(val);
+                              }
+                            }}
                             className="mt-1.5 bg-white"
                             disabled={!officeStateName || loadingCities}
                           >
@@ -4280,7 +4374,13 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           <Input
                             id="office_pincode"
                             value={officePincode}
-                            onChange={(e) => setOfficePincode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/\D/g, "").slice(0, 6);
+                              setOfficePincode(val);
+                              if (dsaType === "ENTITY") {
+                                setPincode(val);
+                              }
+                            }}
                             placeholder="411001"
                             className="mt-1.5 font-mono bg-white"
                             maxLength={6}
@@ -4787,8 +4887,11 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   </div>
                   <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-blue-50 text-blue-800 border border-blue-200">
                     Attached: {currentDocList.filter((d) => {
-                      if (d.type === "aadhaar_card" || d.type === "stakeholder_aadhaar_card") {
-                        return Boolean(uploadedDocs[`${d.type}_front`] || uploadedDocs[d.type]);
+                      if (d.type === "aadhaar_card_front") {
+                        return Boolean(uploadedDocs["aadhaar_card_front"] || uploadedDocs["aadhaar_card"]);
+                      }
+                      if (d.type === "stakeholder_aadhaar_card_front") {
+                        return Boolean(uploadedDocs["stakeholder_aadhaar_card_front"] || uploadedDocs["stakeholder_aadhaar_card"]);
                       }
                       return Boolean(uploadedDocs[d.type]);
                     }).length} / {currentDocList.length}
@@ -4804,135 +4907,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                 </div>
 
                 {currentDocList
-                  .filter((doc) => doc.type !== "dsa_consent_dpdp")
+                  .filter((doc) => doc.type !== "dsa_consent_dpdp" && !doc.type.includes("aadhaar") && !doc.type.startsWith("itr_"))
                   .map((doc) => {
                     const required = isDocRequired(doc);
-                    const isAadhaar = doc.type === "aadhaar_card" || doc.type === "stakeholder_aadhaar_card";
-
-                    if (isAadhaar) {
-                      const frontDoc = uploadedDocs[`${doc.type}_front`] || uploadedDocs[doc.type];
-                      const backDoc = uploadedDocs[`${doc.type}_back`];
-                      // Attached once at least 1 file is uploaded; back side is optional-extra
-                      const isComplete = Boolean(frontDoc);
-                      const isPartial = Boolean(backDoc && !frontDoc); // only back without front (edge case)
-
-                      return (
-                        <div
-                          key={doc.type}
-                          className={`px-4 py-3.5 text-xs grid grid-cols-12 gap-3 items-center transition-colors ${
-                            isComplete ? "bg-emerald-50/30" : isPartial ? "bg-amber-50/20" : "bg-white hover:bg-slate-50/50"
-                          }`}
-                        >
-                          {/* Document Label */}
-                          <div className="col-span-8 sm:col-span-9">
-                            <div className="flex items-center gap-2">
-                              <FileText className={`h-4 w-4 flex-shrink-0 ${isComplete ? "text-emerald-600" : isPartial ? "text-amber-500" : "text-slate-400"}`} />
-                              <span className="text-sm font-bold text-slate-800">
-                                {doc.label}{required && <span className="text-red-500 font-bold ml-0.5" style={{ color: "#ef4444" }}>*</span>}
-                              </span>
-                            </div>
-                            <span className="text-[10px] text-slate-400 block font-normal ml-6 mt-0.5">
-                              Allowed formats: .pdf, .jpg, .jpeg, .png (Max 10MB) • (Front &amp; Back optional)
-                            </span>
-                            <div className="ml-6 mt-1 space-y-0.5">
-                              {frontDoc && (
-                                <span className="text-[11px] text-emerald-700 font-medium block">
-                                  ✓ {backDoc ? "Front" : "Aadhaar"}: {frontDoc.name} ({frontDoc.size})
-                                </span>
-                              )}
-                              {backDoc && (
-                                <span className="text-[11px] text-emerald-700 font-medium block">
-                                  ✓ Back: {backDoc.name} ({backDoc.size})
-                                </span>
-                              )}
-                              {frontDoc && !backDoc && (
-                                <span className="text-[11px] text-slate-400 font-normal block">
-                                  • Back side optional — attach if available
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Single Action / Upload Field */}
-                          <div className="col-span-4 sm:col-span-3 flex items-center justify-end gap-2">
-                            {isComplete ? (
-                              <div className="flex items-center gap-1.5">
-                                <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                                  {backDoc ? "2 Files Attached" : "Attached"}
-                                </span>
-                                {!backDoc && (
-                                  <label className="cursor-pointer inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors" title="Add back side (optional)">
-                                    <UploadCloud className="h-3 w-3 text-slate-500" />
-                                    <span>+Back</span>
-                                    <input
-                                      type="file"
-                                      accept=".pdf,.jpg,.jpeg,.png"
-                                      className="hidden"
-                                      onChange={(e) => {
-                                        const files = Array.from(e.target.files ?? []);
-                                        e.target.value = "";
-                                        if (files.length > 0) handleAadhaarMultiUpload(doc.type, files);
-                                      }}
-                                    />
-                                  </label>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() => removeAadhaarDocs(doc.type)}
-                                  className="text-rose-600 hover:text-rose-800 p-1 rounded hover:bg-rose-50"
-                                  title="Remove files"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            ) : isPartial ? (
-                              // Edge case: back uploaded but no front — show re-attach
-                              <div className="flex items-center gap-1.5">
-                                <label className="cursor-pointer inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50/50 px-2.5 py-1 text-[11px] font-semibold text-amber-900 shadow-sm hover:bg-amber-100 transition-colors">
-                                  <UploadCloud className="h-3.5 w-3.5 text-amber-700" />
-                                  <span>Attach Front</span>
-                                  <input
-                                    type="file"
-                                    accept=".pdf,.jpg,.jpeg,.png"
-                                    className="hidden"
-                                    onChange={(e) => {
-                                      const files = Array.from(e.target.files ?? []);
-                                      e.target.value = "";
-                                      if (files.length > 0) handleAadhaarMultiUpload(doc.type, files);
-                                    }}
-                                  />
-                                </label>
-                                <button
-                                  type="button"
-                                  onClick={() => removeAadhaarDocs(doc.type)}
-                                  className="text-rose-600 hover:text-rose-800 p-1 rounded hover:bg-rose-50"
-                                  title="Remove file"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            ) : (
-                              <label className="cursor-pointer inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-400 transition-colors">
-                                <UploadCloud className="h-3.5 w-3.5 text-blue-600" />
-                                <span>Attach Front &amp; Back</span>
-                                <input
-                                  type="file"
-                                  multiple
-                                  accept=".pdf,.jpg,.jpeg,.png"
-                                  className="hidden"
-                                  onChange={(e) => {
-                                    const files = Array.from(e.target.files ?? []);
-                                    e.target.value = "";
-                                    if (files.length > 0) handleAadhaarMultiUpload(doc.type, files);
-                                  }}
-                                />
-                              </label>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    }
-
                     const attached = uploadedDocs[doc.type];
 
                     return (
@@ -5006,6 +4983,138 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   })}
               </div>
 
+              {/* Separate Section: Aadhaar Card (Front & Back) */}
+              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white divide-y divide-slate-200">
+                <div className="bg-slate-100/80 px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 rounded-lg bg-blue-600 text-white shadow-xs">
+                      <FileText className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-800">
+                        {dsaType === "INDIVIDUAL"
+                          ? "Aadhaar Card"
+                          : "Key Person / Partner / Director — Aadhaar Card"}
+                      </h4>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-blue-100 text-blue-700">
+                    Mandatory
+                  </span>
+                </div>
+
+                <div className="divide-y divide-slate-150">
+                  {aadhaarDocDefs.map((doc) => {
+                    const attached =
+                      uploadedDocs[doc.type] ||
+                      (doc.type === "aadhaar_card_front"
+                        ? uploadedDocs["aadhaar_card"]
+                        : doc.type === "stakeholder_aadhaar_card_front"
+                        ? uploadedDocs["stakeholder_aadhaar_card"]
+                        : undefined);
+                    const isBackDoc =
+                      doc.type === "aadhaar_card_back" ||
+                      doc.type === "stakeholder_aadhaar_card_back";
+
+                    return (
+                      <div
+                        key={doc.type}
+                        className={`px-4 py-3.5 text-xs grid grid-cols-12 gap-3 items-center transition-colors ${
+                          attached ? "bg-emerald-50/30" : "bg-white hover:bg-slate-50/50"
+                        }`}
+                      >
+                        {/* Document Label & Formats - matching ITR */}
+                        <div className="col-span-8 sm:col-span-9">
+                          <div className="flex items-center gap-2">
+                            <FileText className={`h-4 w-4 flex-shrink-0 ${attached ? "text-emerald-600" : "text-slate-400"}`} />
+                            <span className="text-sm font-bold text-slate-800">
+                              {doc.label} {doc.required && <span className="text-red-500 font-bold ml-0.5" style={{ color: "#ef4444" }}>*</span>}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 block font-normal ml-6 mt-0.5">
+                            {!isBackDoc
+                              ? "Upload front side, or single file with both sides. Allowed formats: .pdf, .jpg, .jpeg, .png (Max 10MB)"
+                              : "Allowed formats: .pdf, .jpg, .jpeg, .png (Max 10MB)"}
+                          </span>
+                          {attached && (
+                            <span className="text-[11px] text-emerald-700 font-medium ml-6 block mt-0.5">
+                              ✓ {attached.name} ({attached.size})
+                            </span>
+                          )}
+                        </div>
+
+                        {/* File Upload Button / Remove Button */}
+                        <div className="col-span-4 sm:col-span-3 flex items-center justify-end gap-2">
+                          {isBackDoc && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowAadhaarBack(false);
+                                removeDoc(doc.type);
+                              }}
+                              className="text-slate-400 hover:text-rose-600 p-1 rounded"
+                              title="Remove back side upload"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          {attached ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                                Attached
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  removeDoc(doc.type);
+                                  if (doc.type === "aadhaar_card_front") removeDoc("aadhaar_card");
+                                  if (doc.type === "stakeholder_aadhaar_card_front") removeDoc("stakeholder_aadhaar_card");
+                                }}
+                                className="text-rose-600 hover:text-rose-800 p-1 rounded hover:bg-rose-50"
+                                title="Remove file"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <label className="cursor-pointer inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-400 transition-colors">
+                              <UploadCloud className="h-3.5 w-3.5 text-blue-600" />
+                              <span>Attach</span>
+                              <input
+                                type="file"
+                                accept=".pdf,.jpg,.jpeg,.png"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) {
+                                    e.target.value = "";
+                                    handleFileUpload(doc.type, f);
+                                  }
+                                }}
+                              />
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* ITR-like Add More Button (Max 2 docs allowed) */}
+                {aadhaarDocDefs.length < 2 && (
+                  <div className="flex justify-end p-2.5 border-t border-slate-200 bg-slate-50/60">
+                    <button
+                      type="button"
+                      onClick={() => setShowAadhaarBack(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-white border border-blue-300 rounded-md shadow-2xs hover:bg-blue-50 transition-colors"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      + Add Back Side
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {/* Separate Section: Income Tax Returns (ITR with computation) */}
               <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white divide-y divide-slate-200">
                 <div className="bg-slate-100/80 px-4 py-3 flex items-center justify-between">
@@ -5015,11 +5124,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     </div>
                     <div>
                       <h4 className="text-sm font-bold text-slate-800">
-                        Income Tax Returns (ITR with computation)
+                        Income Tax Returns
                       </h4>
-                      <p className="text-[11px] text-slate-500">
-                        Upload last 2 financial years ITR (and any additional years if applicable)
-                      </p>
                     </div>
                   </div>
                   <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-blue-100 text-blue-700">
@@ -5374,24 +5480,37 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
                     <tbody>
-                      <tr>
-                        <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                          {dsaType === "INDIVIDUAL" ? "Residential Address:" : "Registered Office Address:"}
-                        </td>
-                        <td colSpan={3} className="bg-white border border-slate-300 p-2.5 text-slate-900">
-                          {address ? `${address}, ${city}, ${stateName} - ${pincode}` : `${city}, ${stateName} - ${pincode}`}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
-                          Operating / Office Address:
-                        </td>
-                        <td colSpan={3} className="bg-white border border-slate-300 p-2.5 text-slate-900">
-                          {isOfficeSameAsResidence
-                            ? `${address ? `${address}, ` : ""}${city}, ${stateName} - ${pincode} (Same as ${dsaType === "INDIVIDUAL" ? "Residential" : "Registered Office"} Address)`
-                            : `${officeAddress ? `${officeAddress}, ` : ""}${officeCity}, ${officeStateName} - ${officePincode}`}
-                        </td>
-                      </tr>
+                      {dsaType === "INDIVIDUAL" ? (
+                        <>
+                          <tr>
+                            <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
+                              Residential Address:
+                            </td>
+                            <td colSpan={3} className="bg-white border border-slate-300 p-2.5 text-slate-900">
+                              {address ? `${address}, ${city}, ${stateName} - ${pincode}` : `${city}, ${stateName} - ${pincode}`}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
+                              Operating / Office Address:
+                            </td>
+                            <td colSpan={3} className="bg-white border border-slate-300 p-2.5 text-slate-900">
+                              {isOfficeSameAsResidence
+                                ? `${address ? `${address}, ` : ""}${city}, ${stateName} - ${pincode} (Same as Residential Address)`
+                                : `${officeAddress ? `${officeAddress}, ` : ""}${officeCity}, ${officeStateName} - ${officePincode}`}
+                            </td>
+                          </tr>
+                        </>
+                      ) : (
+                        <tr>
+                          <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
+                            Office Address:
+                          </td>
+                          <td colSpan={3} className="bg-white border border-slate-300 p-2.5 text-slate-900">
+                            {officeAddress ? `${officeAddress}, ${officeCity}, ${officeStateName} - ${officePincode}` : `${officeCity}, ${officeStateName} - ${officePincode}`}
+                          </td>
+                        </tr>
+                      )}
                       <tr>
                         <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">
                           Business Premises Ownership:

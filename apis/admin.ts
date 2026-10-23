@@ -616,12 +616,23 @@ export const adminApi = {
     });
   },
 
+  saveDeviationRemark: async (
+    dsaId: number | string,
+    deviationId: number | string,
+    payload: { remark?: string | null; level?: number }
+  ): Promise<BackendResponse<any>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${dsaId}/deviations/${deviationId}/remark`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
   saveCheckerDeviationRemark: async (
     dsaId: number | string,
     deviationId: number | string,
-    payload: { remark?: string | null }
+    payload: { remark?: string | null; level?: number }
   ): Promise<BackendResponse<any>> => {
-    return request<BackendResponse<any>>(`/v1/dsa/${dsaId}/checker/deviations/${deviationId}/remark`, {
+    return request<BackendResponse<any>>(`/v1/dsa/${dsaId}/deviations/${deviationId}/remark`, {
       method: "PUT",
       body: JSON.stringify(payload),
     });
