@@ -625,6 +625,7 @@ export function DocumentViewerBody({
   canVerifyDoc = true,
   verificationRoleNote,
   showFooterClose = true,
+  showMetaToolbar = true,
   onVerify,
   onReject,
   onClose,
@@ -636,6 +637,7 @@ export function DocumentViewerBody({
   canVerifyDoc?: boolean;
   verificationRoleNote?: string;
   showFooterClose?: boolean;
+  showMetaToolbar?: boolean;
   onVerify?: () => Promise<void>;
   onReject?: () => Promise<void>;
   onClose?: () => void;
@@ -690,7 +692,8 @@ export function DocumentViewerBody({
   return (
     <div className="flex flex-col h-full min-h-0 space-y-3">
       {/* Meta Toolbar */}
-      <div className="shrink-0 flex flex-wrap items-center justify-between gap-2.5 px-3.5 py-2 bg-slate-50/90 rounded-lg border border-slate-200/80 text-xs">
+      {showMetaToolbar && !isDdReviewReportDocument(previewDoc) && (
+        <div className="shrink-0 flex flex-wrap items-center justify-between gap-2.5 px-3.5 py-2 bg-slate-50/90 rounded-lg border border-slate-200/80 text-xs">
         <div className="flex items-center gap-2 flex-wrap">
           <StatusBadge status={getDocDisplayStatus(effectiveStatus)} />
           <span className="font-mono font-semibold text-[10px] px-2 py-0.5 rounded bg-white text-slate-600 border border-slate-200 shadow-2xs uppercase">
@@ -732,6 +735,7 @@ export function DocumentViewerBody({
           </div>
         ) : null}
       </div>
+      )}
 
       {/* Main Preview Box */}
       <div className="flex-1 min-h-0 relative w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs flex items-center justify-center">
@@ -4707,6 +4711,7 @@ export function DsaProfilePage({ id }: { id: string }) {
     null,
   );
   const [loadingPreviewDocId, setLoadingPreviewDocId] = useState<any>(null);
+  const [loadingDdReportModal, setLoadingDdReportModal] = useState<boolean>(false);
 
   // Real DSA Portal Users mapped via GET /api/v1/dsa/{id}/users (Phase 2)
   const [dsaPortalUsers, setDsaPortalUsers] = useState<any[]>([]);
@@ -7126,48 +7131,32 @@ const resolveStageStatus = (
                         {dev.deviation_trigger || dev.remarks || "Deviation Flagged"} (
                         <span className="font-bold text-amber-700">{dev.decision || "DEVIATION"}</span>)
                       </div>
-                      <div className="mt-2 border border-slate-300 rounded overflow-hidden">
-                        <table className="w-full text-[11px] border-collapse bg-white">
-                          <thead>
-                            <tr className="bg-slate-100 text-slate-700 font-semibold text-left border-b border-slate-300">
-                              <th className="py-1 px-2 border-r border-slate-300 w-[30%]">Authority</th>
-                              <th className="py-1 px-2 border-r border-slate-300 w-[45%]">Deviation Remark</th>
-                              <th className="py-1 px-2 w-[25%]">Authority / Date</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-200">
-                            {DEVIATION_AUTHORITY_ROLES.map(({ level: lvl, role_name }) => {
-                              const remMatch = Array.isArray(dev.remarks_by_level)
-                                ? dev.remarks_by_level.find((r: any) => Number(r.level) === lvl)
-                                : (lvl === 3 && dev.remark ? { remark: dev.remark, user_name: "Sub-Region Staff / Authority", date: "" } : null);
+                      <div className="mt-2 pt-1.5 space-y-1 text-xs">
+                        {DEVIATION_AUTHORITY_ROLES.map(({ level: lvl, role_name }) => {
+                          const remMatch = Array.isArray(dev.remarks_by_level)
+                            ? dev.remarks_by_level.find((r: any) => Number(r.level) === lvl)
+                            : (lvl === 3 && dev.remark ? { remark: dev.remark, user_name: "Sub-Region Staff / Authority", date: "" } : null);
 
-                              return (
-                                <tr key={lvl} className="hover:bg-slate-50/60">
-                                  <td className="py-1 px-2 border-r border-slate-200 font-semibold text-[#0b2853]">
-                                    L{lvl} &mdash; {role_name}
-                                  </td>
-                                  <td className="py-1 px-2 border-r border-slate-200 text-slate-800">
-                                    {remMatch?.remark ? (
-                                      remMatch.remark
-                                    ) : (
-                                      <span className="text-slate-400 italic">Pending submission</span>
-                                    )}
-                                  </td>
-                                  <td className="py-1 px-2 text-slate-500 text-[10px]">
-                                    {remMatch?.remark ? (
-                                      <>
-                                        <div>{remMatch.user_name || "Authority"}</div>
-                                        <div className="text-slate-400">{remMatch.date || ""}</div>
-                                      </>
-                                    ) : (
-                                      <span className="text-slate-300">&mdash;</span>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
+                          return (
+                            <div key={lvl} className="leading-relaxed">
+                              <strong>L{lvl} ({role_name}) Remark:</strong>{" "}
+                              {remMatch?.remark ? (
+                                <span>
+                                  {remMatch.remark}
+                                  {(remMatch.user_name || remMatch.date) && (
+                                    <span className="text-slate-500 text-[11px] ml-1.5">
+                                      ({remMatch.user_name || "Authority"}{remMatch.date ? ` • ${remMatch.date}` : ""})
+                                    </span>
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 italic text-[11px]">
+                                  Pending submission
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </td>
                   </tr>
@@ -7455,25 +7444,59 @@ const resolveStageStatus = (
       <PageHeader
         action={
           <div className="flex items-center gap-2">
+            {(!isMakerUser || isL2Actioned) && (
+              <Button
+                size="sm"
+                type="button"
+                variant="outline"
+                onClick={() => setViewingDeviationsModal(true)}
+                className="h-8 text-xs font-semibold px-3 flex items-center gap-1.5 border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 shadow-2xs"
+              >
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                View Deviations{" "}
+                {deviationRules.length > 0
+                  ? `(${deviationRules.length})`
+                  : ""}
+              </Button>
+            )}
             {hasCheckerGeneratedReport && (
               <>
                 <Button
                   size="sm"
                   type="button"
                   variant="outline"
-                  disabled={loadingPreviewDocId === "dd_report"}
+                  disabled={
+                    loadingDdReportModal ||
+                    loadingPreviewDocId === "dd_report" ||
+                    Boolean(
+                      loadingPreviewDocId &&
+                        loadingPreviewDocId ===
+                          (backendDocs.find(isDdReviewReportDocument) as any)?.id
+                    )
+                  }
                   onClick={async () => {
-                    const ddDoc = backendDocs.find(isDdReviewReportDocument) || {
-                      document_type: "DUE_DILIGENCE_REVIEW_REPORT",
-                      file_name: `dsa_dd_review_report_${dsa?.id || ""}.pdf`,
-                      owner_name: dsa?.name,
-                      status: "Checked",
-                    };
-                    await openDocPreview(ddDoc);
+                    try {
+                      setLoadingDdReportModal(true);
+                      const ddDoc = backendDocs.find(isDdReviewReportDocument) || {
+                        document_type: "DUE_DILIGENCE_REVIEW_REPORT",
+                        file_name: `dsa_dd_review_report_${dsa?.id || ""}.pdf`,
+                        owner_name: dsa?.name,
+                        status: "Checked",
+                      };
+                      await openDocPreview(ddDoc);
+                    } finally {
+                      setLoadingDdReportModal(false);
+                    }
                   }}
                   className="h-8 text-xs font-semibold px-3 flex items-center gap-1.5 border-blue-300 bg-blue-50 text-blue-900 hover:bg-blue-100 shadow-2xs"
                 >
-                  {loadingPreviewDocId === "dd_report" ? (
+                  {loadingDdReportModal ||
+                  loadingPreviewDocId === "dd_report" ||
+                  Boolean(
+                    loadingPreviewDocId &&
+                      loadingPreviewDocId ===
+                        (backendDocs.find(isDdReviewReportDocument) as any)?.id
+                  ) ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
                   ) : (
                     <FileCheck2 className="h-3.5 w-3.5 text-blue-600" />
@@ -8763,199 +8786,6 @@ const resolveStageStatus = (
                         </Modal>
                       )}
 
-                      {/* Section: Policy Deviations & Authority Remarks in DD Report */}
-                      <div className="rounded-xl border border-slate-200 bg-white shadow-2xs overflow-hidden">
-                        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-slate-150 bg-slate-50/70">
-                          <div className="flex items-center gap-2">
-                            <AlertTriangle className={cn("h-4 w-4 shrink-0", deviationRules.length > 0 ? "text-amber-600" : "text-emerald-600")} />
-                            <h3 className="text-sm font-bold text-slate-900">
-                              Policy Deviations &amp; Authority Remarks
-                            </h3>
-                            {deviationRules.length > 0 ? (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded border border-amber-300 bg-amber-100 text-amber-900">
-                                {deviationRules.length} {deviationRules.length === 1 ? "Deviation" : "Deviations"} Flagged
-                              </span>
-                            ) : (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-300 bg-emerald-100 text-emerald-900">
-                                0 Deviations (Clear)
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[11px] text-slate-500 font-medium">
-                            Remarks restricted to L3, L4, L5, L7 authorities &bull; Automatically added to DDL report
-                          </div>
-                        </div>
-
-                        <div className="p-4 space-y-4">
-                          {loadingDeviationReport && !deviationReportData ? (
-                            <div className="flex items-center justify-center py-6 text-xs text-slate-500">
-                              <Loader2 className="h-4 w-4 animate-spin text-blue-600 mr-2" />
-                              Loading policy evaluation &amp; deviations...
-                            </div>
-                          ) : deviationRules.length > 0 ? (
-                            <div className="space-y-4">
-                              {deviationRules.map((dev: any, idx: number) => {
-                                return (
-                                  <div
-                                    key={idx}
-                                    className="border border-slate-200 rounded-lg p-3.5 bg-slate-50/40 space-y-3"
-                                  >
-                                    <div className="flex flex-wrap items-start justify-between gap-2 pb-2.5 border-b border-slate-200">
-                                      <div>
-                                        <div className="flex items-center gap-2">
-                                          <span className="font-bold text-slate-900 text-xs sm:text-sm">
-                                            {dev.parameter || dev.rule_name || dev.rule_code || "Deviation Parameter"}
-                                          </span>
-                                          <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold border border-amber-300 bg-amber-100 text-amber-800 uppercase">
-                                            {dev.decision || "DEVIATION"}
-                                          </span>
-                                        </div>
-                                        <div className="text-[11px] text-slate-600 mt-1">
-                                          <span className="font-medium text-slate-700">Trigger:</span>{" "}
-                                          {dev.deviation_trigger || dev.remarks || "Threshold criteria breach"}
-                                        </div>
-                                      </div>
-                                      <div className="text-right text-[11px] text-slate-500 space-y-0.5">
-                                        <div>
-                                          <span className="font-medium text-slate-700">Required:</span>{" "}
-                                          {dev.policy || dev.expected_value || "Standard Criteria"}
-                                        </div>
-                                        <div>
-                                          <span className="font-medium text-slate-700">Actual:</span>{" "}
-                                          <span className="font-mono font-semibold text-slate-900">
-                                            {dev.actual_value !== undefined && dev.actual_value !== null ? String(dev.actual_value) : "N/A"}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    {/* Multi-Level Remarks Table */}
-                                    <div className="overflow-hidden border border-slate-200 rounded-md bg-white shadow-xs">
-                                      <table className="w-full text-[11px] border-collapse table-fixed">
-                                        <thead>
-                                          <tr className="bg-slate-100/90 text-slate-700 border-b border-slate-200 font-semibold text-left">
-                                            <th className="py-1.5 px-3 w-[34%] border-r border-slate-200">
-                                              Authority Role
-                                            </th>
-                                            <th className="py-1.5 px-3 w-[66%]">
-                                              Deviation Remark (Populated One Below Another)
-                                            </th>
-                                          </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                          {DEVIATION_AUTHORITY_ROLES.map(({ level: lvl, role_name, authority_title, badgeClass }) => {
-                                            const stateKey = getRemarkStateKey(dev, lvl, idx);
-                                            const remarkVal = deviationRemarksState[stateKey] ?? "";
-                                            const isSaving = savingDeviationId === stateKey;
-                                            const status = deviationRemarkStatus[stateKey];
-                                            const canEditThisLevel = canUserEditLevelRemark(lvl);
-
-                                            const savedRecord = Array.isArray(dev.remarks_by_level)
-                                              ? dev.remarks_by_level.find((r: any) => Number(r.level) === lvl)
-                                              : (lvl === 3 && dev.remark ? { remark: dev.remark, user_name: "Sub-Region Staff / Authority", date: "" } : null);
-
-                                            return (
-                                              <tr key={lvl} className="align-top hover:bg-slate-50/50">
-                                                <td className="p-2.5 border-r border-slate-200 bg-slate-50/40">
-                                                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold border ${badgeClass}`}>
-                                                    L{lvl} &bull; {role_name}
-                                                  </span>
-                                                  <div className="text-[10px] text-slate-500 mt-0.5">
-                                                    {authority_title}
-                                                  </div>
-                                                  {savedRecord?.user_name && (
-                                                    <div className="text-[10px] text-slate-700 mt-1.5 font-medium">
-                                                      <div>{savedRecord.user_name}</div>
-                                                      {savedRecord.date && (
-                                                        <div className="text-[9px] text-slate-400 font-normal">
-                                                          {savedRecord.date}
-                                                        </div>
-                                                      )}
-                                                    </div>
-                                                  )}
-                                                </td>
-                                                <td className="p-2.5">
-                                                  {canEditThisLevel ? (
-                                                    <div className="space-y-1.5">
-                                                      <textarea
-                                                        value={remarkVal}
-                                                        onChange={(e) => {
-                                                          const val = e.target.value;
-                                                          setDeviationRemarksState((prev) => ({
-                                                            ...prev,
-                                                            [stateKey]: val,
-                                                          }));
-                                                        }}
-                                                        disabled={isSaving}
-                                                        rows={2}
-                                                        maxLength={2000}
-                                                        placeholder={`Enter L${lvl} deviation justification & remarks...`}
-                                                        className="w-full text-xs p-2 border border-slate-300 rounded focus:ring-1 focus:ring-amber-500 focus:border-amber-500 bg-white"
-                                                      />
-                                                      <div className="flex items-center justify-between">
-                                                        <span className={`text-[10px] ${remarkVal.length > 2000 ? "text-red-600 font-bold" : "text-slate-400"}`}>
-                                                          {remarkVal.length}/2000 characters
-                                                        </span>
-                                                        <Button
-                                                          type="button"
-                                                          size="sm"
-                                                          disabled={isSaving || remarkVal.length > 2000}
-                                                          onClick={async () => {
-                                                            await handleSaveDeviationRemark(dev, lvl, idx);
-                                                            await refreshDdReviewReport(true);
-                                                            if (dsa?.id) {
-                                                              fetchBackendDocuments(true).catch(() => {});
-                                                            }
-                                                          }}
-                                                          className="h-6 px-3 text-[11px] bg-amber-600 hover:bg-amber-700 text-white font-medium"
-                                                        >
-                                                          {isSaving ? (
-                                                            <>
-                                                              <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                                              Saving...
-                                                            </>
-                                                          ) : status?.success ? (
-                                                            <>
-                                                              <Check className="h-3 w-3 mr-1 text-emerald-300" />
-                                                              Saved
-                                                            </>
-                                                          ) : (
-                                                            "Save Remark"
-                                                          )}
-                                                        </Button>
-                                                      </div>
-                                                      {status?.error && (
-                                                        <p className="text-[11px] text-red-600 font-medium">{status.error}</p>
-                                                      )}
-                                                    </div>
-                                                  ) : (
-                                                    <div className="text-slate-800 whitespace-pre-wrap leading-relaxed py-1 text-xs">
-                                                      {savedRecord?.remark ? (
-                                                        <span className="font-normal text-slate-800">{savedRecord.remark}</span>
-                                                      ) : (
-                                                        <span className="text-slate-400 italic text-[11px]">No remark submitted yet</span>
-                                                      )}
-                                                    </div>
-                                                  )}
-                                                </td>
-                                              </tr>
-                                            );
-                                          })}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <div className="p-3 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-md">
-                              No policy deviations recorded for this application. Application meets standard due diligence parameters.
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
                       {/* Due Diligence Review Report Card */}
                       <div className="rounded-xl border border-slate-200 bg-white shadow-2xs">
                         {/* Header */}
@@ -9065,6 +8895,7 @@ const resolveStageStatus = (
                               effectiveStatus={hasCheckerGeneratedReport ? "Checked" : "Uploaded"}
                               canVerifyDoc={false}
                               showFooterClose={false}
+                              showMetaToolbar={false}
                               onClose={() => {}}
                             />
                           </div>
@@ -12482,181 +12313,258 @@ const resolveStageStatus = (
         title="Policy Evaluation &amp; Deviation Details"
         width="max-w-6xl"
       >
-        <div className="space-y-4">
+        <div className="space-y-5 max-h-[75vh] overflow-y-auto pr-1">
           {deviationRules.length > 0 ? (
-            <div className="overflow-x-auto max-h-[65vh] border border-slate-300 rounded">
-              <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
-                <thead className="sticky top-0 z-10 bg-slate-100">
-                  <tr className="text-slate-800 font-bold border-b border-slate-300 text-left">
-                    <th className="w-[13%] border border-slate-300 p-2">
-                      Parameter
-                    </th>
-                    <th className="w-[14%] border border-slate-300 p-2">
-                      Policy Requirement
-                    </th>
-                    <th className="w-[9%] border border-slate-300 p-2">
-                      Actual Value
-                    </th>
-                    <th className="w-[14%] border border-slate-300 p-2">
-                      Evaluation Remarks / Trigger
-                    </th>
-                    <th className="w-[8%] border border-slate-300 p-2 text-center">
-                      Decision
-                    </th>
-                    <th className="w-[42%] border border-slate-300 p-2">
-                      Deviation Remarks (L3, L4, L5, L7)
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="bg-amber-100/90 text-amber-950 font-bold border border-slate-300">
-                    <td
-                      colSpan={6}
-                      className="p-2 border border-slate-300 text-amber-900"
+            <>
+              {/* Top: Standard Policy Evaluation & Deviations Table */}
+              <div className="overflow-x-auto border border-slate-300 rounded shadow-xs">
+                <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
+                  <thead className="bg-slate-100">
+                    <tr className="text-slate-800 font-bold border-b border-slate-300 text-left">
+                      <th className="w-[20%] border border-slate-300 p-2">
+                        Parameter
+                      </th>
+                      <th className="w-[26%] border border-slate-300 p-2">
+                        Policy Requirement
+                      </th>
+                      <th className="w-[12%] border border-slate-300 p-2">
+                        Actual Value
+                      </th>
+                      <th className="w-[30%] border border-slate-300 p-2">
+                        Evaluation Remarks / Trigger
+                      </th>
+                      <th className="w-[12%] border border-slate-300 p-2 text-center">
+                        Decision
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="bg-amber-100/90 text-amber-950 font-bold border border-slate-300">
+                      <td
+                        colSpan={5}
+                        className="p-2 border border-slate-300 text-amber-900"
+                      >
+                        Deviations Flagged (Discretionary Approval Required)
+                      </td>
+                    </tr>
+                    {deviationRules.map((dev: any, idx: number) => {
+                      return (
+                        <tr key={idx} className="bg-white hover:bg-slate-50">
+                          <td className="border border-slate-300 p-2 font-bold text-slate-900 align-top">
+                            {dev.parameter ||
+                              dev.rule_name ||
+                              dev.rule_code ||
+                              "N/A"}
+                          </td>
+                          <td className="border border-slate-300 p-2 text-slate-700 align-top">
+                            {dev.policy ||
+                              dev.expected_value ||
+                              "Standard Criteria"}
+                          </td>
+                          <td className="border border-slate-300 p-2 font-mono text-slate-900 font-semibold align-top">
+                            {dev.actual_value !== undefined &&
+                            dev.actual_value !== null
+                              ? String(dev.actual_value)
+                              : "N/A"}
+                          </td>
+                          <td className="border border-slate-300 p-2 text-slate-700 align-top">
+                            {dev.deviation_trigger ||
+                              dev.remarks ||
+                              "Deviation Flagged"}
+                          </td>
+                          <td className="border border-slate-300 p-2 text-center align-top">
+                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold border border-amber-300 bg-amber-100 text-amber-800 uppercase">
+                              {dev.decision || "DEVIATION"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Bottom: Separate Table of Deviation Parameter, Policy Requirement and Remark Input for Each Deviation */}
+              <div className="space-y-4 pt-1">
+                <div className="flex items-center gap-2 pb-1 border-b border-slate-200">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+                    Authority Deviation Remarks
+                  </h3>
+                </div>
+
+                {deviationRules.map((dev: any, idx: number) => {
+                  return (
+                    <div
+                      key={idx}
+                      className="border border-slate-300 rounded-lg overflow-hidden bg-white shadow-xs"
                     >
-                      Deviations Flagged (Discretionary Approval Required)
-                    </td>
-                  </tr>
-                  {deviationRules.map((dev: any, idx: number) => {
-                    return (
-                      <tr key={idx} className="bg-white hover:bg-slate-50">
-                        <td className="border border-slate-300 p-2 font-bold text-slate-900 align-top">
-                          {dev.parameter ||
-                            dev.rule_name ||
-                            dev.rule_code ||
-                            "N/A"}
-                        </td>
-                        <td className="border border-slate-300 p-2 text-slate-700 align-top">
-                          {dev.policy ||
-                            dev.expected_value ||
-                            "Standard Criteria"}
-                        </td>
-                        <td className="border border-slate-300 p-2 font-mono text-slate-900 font-semibold align-top">
-                          {dev.actual_value !== undefined &&
-                          dev.actual_value !== null
-                            ? String(dev.actual_value)
-                            : "N/A"}
-                        </td>
-                        <td className="border border-slate-300 p-2 text-slate-700 align-top">
-                          {dev.deviation_trigger ||
-                            dev.remarks ||
-                            "Deviation Flagged"}
-                        </td>
-                        <td className="border border-slate-300 p-2 text-center align-top">
-                          <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold border border-amber-300 bg-amber-100 text-amber-800 uppercase">
-                            {dev.decision || "DEVIATION"}
-                          </span>
-                        </td>
-                        <td className="border border-slate-300 p-2 align-top">
-                          <div className="overflow-hidden border border-slate-200 rounded-md bg-white shadow-xs">
-                            <table className="w-full text-[11px] border-collapse table-fixed">
-                              <thead>
-                                <tr className="bg-slate-100/90 text-slate-700 border-b border-slate-200 font-semibold text-left">
-                                  <th className="py-1 px-2 w-[36%] border-r border-slate-200">Authority Role</th>
-                                  <th className="py-1 px-2 w-[64%]">Deviation Remark</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100">
-                                {DEVIATION_AUTHORITY_ROLES.map(({ level: lvl, role_name, authority_title, badgeClass }) => {
-                                  const stateKey = getRemarkStateKey(dev, lvl, idx);
-                                  const remarkVal = deviationRemarksState[stateKey] ?? "";
-                                  const isSaving = savingDeviationId === stateKey;
-                                  const status = deviationRemarkStatus[stateKey];
-                                  const canEditThisLevel = canUserEditLevelRemark(lvl);
+                      {/* Multi-Level Remarks Table with Parameter and Policy Columns */}
+                      <table className="w-full text-xs border-collapse border border-slate-300 table-fixed">
+                        <thead>
+                          <tr className="bg-slate-100 text-slate-800 border-b border-slate-300 font-bold text-left">
+                            <th className="py-2 px-3 w-[18%] border-r border-slate-300">
+                              Deviation Parameter
+                            </th>
+                            <th className="py-2 px-3 w-[24%] border-r border-slate-300">
+                              Policy Requirement
+                            </th>
+                            <th className="py-2 px-3 w-[22%] border-r border-slate-300">
+                              Authority Role
+                            </th>
+                            <th className="py-2 px-3 w-[36%]">
+                              Deviation Remark
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {DEVIATION_AUTHORITY_ROLES.map(({ level: lvl, role_name, authority_title, badgeClass }, roleIdx) => {
+                            const stateKey = getRemarkStateKey(dev, lvl, idx);
+                            const remarkVal = deviationRemarksState[stateKey] ?? "";
+                            const isSaving = savingDeviationId === stateKey;
+                            const status = deviationRemarkStatus[stateKey];
+                            const canEditThisLevel = canUserEditLevelRemark(lvl);
 
-                                  const savedRecord = Array.isArray(dev.remarks_by_level)
-                                    ? dev.remarks_by_level.find((r: any) => Number(r.level) === lvl)
-                                    : null;
+                            const savedRecord = Array.isArray(dev.remarks_by_level)
+                              ? dev.remarks_by_level.find((r: any) => Number(r.level) === lvl)
+                              : (lvl === 3 && dev.remark ? { remark: dev.remark, user_name: "Sub-Region Staff / Authority", date: "" } : null);
 
-                                  return (
-                                    <tr key={lvl} className="align-top hover:bg-slate-50/50">
-                                      <td className="p-1.5 border-r border-slate-200 bg-slate-50/40">
-                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold border ${badgeClass}`}>
-                                          L{lvl} • {role_name}
+                            return (
+                              <tr key={lvl} className="align-top hover:bg-slate-50/50">
+                                {roleIdx === 0 && (
+                                  <>
+                                    <td
+                                      rowSpan={DEVIATION_AUTHORITY_ROLES.length}
+                                      className="p-3 border-r border-slate-300 bg-white align-top"
+                                    >
+                                      <div className="font-bold text-slate-900 text-xs sm:text-sm">
+                                        {dev.parameter || dev.rule_name || dev.rule_code || "Deviation Parameter"}
+                                      </div>
+                                      <div className="mt-1.5">
+                                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold border border-amber-300 bg-amber-100 text-amber-800 uppercase">
+                                          {dev.decision || "DEVIATION"}
                                         </span>
-                                        <div className="text-[9px] text-slate-400 mt-0.5">{authority_title}</div>
-                                        {savedRecord?.user_name && (
-                                          <div className="text-[9px] text-slate-600 mt-1 font-medium">
-                                            {savedRecord.user_name}
-                                            {savedRecord.date && (
-                                              <div className="text-[9px] text-slate-400 font-normal">{savedRecord.date}</div>
-                                            )}
-                                          </div>
-                                        )}
-                                      </td>
-                                      <td className="p-1.5">
-                                        {canEditThisLevel ? (
-                                          <div className="space-y-1">
-                                            <textarea
-                                              value={remarkVal}
-                                              onChange={(e) => {
-                                                const val = e.target.value;
-                                                setDeviationRemarksState((prev) => ({
-                                                  ...prev,
-                                                  [stateKey]: val,
-                                                }));
-                                              }}
-                                              disabled={isSaving}
-                                              rows={2}
-                                              maxLength={2000}
-                                              placeholder={`Enter L${lvl} justification...`}
-                                              className="w-full text-[11px] p-1.5 border border-slate-300 rounded focus:ring-1 focus:ring-amber-500 focus:border-amber-500 bg-white"
-                                            />
-                                            <div className="flex items-center justify-between">
-                                              <span className={`text-[9px] ${remarkVal.length > 2000 ? "text-red-600 font-bold" : "text-slate-400"}`}>
-                                                {remarkVal.length}/2000
-                                              </span>
-                                              <Button
-                                                type="button"
-                                                size="sm"
-                                                disabled={isSaving || remarkVal.length > 2000}
-                                                onClick={() => handleSaveDeviationRemark(dev, lvl, idx)}
-                                                className="h-5 px-2 text-[10px] bg-amber-600 hover:bg-amber-700 text-white font-medium"
-                                              >
-                                                {isSaving ? (
-                                                  <>
-                                                    <Loader2 className="h-2.5 w-2.5 animate-spin mr-1" />
-                                                    Saving...
-                                                  </>
-                                                ) : status?.success ? (
-                                                  <>
-                                                    <Check className="h-2.5 w-2.5 mr-1 text-emerald-300" />
-                                                    Saved
-                                                  </>
-                                                ) : (
-                                                  "Save Remark"
-                                                )}
-                                              </Button>
-                                            </div>
-                                            {status?.error && (
-                                              <p className="text-[10px] text-red-600 font-medium">{status.error}</p>
-                                            )}
-                                          </div>
-                                        ) : (
-                                          <div className="text-slate-800 whitespace-pre-wrap leading-relaxed py-0.5">
-                                            {savedRecord?.remark || (lvl === 3 && dev.remark && !Array.isArray(dev.remarks_by_level)) ? (
-                                              <span className="font-normal text-slate-800">{savedRecord?.remark || dev.remark}</span>
-                                            ) : (
-                                              <span className="text-slate-400 italic text-[10px]">No remark submitted</span>
-                                            )}
-                                          </div>
-                                        )}
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                                      </div>
+                                      {dev.deviation_trigger || dev.remarks ? (
+                                        <div className="text-[11px] text-slate-500 font-normal mt-2 leading-relaxed">
+                                          <span className="font-semibold text-slate-700">Trigger:</span>{" "}
+                                          {dev.deviation_trigger || dev.remarks}
+                                        </div>
+                                      ) : null}
+                                    </td>
+                                    <td
+                                      rowSpan={DEVIATION_AUTHORITY_ROLES.length}
+                                      className="p-3 border-r border-slate-300 bg-white align-top text-slate-700"
+                                    >
+                                      <div className="leading-relaxed">
+                                        {dev.policy || dev.expected_value || "Standard Criteria"}
+                                      </div>
+                                      {dev.actual_value !== undefined && dev.actual_value !== null ? (
+                                        <div className="mt-2 text-slate-600 font-normal">
+                                          <span className="font-semibold text-slate-700">Actual Value:</span>{" "}
+                                          <span className="font-mono font-bold text-slate-900">
+                                            {String(dev.actual_value)}
+                                          </span>
+                                        </div>
+                                      ) : null}
+                                    </td>
+                                  </>
+                                )}
+                                <td className="p-3 border-r border-slate-300 bg-slate-50/40">
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border ${badgeClass}`}>
+                                    L{lvl} &bull; {role_name}
+                                  </span>
+                                  <div className="text-[11px] text-slate-500 mt-1">
+                                    {authority_title}
+                                  </div>
+                                  {savedRecord?.user_name && (
+                                    <div className="text-[11px] text-slate-700 mt-1.5 font-medium">
+                                      <div>{savedRecord.user_name}</div>
+                                      {savedRecord.date && (
+                                        <div className="text-[10px] text-slate-400 font-normal">
+                                          {savedRecord.date}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="p-3">
+                                  {canEditThisLevel ? (
+                                    <div className="space-y-1.5">
+                                      <textarea
+                                        value={remarkVal}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          setDeviationRemarksState((prev) => ({
+                                            ...prev,
+                                            [stateKey]: val,
+                                          }));
+                                        }}
+                                        disabled={isSaving}
+                                        rows={2}
+                                        maxLength={2000}
+                                        placeholder={`Enter L${lvl} deviation justification & remarks...`}
+                                        className="w-full text-xs p-2 border border-slate-300 rounded focus:ring-1 focus:ring-amber-500 focus:border-amber-500 bg-white"
+                                      />
+                                      <div className="flex items-center justify-between">
+                                        <span className={`text-[10px] ${remarkVal.length > 2000 ? "text-red-600 font-bold" : "text-slate-400"}`}>
+                                          {remarkVal.length}/2000 characters
+                                        </span>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          disabled={isSaving || remarkVal.length > 2000}
+                                          onClick={async () => {
+                                            await handleSaveDeviationRemark(dev, lvl, idx);
+                                            await refreshDdReviewReport(true);
+                                            if (dsa?.id) {
+                                              fetchBackendDocuments(true).catch(() => {});
+                                            }
+                                          }}
+                                          className="h-6 px-3 text-[11px] bg-amber-600 hover:bg-amber-700 text-white font-medium"
+                                        >
+                                          {isSaving ? (
+                                            <>
+                                              <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                              Saving...
+                                            </>
+                                          ) : status?.success ? (
+                                            <>
+                                              <Check className="h-3 w-3 mr-1 text-emerald-300" />
+                                              Saved
+                                            </>
+                                          ) : (
+                                            "Save Remark"
+                                          )}
+                                        </Button>
+                                      </div>
+                                      {status?.error && (
+                                        <p className="text-[11px] text-red-600 font-medium">{status.error}</p>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="text-slate-800 whitespace-pre-wrap leading-relaxed py-1 text-xs">
+                                      {savedRecord?.remark ? (
+                                        <span className="font-normal text-slate-800">{savedRecord.remark}</span>
+                                      ) : (
+                                        <span className="text-slate-400 italic text-[11px]">No remark submitted yet</span>
+                                      )}
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           ) : (
             <div className="border border-slate-200 rounded p-6 text-center text-xs text-slate-500">
+              No policy deviations recorded for this application.
             </div>
           )}
           <div className="flex justify-end pt-2">
