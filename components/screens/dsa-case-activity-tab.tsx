@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   ArrowDownUp,
@@ -29,7 +30,11 @@ import {
 import { Button, Card, CardContent, EmptyState } from "@/components/ui/primitives";
 import { useDsa } from "@/hooks/useDsa";
 import { cn } from "@/lib/utils";
-import type { DsaActivityHistory, DsaWorkflowActivity } from "@/types/dsa";
+import type {
+  DsaActivityHistory,
+  DsaWorkflowActivity,
+  DsaWorkflowStepHistory,
+} from "@/types/dsa";
 
 type FilterCategory = "all" | "approvals" | "transfers" | "remarks" | "documents";
 
@@ -213,6 +218,110 @@ function getActorAvatar(actor: string) {
     initials,
     bg: colors[sum % colors.length],
   };
+}
+
+/**
+ * Resolves the authority name who acted on this workflow tier / submitted remarks.
+ */
+function resolveAuthorityName(
+  step: DsaWorkflowStepHistory,
+  activities: DsaWorkflowActivity[] = [],
+): string {
+  const anyStep = step as unknown as Record<string, unknown>;
+  const direct =
+    (typeof anyStep.actioned_by_name === "string" && anyStep.actioned_by_name) ||
+    (typeof anyStep.actor_name === "string" && anyStep.actor_name) ||
+    (typeof anyStep.user_name === "string" && anyStep.user_name) ||
+    (typeof anyStep.authority_name === "string" && anyStep.authority_name) ||
+    ((anyStep.actioned_by_user as Record<string, unknown> | undefined)?.name as string | undefined);
+  if (direct && direct.trim()) {
+    return direct.trim();
+  }
+
+  const statusUpper = String(step.status || "").toUpperCase();
+  const isPending = statusUpper === "PENDING" || (!step.actioned_at && !step.remarks);
+
+  if (activities && activities.length > 0) {
+    const stepRemarks = step.remarks ? step.remarks.trim() : null;
+    const stepTime = step.actioned_at ? new Date(step.actioned_at).getTime() : null;
+
+    // 1. Match by exact remarks
+    if (stepRemarks) {
+      const matchRemarks = activities.find((a) => {
+        const aRem = (a.remarks || a.comments || "").trim();
+        if (aRem !== stepRemarks) return false;
+        const rawTime = a.timestamp || a.activity_at || a.created_at;
+        if (stepTime && rawTime) {
+          const aTime = new Date(rawTime).getTime();
+          if (Math.abs(aTime - stepTime) <= 120000) return true;
+        }
+        if (step.level != null && (a.approval_level === step.level || a.workflow_level === step.level)) {
+          return true;
+        }
+        if (step.stage_code && (a.stage_code === step.stage_code || a.stage === step.stage_code)) {
+          return true;
+        }
+        return true;
+      });
+      if (matchRemarks) {
+        const name = matchRemarks.actor_name || matchRemarks.user_name;
+        if (name && name.trim()) return name.trim();
+      }
+    }
+
+    // 2. Match by timestamp (within 5 seconds)
+    if (stepTime) {
+      const matchTime = activities.find((a) => {
+        const rawTime = a.timestamp || a.activity_at || a.created_at;
+        if (!rawTime) return false;
+        const aTime = new Date(rawTime).getTime();
+        return Math.abs(aTime - stepTime) <= 5000;
+      });
+      if (matchTime) {
+        const name = matchTime.actor_name || matchTime.user_name;
+        if (name && name.trim()) return name.trim();
+      }
+    }
+
+    // 3. Match by actioned_by (matching actor_id or user_id)
+    if (step.actioned_by != null) {
+      const actIdStr = String(step.actioned_by);
+      const matchId = activities.find(
+        (a) => String(a.actor_id) === actIdStr || String(a.user_id) === actIdStr,
+      );
+      if (matchId) {
+        const name = matchId.actor_name || matchId.user_name;
+        if (name && name.trim()) return name.trim();
+      }
+    }
+
+    // 4. Match by stage_code / level if not pending
+    if (!isPending) {
+      const matchStage = activities.find(
+        (a) =>
+          (step.stage_code && (a.stage_code === step.stage_code || a.stage === step.stage_code)) ||
+          (step.level != null && (a.approval_level === step.level || a.workflow_level === step.level)),
+      );
+      if (matchStage) {
+        const name = matchStage.actor_name || matchStage.user_name;
+        if (name && name.trim()) return name.trim();
+      }
+    }
+  }
+
+  // 5. Fallback: if actioned_by is a string name (non-numeric)
+  if (step.actioned_by != null && typeof step.actioned_by === "string") {
+    const trimmed = step.actioned_by.trim();
+    if (trimmed && isNaN(Number(trimmed))) {
+      return trimmed;
+    }
+  }
+
+  if (isPending) {
+    return "—";
+  }
+
+  return "—";
 }
 
 /** Individual Timeline Card for a single audit event */
@@ -428,6 +537,7 @@ function ActivityCard({
 }
 
 export function DsaCaseActivityTab({ dsaId }: { dsaId: number | string }) {
+  const router = useRouter();
   const { fetchApprovalHistory, acquireCase, releaseCase } = useDsa();
   const [history, setHistory] = useState<DsaActivityHistory | null>(null);
   const [loading, setLoading] = useState(true);
@@ -438,6 +548,10 @@ export function DsaCaseActivityTab({ dsaId }: { dsaId: number | string }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<FilterCategory>("all");
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
+
+  // Approval table pagination (20 items per page)
+  const [tablePage, setTablePage] = useState(1);
+  const TABLE_PAGE_SIZE = 20;
 
   const requestedRef = useRef<string | null>(null);
 
@@ -456,12 +570,23 @@ export function DsaCaseActivityTab({ dsaId }: { dsaId: number | string }) {
   useEffect(() => {
     if (requestedRef.current === String(dsaId)) return;
     requestedRef.current = String(dsaId);
+    setTablePage(1);
     void load();
   }, [dsaId, load]);
 
   const lock = history?.current_assignment ?? null;
   const heldByMe = Boolean(lock?.is_locked_by_current_user);
   const heldByOther = Boolean(lock?.is_locked_by_other_user);
+
+  const approvalsList = history?.approvals ?? [];
+  const totalTableItems = approvalsList.length;
+  const totalTablePages = Math.max(1, Math.ceil(totalTableItems / TABLE_PAGE_SIZE));
+  const currentTablePage = Math.min(tablePage, totalTablePages);
+
+  const paginatedApprovals = useMemo(() => {
+    const start = (currentTablePage - 1) * TABLE_PAGE_SIZE;
+    return approvalsList.slice(start, start + TABLE_PAGE_SIZE);
+  }, [approvalsList, currentTablePage]);
 
   const rawActivities = useMemo(() => history?.activities ?? [], [history]);
 
@@ -628,11 +753,16 @@ export function DsaCaseActivityTab({ dsaId }: { dsaId: number | string }) {
     try {
       if (kind === "acquire") {
         await acquireCase(dsaId);
+        await load();
       } else {
-        await releaseCase(dsaId);
+        const res = await releaseCase(dsaId);
+        if (res !== null) {
+          router.push("/dashboard");
+          return;
+        }
+        await load();
       }
     } finally {
-      await load();
       setBusy(null);
     }
   };
@@ -651,69 +781,28 @@ export function DsaCaseActivityTab({ dsaId }: { dsaId: number | string }) {
         )}
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <div
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold text-slate-900">
+              {lock?.is_locked
+                ? heldByMe
+                  ? "You hold this case"
+                  : lock?.assigned_user_name
+                  ? `Case locked by ${lock.assigned_user_name}`
+                  : "Case locked by another user"
+                : "Case is available"}
+            </p>
+            <span
               className={cn(
-                "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border shadow-2xs",
+                "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
                 lock?.is_locked
                   ? heldByMe
-                    ? "border-emerald-200 bg-emerald-100/70 text-emerald-700"
-                    : "border-amber-200 bg-amber-100/70 text-amber-700"
-                  : "border-slate-200 bg-slate-100 text-slate-600",
+                    ? "bg-emerald-100 text-emerald-800"
+                    : "bg-amber-100 text-amber-800"
+                  : "bg-slate-200 text-slate-700",
               )}
             >
-              {lock?.is_locked ? (
-                heldByMe ? (
-                  <Sparkles className="h-4 w-4" />
-                ) : (
-                  <Lock className="h-4 w-4" />
-                )
-              ) : (
-                <Unlock className="h-4 w-4" />
-              )}
-            </div>
-
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-semibold text-slate-900">
-                  {lock?.is_locked
-                    ? heldByMe
-                      ? "You hold this case"
-                      : "Case locked by another user"
-                    : "Case is unassigned & open"}
-                </p>
-                <span
-                  className={cn(
-                    "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-                    lock?.is_locked
-                      ? heldByMe
-                        ? "bg-emerald-100 text-emerald-800"
-                        : "bg-amber-100 text-amber-800"
-                      : "bg-slate-200 text-slate-700",
-                  )}
-                >
-                  {lock?.is_locked ? "Locked" : "Available"}
-                </span>
-              </div>
-
-              <p className="mt-1 text-xs text-slate-600">
-                {lock?.is_locked ? (
-                  <>
-                    Assigned to{" "}
-                    <span className="font-semibold text-slate-800">
-                      {lock.assigned_user_name ?? "Unknown user"}
-                    </span>
-                    {lock.assigned_user_role ? ` (${lock.assigned_user_role})` : ""}
-                    {lock.assigned_branch ? ` · ${lock.assigned_branch}` : ""}
-                    {lock.assigned_at
-                      ? ` · since ${formatDateTime(lock.assigned_at)}`
-                      : ""}
-                  </>
-                ) : (
-                  "Available in the eligible queue. Acquire case to lock and begin verification/processing."
-                )}
-              </p>
-            </div>
+              {lock?.is_locked ? "Locked" : "Available"}
+            </span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -776,10 +865,10 @@ export function DsaCaseActivityTab({ dsaId }: { dsaId: number | string }) {
         )}
       </div>
 
-      {/* ── 2. Audit Trail Main Section ─────────────────────────────────── */}
+      {/* ── 2. Audit Trail Main Section (commented out per user request: keep table part only) ──
       <Card className="overflow-hidden border-slate-200/90 shadow-xs">
         <CardContent className="p-5">
-          {/* Section Header */}
+          // Section Header
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white shadow-xs">
@@ -803,7 +892,7 @@ export function DsaCaseActivityTab({ dsaId }: { dsaId: number | string }) {
               </div>
             </div>
 
-            {/* Quick Sort Toggle Button */}
+            // Quick Sort Toggle Button
             <div className="flex items-center gap-2">
               <Button
                 size="sm"
@@ -818,9 +907,9 @@ export function DsaCaseActivityTab({ dsaId }: { dsaId: number | string }) {
             </div>
           </div>
 
-          {/* Controls: Search & Category Filter Pills */}
+          // Controls: Search & Category Filter Pills
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            {/* Search Input */}
+            // Search Input
             <div className="relative w-full max-w-xs">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
               <input
@@ -841,7 +930,7 @@ export function DsaCaseActivityTab({ dsaId }: { dsaId: number | string }) {
               )}
             </div>
 
-            {/* Filter Category Pills */}
+            // Filter Category Pills
             <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
@@ -960,7 +1049,7 @@ export function DsaCaseActivityTab({ dsaId }: { dsaId: number | string }) {
             </div>
           </div>
 
-          {/* ── Timeline Thread List ───────────────────────────────────── */}
+          // ── Timeline Thread List ─────────────────────────────────────
           <div className="mt-6">
             {loading ? (
               <div className="flex min-h-56 flex-col items-center justify-center gap-2">
@@ -1011,7 +1100,7 @@ export function DsaCaseActivityTab({ dsaId }: { dsaId: number | string }) {
               <div className="relative">
                 {groupedActivities.map((group) => (
                   <div key={group.dateKey} className="relative mb-6 last:mb-0">
-                    {/* Date Section Divider Badge */}
+                    // Date Section Divider Badge
                     <div className="sticky top-0 z-20 mb-4 flex items-center gap-3 bg-white/95 py-1 backdrop-blur-xs">
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50/90 px-3 py-1 text-xs font-semibold text-slate-700 shadow-2xs">
                         <Calendar className="h-3.5 w-3.5 text-slate-500" />
@@ -1020,7 +1109,7 @@ export function DsaCaseActivityTab({ dsaId }: { dsaId: number | string }) {
                       <div className="h-px flex-1 bg-slate-100" />
                     </div>
 
-                    {/* Timeline items for this date */}
+                    // Timeline items for this date
                     <div className="relative pl-1">
                       {group.items.map((activity, idx) => (
                         <ActivityCard
@@ -1037,64 +1126,63 @@ export function DsaCaseActivityTab({ dsaId }: { dsaId: number | string }) {
           </div>
         </CardContent>
       </Card>
+      */}
 
       {/* ── 3. Workflow Steps Table ─────────────────────────────────────── */}
-      {history?.approvals?.length ? (
+      {loading ? (
+        <Card className="overflow-hidden border-slate-200/90 shadow-xs">
+          <CardContent className="p-8 flex flex-col items-center justify-center gap-2">
+            <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+            <p className="text-xs text-slate-500">Loading approval routing table...</p>
+          </CardContent>
+        </Card>
+      ) : failed ? (
+        <EmptyState
+          title="Approval routing unavailable"
+          description="We could not load the approval routing table. Please retry."
+          action={
+            <Button onClick={load} size="sm" type="button" variant="outline">
+              <RefreshCw className="h-3.5 w-3.5" />
+              Retry
+            </Button>
+          }
+        />
+      ) : history?.approvals?.length ? (
         <Card className="overflow-hidden border-slate-200/90 shadow-xs">
           <CardContent className="p-5">
-            <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2.5">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
-                  <Layers className="h-4 w-4" />
-                </span>
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-900">
-                    Level-by-Level Approval Routing
-                  </h4>
-                  <p className="text-xs text-slate-500">
-                    Hierarchical routing snapshot across approval tiers (L1–L7)
-                  </p>
-                </div>
-              </div>
-              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
-                {history.approvals.length} Tiers
-              </span>
-            </div>
-
             <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
               <table className="w-full min-w-[36rem] text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/80 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    <th className="py-2.5 px-3">Level</th>
                     <th className="py-2.5 px-3">Stage</th>
                     <th className="py-2.5 px-3">Role</th>
+                    <th className="py-2.5 px-3">Name</th>
                     <th className="py-2.5 px-3">Status</th>
                     <th className="py-2.5 px-3">Actioned At</th>
                     <th className="py-2.5 px-3">Remarks</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {history.approvals.map((step) => {
+                  {paginatedApprovals.map((step) => {
                     const statusStr = String(step.status || "").toUpperCase();
                     const isApproved =
                       statusStr.includes("APPROV") || statusStr.includes("RECOMMEND");
                     const isRejected = statusStr.includes("REJECT");
+                    const authorityName = resolveAuthorityName(step, rawActivities);
 
                     return (
                       <tr
                         key={step.id}
                         className="transition hover:bg-slate-50/60"
                       >
-                        <td className="py-2.5 px-3">
-                          <span className="inline-flex items-center rounded-md bg-slate-900 px-1.5 py-0.5 text-[10px] font-bold text-white">
-                            L{step.level ?? "—"}
-                          </span>
-                        </td>
                         <td className="py-2.5 px-3 font-medium text-slate-800">
                           {step.stage_code || "—"}
                         </td>
                         <td className="py-2.5 px-3 text-slate-600">
                           {step.assigned_role || "—"}
+                        </td>
+                        <td className="py-2.5 px-3 font-medium text-slate-900">
+                          {authorityName}
                         </td>
                         <td className="py-2.5 px-3">
                           <span
@@ -1118,7 +1206,10 @@ export function DsaCaseActivityTab({ dsaId }: { dsaId: number | string }) {
                         <td className="py-2.5 px-3 text-slate-500">
                           {step.actioned_at ? formatDateTime(step.actioned_at) : "—"}
                         </td>
-                        <td className="py-2.5 px-3 text-slate-600 max-w-xs truncate">
+                        <td
+                          className="py-2.5 px-3 text-slate-600 max-w-xs truncate"
+                          title={step.remarks || undefined}
+                        >
                           {step.remarks || "—"}
                         </td>
                       </tr>
@@ -1127,9 +1218,84 @@ export function DsaCaseActivityTab({ dsaId }: { dsaId: number | string }) {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-100 pt-3 text-xs text-slate-500">
+              <span>
+                Page {currentTablePage} of {totalTablePages} · {totalTableItems}{" "}
+                {totalTableItems === 1 ? "item" : "items"}
+              </span>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  disabled={currentTablePage <= 1}
+                  onClick={() => setTablePage((p) => Math.max(1, p - 1))}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                  className="h-7 px-2.5 text-xs"
+                >
+                  Previous
+                </Button>
+                {Array.from({ length: totalTablePages }, (_, i) => i + 1)
+                  .filter(
+                    (p) =>
+                      p === 1 ||
+                      p === totalTablePages ||
+                      Math.abs(p - currentTablePage) <= 1,
+                  )
+                  .reduce<(number | string)[]>((acc, p, idx, arr) => {
+                    if (idx > 0 && (p as number) - (arr[idx - 1] as number) > 1) {
+                      acc.push("...");
+                    }
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((item, idx) =>
+                    item === "..." ? (
+                      <span
+                        key={`ellipsis-${idx}`}
+                        className="px-1 text-slate-400 text-xs"
+                      >
+                        ...
+                      </span>
+                    ) : (
+                      <Button
+                        key={item}
+                        onClick={() => setTablePage(Number(item))}
+                        size="sm"
+                        type="button"
+                        variant={item === currentTablePage ? "secondary" : "outline"}
+                        className={cn(
+                          "h-7 w-7 p-0 text-xs",
+                          item === currentTablePage &&
+                            "font-bold bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100",
+                        )}
+                      >
+                        {item}
+                      </Button>
+                    ),
+                  )}
+                <Button
+                  disabled={currentTablePage >= totalTablePages}
+                  onClick={() => setTablePage((p) => Math.min(totalTablePages, p + 1))}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                  className="h-7 px-2.5 text-xs"
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
-      ) : null}
+      ) : (
+        <Card className="overflow-hidden border-slate-200/90 shadow-xs">
+          <CardContent className="py-12 text-center">
+            <p className="text-xs text-slate-500">No approval routing records found.</p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
