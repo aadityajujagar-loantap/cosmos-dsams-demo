@@ -839,19 +839,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             isCollapsed ? "justify-center px-2" : "px-4",
           )}
         >
-          {isCollapsed ? (
-            <div className="flex h-10 w-10 items-center justify-center">
-              <Image
-                alt="Cosmos Bank"
-                className="h-8 w-auto object-contain"
-                height={36}
-                priority
-                src={withBasePath("/logo-collapsed.png")}
-                unoptimized
-                width={36}
-              />
-            </div>
-          ) : (
+          {isCollapsed ? null : (
             <Image
               alt="Cosmos Bank"
               className="h-9 w-auto max-w-[230px]"
@@ -865,7 +853,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
         {renderNavigation(isCollapsed)}
         {/* Collapse Option at bottom left */}
-        <div className={cn("border-t border-slate-200 shrink-0", isCollapsed ? "p-2 flex justify-center" : "p-2.5")}>
+        <div className={cn("border-t border-slate-200 shrink-0", isCollapsed ? "p-2 flex flex-col items-center" : "p-2.5")}>
           <button
             type="button"
             onClick={toggleCollapse}
@@ -890,6 +878,19 @@ export function AppShell({ children }: { children: ReactNode }) {
               </>
             )}
           </button>
+          {!isCollapsed && (
+            <div className="mt-2 flex items-center justify-center gap-1.5 text-[10px] text-slate-400 select-none">
+              <span>DSA - CRM © powered by</span>
+              <Image
+                alt="iFlow"
+                className="h-4 w-auto object-contain shrink-0"
+                height={14}
+                src={withBasePath("/image.png")}
+                unoptimized
+                width={41}
+              />
+            </div>
+          )}
         </div>
       </aside>
 
@@ -938,7 +939,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         )}
       >
         {/* Top Header across all pages & all roles */}
-        <header className="sticky top-0 z-20 flex min-h-[4.25rem] items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-2.5 backdrop-blur lg:px-6">
+        <header className="relative sticky top-0 z-20 flex min-h-[4.25rem] items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-2.5 backdrop-blur lg:px-6">
           <div className="flex items-center gap-3">
             <Button
               aria-label="Open navigation"
@@ -958,6 +959,21 @@ export function AppShell({ children }: { children: ReactNode }) {
               </span>
             </div>
           </div>
+
+          {/* Centered logo on top bar when sidebar is collapsed */}
+          {isCollapsed && (
+            <div className="pointer-events-none hidden md:flex items-center justify-center absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+              <Image
+                alt="Cosmos Bank"
+                className="h-9 w-auto max-w-[230px]"
+                height={40}
+                priority
+                src={withBasePath("/logo-dsasm-cosmos.png")}
+                unoptimized
+                width={220}
+              />
+            </div>
+          )}
 
           <div className="flex items-center gap-2.5 ml-auto">
             <button

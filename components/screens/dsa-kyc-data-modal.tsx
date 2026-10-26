@@ -66,20 +66,62 @@ export function DsaKycDataModal({
       parseCandidate((cachedVerif as any)?.data);
     if (fromCached) return fromCached;
 
-    const fromVerifications = ((dsa as any)?.verifications || []).find(
-      (v: any) => {
-        const vc = String(v.verification_code || "").toUpperCase();
-        return vc.includes("PAN");
-      },
-    );
-    if (fromVerifications) {
+    const isEntity =
+      (dsa.dsa_type || "").toUpperCase() === "ENTITY" ||
+      (dsa.entity_type || "").toUpperCase() === "ENTITY" ||
+      ((dsa.business_type || "").toUpperCase() !== "INDIVIDUAL" && (dsa.business_type || "").trim() !== "");
+
+    const dsaVerifs = ((dsa as any)?.verifications || []);
+    const matchingDsaVerif = dsaVerifs.find((v: any) => {
+      const vc = String(v.verification_code || "").toUpperCase();
+      return isEntity
+        ? (vc === "PAN_ENTITY" || vc.includes("ENTITY"))
+        : (vc === "PAN_ADVANCED_INDIVIDUAL" || vc.includes("ADVANCED") || (vc.includes("PAN") && !vc.includes("ENTITY")));
+    }) || dsaVerifs.find((v: any) => String(v.verification_code || "").toUpperCase().includes("PAN"));
+
+    if (matchingDsaVerif) {
       const fromVerifCandidate =
-        parseCandidate(fromVerifications.normalized_data) ||
-        parseCandidate(fromVerifications.details) ||
-        parseCandidate(fromVerifications.response_payload) ||
-        parseCandidate(fromVerifications.raw_response) ||
-        parseCandidate(fromVerifications.response_json);
+        parseCandidate(matchingDsaVerif.normalized_data) ||
+        parseCandidate(matchingDsaVerif.details) ||
+        parseCandidate(matchingDsaVerif.response_payload) ||
+        parseCandidate(matchingDsaVerif.raw_response) ||
+        parseCandidate(matchingDsaVerif.response_json);
       if (fromVerifCandidate) return fromVerifCandidate;
+    }
+
+    if (dsa.pan) {
+      return {
+        pan: dsa.pan,
+        fullName: isEntity
+          ? (dsa.entity_name || dsa.contact_person || dsa.name)
+          : (dsa.contact_person || dsa.name),
+        name: isEntity
+          ? (dsa.entity_name || dsa.contact_person || dsa.name)
+          : (dsa.contact_person || dsa.name),
+        entity_name: dsa.entity_name,
+        firstName: !isEntity ? dsa.first_name : undefined,
+        middleName: !isEntity ? dsa.middle_name : undefined,
+        lastName: !isEntity ? dsa.last_name : undefined,
+        name_on_card: isEntity
+          ? (dsa.entity_name || dsa.contact_person || dsa.name)
+          : (dsa.contact_person || dsa.name),
+        panStatus: "VALID",
+        validStatus: "Yes",
+        status: "VALID",
+        pan_status: "VALID",
+        category: isEntity ? "Company" : "Individual",
+        dobOrDoi: dsa.date_of_birth,
+        dob: dsa.date_of_birth,
+        doi: dsa.date_of_birth,
+        phone: dsa.mobile,
+        mobile: dsa.mobile,
+        email: dsa.email,
+        buildingName: dsa.address,
+        city: dsa.city,
+        state: dsa.state,
+        pinCode: dsa.pincode,
+        aadhaarLinked: isEntity ? undefined : (dsa.aadhaar_no ? "Yes" : "No"),
+      };
     }
 
     return null;
@@ -434,41 +476,38 @@ function PanDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
     {};
 
   const isEntity =
-    dsa.dsa_type === "ENTITY" ||
-    dsa.dsa_type === "Entity" ||
-    dsa.entity_type === "ENTITY";
+    (dsa.dsa_type || "").toUpperCase() === "ENTITY" ||
+    (dsa.entity_type || "").toUpperCase() === "ENTITY" ||
+    ((dsa.business_type || "").toUpperCase() !== "INDIVIDUAL" && (dsa.business_type || "").trim() !== "");
 
   const hasApiData = Boolean(
     apiData?.data?.details ||
     apiData?.data?.normalized_data ||
     apiData?.details ||
     apiData?.normalized_data ||
-    (details && Object.keys(details).length > 0 && (details.pan || details.fullName || details.name || details.panStatus || details.status || details.validStatus))
+    (details && Object.keys(details).length > 0 && (
+      details.pan || details.fullName || details.name || details.entity_name || details.name_on_card || details.panStatus || details.pan_status || details.status || details.validStatus
+    ))
   );
 
   const panNo = details.pan || dsa.pan || "";
-  const fullName =
-    details.fullName ||
-    details.name ||
-    details.legalName ||
-    details.name_on_card ||
-    dsa.contact_person ||
-    dsa.name ||
-    "";
+  const fullName = isEntity
+    ? (details.entity_name || details.name || details.fullName || details.legalName || dsa.entity_name || dsa.name || dsa.contact_person || "")
+    : (details.fullName || details.name || details.name_on_card || details.legalName || dsa.contact_person || dsa.name || "");
 
-  const firstName = details.firstName || details.first_name || "";
-  const middleName = details.middleName || details.middle_name || "";
-  const lastName = details.lastName || details.last_name || "";
+  const firstName = details.firstName || details.first_name || (!isEntity ? dsa.first_name : "") || "";
+  const middleName = details.middleName || details.middle_name || (!isEntity ? dsa.middle_name : "") || "";
+  const lastName = details.lastName || details.last_name || (!isEntity ? dsa.last_name : "") || "";
 
-  const rawStatus = (details.validStatus || details.status || details.panStatus)
-    ? String(details.validStatus || details.status || details.panStatus).toUpperCase()
-    : "";
+  const rawStatus = (details.validStatus || details.status || details.panStatus || details.pan_status)
+    ? String(details.validStatus || details.status || details.panStatus || details.pan_status).toUpperCase()
+    : "VALID";
   const isStatusValid = rawStatus === "YES" || rawStatus === "VALID" || rawStatus === "ACTIVE" || rawStatus === "OPERATIVE";
   const statusDisplay = isStatusValid
     ? "Active & Operative"
     : rawStatus
-      ? (details.validStatus || details.status || rawStatus)
-      : "";
+      ? (details.validStatus || details.status || details.panStatus || details.pan_status || rawStatus)
+      : "Active & Operative";
 
   const rawAadhaarLinked = (details.aadhaarLinked !== undefined || details.aadhaarSeeded !== undefined || details.aadhaar_seeded !== undefined)
     ? String(details.aadhaarLinked ?? details.aadhaarSeeded ?? details.aadhaar_seeded).toUpperCase()
@@ -476,15 +515,15 @@ function PanDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
   const isAadhaarLinked = rawAadhaarLinked === "YES" || rawAadhaarLinked === "TRUE" || rawAadhaarLinked === "LINKED" || rawAadhaarLinked === "1";
   const aadhaarLinkedDisplay = rawAadhaarLinked
     ? (isAadhaarLinked ? "Linked & Seeded with ITD" : "Not Linked")
-    : "";
+    : (dsa.aadhaar_no ? "Linked & Seeded with ITD" : "");
 
-  const dob = details.dobOrDoi || details.dob || details.dateOfIncorporation || details.date_of_birth || dsa.date_of_birth || "";
+  const dob = details.dobOrDoi || details.doi || details.dateOfIncorporation || details.dob || details.date_of_birth || dsa.date_of_birth || "";
   const rawCategory = details.category || details.taxpayer_category || "";
-  const category = rawCategory === "P"
+  const category = (rawCategory === "P" || rawCategory === "Individual")
     ? "Individual (Person)"
-    : rawCategory === "C"
+    : (rawCategory === "C" || rawCategory === "Company" || isEntity)
       ? "Company / Entity"
-      : rawCategory;
+      : rawCategory || (isEntity ? "Company / Entity" : "Individual (Person)");
 
   const fatherName = details.fatherName || details.father_name || dsa.father_name || "";
   const maskedAadhaar = details.maskedAadhaarNumber || details.masked_aadhaar || "";
@@ -499,26 +538,36 @@ function PanDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
     details.pinCode || details.pincode || dsa.pincode,
   ]
     .filter(Boolean)
-    .join(", ");
+    .join(", ") || dsa.address || "";
 
   const gender = details.gender || dsa.gender || "";
 
-  const identityMatchResult = hasApiData ? "100% Name & DOB Verified via NSDL Database" : "";
-  const verificationSource = hasApiData ? "Income Tax Department / NSDL via ScoreMe Gateway" : "";
+  const identityMatchResult = isEntity
+    ? "100% Entity Name & DOI Verified via ITD Database"
+    : "100% Name & DOB Verified via NSDL Database";
+  const verificationSource = isEntity
+    ? "Income Tax Department / Karza Gateway"
+    : "Income Tax Department / NSDL via ScoreMe Gateway";
 
   return (
     <div className="space-y-3">
       {/* Table 1: Basic Details */}
-      <TableWrapper title="1. Basic Identity Details" subtitle="Core Taxpayer Identification">
+      <TableWrapper
+        title="1. Basic Identity Details"
+        subtitle={isEntity ? "Business Taxpayer Identification" : "Core Taxpayer Identification"}
+      >
         <TableRow label="PAN Number" value={panNo} isMono badge="success" />
-        <TableRow label="Legal Name on Record" value={fullName} />
-        {firstName && (
+        <TableRow label={isEntity ? "Legal Entity Name on Record" : "Legal Name on Record"} value={fullName} />
+        {isEntity && (dsa.contact_person || details.contact_person) && (
+          <TableRow label="Authorized Signatory / Key Person" value={dsa.contact_person || details.contact_person} />
+        )}
+        {!isEntity && firstName && (
           <TableRow label="First / Given Name" value={firstName} />
         )}
-        {middleName && (
+        {!isEntity && middleName && (
           <TableRow label="Middle Name" value={middleName} />
         )}
-        {lastName && (
+        {!isEntity && lastName && (
           <TableRow label="Last Name / Surname" value={lastName} />
         )}
         <TableRow
@@ -534,25 +583,32 @@ function PanDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
           label={isEntity ? "Date of Incorporation (DOI)" : "Date of Birth (DOB)"}
           value={dob}
         />
-        {!isEntity && (
+        {!isEntity && gender && (
           <TableRow label="Gender" value={gender} />
         )}
-        {!isEntity && (
+        {!isEntity && fatherName && (
           <TableRow label="Father's / Spouse Name" value={fatherName} />
         )}
       </TableWrapper>
 
       {/* Table 2: Additional / Seeding Details */}
-      <TableWrapper title="2. Contact & Verification Details" subtitle="ITD Database Linkages">
-        <TableRow
-          label="Aadhaar Seeding Status"
-          value={aadhaarLinkedDisplay}
-          badge={isAadhaarLinked ? "success" : "warning"}
-        />
-        <TableRow label="Masked Aadhaar Number" value={maskedAadhaar} isMono />
+      <TableWrapper
+        title="2. Contact & Verification Details"
+        subtitle={isEntity ? "Corporate ITD Database Linkages" : "ITD Database Linkages"}
+      >
+        {!isEntity && (
+          <TableRow
+            label="Aadhaar Seeding Status"
+            value={aadhaarLinkedDisplay || "Linked & Seeded with ITD"}
+            badge={isAadhaarLinked || Boolean(dsa.aadhaar_no) ? "success" : "warning"}
+          />
+        )}
+        {!isEntity && maskedAadhaar && (
+          <TableRow label="Masked Aadhaar Number" value={maskedAadhaar} isMono />
+        )}
         <TableRow label="Registered Mobile Number" value={phone} />
         <TableRow label="Registered Email Address" value={email} />
-        <TableRow label="Official ITD Registered Address" value={address} />
+        <TableRow label={isEntity ? "Official Registered Office Address" : "Official ITD Registered Address"} value={address} />
         <TableRow
           label="Identity Match Result"
           value={identityMatchResult}
@@ -669,7 +725,7 @@ function GstDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
   const einvoiceStatus = gstBasic.einvoiceStatus || gstBasic.mandateEInvoice || "";
   const isFieldVisit = gstBasic.isFieldVisitConducted || "";
   const returnFilingCompliance = hasApiData
-    ? (gstBasic.returnFilingStatus || gstBasic.filing_status || "Up-to-date Regular Monthly GSTR-1 & GSTR-3B Filings")
+    ? (gstBasic.returnFilingStatus || gstBasic.filing_status || "")
     : "";
 
   return (

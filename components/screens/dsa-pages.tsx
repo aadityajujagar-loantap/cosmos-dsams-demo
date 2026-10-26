@@ -8045,8 +8045,14 @@ const resolveStageStatus = (
                       return undefined;
                     };
 
-                    // PAN reads dsa_verifications and onboarding KYC rows
-                    const panVerif = getVerif("PAN", true);
+                    // PAN reads dsa_verifications and onboarding KYC rows (differentiated for Entity vs Individual)
+                    const isEntityDsa =
+                      (dsa.dsa_type || "").toUpperCase() === "ENTITY" ||
+                      (dsa.entity_type || "").toUpperCase() === "ENTITY" ||
+                      ((dsa.business_type || "").toUpperCase() !== "INDIVIDUAL" && (dsa.business_type || "").trim() !== "");
+                    const panVerif = isEntityDsa
+                      ? (getVerif("PAN_ENTITY", true, ["PAN_ENTITY", "pan-entity"]) ?? getVerif("PAN", true))
+                      : (getVerif("PAN_ADVANCED_INDIVIDUAL", true, ["PAN_ADVANCED_INDIVIDUAL", "PAN_ADVANCE", "pan-advance"]) ?? getVerif("PAN", true));
                     // PAN_TO_GSTIN must NOT satisfy the GST slot: its type string contains
                     // "GST", so a substring match would let a PAN-to-GSTIN row satisfy both.
                     const panToGstVerif =
