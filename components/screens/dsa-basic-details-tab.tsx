@@ -17,9 +17,155 @@ import {
   Loader2,
   Plus,
   Trash2,
+  ChevronDown,
 } from "lucide-react";
 import { Button, Input, Label, Select, StatusBadge } from "@/components/ui/primitives";
 import { cn, formatDate } from "@/lib/utils";
+
+const BUSINESS_LICENSE_OPTIONS = [
+  { key: "SHOP_ACT", label: "Shop Act" },
+  { key: "UDYAM", label: "Udyam" },
+];
+
+function CheckboxDropdown({
+  id,
+  options,
+  selectedKeys,
+  onChange,
+  placeholder = "Select Business License(s)",
+  className,
+}: {
+  id?: string;
+  options: { key: string; label: string }[];
+  selectedKeys: string[];
+  onChange: (keys: string[]) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
+
+  const handleToggle = (key: string) => {
+    if (selectedKeys.includes(key)) {
+      onChange(selectedKeys.filter((k) => k !== key));
+    } else {
+      onChange([...selectedKeys, key]);
+    }
+  };
+
+  const handleSelectAll = () => {
+    onChange(options.map((o) => o.key));
+  };
+
+  const handleClearAll = () => {
+    onChange([]);
+  };
+
+  const selectedLabels = React.useMemo(() => {
+    return selectedKeys
+      .map((k) => options.find((o) => o.key === k)?.label || k)
+      .filter(Boolean);
+  }, [selectedKeys, options]);
+
+  return (
+    <div className={`relative w-full ${className || ""}`} ref={containerRef}>
+      <button
+        id={id}
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex h-9 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none transition hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:opacity-50 disabled:pointer-events-none disabled:bg-slate-50"
+      >
+        <div className="flex items-center gap-1.5 overflow-hidden text-left truncate">
+          {selectedKeys.length === 0 ? (
+            <span className="text-slate-400 font-normal truncate">{placeholder}</span>
+          ) : (
+            <div className="flex items-center gap-1.5 truncate">
+              <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800 shrink-0">
+                {selectedKeys.length} selected
+              </span>
+              <span className="truncate text-slate-700 font-medium max-w-[180px] sm:max-w-[260px]">
+                {selectedLabels.join(", ")}
+              </span>
+            </div>
+          )}
+        </div>
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 ${
+            isOpen ? "rotate-180 text-blue-600" : ""
+          }`}
+        />
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 right-0 z-50 mt-1 rounded-lg border border-slate-200 bg-white p-2 shadow-xl ring-1 ring-black/5">
+          <div className="flex items-center justify-between pb-2 px-1 border-b border-slate-100 text-[11px]">
+            <span className="font-semibold text-slate-600">
+              {selectedKeys.length} of {options.length} selected
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                className="text-blue-600 hover:text-blue-800 font-medium transition-colors cursor-pointer"
+              >
+                Select All
+              </button>
+              <span className="text-slate-300">|</span>
+              <button
+                type="button"
+                onClick={handleClearAll}
+                className="text-slate-500 hover:text-rose-600 font-medium transition-colors cursor-pointer"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-1.5 max-h-56 overflow-y-auto space-y-0.5 pr-0.5">
+            {options.map((opt) => {
+              const isChecked = selectedKeys.includes(opt.key);
+              return (
+                <label
+                  key={opt.key}
+                  className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs cursor-pointer transition-colors ${
+                    isChecked
+                      ? "bg-blue-50 text-blue-900 font-medium"
+                      : "text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => handleToggle(opt.key)}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <span className="flex-1 select-none leading-tight">{opt.label}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function DetailGrid({ children, className }: { children: React.ReactNode; className?: string }) {
   return <div className={cn("grid gap-3.5 sm:grid-cols-2", className)}>{children}</div>;
@@ -296,6 +442,17 @@ export function DsaBasicDetailsTab({
         if (!hasExp) return false;
         return isFieldChanged("applicant_prior_experience", formData.applicant_prior_experience, dsa);
       }
+      if (f === "udyam_no" || f === "shop_act_no") {
+        const val = String(formData[f] || "").trim();
+        if (!val) return false;
+        const selLicenses: string[] = formData.selectedLicenses || [];
+        const requiredKey = f === "udyam_no" ? "UDYAM" : "SHOP_ACT";
+        if (!selLicenses.includes(requiredKey)) return false;
+        return isFieldChanged(f, formData[f], dsa);
+      }
+      if (!String(formData[f] || "").trim()) {
+        return false;
+      }
       return isFieldChanged(f, formData[f], dsa);
     });
   };
@@ -348,12 +505,34 @@ export function DsaBasicDetailsTab({
         });
         break;
 
-      case "statutory":
+      case "statutory": {
+        const proofStr = String(
+          dsa.registered_business_proof || dsa.business_license_type || ""
+        ).toUpperCase();
+        const initialSelectedLicenses: string[] = [];
+        if (
+          proofStr.includes("SHOP") ||
+          Boolean(cleanLicenseValue(dsa.shop_act_no))
+        ) {
+          initialSelectedLicenses.push("SHOP_ACT");
+        }
+        if (
+          proofStr.includes("UDYAM") ||
+          Boolean(cleanLicenseValue(dsa.udyam_no))
+        ) {
+          initialSelectedLicenses.push("UDYAM");
+        }
+
         setFormData({
           pan: dsa.pan || "",
           gst_applicable: Boolean(dsa.gst_applicable),
           gst: dsa.gst || "",
-          registered_business_proof: dsa.registered_business_proof || "",
+          selectedLicenses: initialSelectedLicenses,
+          registered_business_proof:
+            dsa.registered_business_proof ||
+            initialSelectedLicenses
+              .map((k) => (k === "SHOP_ACT" ? "Shop Act" : "Udyam"))
+              .join(","),
           applicant_prior_experience: dsa.applicant_prior_experience || "",
           experience_years:
             dsa.experience_years !== undefined && dsa.experience_years !== null
@@ -364,6 +543,7 @@ export function DsaBasicDetailsTab({
           business_premises_ownership: dsa.business_premises_ownership || "",
         });
         break;
+      }
 
       case "branch":
         setFormData({
@@ -515,6 +695,13 @@ export function DsaBasicDetailsTab({
       if (formData.gst_applicable && !formData.gst?.trim()) {
         errs.gst = "GSTIN is required when GST is applicable";
       }
+      const selLicenses: string[] = formData.selectedLicenses || [];
+      if (selLicenses.includes("SHOP_ACT") && !formData.shop_act_no?.trim()) {
+        errs.shop_act_no = "Shop Act license number is required when selected";
+      }
+      if (selLicenses.includes("UDYAM") && !formData.udyam_no?.trim()) {
+        errs.udyam_no = "Udyam registration number is required when selected";
+      }
     }
 
     if (block === "address") {
@@ -603,6 +790,23 @@ export function DsaBasicDetailsTab({
         if (!payload.gst_applicable) {
           payload.gst = "";
         }
+        const selLicenses: string[] = payload.selectedLicenses || [];
+        if (!selLicenses.includes("SHOP_ACT")) {
+          payload.shop_act_no = "";
+        }
+        if (!selLicenses.includes("UDYAM")) {
+          payload.udyam_no = "";
+        }
+        payload.registered_business_proof = selLicenses
+          .map((k: string) => (k === "SHOP_ACT" ? "Shop Act" : "Udyam"))
+          .join(",");
+        payload.business_license_no = [
+          selLicenses.includes("SHOP_ACT") ? payload.shop_act_no : null,
+          selLicenses.includes("UDYAM") ? payload.udyam_no : null,
+        ]
+          .filter(Boolean)
+          .join(", ");
+        delete payload.selectedLicenses;
         if (payload.experience_years !== undefined) {
           payload.experience_years = payload.experience_years ? String(payload.experience_years) : "0";
         }
@@ -1324,52 +1528,76 @@ export function DsaBasicDetailsTab({
                 <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">
                   Registered Business Proof
                 </Label>
-                <Input
-                  value={formData.registered_business_proof || ""}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, registered_business_proof: e.target.value }))}
-                  placeholder="e.g. Shop Act, Udyam Registration"
+                <CheckboxDropdown
+                  id="maker_registered_business_proof"
+                  placeholder="Select Business Proof (Shop Act / Udyam)"
+                  options={BUSINESS_LICENSE_OPTIONS}
+                  selectedKeys={formData.selectedLicenses || []}
+                  onChange={(keys) => {
+                    setFormData((prev: Record<string, any>) => ({
+                      ...prev,
+                      selectedLicenses: keys,
+                      registered_business_proof: keys
+                        .map((k: string) => (k === "SHOP_ACT" ? "Shop Act" : "Udyam"))
+                        .join(","),
+                      ...(keys.includes("SHOP_ACT") ? {} : { shop_act_no: "" }),
+                      ...(keys.includes("UDYAM") ? {} : { udyam_no: "" }),
+                    }));
+                    if (!keys.includes("SHOP_ACT")) {
+                      clearSupportingFile("shop_act_no");
+                    }
+                    if (!keys.includes("UDYAM")) {
+                      clearSupportingFile("udyam_no");
+                    }
+                  }}
                 />
               </div>
 
-              <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
-                <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">
-                  Udyam Registration Number
-                </Label>
-                <Input
-                  value={formData.udyam_no || ""}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, udyam_no: e.target.value }))}
-                  placeholder="UDYAM-XX-00-0000000"
-                  className="font-mono"
-                />
-                {isFieldChanged("udyam_no", formData.udyam_no, dsa) && (
-                  <SupportingDocInput
-                    field="udyam_no"
-                    file={supportingFiles.udyam_no}
-                    onPick={(f) => pickSupportingFile("udyam_no", f)}
-                    onClear={() => clearSupportingFile("udyam_no")}
+              {(formData.selectedLicenses || []).includes("UDYAM") && (
+                <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
+                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">
+                    Udyam Registration Number *
+                  </Label>
+                  <Input
+                    value={formData.udyam_no || ""}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, udyam_no: e.target.value.toUpperCase() }))}
+                    placeholder="UDYAM-XX-00-0000000"
+                    className="font-mono uppercase"
                   />
-                )}
-              </div>
+                  {errors.udyam_no && <p className="text-red-500 text-xs mt-1">{errors.udyam_no}</p>}
+                  {(!dsa?.udyam_no || isFieldChanged("udyam_no", formData.udyam_no, dsa)) && (
+                    <SupportingDocInput
+                      field="udyam_no"
+                      file={supportingFiles.udyam_no}
+                      onPick={(f) => pickSupportingFile("udyam_no", f)}
+                      onClear={() => clearSupportingFile("udyam_no")}
+                    />
+                  )}
+                </div>
+              )}
 
-              <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
-                <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">
-                  Shop Act License / Reg Number
-                </Label>
-                <Input
-                  value={formData.shop_act_no || ""}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, shop_act_no: e.target.value }))}
-                  placeholder="Shop Act Number"
-                  className="font-mono"
-                />
-                {isFieldChanged("shop_act_no", formData.shop_act_no, dsa) && (
-                  <SupportingDocInput
-                    field="shop_act_no"
-                    file={supportingFiles.shop_act_no}
-                    onPick={(f) => pickSupportingFile("shop_act_no", f)}
-                    onClear={() => clearSupportingFile("shop_act_no")}
+              {(formData.selectedLicenses || []).includes("SHOP_ACT") && (
+                <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
+                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">
+                    Shop Act License / Reg Number *
+                  </Label>
+                  <Input
+                    value={formData.shop_act_no || ""}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, shop_act_no: e.target.value.toUpperCase() }))}
+                    placeholder="Shop Act Number"
+                    className="font-mono uppercase"
                   />
-                )}
-              </div>
+                  {errors.shop_act_no && <p className="text-red-500 text-xs mt-1">{errors.shop_act_no}</p>}
+                  {(!dsa?.shop_act_no || isFieldChanged("shop_act_no", formData.shop_act_no, dsa)) && (
+                    <SupportingDocInput
+                      field="shop_act_no"
+                      file={supportingFiles.shop_act_no}
+                      onPick={(f) => pickSupportingFile("shop_act_no", f)}
+                      onClear={() => clearSupportingFile("shop_act_no")}
+                    />
+                  )}
+                </div>
+              )}
 
               <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
                 <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">
@@ -1451,7 +1679,7 @@ export function DsaBasicDetailsTab({
             <DetailItem
               label="GSTIN"
               value={
-                dsa.gst ? (
+                dsa.gst_applicable && dsa.gst ? (
                   <span className="font-mono font-bold text-slate-900">{dsa.gst}</span>
                 ) : dsa.gst_applicable ? (
                   <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
@@ -1470,7 +1698,7 @@ export function DsaBasicDetailsTab({
                     .split(",")
                     .map((p: string) => p.trim())
                     .filter(Boolean);
-                  if (proofs.length === 0) return "Shop & Establishment / MSME";
+                  if (proofs.length === 0) return "—";
                   return (
                     <div className="flex flex-wrap gap-1.5">
                       {proofs.map((proof: string, i: number) => (
@@ -1521,7 +1749,7 @@ export function DsaBasicDetailsTab({
                 cleanLicenseValue(dsa.business_license_no) ||
                 (dsa.registered_business_proof ? `Registered Proofs on File (${dsa.registered_business_proof.split(",").join(", ")})` : null) ||
                 dsa.registration_no_llpin_cin ||
-                "Standard Regulatory Compliance"
+                "—"
               }
             />
             {cleanLicenseValue(dsa.udyam_no) ? (
