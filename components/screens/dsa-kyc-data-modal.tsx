@@ -677,7 +677,7 @@ function GstDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
   const returnFilingCompliance = hasApiData
     ? gstBasic.returnFilingStatus ||
       gstBasic.filing_status ||
-      "Up-to-date Regular Monthly GSTR-1 & GSTR-3B Filings"
+      ""
     : "";
 
   return (
