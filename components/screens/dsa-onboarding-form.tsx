@@ -2608,11 +2608,11 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       registered_business_proof: resolvedBusinessProof,
       gst_applicable: gstApplicable,
       gst: gstApplicable && gstNumber ? gstNumber.trim().toUpperCase() : undefined,
-      shop_act_no: !gstApplicable && shopActNumber.trim() ? shopActNumber.trim() : undefined,
-      udyam_no: !gstApplicable && udyamNumber.trim() ? udyamNumber.trim() : undefined,
+      shop_act_no: !gstApplicable && selectedLicenses.includes("SHOP_ACT") && shopActNumber.trim() ? shopActNumber.trim() : undefined,
+      udyam_no: !gstApplicable && selectedLicenses.includes("UDYAM") && udyamNumber.trim() ? udyamNumber.trim() : undefined,
       business_license_no: !gstApplicable ? ([
-        shopActNumber.trim() || null,
-        udyamNumber.trim() || null,
+        selectedLicenses.includes("SHOP_ACT") ? shopActNumber.trim() : null,
+        selectedLicenses.includes("UDYAM") ? udyamNumber.trim() : null,
       ].filter(Boolean).join(", ") || undefined) : undefined,
       address: dsaType === "ENTITY" ? officeAddress : address,
       city: dsaType === "ENTITY" ? officeCity : city,
@@ -5406,10 +5406,24 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           </tr>
                           {!gstApplicable && (shopActNumber || udyamNumber) && (
                             <tr>
-                              <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Shop Act License No:</td>
-                              <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-mono text-slate-900">{shopActNumber || "N/A"}</td>
-                              <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Udyam Registration No:</td>
-                              <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-mono text-slate-900">{udyamNumber || "N/A"}</td>
+                              {shopActNumber && udyamNumber ? (
+                                <>
+                                  <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Shop Act License No:</td>
+                                  <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-mono text-slate-900">{shopActNumber}</td>
+                                  <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Udyam Registration No:</td>
+                                  <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-mono text-slate-900">{udyamNumber}</td>
+                                </>
+                              ) : shopActNumber ? (
+                                <>
+                                  <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Shop Act License No:</td>
+                                  <td colSpan={3} className="bg-white border border-slate-300 p-2.5 font-mono text-slate-900">{shopActNumber}</td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Udyam Registration No:</td>
+                                  <td colSpan={3} className="bg-white border border-slate-300 p-2.5 font-mono text-slate-900">{udyamNumber}</td>
+                                </>
+                              )}
                             </tr>
                           )}
                         </>
@@ -5459,10 +5473,24 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           </tr>
                           {!gstApplicable && (shopActNumber || udyamNumber) && (
                             <tr>
-                              <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Shop Act License No:</td>
-                              <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-mono text-slate-900">{shopActNumber || "N/A"}</td>
-                              <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Udyam Registration No:</td>
-                              <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-mono text-slate-900">{udyamNumber || "N/A"}</td>
+                              {shopActNumber && udyamNumber ? (
+                                <>
+                                  <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Shop Act License No:</td>
+                                  <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-mono text-slate-900">{shopActNumber}</td>
+                                  <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Udyam Registration No:</td>
+                                  <td className="w-[25%] bg-white border border-slate-300 p-2.5 font-mono text-slate-900">{udyamNumber}</td>
+                                </>
+                              ) : shopActNumber ? (
+                                <>
+                                  <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Shop Act License No:</td>
+                                  <td colSpan={3} className="bg-white border border-slate-300 p-2.5 font-mono text-slate-900">{shopActNumber}</td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className="w-[25%] bg-slate-50 border border-slate-300 p-2.5 font-bold text-slate-700">Udyam Registration No:</td>
+                                  <td colSpan={3} className="bg-white border border-slate-300 p-2.5 font-mono text-slate-900">{udyamNumber}</td>
+                                </>
+                              )}
                             </tr>
                           )}
                         </>

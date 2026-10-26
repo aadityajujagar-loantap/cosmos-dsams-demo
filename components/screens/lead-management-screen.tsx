@@ -763,6 +763,33 @@ const setFilters = (newFilters: {
     });
   }, [createForm.dob]);
 
+  // Auto-populate DSACode for DSA portal users
+  useEffect(() => {
+    if (!isBankUser) {
+      let storedDsaCode = "";
+      try {
+        const stored = localStorage.getItem("auth_dsa");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          storedDsaCode = parsed?.code || parsed?.dsa_code || "";
+        }
+      } catch {}
+      const matched = dsaList.find((d: any) =>
+        (currentUser?.email && d.email && d.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+        (currentUser?.mobile && d.mobile && d.mobile === currentUser.mobile) ||
+        (currentUser?.code && (d.dsa_code === currentUser.code || d.code === currentUser.code)) ||
+        (currentUser?.ticket_no && (d.dsa_code === currentUser.ticket_no || d.code === currentUser.ticket_no || d.ticket_no === currentUser.ticket_no))
+      );
+      const resolved = currentUser?.code || (currentUser as any)?.dsa_code || storedDsaCode || matched?.dsa_code || matched?.code || (currentUser as any)?.ticket_no;
+      if (resolved) {
+        setCreateForm((prev) => {
+          if ((prev as any).DSACode === resolved && (prev as any).dsa_code === resolved) return prev;
+          return { ...prev, DSACode: resolved, dsa_code: resolved };
+        });
+      }
+    }
+  }, [currentUser, dsaList, isBankUser]);
+
   const handleProductChange = async (productId: number) => {
     const pid = productId ? Number(productId) : undefined;
     setCreateForm((prev) => ({ ...prev, loan_product_id: pid, loan_type_id: undefined }));
@@ -781,7 +808,36 @@ const setFilters = (newFilters: {
 
   const handleCreateLead = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (isBankUser && !((createForm as any).DSACode || (createForm as any).dsa_code)) {
+
+    // Resolve DSA Code for payload
+    let storedDsaCode = "";
+    try {
+      const stored = localStorage.getItem("auth_dsa");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        storedDsaCode = parsed?.code || parsed?.dsa_code || "";
+      }
+    } catch {}
+
+    const matchedDsaFromList = dsaList.find((d: any) =>
+      (currentUser?.email && d.email && d.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+      (currentUser?.mobile && d.mobile && d.mobile === currentUser.mobile) ||
+      (currentUser?.code && (d.dsa_code === currentUser.code || d.code === currentUser.code)) ||
+      (currentUser?.ticket_no && (d.dsa_code === currentUser.ticket_no || d.code === currentUser.ticket_no || d.ticket_no === currentUser.ticket_no))
+    );
+
+    const resolvedDsaCode =
+      (createForm as any).DSACode ||
+      (createForm as any).dsa_code ||
+      currentUser?.code ||
+      (currentUser as any)?.dsa_code ||
+      storedDsaCode ||
+      matchedDsaFromList?.dsa_code ||
+      matchedDsaFromList?.code ||
+      (currentUser as any)?.ticket_no ||
+      "";
+
+    if (isBankUser && !resolvedDsaCode) {
       toast({ title: "Validation Error", description: "Please select a DSA Partner / DSA Code", variant: "error" });
       return;
     }
@@ -871,7 +927,12 @@ const setFilters = (newFilters: {
 
     try {
       setSubmittingLead(true);
-      const res = await createLead(createForm as LeadData);
+      const payload = {
+        ...createForm,
+        DSACode: resolvedDsaCode || (createForm as any).DSACode,
+        dsa_code: resolvedDsaCode || (createForm as any).dsa_code,
+      };
+      const res = await createLead(payload as LeadData);
       if (res?.status === "success") {
         toast({ title: "Success", description: "Lead created successfully", variant: "success" });
         setIsCreateModalOpen(false);
@@ -904,7 +965,15 @@ const setFilters = (newFilters: {
   };
 
   const handleGenerateLink = async (dsaCodeToUse?: string) => {
-    const code = dsaCodeToUse || selectedShareDsaCode;
+    let storedDsaCode = "";
+    try {
+      const stored = localStorage.getItem("auth_dsa");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        storedDsaCode = parsed?.code || parsed?.dsa_code || "";
+      }
+    } catch {}
+    const code = dsaCodeToUse || selectedShareDsaCode || (!isBankUser ? (currentUser?.code || (currentUser as any)?.dsa_code || storedDsaCode || (currentUser as any)?.ticket_no || "") : "");
     if (isBankUser && !code) {
       toast({ title: "Validation Error", description: "Please select a DSA Partner / DSA Code", variant: "error" });
       return;
@@ -1276,7 +1345,29 @@ const setFilters = (newFilters: {
             <Share2 className="h-4 w-4 text-emerald-600" />
             <span>Customer Link</span>
           </Button>
-          <Button onClick={() => setIsCreateModalOpen(true)} type="button" className="gap-2">
+          <Button
+            onClick={() => {
+              let storedDsaCode = "";
+              try {
+                const stored = localStorage.getItem("auth_dsa");
+                if (stored) {
+                  const parsed = JSON.parse(stored);
+                  storedDsaCode = parsed?.code || parsed?.dsa_code || "";
+                }
+              } catch {}
+              const resolved = currentUser?.code || (currentUser as any)?.dsa_code || storedDsaCode || (currentUser as any)?.ticket_no;
+              if (!isBankUser && resolved) {
+                setCreateForm((prev) => ({
+                  ...prev,
+                  DSACode: resolved,
+                  dsa_code: resolved,
+                }));
+              }
+              setIsCreateModalOpen(true);
+            }}
+            type="button"
+            className="gap-2"
+          >
             <Plus className="h-4 w-4" />
             <span>New Lead</span>
           </Button>

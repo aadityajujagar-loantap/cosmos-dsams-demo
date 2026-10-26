@@ -3946,10 +3946,19 @@ export function DsaProfilePage({ id }: { id: string }) {
         }
       } else if (type === "udyam") {
         const regNo =
-          dsa.business_license_no ||
+          (dsa as any)?.udyam_no ||
           (dsa as any)?.udyam_registration_no ||
           (dsa as any)?.udyam_number ||
-          "";
+          (dsa.business_license_no && /UDYAM-[A-Z]{2}-\d{2}-\d{7}/i.test(dsa.business_license_no) ? dsa.business_license_no : "");
+        if (!regNo) {
+          toast({
+            title: "Udyam Missing",
+            description: "No Udyam registration number available on profile to verify.",
+            variant: "warning",
+          });
+          setVerifyingKyc((prev) => ({ ...prev, udyam: false }));
+          return;
+        }
         const res = await triggerCheckerVerification(dsa.id, "UDYAM", {
           registration_number: regNo,
         });
@@ -4968,14 +4977,23 @@ export function DsaProfilePage({ id }: { id: string }) {
   const canViewCibilKycData = isCheckerRole && isCibilChecked;
   const canViewAmlKycData = isCheckerRole && isAmlChecked;
 
+  const isGstRequired = Boolean(dsa?.gst_applicable);
+  const isUdyamRequired = Boolean(
+    (dsa as any)?.udyam_no ||
+    (dsa as any)?.udyam_registration_no ||
+    (dsa?.business_license_no && /UDYAM-[A-Z]{2}-\d{2}-\d{7}/i.test(dsa.business_license_no))
+  );
+
   const isAllKycVerified = Boolean(
     isPanChecked &&
-    isGstChecked &&
+    (!isGstRequired || isGstChecked) &&
     isBankChecked &&
-    isUdyamChecked &&
+    (!isUdyamRequired || isUdyamChecked) &&
     isCibilChecked &&
     isAmlChecked,
   );
+  const totalRequiredKycCount =
+    4 + (isGstRequired ? 1 : 0) + (isUdyamRequired ? 1 : 0);
 
   if (loading || !dsa) {
     return (
@@ -5482,9 +5500,14 @@ const resolveStageStatus = (
       ]
     : [];
 
-  const requiredCheckerVerifications = isIndividualDsa
+  const hasUdyam = Boolean(
+    (dsa as any)?.udyam_no ||
+    (dsa as any)?.udyam_registration_no ||
+    (dsa?.business_license_no && /UDYAM-[A-Z]{2}-\d{2}-\d{7}/i.test(dsa.business_license_no))
+  );
+
+  const udyamCheckerVerif = hasUdyam
     ? [
-        ...gstCheckerVerif,
         {
           code: "UDYAM",
           label: "Udyam Verification",
@@ -5494,6 +5517,13 @@ const resolveStageStatus = (
           ifAdverse: "Deviation generated",
           desc: "Validates enterprise MSME registration and classification",
         },
+      ]
+    : [];
+
+  const requiredCheckerVerifications = isIndividualDsa
+    ? [
+        ...gstCheckerVerif,
+        ...udyamCheckerVerif,
         {
           code: "CIBIL_CONSUMER",
           label: "Transunion CIBIL Consumer Hard Pull",
@@ -5515,15 +5545,7 @@ const resolveStageStatus = (
       ]
     : [
         ...gstCheckerVerif,
-        {
-          code: "UDYAM",
-          label: "Udyam Verification",
-          dsaType: "Both",
-          triggeredBy: "Checker",
-          ifFail: "Continue; remark in DD note",
-          ifAdverse: "Deviation generated",
-          desc: "Validates enterprise MSME registration and classification",
-        },
+        ...udyamCheckerVerif,
         {
           code: "CIBIL_COMMERCIAL",
           label: "Transunion CIBIL Commercial (CMR Rank)",
@@ -5553,8 +5575,12 @@ const resolveStageStatus = (
     const inExisting = existingVerifications.some((v) => {
       const vCode = (v.verification_code || v.type || "").toUpperCase();
       const st = (v.execution_status || v.status || "").toUpperCase();
+      const matchesCode =
+        vCode === codeUpper ||
+        (codeUpper === "GST" && (vCode === "GST_BASIC_DETAILS" || vCode === "GST_BASIC" || vCode.includes("GST"))) ||
+        (codeUpper === "UDYAM" && (vCode.includes("UDYAM") || vCode.includes("MSME")));
       return (
-        vCode === codeUpper &&
+        matchesCode &&
         (v.is_success !== undefined ||
           st === "COMPLETED" ||
           st === "FAILED" ||
@@ -5570,22 +5596,23 @@ const resolveStageStatus = (
     // 2. In session / local state fallback
     if (codeUpper.includes("PAN")) {
       if (failedKyc.pan) return false;
-      if (verifiedKyc.pan) return true;
+      if (verifiedKyc.pan || isPanChecked) return true;
     }
     if (codeUpper === "CIBIL_CONSUMER" || codeUpper === "CIBIL_COMMERCIAL") {
-      if (checkerKycAttempted.cibil || verifiedKyc.cibil || failedKyc.cibil)
+      if (checkerKycAttempted.cibil || verifiedKyc.cibil || failedKyc.cibil || isCibilChecked)
         return true;
     }
     if (codeUpper === "AML_COMPASS") {
-      if (checkerKycAttempted.aml || verifiedKyc.aml || failedKyc.aml)
+      if (checkerKycAttempted.aml || verifiedKyc.aml || failedKyc.aml || isAmlChecked)
         return true;
     }
     if (codeUpper === "GST") {
       if (!dsa?.gst_applicable) return true;
-      if (verifiedKyc.gst || failedKyc.gst) return true;
+      if (verifiedKyc.gst || failedKyc.gst || isGstChecked) return true;
     }
     if (codeUpper === "UDYAM") {
-      if (verifiedKyc.udyam || failedKyc.udyam) return true;
+      if (!hasUdyam) return true;
+      if (verifiedKyc.udyam || failedKyc.udyam || isUdyamChecked) return true;
     }
 
     return false;
@@ -5736,9 +5763,9 @@ const resolveStageStatus = (
 
   const kycVerifiedCount = [
     isPanChecked,
-    isGstChecked,
+    isGstRequired ? isGstChecked : true,
     isBankChecked,
-    isUdyamChecked,
+    isUdyamRequired ? isUdyamChecked : true,
     isCibilChecked,
     isAmlChecked,
   ].filter(Boolean).length;
@@ -7714,7 +7741,7 @@ const resolveStageStatus = (
                         : "bg-slate-200/80 text-slate-500",
                     )}
                   >
-                    6
+                    {totalRequiredKycCount}
                   </span>
                 </button>
 
@@ -7857,17 +7884,19 @@ const resolveStageStatus = (
                                 });
                               }
                               const regNo =
-                                dsa.business_license_no ||
+                                (dsa as any)?.udyam_no ||
                                 (dsa as any)?.udyam_registration_no ||
-                                "";
-                              tasks.push({
-                                key: "udyam",
-                                promise: triggerCheckerVerification(
-                                  dsa.id,
-                                  "UDYAM",
-                                  { registration_number: regNo },
-                                ),
-                              });
+                                (dsa.business_license_no && /UDYAM-[A-Z]{2}-\d{2}-\d{7}/i.test(dsa.business_license_no) ? dsa.business_license_no : "");
+                              if (regNo) {
+                                tasks.push({
+                                  key: "udyam",
+                                  promise: triggerCheckerVerification(
+                                    dsa.id,
+                                    "UDYAM",
+                                    { registration_number: regNo },
+                                  ),
+                                });
+                              }
                               if (
                                 !isMakerUser &&
                                 (canCheckerVerifyKyc ||
@@ -8455,99 +8484,162 @@ const resolveStageStatus = (
                           </div>
                         </div>
 
-                        {/* Udyam / MSME Registration */}
-                        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                              Udyam Registration
-                            </span>
-                            <StatusBadge
-                              status={isUdyamChecked ? "Verified" : "Pending"}
-                            />
-                          </div>
-                          <div>
-                            {isUdyamChecked || (dsa as any)?.udyam_registration_no || dsa.business_license_no ? (
-                              <>
-                                <p className="text-sm font-bold text-slate-900">
-                                  {(dsa as any)?.udyam_registration_no || dsa.business_license_no || ""}
-                                </p>
-                                {(dsa.constitution || dsa.business_type) && (
-                                  <p className="text-xs text-slate-600 mt-0.5">
-                                    Category: {dsa.constitution || dsa.business_type}
+                        {/* Udyam / Shop Act Registration */}
+                        {(() => {
+                          const resolvedUdyamNo =
+                            (dsa as any)?.udyam_no ||
+                            (dsa as any)?.udyam_registration_no ||
+                            (dsa.business_license_no && /UDYAM-[A-Z]{2}-\d{2}-\d{7}/i.test(dsa.business_license_no) ? dsa.business_license_no : null);
+                          const hasUdyam = Boolean(resolvedUdyamNo);
+
+                          const resolvedShopActNo =
+                            (dsa as any)?.shop_act_no ||
+                            (!hasUdyam && dsa.business_license_no && !/UDYAM-[A-Z]{2}-\d{2}-\d{7}/i.test(dsa.business_license_no) ? dsa.business_license_no : null);
+                          const hasShopAct = Boolean(resolvedShopActNo);
+
+                          if (hasUdyam) {
+                            return (
+                              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                                    Udyam Registration
+                                  </span>
+                                  <StatusBadge
+                                    status={isUdyamChecked ? "Verified" : "Pending"}
+                                  />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-bold text-slate-900 font-mono">
+                                    {resolvedUdyamNo}
                                   </p>
-                                )}
-                              </>
-                            ) : (
-                              <p className="text-sm text-slate-400 italic">
-                                No Udyam details yet. Trigger the Udyam check to fetch them.
-                              </p>
-                            )}
-                          </div>
-                          <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                            <span className="text-[11px] text-slate-500">
-                              {udyamVerif?.executed_at
-                                ? `Checked on ${formatDate(udyamVerif.executed_at)} via MSME Portal`
-                                : isUdyamChecked
-                                  ? "Ministry of MSME Portal"
-                                  : isMakerUser
-                                    ? "Pending Checker Verification"
-                                    : "Ministry of MSME Portal"}
-                            </span>
-                            <div className="flex items-center gap-1.5">
-                              {canViewUdyamKycData && (
-                                <Button
-                                  size="sm"
-                                  type="button"
-                                  variant="outline"
-                                  onClick={() => {
-                                    setViewKycDataCachedVerif(udyamVerif);
-                                    setViewKycDataModalType("udyam");
-                                  }}
-                                  className="text-xs px-2.5 py-1 h-auto font-medium text-slate-700 hover:text-blue-700 hover:bg-blue-50 border-slate-300 flex items-center gap-1 shadow-2xs"
-                                >
-                                  <Eye className="h-3.5 w-3.5" />
-                                  View Data
-                                </Button>
-                              )}
-                              {canCheckerVerifyKyc && (
-                                <Button
-                                  size="sm"
-                                  type="button"
-                                  disabled={verifyingKyc.udyam}
-                                  onClick={() =>
-                                    handleVerifyKyc(
-                                      "udyam",
-                                      "Udyam Registration",
-                                    )
-                                  }
-                                  className={cn(
-                                    "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
-                                    isUdyamChecked
-                                      ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                                      : "bg-blue-600 hover:bg-blue-700 text-white",
+                                  {(dsa.constitution || dsa.business_type) && (
+                                    <p className="text-xs text-slate-600 mt-0.5">
+                                      Category: {dsa.constitution || dsa.business_type}
+                                    </p>
                                   )}
-                                >
-                                  {verifyingKyc.udyam ? (
-                                    <>
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                      Checking...
-                                    </>
-                                  ) : isUdyamChecked ? (
-                                    <>
-                                      <Check className="h-3 w-3 text-emerald-600" />
-                                      Re-Check Udyam
-                                    </>
-                                  ) : (
-                                    <>
-                                      <ShieldCheck className="h-3 w-3" />
-                                      Check Udyam
-                                    </>
-                                  )}
-                                </Button>
-                              )}
+                                </div>
+                                <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                                  <span className="text-[11px] text-slate-500">
+                                    {udyamVerif?.executed_at
+                                      ? `Checked on ${formatDate(udyamVerif.executed_at)} via MSME Portal`
+                                      : isUdyamChecked
+                                        ? "Ministry of MSME Portal"
+                                        : isMakerUser
+                                          ? "Pending Checker Verification"
+                                          : "Ministry of MSME Portal"}
+                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    {canViewUdyamKycData && (
+                                      <Button
+                                        size="sm"
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => {
+                                          setViewKycDataCachedVerif(udyamVerif);
+                                          setViewKycDataModalType("udyam");
+                                        }}
+                                        className="text-xs px-2.5 py-1 h-auto font-medium text-slate-700 hover:text-blue-700 hover:bg-blue-50 border-slate-300 flex items-center gap-1 shadow-2xs"
+                                      >
+                                        <Eye className="h-3.5 w-3.5" />
+                                        View Data
+                                      </Button>
+                                    )}
+                                    {canCheckerVerifyKyc && (
+                                      <Button
+                                        size="sm"
+                                        type="button"
+                                        disabled={verifyingKyc.udyam}
+                                        onClick={() =>
+                                          handleVerifyKyc(
+                                            "udyam",
+                                            "Udyam Registration",
+                                          )
+                                        }
+                                        className={cn(
+                                          "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
+                                          isUdyamChecked
+                                            ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                                            : "bg-blue-600 hover:bg-blue-700 text-white",
+                                        )}
+                                      >
+                                        {verifyingKyc.udyam ? (
+                                          <>
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                            Checking...
+                                          </>
+                                        ) : isUdyamChecked ? (
+                                          <>
+                                            <Check className="h-3 w-3 text-emerald-600" />
+                                            Re-Check Udyam
+                                          </>
+                                        ) : (
+                                          <>
+                                            <ShieldCheck className="h-3 w-3" />
+                                            Check Udyam
+                                          </>
+                                        )}
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          if (hasShopAct) {
+                            return (
+                              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                                    Shop Act License
+                                  </span>
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                    Manual Verification
+                                  </span>
+                                </div>
+                                <div>
+                                  <p className="text-sm font-bold text-slate-900 font-mono">
+                                    {resolvedShopActNo}
+                                  </p>
+                                  <p className="text-xs text-slate-500 mt-1">
+                                    No shop act verification available online
+                                  </p>
+                                </div>
+                                <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                                  <span className="text-[11px] text-slate-500">
+                                    Document proof verified manually
+                                  </span>
+                                  <span className="text-[11px] font-medium text-slate-400 italic">
+                                    No API verification
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                                  Registered Business Proof
+                                </span>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-500 border border-slate-200">
+                                  Not Applicable
+                                </span>
+                              </div>
+                              <div>
+                                <p className="text-sm text-slate-400 italic">
+                                  No shop act available
+                                </p>
+                              </div>
+                              <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                                <span className="text-[11px] text-slate-400">
+                                  No business proof on file
+                                </span>
+                              </div>
                             </div>
-                          </div>
-                        </div>
+                          );
+                        })()}
 
                         {/* CIBIL Bureau Assessment */}
                         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
@@ -8773,8 +8865,7 @@ const resolveStageStatus = (
                                 size="sm"
                                 disabled={
                                   submittingCheckerReport ||
-                                  (!checkerDdNote.trim() && !hasCheckerDdNote) ||
-                                  kycVerifiedCount < 6
+                                  (!checkerDdNote.trim() && !hasCheckerDdNote)
                                 }
                                 onClick={() => {
                                   handleSubmitCheckerDdReport();
@@ -8986,7 +9077,7 @@ const resolveStageStatus = (
                           ).length;
                           const hasPending =
                             cat.id === "kyc"
-                              ? kycVerifiedCount < 6
+                              ? !isAllKycVerified
                               : missingCount > 0 || unverifiedCount > 0;
 
                           return (

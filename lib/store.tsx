@@ -140,9 +140,13 @@ function sessionRoleFromBackendRoles(
 
 function sessionUserFromAuthSession(session: AuthSession): DemoSessionUser {
   const roleNames = session.roles.map((role) => role.name);
+  const dsaInfo = session.dsa || authService.getDsa();
+  const dsaCode = dsaInfo?.dsa_code || dsaInfo?.code || (session.user as any)?.dsa_code || (session.user as any)?.code || session.user.ticket_no || session.user.branch_code;
 
   return {
-    code: session.user.branch_code ?? undefined,
+    code: dsaCode ?? undefined,
+    dsa_code: dsaInfo?.dsa_code || dsaInfo?.code,
+    ticket_no: session.user.ticket_no ?? undefined,
     email: session.user.email,
     id: String(session.user.id),
     mobile: session.user.phone ?? "",
@@ -155,8 +159,13 @@ function sessionUserFromStoredAuth(): DemoSessionUser | null {
   const user = authService.getUser();
   if (!user) return null;
 
+  const dsaInfo = authService.getDsa();
+  const dsaCode = dsaInfo?.dsa_code || dsaInfo?.code || (user as any)?.dsa_code || (user as any)?.code || user.ticket_no || user.branch_code;
+
   return {
-    code: user.branch_code ?? undefined,
+    code: dsaCode ?? undefined,
+    dsa_code: dsaInfo?.dsa_code || dsaInfo?.code,
+    ticket_no: user.ticket_no ?? undefined,
     email: user.email,
     id: String(user.id),
     mobile: user.phone ?? "",

@@ -51,7 +51,10 @@ export function normalizeDsaData(dsa: any): any {
 
   const hasGstInProof = proofsStr.includes("GST");
   const hasGstNumber = Boolean(dsa.gst && String(dsa.gst).trim().length > 0);
-  const isGstApplicable = Boolean(dsa.gst_applicable || hasGstInProof || hasGstNumber);
+  const isGstApplicable =
+    dsa.gst_applicable !== undefined && dsa.gst_applicable !== null
+      ? Boolean(dsa.gst_applicable)
+      : Boolean(hasGstInProof || hasGstNumber);
 
   // 2. Age calculation from date_of_birth if age is missing or 0
   let calculatedAge = dsa.age;
@@ -111,12 +114,14 @@ export function normalizeDsaData(dsa: any): any {
   const rawShopAct = cleanLicense(dsa.shop_act_no);
   const rawBizLicense = cleanLicense(dsa.business_license_no);
 
+  const isUdyamFormat = (val: string | null) => Boolean(val && /UDYAM-[A-Z]{2}-\d{2}-\d{7}/i.test(val));
+
   const udyamNo =
     rawUdyam ||
-    (proofsStr.includes("UDYAM") ? rawBizLicense : null);
+    (proofsStr.includes("UDYAM") && isUdyamFormat(rawBizLicense) ? rawBizLicense : null);
   const shopActNo =
     rawShopAct ||
-    (proofsStr.includes("SHOP") ? rawBizLicense : null);
+    (proofsStr.includes("SHOP") && rawBizLicense && !isUdyamFormat(rawBizLicense) ? rawBizLicense : null);
 
   const businessLicenseNo =
     rawBizLicense ||
