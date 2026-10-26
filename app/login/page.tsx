@@ -392,16 +392,16 @@ export default function LoginPage() {
             <Image
               src={withBasePath("/logo-dsasm-cosmos.png")}
               alt="Cosmos Logo"
-              width={708}
-              height={118}
-              className="h-10 w-auto"
+              width={1000}
+              height={167}
+              className="h-12 w-auto"
               priority
               unoptimized
             />
           </div>
         </div>
         <div className="relative z-10 my-auto max-w-lg space-y-4">
-          <h2 className="text-3xl xl:text-4xl font-extrabold leading-tight tracking-tight text-slate-100">
+          <h2 className="text-2xl xl:text-3xl font-extrabold leading-tight tracking-tight text-slate-100">
             Empowering DSAs with Seamless <span className="text-sky-300">Direct Selling Tools</span>
           </h2>
           <p className="text-sm leading-relaxed text-slate-300 xl:text-base">

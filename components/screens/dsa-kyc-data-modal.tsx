@@ -647,8 +647,29 @@ function GstDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
     gstBasic.stateJurisdiction || gstBasic.state_jurisdiction || "";
   const centralJurisdiction =
     gstBasic.centralJurisdiction || gstBasic.central_jurisdiction || "";
+  const rawAddress =
+    gstBasic.primaryBusinessRegisteredAddress ||
+    gstBasic.principalPlaceOfBusiness ||
+    gstBasic.principal_place_of_business ||
+    gstBasic.registeredAddress ||
+    gstBasic.registered_address ||
+    gstBasic.address ||
+    "";
   const address =
-    gstBasic.primaryBusinessRegisteredAddress || gstBasic.address || "";
+    typeof rawAddress === "string"
+      ? rawAddress
+      : rawAddress && typeof rawAddress === "object"
+        ? [
+            rawAddress.buildingName || rawAddress.bno || rawAddress.building_name || "",
+            rawAddress.street || rawAddress.st || "",
+            rawAddress.location || rawAddress.loc || "",
+            rawAddress.district || rawAddress.dst || rawAddress.city || "",
+            rawAddress.state || rawAddress.stcd || "",
+            rawAddress.pinCode || rawAddress.pncd || rawAddress.pincode || "",
+          ]
+            .filter(Boolean)
+            .join(", ")
+        : "";
   const otherAddresses = Array.isArray(
     gstBasic.businessAddress?.otherBusinessAddressRegisteredAddress,
   )
@@ -679,6 +700,20 @@ function GstDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
       gstBasic.filing_status ||
       ""
     : "";
+
+  const hasTable2Data = Boolean(
+    stateJurisdiction ||
+      centralJurisdiction ||
+      address ||
+      otherAddresses ||
+      signatories ||
+      turnover ||
+      natureOfActivities ||
+      aadhaarAuth ||
+      einvoiceStatus ||
+      isFieldVisit ||
+      returnFilingCompliance,
+  );
 
   return (
     <div className="space-y-3">
@@ -712,59 +747,69 @@ function GstDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
       </TableWrapper>
 
       {/* Table 2: Jurisdiction, Address & Compliance Profile */}
-      <TableWrapper
-        title="2. Jurisdiction, Address & Compliance Profile"
-        subtitle="Locations, Signatories & Compliance"
-      >
-        <TableRow label="State Jurisdiction" value={stateJurisdiction} />
-        <TableRow label="Central Jurisdiction" value={centralJurisdiction} />
-        <TableRow label="Principal Registered Address" value={address} />
-        {otherAddresses && (
-          <TableRow
-            label="Additional Business Locations"
-            value={otherAddresses}
-          />
-        )}
-        {signatories && (
-          <TableRow label="Authorized Signatories" value={signatories} />
-        )}
-        {turnover && (
-          <TableRow
-            label={`Aggregate Turnover (${turnoverFY || "Latest FY"})`}
-            value={turnover}
-            badge="info"
-          />
-        )}
-        <TableRow
-          label="Nature of Business Activities"
-          value={natureOfActivities}
-        />
-        <TableRow
-          label="Aadhaar Authenticated"
-          value={
-            aadhaarAuth
-              ? `${aadhaarAuth}${aadhaarAuthDate ? ` (Date: ${aadhaarAuthDate})` : ""}`
-              : ""
-          }
-          badge={
-            aadhaarAuth === "Yes" ? "success" : aadhaarAuth ? "info" : undefined
-          }
-        />
-        <TableRow
-          label="E-Invoice System Status"
-          value={
-            einvoiceStatus === "Yes"
-              ? "Enabled / Mandate Active"
-              : einvoiceStatus
-          }
-        />
-        <TableRow label="Field Visit Conducted" value={isFieldVisit} />
-        <TableRow
-          label="Return Filing Compliance"
-          value={returnFilingCompliance}
-          badge={returnFilingCompliance ? "info" : undefined}
-        />
-      </TableWrapper>
+      {hasTable2Data && (
+        <TableWrapper
+          title="2. Jurisdiction, Address & Compliance Profile"
+          subtitle="Locations, Signatories & Compliance"
+        >
+          {stateJurisdiction && <TableRow label="State Jurisdiction" value={stateJurisdiction} />}
+          {centralJurisdiction && <TableRow label="Central Jurisdiction" value={centralJurisdiction} />}
+          {address && <TableRow label="Principal Registered Address" value={address} />}
+          {otherAddresses && (
+            <TableRow
+              label="Additional Business Locations"
+              value={otherAddresses}
+            />
+          )}
+          {signatories && (
+            <TableRow label="Authorized Signatories" value={signatories} />
+          )}
+          {turnover && (
+            <TableRow
+              label={`Aggregate Turnover (${turnoverFY || "Latest FY"})`}
+              value={turnover}
+              badge="info"
+            />
+          )}
+          {natureOfActivities && (
+            <TableRow
+              label="Nature of Business Activities"
+              value={natureOfActivities}
+            />
+          )}
+          {aadhaarAuth && (
+            <TableRow
+              label="Aadhaar Authenticated"
+              value={
+                aadhaarAuth
+                  ? `${aadhaarAuth}${aadhaarAuthDate ? ` (Date: ${aadhaarAuthDate})` : ""}`
+                  : ""
+              }
+              badge={
+                aadhaarAuth === "Yes" ? "success" : aadhaarAuth ? "info" : undefined
+              }
+            />
+          )}
+          {einvoiceStatus && (
+            <TableRow
+              label="E-Invoice System Status"
+              value={
+                einvoiceStatus === "Yes"
+                  ? "Enabled / Mandate Active"
+                  : einvoiceStatus
+              }
+            />
+          )}
+          {isFieldVisit && <TableRow label="Field Visit Conducted" value={isFieldVisit} />}
+          {returnFilingCompliance && (
+            <TableRow
+              label="Return Filing Compliance"
+              value={returnFilingCompliance}
+              badge="info"
+            />
+          )}
+        </TableWrapper>
+      )}
     </div>
   );
 }
