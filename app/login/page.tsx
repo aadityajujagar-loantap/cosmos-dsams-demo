@@ -197,6 +197,7 @@ export default function LoginPage() {
           token: response.token,
           user: response.user as AuthSession["user"],
           roles,
+          dsa: response.dsa,
         };
 
         if (!(await startAllowedSession(session))) return;

@@ -4,6 +4,7 @@ const TOKEN_KEY = "auth_token";
 const USER_KEY = "auth_user";
 const ROLES_KEY = "auth_roles";
 const PERMISSIONS_KEY = "auth_permissions";
+const DSA_KEY = "auth_dsa";
 
 export const authService = {
   getToken(): string | null {
@@ -15,6 +16,12 @@ export const authService = {
     if (typeof window === "undefined") return null;
     const stored = localStorage.getItem(USER_KEY);
     return stored ? (JSON.parse(stored) as User) : null;
+  },
+
+  getDsa(): any | null {
+    if (typeof window === "undefined") return null;
+    const stored = localStorage.getItem(DSA_KEY);
+    return stored ? JSON.parse(stored) : null;
   },
 
   getRoles(): string[] {
@@ -34,6 +41,10 @@ export const authService = {
     localStorage.setItem(TOKEN_KEY, session.token);
     localStorage.setItem(USER_KEY, JSON.stringify(session.user));
 
+    if (session.dsa) {
+      localStorage.setItem(DSA_KEY, JSON.stringify(session.dsa));
+    }
+
     const roleNames = session.roles.map((r) => r.name);
     localStorage.setItem(ROLES_KEY, JSON.stringify(roleNames));
 
@@ -49,6 +60,7 @@ export const authService = {
     localStorage.removeItem(USER_KEY);
     localStorage.removeItem(ROLES_KEY);
     localStorage.removeItem(PERMISSIONS_KEY);
+    localStorage.removeItem(DSA_KEY);
     localStorage.removeItem("cosmos_dsa_user");
   },
 

@@ -34,6 +34,14 @@ export interface RolesPermissionsData {
 export interface AuthSession {
   token: string;
   user: User;
+  dsa?: {
+    id?: number | null;
+    code?: string | null;
+    dsa_code?: string | null;
+    ticket_no?: string | null;
+    role_in_dsa?: string | null;
+    operational_status?: string | null;
+  } | null;
   roles: {
     id: number;
     name: string;
@@ -70,6 +78,8 @@ export interface SessionUser {
   email: string;
   mobile: string;
   code?: string;
+  dsa_code?: string;
+  ticket_no?: string;
   branchId?: number;
   branchName?: string;
 }
