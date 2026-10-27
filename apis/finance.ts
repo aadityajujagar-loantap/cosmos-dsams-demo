@@ -146,7 +146,7 @@ export const financeApi = {
   async updateDsaInvoiceStatus(
     id: number | string,
     data: {
-      status: "SUBMITTED" | "APPROVED" | "REJECTED" | "PAID";
+      status: "SUBMITTED" | "RECOMMENDED" | "APPROVED" | "REJECTED" | "PAID";
       remarks?: string;
       payment_reference?: string;
       payment_mode?: string;
