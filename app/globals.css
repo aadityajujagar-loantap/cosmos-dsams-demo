@@ -218,13 +218,12 @@ textarea {
 }
 
 .compact-dashboard .p-3 {
+  padding: 0.5rem;
+}
+
 /* Custom Animations */
-
-
 .animate-slide-down {
   animation: slide-down 0.2s ease-out forwards;
-}
-  padding: 0.5rem;
 }
 
 .compact-dashboard .px-8,
