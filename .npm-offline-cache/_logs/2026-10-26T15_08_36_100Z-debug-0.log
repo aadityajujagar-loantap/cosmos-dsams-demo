@@ -1,0 +1,45 @@
+0 verbose cli C:\Program Files\nodejs\node.exe C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js
+1 info using npm@11.17.0
+2 info using node@v24.19.0
+3 silly config load:file:C:\Program Files\nodejs\node_modules\npm\npmrc
+4 silly config load:file:C:\Users\Aaditya Jujagar\Desktop\cos-dsams\agent\.npmrc
+5 silly config load:file:C:\Users\Aaditya Jujagar\.npmrc
+6 silly config load:file:C:\Users\Aaditya Jujagar\AppData\Roaming\npm\etc\npmrc
+7 verbose title npm ci
+8 verbose argv "ci" "--offline" "--cache" "./.npm-offline-cache"
+9 verbose logfile logs-max:10 dir:C:\Users\Aaditya Jujagar\Desktop\cos-dsams\agent\.npm-offline-cache\_logs\2026-10-26T15_08_36_100Z-
+10 verbose logfile C:\Users\Aaditya Jujagar\Desktop\cos-dsams\agent\.npm-offline-cache\_logs\2026-10-26T15_08_36_100Z-debug-0.log
+11 silly logfile start cleaning logs, removing 1 files
+12 silly logfile done cleaning log files
+13 silly packumentCache heap:4496293888 maxSize:1124073472 maxEntrySize:562036736
+14 silly packumentCache heap:4496293888 maxSize:1124073472 maxEntrySize:562036736
+15 silly idealTree buildDeps
+16 http fetch GET 200 https://registry.npmjs.org/npm 757ms
+17 verbose stack Error: EPERM: operation not permitted, unlink 'C:\Users\Aaditya Jujagar\Desktop\cos-dsams\agent\node_modules\lightningcss-win32-x64-msvc\lightningcss.win32-x64-msvc.node'
+18 error code EPERM
+19 error syscall unlink
+20 error path C:\Users\Aaditya Jujagar\Desktop\cos-dsams\agent\node_modules\lightningcss-win32-x64-msvc\lightningcss.win32-x64-msvc.node
+21 error errno -4048
+22 error [Error: EPERM: operation not permitted, unlink 'C:\Users\Aaditya Jujagar\Desktop\cos-dsams\agent\node_modules\lightningcss-win32-x64-msvc\lightningcss.win32-x64-msvc.node'] {
+22 error   errno: -4048,
+22 error   code: 'EPERM',
+22 error   syscall: 'unlink',
+22 error   path: 'C:\\Users\\Aaditya Jujagar\\Desktop\\cos-dsams\\agent\\node_modules\\lightningcss-win32-x64-msvc\\lightningcss.win32-x64-msvc.node'
+22 error }
+23 error
+23 error The operation was rejected by your operating system.
+23 error It's possible that the file was already in use (by a text editor or antivirus), or that you lack permissions to access it.
+23 error
+23 error If you believe this might be a permissions issue, please double-check the permissions of the file and its containing directories, or try running the command again as root/Administrator.
+24 verbose cwd C:\Users\Aaditya Jujagar\Desktop\cos-dsams\agent
+25 verbose os Windows_NT 10.0.19045
+26 verbose node v24.19.0
+27 verbose npm  v11.17.0
+28 notice
+28 notice New major version of npm available! 11.17.0 -> 12.2.1
+28 notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+28 notice To update run: npm install -g npm@12.2.1
+28 notice  { force: true, Symbol(proc-log.meta): true }
+29 verbose exit -4048
+30 verbose code -4048
+31 error A complete log of this run can be found in: C:\Users\Aaditya Jujagar\Desktop\cos-dsams\agent\.npm-offline-cache\_logs\2026-10-26T15_08_36_100Z-debug-0.log
