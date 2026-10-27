@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "bundle:offline": "node scripts/make-offline-bundle.mjs",
-    "install:offline": "npm ci --offline --cache ./.npm-offline-cache"
+    "install:offline": "npm ci --offline --include=dev --cache ./.npm-offline-cache"
   },
   "dependencies": {
     "clsx": "^2.1.1",
