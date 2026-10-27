@@ -12,6 +12,7 @@ const STATUS_FILTERS: { label: string; value: string }[] = [
   { label: "All Statuses", value: "" },
   { label: "Draft", value: "DRAFT" },
   { label: "Submitted", value: "SUBMITTED" },
+  { label: "Recommended", value: "RECOMMENDED" },
   { label: "Approved", value: "APPROVED" },
   { label: "Paid", value: "PAID" },
   { label: "Rejected", value: "REJECTED" },

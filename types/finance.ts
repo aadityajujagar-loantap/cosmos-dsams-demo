@@ -52,9 +52,15 @@ export interface EligibleDisbursement {
   dsa_code: string;
   loan_product_id: number;
   product_name: string;
+  facility_type?: string;
+  sanctioned_amount?: number | string;
   loan_account_no: string;
   disbursed_amount: number | string;
   disbursement_date: string;
+  has_deviation?: boolean;
+  deviation_type?: string | null;
+  deviation_label?: string;
+  is_commission_eligible?: boolean;
 }
 
 export interface EligibleDisbursementsData {
@@ -72,8 +78,14 @@ export interface CommissionPreviewItem {
   dsa_id: number;
   dsa_code: string;
   disbursed_amount: number | string;
+  commission_basis?: "DISBURSED_AMOUNT" | "SANCTIONED_AMOUNT" | string;
+  commission_basis_amount?: number | string;
   disbursement_date: string;
-  rate_type: "PERCENTAGE" | "FIXED";
+  has_deviation?: boolean;
+  deviation_type?: string | null;
+  deviation_label?: string;
+  is_commission_eligible?: boolean;
+  rate_type: "PERCENTAGE" | "FIXED" | "INELIGIBLE_DEVIATION" | string;
   commission_rate: number | string;
   gross_commission: number | string;
   tds_rate: number | string;
@@ -140,11 +152,15 @@ export interface FinalizedCommission {
   };
 }
 
-export type DsaInvoiceStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "PAID";
+export type DsaInvoiceStatus = "DRAFT" | "SUBMITTED" | "RECOMMENDED" | "APPROVED" | "REJECTED" | "PAID";
 
 export interface DsaProfile {
   code: string;
   name: string;
+  constitution?: string;
+  pan?: string;
+  gst?: string;
+  bav_status?: string;
   account_number?: string;
   ifsc?: string;
   bank_name?: string;
@@ -194,7 +210,11 @@ export interface DsaInvoice {
   gross_amount: number | string;
   tds_amount: number | string;
   gst_amount: number | string;
+  cgst_amount?: number | string;
+  sgst_amount?: number | string;
   net_payable_amount: number | string;
+  is_rcm?: boolean;
+  dsa_category?: string;
   status: DsaInvoiceStatus;
   payment_reference: string | null;
   payment_mode?: string | null;
