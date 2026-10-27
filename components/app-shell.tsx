@@ -150,7 +150,9 @@ function isPathAllowedForRole(role: string, pathname: string) {
       pathname === "/leads" ||
       pathname.startsWith("/leads/") ||
       pathname === "/applications" ||
-      pathname.startsWith("/applications/")
+      pathname.startsWith("/applications/") ||
+      pathname === "/finance/invoices" ||
+      pathname === "/finance/commissions"
     );
   }
 
@@ -163,7 +165,9 @@ function isPathAllowedForRole(role: string, pathname: string) {
       pathname === "/leads" ||
       pathname.startsWith("/leads/") ||
       pathname === "/applications" ||
-      pathname.startsWith("/applications/")
+      pathname.startsWith("/applications/") ||
+      pathname === "/finance/invoices" ||
+      pathname === "/finance/commissions"
     );
   }
 
@@ -428,6 +432,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications & Leads" }],
           label: "Sourcing",
         },
+        {
+          items: [
+            { href: "/finance/invoices", icon: FileText, label: "Invoices" },
+            { href: "/finance/commissions", icon: Wallet, label: "Commissions" },
+          ],
+          label: "Finance",
+        },
       ];
     } else if (currentUser.role === "Branch User" || currentUser.role === "Maker") {
       return [
@@ -444,6 +455,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         {
           items: [{ href: "/applications", icon: ClipboardCheck, label: "Applications & Leads" }],
           label: "Sourcing",
+        },
+        {
+          items: [
+            { href: "/finance/invoices", icon: FileText, label: "Invoices" },
+            { href: "/finance/commissions", icon: Wallet, label: "Commissions" },
+          ],
+          label: "Finance",
         },
       ];
     } else if (currentUser.role === "DSA Partner") {
