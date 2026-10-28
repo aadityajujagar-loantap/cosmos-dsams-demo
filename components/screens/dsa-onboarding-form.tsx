@@ -2216,8 +2216,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           return false;
         }
       } else {
-        if (pan && !panRegex.test(pan.trim())) {
-          toast({ title: "Invalid PAN", description: "If provided, PAN must be a valid 10-character PAN format.", variant: "warning" });
+        // Proprietorship: individual PAN is required (proprietor is a natural person)
+        if (!pan || !panRegex.test(pan.trim())) {
+          toast({ title: "Proprietor PAN Required", description: "Proprietor individual PAN (e.g. ABCDE1234F) is mandatory for Sole Proprietorship.", variant: "warning" });
           return false;
         }
       }
@@ -3922,7 +3923,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         <div className="flex flex-col">
                           <div className="h-5 flex items-center">
                             <Label htmlFor="proprietor_pan_manual" className="text-sm font-bold text-slate-700 leading-none">
-                              Proprietor Individual PAN Number (Optional)
+                              Proprietor Individual PAN Number *
                             </Label>
                           </div>
                           <Input
