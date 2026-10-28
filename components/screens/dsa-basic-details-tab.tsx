@@ -283,6 +283,37 @@ export function isFieldChanged(field: string, formValue: any, dsa: any): boolean
   return norm(formValue) !== norm(dsaVal);
 }
 
+/** Normalizes any variation of constitution to standard canonical key */
+export function normalizeConstitution(val?: string | null): string {
+  if (!val) return "";
+  const s = String(val).trim();
+  const lower = s.toLowerCase();
+  if (lower.includes("propriet")) return "Proprietorship";
+  if (lower.includes("pvt") || lower.includes("private")) return "Pvt Ltd";
+  if (lower.includes("public")) return "Public Ltd";
+  if (lower.includes("llp") || lower.includes("limited liability")) return "LLP";
+  if (lower.includes("partner")) return "Partnership";
+  if (lower.includes("co-op") || lower.includes("society")) return "Co-op Society";
+  if (lower.includes("trust")) return "Trust";
+  return s;
+}
+
+/** Returns the display label corresponding to constitution */
+export function getConstitutionLabel(val?: string | null): string {
+  if (!val) return "—";
+  const norm = normalizeConstitution(val);
+  const map: Record<string, string> = {
+    Proprietorship: "Proprietorship / Sole Proprietorship",
+    Partnership: "Partnership Firm",
+    LLP: "Limited Liability Partnership (LLP)",
+    "Pvt Ltd": "Private Limited Company",
+    "Public Ltd": "Public Limited Company",
+    Trust: "Trust",
+    "Co-op Society": "Co-operative Society",
+  };
+  return map[norm] || val || "—";
+}
+
 function SupportingDocInput({
   field,
   file,
@@ -479,8 +510,8 @@ export function DsaBasicDetailsTab({
           last_name: dsa.last_name || "",
           entity_name: dsa.entity_name || dsa.name || "",
           contact_person: dsa.contact_person || "",
-          constitution: dsa.constitution || "",
-          business_type: dsa.business_type || "",
+          constitution: normalizeConstitution(dsa.constitution || dsa.business_type || ""),
+          business_type: dsa.business_type || normalizeConstitution(dsa.constitution || dsa.business_type || ""),
           nature_of_business: dsa.nature_of_business || "",
           registration_no_llpin_cin: dsa.registration_no_llpin_cin || "",
           date_of_birth: dsa.date_of_birth
@@ -775,6 +806,9 @@ export function DsaBasicDetailsTab({
           payload.contact_person = [payload.first_name, payload.last_name].filter(Boolean).join(" ");
         } else {
           payload.name = payload.entity_name;
+        }
+        if (payload.constitution) {
+          payload.business_type = payload.constitution;
         }
       }
 
@@ -1129,7 +1163,7 @@ export function DsaBasicDetailsTab({
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
                 {(() => {
-                  const isSoleProp = Boolean((formData.constitution || dsa?.constitution || "").toLowerCase().includes("proprietor"));
+                  const isSoleProp = Boolean((formData.constitution || dsa?.constitution || dsa?.business_type || "").toLowerCase().includes("proprietor"));
                   return (
                     <div className={`rounded-md border p-3 shadow-2xs sm:col-span-2 ${isSoleProp ? "border-slate-200 bg-white" : "border-slate-200 bg-slate-50/70"}`}>
                       <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Entity / Firm Name</Label>
@@ -1158,16 +1192,26 @@ export function DsaBasicDetailsTab({
                 <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
                   <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Legal Constitution</Label>
                   <Select
-                    value={formData.constitution || ""}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, constitution: e.target.value }))}
+                    value={normalizeConstitution(formData.constitution || dsa?.constitution || dsa?.business_type || "")}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormData((prev) => ({ ...prev, constitution: val, business_type: val }));
+                    }}
                   >
                     <option value="">Select Constitution</option>
-                    <option value="Private Limited">Private Limited Company</option>
-                    <option value="Public Limited">Public Limited Company</option>
-                    <option value="Limited Liability Partnership (LLP)">Limited Liability Partnership (LLP)</option>
-                    <option value="Partnership Firm">Partnership Firm</option>
-                    <option value="Sole Proprietorship">Sole Proprietorship</option>
-                    <option value="Trust / Society">Trust / Society</option>
+                    <option value="Proprietorship">Proprietorship / Sole Proprietorship</option>
+                    <option value="Partnership">Partnership Firm</option>
+                    <option value="LLP">Limited Liability Partnership (LLP)</option>
+                    <option value="Pvt Ltd">Private Limited Company</option>
+                    <option value="Public Ltd">Public Limited Company</option>
+                    <option value="Trust">Trust</option>
+                    <option value="Co-op Society">Co-operative Society</option>
+                    {formData.constitution &&
+                      !["Proprietorship", "Partnership", "LLP", "Pvt Ltd", "Public Ltd", "Trust", "Co-op Society"].includes(
+                        normalizeConstitution(formData.constitution)
+                      ) && (
+                        <option value={formData.constitution}>{formData.constitution}</option>
+                      )}
                   </Select>
                 </div>
 
@@ -1240,7 +1284,7 @@ export function DsaBasicDetailsTab({
               label="Legal Constitution"
               value={
                 isEntity
-                  ? (dsa.business_type || dsa.constitution || "—")
+                  ? getConstitutionLabel(dsa.constitution || dsa.business_type)
                   : "Individual"
               }
             />
