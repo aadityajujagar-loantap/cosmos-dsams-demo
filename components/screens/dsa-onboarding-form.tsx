@@ -851,10 +851,11 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   const resolvedAge = derivedAge || age;
   const isAgeLocked = Boolean(derivedAge);
 
-  const isFirstNameLocked = Boolean(panVerified && (panVerificationData?.panAutofilledFields?.firstName || firstName));
-  const isLastNameLocked = Boolean(panVerified && (panVerificationData?.panAutofilledFields?.lastName || lastName));
-  const isDobLocked = Boolean(panVerified && (panVerificationData?.panAutofilledFields?.dob || dateOfBirth));
-  const isEntityNameLocked = Boolean(panVerified && (panVerificationData?.panAutofilledFields?.entityName || entityName));
+  const isProprietorshipEntity = dsaType === "ENTITY" && Boolean(constitution && constitution.toLowerCase().includes("proprietor"));
+  const isFirstNameLocked = Boolean(!isProprietorshipEntity && panVerified && (panVerificationData?.panAutofilledFields?.firstName || firstName));
+  const isLastNameLocked = Boolean(!isProprietorshipEntity && panVerified && (panVerificationData?.panAutofilledFields?.lastName || lastName));
+  const isDobLocked = Boolean(!isProprietorshipEntity && panVerified && (panVerificationData?.panAutofilledFields?.dob || dateOfBirth));
+  const isEntityNameLocked = Boolean(!isProprietorshipEntity && panVerified && (panVerificationData?.panAutofilledFields?.entityName || entityName));
 
   // Mirror DOB into age. Clearing DOB leaves a manual age editable; the derived value
   // always takes precedence so the two can never disagree.
@@ -2207,10 +2208,18 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         toast({ title: "OTP Verification Required", description: "Please verify mobile number before proceeding.", variant: "warning" });
         return false;
       }
+      const isProprietorship = dsaType === "ENTITY" && Boolean(constitution && constitution.toLowerCase().includes("proprietor"));
       const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/i;
-      if (!pan || !panRegex.test(pan.trim())) {
-        toast({ title: "Valid PAN Required", description: "Valid 10-character PAN format (e.g. ABCDE1234F) is mandatory.", variant: "warning" });
-        return false;
+      if (!isProprietorship) {
+        if (!pan || !panRegex.test(pan.trim())) {
+          toast({ title: "Valid PAN Required", description: "Valid 10-character PAN format (e.g. ABCDE1234F) is mandatory.", variant: "warning" });
+          return false;
+        }
+      } else {
+        if (pan && !panRegex.test(pan.trim())) {
+          toast({ title: "Invalid PAN", description: "If provided, PAN must be a valid 10-character PAN format.", variant: "warning" });
+          return false;
+        }
       }
       const resolvedEmail = email.trim() || selfEmail.trim();
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -2506,37 +2515,39 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       return;
     }
     if (step === 1) {
-      try {
-        const dupCheck: any = await adminApi.checkDsaDuplicate({
-          pan: pan.trim().toUpperCase(),
-          mobile: mobile.trim() || undefined,
-          email: (selfEmail.trim() || email.trim()) || undefined,
-          gst: gstApplicable && gstNumber.trim() ? gstNumber.trim().toUpperCase() : undefined,
-          exclude_id: createdDsaId || undefined,
-        }).catch((e: any) => e?.data ?? e);
+      if (pan.trim()) {
+        try {
+          const dupCheck: any = await adminApi.checkDsaDuplicate({
+            pan: pan.trim().toUpperCase(),
+            mobile: mobile.trim() || undefined,
+            email: (selfEmail.trim() || email.trim()) || undefined,
+            gst: gstApplicable && gstNumber.trim() ? gstNumber.trim().toUpperCase() : undefined,
+            exclude_id: createdDsaId || undefined,
+          }).catch((e: any) => e?.data ?? e);
 
-        if (
-          dupCheck?.status === false ||
-          dupCheck?.exists === true ||
-          dupCheck?.message?.includes("already exists") ||
-          dupCheck?.error?.includes("already exists")
-        ) {
-          toast({
-            title: "Submission Failed",
-            description: "A DSA record with this PAN, Email, or Mobile already exists.",
-            variant: "destructive",
-          });
-          return;
-        }
-      } catch (dupErr: any) {
-        const dupMsg = String(dupErr?.data?.message || dupErr?.message || "");
-        if (dupMsg.toLowerCase().includes("already exists")) {
-          toast({
-            title: "Submission Failed",
-            description: "A DSA record with this PAN, Email, or Mobile already exists.",
-            variant: "destructive",
-          });
-          return;
+          if (
+            dupCheck?.status === false ||
+            dupCheck?.exists === true ||
+            dupCheck?.message?.includes("already exists") ||
+            dupCheck?.error?.includes("already exists")
+          ) {
+            toast({
+              title: "Submission Failed",
+              description: "A DSA record with this PAN, Email, or Mobile already exists.",
+              variant: "destructive",
+            });
+            return;
+          }
+        } catch (dupErr: any) {
+          const dupMsg = String(dupErr?.data?.message || dupErr?.message || "");
+          if (dupMsg.toLowerCase().includes("already exists")) {
+            toast({
+              title: "Submission Failed",
+              description: "A DSA record with this PAN, Email, or Mobile already exists.",
+              variant: "destructive",
+            });
+            return;
+          }
         }
       }
     }
@@ -3130,6 +3141,41 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                 </div>
               </div>
 
+              {/* Entity Constitution Selector on First Page */}
+              {dsaType === "ENTITY" && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-5 space-y-3 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <Label htmlFor="constitution" className="text-sm font-bold text-slate-800 uppercase tracking-wider block">
+                        Constitution of Business *
+                      </Label>
+                    </div>
+                    <Select
+                      id="constitution"
+                      value={constitution}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setConstitution(val);
+                        if (val.toLowerCase().includes("proprietor")) {
+                          setPanVerified(false);
+                          setPanVerificationData(null);
+                        }
+                      }}
+                      className="mt-1 sm:mt-0 h-9 bg-white text-sm w-full sm:w-80"
+                    >
+                      <option value="">Select Constitution</option>
+                      <option value="Proprietorship">Proprietorship / Sole Proprietorship</option>
+                      <option value="Partnership">Partnership Firm</option>
+                      <option value="LLP">Limited Liability Partnership (LLP)</option>
+                      <option value="Pvt Ltd">Private Limited Company</option>
+                      <option value="Public Ltd">Public Limited Company</option>
+                      <option value="Trust">Trust</option>
+                      <option value="Co-op Society">Co-operative Society</option>
+                    </Select>
+                  </div>
+                </div>
+              )}
+
 
 
               {/* Branch Selection & Contact Verification (Public Self-Onboarding) */}
@@ -3255,12 +3301,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           ? "Resend to Mobile & Email"
                           : "Send OTP (SMS & Email)"}
                       </Button>
-
-                      <span className="text-[11px] text-slate-500">
-                        {otpSent
-                          ? "The same OTP is valid from either channel."
-                          : "Sends a single 6-digit OTP code to both your mobile text message and email address."}
-                      </span>
                     </div>
                   )}
 
@@ -3360,80 +3400,82 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
               )}
 
               {/* Instant Identity Verification (PAN API) */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-5 space-y-4 shadow-sm">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl flex items-center justify-center">
-                      <CreditCard className="h-4 w-4" />
+              {!isProprietorshipEntity && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-5 space-y-4 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl flex items-center justify-center">
+                        <CreditCard className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+                          PAN Verification
+                        </h4>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-                        PAN Verification
-                      </h4>
-                    </div>
+                    {panVerified && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800 border border-emerald-300">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                        PAN Verified
+                      </span>
+                    )}
                   </div>
-                  {panVerified && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800 border border-emerald-300">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                      PAN Verified
-                    </span>
-                  )}
-                </div>
 
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 max-w-xl">
-                  <div className="flex-1 flex flex-col">
-                    <div className="h-5 flex items-center">
-                      <Label htmlFor="pan_number_top" className="text-sm font-bold text-slate-700 leading-none">
-                        {dsaType === "INDIVIDUAL" ? "Individual PAN Number *" : "Entity PAN Number *"}
-                      </Label>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 max-w-xl">
+                    <div className="flex-1 flex flex-col">
+                      <div className="h-5 flex items-center">
+                        <Label htmlFor="pan_number_top" className="text-sm font-bold text-slate-700 leading-none">
+                          {dsaType === "INDIVIDUAL" ? "Individual PAN Number *" : "Entity PAN Number *"}
+                        </Label>
+                      </div>
+                      <Input
+                        id="pan_number_top"
+                        value={pan}
+                        disabled={panVerified}
+                        tabIndex={panVerified ? -1 : 0}
+                        onChange={(e) => {
+                          setPan(e.target.value.toUpperCase().slice(0, 10));
+                          setPanVerified(false);
+                          setPanVerificationData(null);
+                        }}
+                        placeholder="ABCDE1234F"
+                        className={cn(
+                          "mt-1.5 font-mono uppercase text-sm tracking-wider h-9 bg-white cursor-text focus:ring-2 focus:ring-blue-100 focus:border-blue-500",
+                          panVerified && "disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed pointer-events-none select-none focus:ring-0 focus:outline-none focus:border-slate-200"
+                        )}
+                        maxLength={10}
+                        required
+                      />
                     </div>
-                    <Input
-                      id="pan_number_top"
-                      value={pan}
-                      disabled={panVerified}
+                    <Button
+                      type="button"
+                      onClick={handleVerifyPan}
+                      disabled={isVerifyingPan || pan.trim().length !== 10 || panVerified}
                       tabIndex={panVerified ? -1 : 0}
-                      onChange={(e) => {
-                        setPan(e.target.value.toUpperCase().slice(0, 10));
-                        setPanVerified(false);
-                        setPanVerificationData(null);
-                      }}
-                      placeholder="ABCDE1234F"
                       className={cn(
-                        "mt-1.5 font-mono uppercase text-sm tracking-wider h-9 bg-white cursor-text focus:ring-2 focus:ring-blue-100 focus:border-blue-500",
-                        panVerified && "disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed pointer-events-none select-none focus:ring-0 focus:outline-none focus:border-slate-200"
+                        "text-xs font-semibold whitespace-nowrap h-9 px-4 shrink-0 flex items-center justify-center gap-1.5 transition-all shadow-sm",
+                        panVerified
+                          ? "bg-emerald-600 text-white opacity-90 cursor-default pointer-events-none select-none focus:ring-0 focus:outline-none"
+                          : "bg-blue-600 hover:bg-blue-700 text-white"
                       )}
-                      maxLength={10}
-                      required
-                    />
+                    >
+                      {isVerifyingPan ? (
+                        <span className="flex items-center gap-1.5">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Verifying PAN...
+                        </span>
+                      ) : panVerified ? (
+                        <span className="flex items-center gap-1.5">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Verified
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1.5">
+                          <Sparkles className="h-3.5 w-3.5" /> Verify & Auto-Fill
+                        </span>
+                      )}
+                    </Button>
                   </div>
-                  <Button
-                    type="button"
-                    onClick={handleVerifyPan}
-                    disabled={isVerifyingPan || pan.trim().length !== 10 || panVerified}
-                    tabIndex={panVerified ? -1 : 0}
-                    className={cn(
-                      "text-xs font-semibold whitespace-nowrap h-9 px-4 shrink-0 flex items-center justify-center gap-1.5 transition-all shadow-sm",
-                      panVerified
-                        ? "bg-emerald-600 text-white opacity-90 cursor-default pointer-events-none select-none focus:ring-0 focus:outline-none"
-                        : "bg-blue-600 hover:bg-blue-700 text-white"
-                    )}
-                  >
-                    {isVerifyingPan ? (
-                      <span className="flex items-center gap-1.5">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Verifying PAN...
-                      </span>
-                    ) : panVerified ? (
-                      <span className="flex items-center gap-1.5">
-                        <CheckCircle2 className="h-3.5 w-3.5" /> Verified
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1.5">
-                        <Sparkles className="h-3.5 w-3.5" /> Verify & Auto-Fill
-                      </span>
-                    )}
-                  </Button>
                 </div>
-              </div>
+              )}
 
               {/* INDIVIDUAL FORM FIELDS */}
               {dsaType === "INDIVIDUAL" && (
@@ -3685,7 +3727,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                 {/* GST & Business Details Block */}
                 <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-5 space-y-4 shadow-sm">
                   {/* GST Registration Applicable */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-200/80">
+                  <div className="flex flex-wrap items-center gap-4 pb-3 border-b border-slate-200/80">
                     <div>
                       <span className="text-sm font-bold text-slate-800">GST Registration Applicable?</span>
                     </div>
@@ -3849,9 +3891,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
                             Corporate / Business Entity Details
                           </h4>
-                          <p className="text-[11px] text-slate-500">
-                            Organization constitution, registration and key stakeholder information
-                          </p>
                         </div>
                       </div>
                     </div>
@@ -3859,7 +3898,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="flex flex-col">
                         <div className="h-5 flex items-center">
-                          <Label htmlFor="entity_name" className="text-sm font-bold text-slate-700 leading-none">Entity Legal Name *</Label>
+                          <Label htmlFor="entity_name" className="text-sm font-bold text-slate-700 leading-none">
+                            {isProprietorshipEntity ? "Entity / Firm Name *" : "Entity Legal Name *"}
+                          </Label>
                         </div>
                         <Input
                           id="entity_name"
@@ -3871,33 +3912,29 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           readOnly={isEntityNameLocked}
                           aria-readonly={isEntityNameLocked}
                           title={isEntityNameLocked ? "Verified from PAN record and locked." : undefined}
-                          placeholder="e.g. Apex Financial Solutions Pvt Ltd"
+                          placeholder={isProprietorshipEntity ? "e.g. Apex Financial Enterprises" : "e.g. Apex Financial Solutions Pvt Ltd"}
                           className={`mt-1.5 h-9 text-sm ${isEntityNameLocked ? "bg-slate-100 text-slate-600 cursor-not-allowed" : "bg-white"}`}
                         />
                       </div>
-                      <div className="flex flex-col">
-                        <div className="h-5 flex items-center">
-                          <Label htmlFor="constitution" className="text-sm font-bold text-slate-700 leading-none">Constitution of Business *</Label>
-                        </div>
-                        <Select
-                          id="constitution"
-                          value={constitution}
-                          onChange={(e) => setConstitution(e.target.value)}
-                          className="mt-1.5 h-9 bg-white text-sm"
-                        >
-                          <option value="">Select Constitution</option>
-                          <option value="Proprietorship">Proprietorship</option>
-                          <option value="Partnership">Partnership Firm</option>
-                          <option value="LLP">Limited Liability Partnership (LLP)</option>
-                          <option value="Pvt Ltd">Private Limited Company</option>
-                          <option value="Public Ltd">Public Limited Company</option>
-                          <option value="Trust">Trust</option>
-                          <option value="Co-op Society">Co-operative Society</option>
-                        </Select>
-                      </div>
-                    </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {isProprietorshipEntity && (
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label htmlFor="proprietor_pan_manual" className="text-sm font-bold text-slate-700 leading-none">
+                              Proprietor Individual PAN Number (Optional)
+                            </Label>
+                          </div>
+                          <Input
+                            id="proprietor_pan_manual"
+                            value={pan}
+                            onChange={(e) => setPan(e.target.value.toUpperCase().slice(0, 10))}
+                            placeholder="ABCDE1234F"
+                            maxLength={10}
+                            className="mt-1.5 h-9 text-sm font-mono uppercase bg-white"
+                          />
+                        </div>
+                      )}
+
                       <div className="flex flex-col">
                         <div className="h-5 flex items-center">
                           <Label htmlFor="nature_of_business" className="text-sm font-bold text-slate-700 leading-none">Nature of Business *</Label>
@@ -3910,6 +3947,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           className="mt-1.5 h-9 bg-white text-sm"
                         />
                       </div>
+
                       <div className="flex flex-col">
                         <div className="h-5 flex items-center">
                           <Label htmlFor="contact_person" className="text-sm font-bold text-slate-700 leading-none">Key Contact Person Name *</Label>
@@ -3922,9 +3960,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           className="mt-1.5 h-9 bg-white text-sm"
                         />
                       </div>
-                    </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {mode === "branch" && (
                         <div className="flex flex-col">
                           <div className="h-5 flex items-center">
@@ -3940,6 +3976,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           />
                         </div>
                       )}
+
                       <div className="flex flex-col">
                         <div className="h-5 flex items-center">
                           <Label htmlFor="entity_email" className="text-sm font-bold text-slate-700 leading-none">Official Contact Email *</Label>
@@ -3959,7 +3996,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   {/* GST & Business Details Block */}
                 <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-5 space-y-4 shadow-sm">
                   {/* GST Registration Applicable */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-200/80">
+                  <div className="flex flex-wrap items-center gap-4 pb-3 border-b border-slate-200/80">
                     <div>
                       <span className="text-sm font-bold text-slate-800">GST Registration Applicable?</span>
                     </div>
