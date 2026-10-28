@@ -1128,16 +1128,22 @@ export function DsaBasicDetailsTab({
               </div>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3 shadow-2xs sm:col-span-2">
-                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Entity / Firm Name</Label>
-                  <Input
-                    value={formData.entity_name || ""}
-                    disabled
-                    readOnly
-                    className="bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200"
-                    placeholder="Registered business or firm name"
-                  />
-                </div>
+                {(() => {
+                  const isSoleProp = Boolean((formData.constitution || dsa?.constitution || "").toLowerCase().includes("proprietor"));
+                  return (
+                    <div className={`rounded-md border p-3 shadow-2xs sm:col-span-2 ${isSoleProp ? "border-slate-200 bg-white" : "border-slate-200 bg-slate-50/70"}`}>
+                      <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Entity / Firm Name</Label>
+                      <Input
+                        value={formData.entity_name || ""}
+                        disabled={!isSoleProp}
+                        readOnly={!isSoleProp}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, entity_name: e.target.value }))}
+                        className={isSoleProp ? "bg-white text-slate-800 border-slate-200" : "bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200"}
+                        placeholder="Registered business or firm name"
+                      />
+                    </div>
+                  );
+                })()}
 
                 <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
                   <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Primary Contact Person *</Label>

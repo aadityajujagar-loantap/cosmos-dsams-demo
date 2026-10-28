@@ -3704,18 +3704,14 @@ export function DsaProfilePage({ id }: { id: string }) {
   );
 
   const DEVIATION_AUTHORITY_ROLES = [
-    { level: 3, role_name: "Sub-Region Head", authority_title: "1st Recommending Authority", badgeClass: "bg-blue-50 text-blue-700 border-blue-200" },
-    { level: 4, role_name: "DGM", authority_title: "2nd Recommending Authority", badgeClass: "bg-indigo-50 text-indigo-700 border-indigo-200" },
-    { level: 5, role_name: "Region Head", authority_title: "3rd Recommending Authority", badgeClass: "bg-purple-50 text-purple-700 border-purple-200" },
-    { level: 7, role_name: "HO Credit Head", authority_title: "Approving Authority", badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+    { level: 1, role_name: "Maker", authority_title: "Sourcing & Maker Authority", badgeClass: "bg-blue-50 text-blue-700 border-blue-200" },
+    { level: 2, role_name: "Checker", authority_title: "Verification & Due Diligence Authority", badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200" },
   ] as const;
 
   const canUserEditLevelRemark = (lvl: number): boolean => {
     if (isAdminOrSuperAdmin) return true;
-    if (lvl === 3 && isSubRegionRole) return true;
-    if (lvl === 4 && isDgmRole) return true;
-    if (lvl === 5 && isRegionHeadRole) return true;
-    if (lvl === 7 && isHoHeadRole) return true;
+    if (lvl === 1 && (isMakerUser || isMakerLevel)) return true;
+    if (lvl === 2 && (isCheckerRole || isCheckerLevel || isCheckerUserOrLevel)) return true;
     return false;
   };
 
@@ -3753,7 +3749,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                 : null;
               if (saved?.remark !== undefined && saved?.remark !== null) {
                 next[stateKey] = saved.remark || "";
-              } else if (lvl === 3 && dev.remark && !Array.isArray(dev.remarks_by_level)) {
+              } else if (lvl === 2 && dev.remark && !Array.isArray(dev.remarks_by_level)) {
                 next[stateKey] = dev.remark || "";
               } else {
                 next[stateKey] = "";
@@ -7286,7 +7282,7 @@ const resolveStageStatus = (
                         {DEVIATION_AUTHORITY_ROLES.map(({ level: lvl, role_name }) => {
                           const remMatch = Array.isArray(dev.remarks_by_level)
                             ? dev.remarks_by_level.find((r: any) => Number(r.level) === lvl)
-                            : (lvl === 3 && dev.remark ? { remark: dev.remark, user_name: "Sub-Region Staff / Authority", date: "" } : null);
+                            : (lvl === 2 && dev.remark ? { remark: dev.remark, user_name: "Checker / Verification Authority", date: "" } : null);
 
                           return (
                             <div key={lvl} className="leading-relaxed">
@@ -12619,7 +12615,7 @@ const resolveStageStatus = (
 
                             const savedRecord = Array.isArray(dev.remarks_by_level)
                               ? dev.remarks_by_level.find((r: any) => Number(r.level) === lvl)
-                              : (lvl === 3 && dev.remark ? { remark: dev.remark, user_name: "Sub-Region Staff / Authority", date: "" } : null);
+                              : (lvl === 2 && dev.remark ? { remark: dev.remark, user_name: "Checker / Verification Authority", date: "" } : null);
 
                             return (
                               <tr key={lvl} className="align-top hover:bg-slate-50/50">
