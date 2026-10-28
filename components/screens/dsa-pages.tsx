@@ -3704,13 +3704,11 @@ export function DsaProfilePage({ id }: { id: string }) {
   );
 
   const DEVIATION_AUTHORITY_ROLES = [
-    { level: 1, role_name: "Maker", authority_title: "Sourcing & Maker Authority", badgeClass: "bg-blue-50 text-blue-700 border-blue-200" },
     { level: 2, role_name: "Checker", authority_title: "Verification & Due Diligence Authority", badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200" },
   ] as const;
 
   const canUserEditLevelRemark = (lvl: number): boolean => {
     if (isAdminOrSuperAdmin) return true;
-    if (lvl === 1 && (isMakerUser || isMakerLevel)) return true;
     if (lvl === 2 && (isCheckerRole || isCheckerLevel || isCheckerUserOrLevel)) return true;
     return false;
   };
