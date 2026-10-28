@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Button, Modal, Input, Label, Select } from "@/components/ui/primitives";
 import type { BranchOption } from "@/types/dsa";
+import { normalizeConstitution } from "./dsa-basic-details-tab";
 
 export type DetailBlockKey =
   | "sourcing"
@@ -77,8 +78,8 @@ export function DsaDetailEditModal({
           last_name: dsa.last_name || "",
           entity_name: dsa.entity_name || dsa.name || "",
           contact_person: dsa.contact_person || "",
-          constitution: dsa.constitution || "",
-          business_type: dsa.business_type || "",
+          constitution: normalizeConstitution(dsa.constitution || dsa.business_type || ""),
+          business_type: dsa.business_type || normalizeConstitution(dsa.constitution || dsa.business_type || ""),
           nature_of_business: dsa.nature_of_business || "",
           registration_no_llpin_cin: dsa.registration_no_llpin_cin || "",
           date_of_birth: dsa.date_of_birth ? dsa.date_of_birth.substring(0, 10) : "",
@@ -649,17 +650,27 @@ export function DsaDetailEditModal({
                 <Label htmlFor="constitution">Legal Constitution</Label>
                 <Select
                   id="constitution"
-                  value={formData.constitution || ""}
-                  onChange={(e) => handleChange("constitution", e.target.value)}
+                  value={normalizeConstitution(formData.constitution || dsa?.constitution || dsa?.business_type || "")}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    handleChange("constitution", val);
+                    handleChange("business_type", val);
+                  }}
                 >
                   <option value="">Select Constitution</option>
-                  <option value="Individual / Sole Proprietorship">Individual / Sole Proprietorship</option>
-                  <option value="Sole Proprietorship">Sole Proprietorship</option>
-                  <option value="Partnership">Partnership</option>
-                  <option value="Private Limited">Private Limited</option>
-                  <option value="Limited Liability Partnership (LLP)">Limited Liability Partnership (LLP)</option>
-                  <option value="Public Limited">Public Limited</option>
-                  <option value="Trust / Society">Trust / Society</option>
+                  <option value="Proprietorship">Proprietorship / Sole Proprietorship</option>
+                  <option value="Partnership">Partnership Firm</option>
+                  <option value="LLP">Limited Liability Partnership (LLP)</option>
+                  <option value="Pvt Ltd">Private Limited Company</option>
+                  <option value="Public Ltd">Public Limited Company</option>
+                  <option value="Trust">Trust</option>
+                  <option value="Co-op Society">Co-operative Society</option>
+                  {formData.constitution &&
+                    !["Proprietorship", "Partnership", "LLP", "Pvt Ltd", "Public Ltd", "Trust", "Co-op Society"].includes(
+                      normalizeConstitution(formData.constitution)
+                    ) && (
+                      <option value={formData.constitution}>{formData.constitution}</option>
+                    )}
                 </Select>
               </div>
               <div>
