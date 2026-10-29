@@ -3500,7 +3500,7 @@ export function DsaProfilePage({ id }: { id: string }) {
     (
       key: string,
       codePatterns: string[],
-      includeKycTable = true,
+      includeKycTable = false,
       exactTypes?: string[],
     ) => {
       // 1. In-session explicit failure takes absolute precedence
@@ -3519,35 +3519,44 @@ export function DsaProfilePage({ id }: { id: string }) {
         },
       );
 
-      const inDsaVerifs = vers.some((v: any) => {
+      const matching = vers.filter((v: any) => {
         const c = String(v.verification_code || v.type || "").toUpperCase();
-        const st = String(v.execution_status || v.status || "").toUpperCase();
+        return exactTypes
+          ? exactTypes.some((x) => c === x.toUpperCase())
+          : codePatterns.some((p) => c.includes(p.toUpperCase()));
+      });
+
+      if (matching.length > 0) {
+        const latest = [...matching].sort((a, b) => {
+          const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return timeB - timeA;
+        })[0];
+
+        const st = String(latest.execution_status || latest.status || "").toUpperCase();
         const isSuccess =
-          Boolean(v.is_success) ||
+          Boolean(latest.is_success) ||
           st === "SUCCESS" ||
           st === "COMPLETED" ||
           st === "PASSED" ||
           st === "VERIFIED";
         const isFailed =
-          v.is_success === false ||
+          latest.is_success === false ||
           st === "FAILED" ||
           st === "ERROR" ||
           st === "REJECTED";
-        return (
-          codePatterns.some((p) => c.includes(p.toUpperCase())) &&
-          isSuccess &&
-          !isFailed
-        );
-      });
-      if (inDsaVerifs) return true;
+        if (isSuccess && !isFailed) return true;
+        if (isFailed) return false;
+      }
 
-      // 4. Also check KycVerification records for this specific DSA
+      // 4. Also check KycVerification records for this specific DSA (PAN only)
       if (!includeKycTable) return false;
 
       const inDbList = kycVerificationsList.some((v: any) => {
         const t = String(v.type || v.verification_type || "").toUpperCase();
         const st = String(v.status || v.execution_status || "").toUpperCase();
         const isSuccess =
+          Boolean(v.is_success) ||
           st === "SUCCESS" ||
           st === "COMPLETED" ||
           st === "PASSED" ||
@@ -3562,9 +3571,6 @@ export function DsaProfilePage({ id }: { id: string }) {
           isSuccess &&
           !isFailed &&
           isAfterCreation &&
-          // When exactTypes is supplied, the kyc_verifications.type must be one of them.
-          // PAN_TO_GSTIN contains "GST" as a substring, so without this a PAN-to-GSTIN
-          // row would satisfy the GST slot as well.
           (!exactTypes || exactTypes.some((x) => t === x.toUpperCase()))
         );
       });
@@ -3573,6 +3579,62 @@ export function DsaProfilePage({ id }: { id: string }) {
       return false;
     },
     [verifiedKyc, failedKyc, dsa, kycVerificationsList],
+  );
+
+  const isKycTypeFailed = useCallback(
+    (
+      key: string,
+      codePatterns: string[],
+      exactTypes?: string[],
+    ) => {
+      // 1. In-session explicit failure takes absolute precedence
+      if (failedKyc[key]) return true;
+      if (verifiedKyc[key]) return false;
+
+      // 2. Check authoritative database records (dsa.verifications)
+      const vers: any[] = ((dsa as any)?.verifications || []).filter(
+        (v: any) => {
+          if (dsa?.created_at && v.created_at) {
+            return new Date(v.created_at) >= new Date(dsa.created_at);
+          }
+          return true;
+        },
+      );
+
+      const matching = vers.filter((v: any) => {
+        const c = String(v.verification_code || v.type || "").toUpperCase();
+        return exactTypes
+          ? exactTypes.some((x) => c === x.toUpperCase())
+          : codePatterns.some((p) => c.includes(p.toUpperCase()));
+      });
+
+      if (matching.length > 0) {
+        const latest = [...matching].sort((a, b) => {
+          const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return timeB - timeA;
+        })[0];
+
+        const st = String(latest.execution_status || latest.status || "").toUpperCase();
+        const isFailed =
+          latest.is_success === false ||
+          st === "FAILED" ||
+          st === "ERROR" ||
+          st === "REJECTED";
+        const isSuccess =
+          Boolean(latest.is_success) ||
+          st === "SUCCESS" ||
+          st === "COMPLETED" ||
+          st === "PASSED" ||
+          st === "VERIFIED";
+
+        if (isFailed) return true;
+        if (isSuccess) return false;
+      }
+
+      return false;
+    },
+    [failedKyc, verifiedKyc, dsa],
   );
 
   const workflowLevelInfo = getDsaWorkflowLevelInfo(
@@ -4476,66 +4538,9 @@ export function DsaProfilePage({ id }: { id: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dsa?.id, dsa?.onboarding_status, dsa?.agreement_status, dsa?.operational_status]);
 
-  // Reactively seed verifiedKyc whenever kycVerificationsList changes (fires after loadKycHistory resolves).
-  // This is what makes KYC status survive page reloads — statuses come from kyc_verifications DB records.
-  useEffect(() => {
-    if (!kycVerificationsList.length) return;
-    const checkSuccess = (v: any) => {
-      const st = String(v.status || v.execution_status || "").toUpperCase();
-      return (
-        Boolean(v.is_success) ||
-        st === "SUCCESS" ||
-        st === "COMPLETED" ||
-        st === "PASSED" ||
-        st === "VERIFIED"
-      );
-    };
-    const checkFailed = (v: any) => {
-      const st = String(v.status || v.execution_status || "").toUpperCase();
-      return (
-        v.is_success === false ||
-        st === "FAILED" ||
-        st === "ERROR" ||
-        st === "REJECTED"
-      );
-    };
-    const matchesPat = (v: any, pats: string[]) => {
-      const t = String(
-        v.type || v.verification_type || v.verification_code || "",
-      ).toUpperCase();
-      return pats.some((p) => {
-        const pu = p.toUpperCase();
-        // UDYAM/MSME: exact match only — a substring hit on an unrelated
-        // verification type must not light up the Udyam slot.
-        if (pu === "UDYAM" || pu === "MSME") return t === pu || t.includes(`_${pu}`) || t.includes(`${pu}_`);
-        return t.includes(pu);
-      });
-    };
-    const afterCreation = (v: any) =>
-      !dsa?.created_at ||
-      !v.created_at ||
-      new Date(v.created_at) >= new Date(dsa.created_at);
-
-    const has = (pats: string[]) =>
-      kycVerificationsList.some(
-        (v: any) =>
-          matchesPat(v, pats) &&
-          checkSuccess(v) &&
-          !checkFailed(v) &&
-          afterCreation(v),
-      );
-
-    setVerifiedKyc((prev) => ({
-      // PAN is intentionally NOT seeded here: onboarding PAN verification is not
-      // approval. Only the Maker's PAN button sets verifiedKyc.pan.
-      gst:   prev.gst   || has(["GST"]),
-      bank:  prev.bank  || has(["BANK", "BAV"]),
-      udyam: prev.udyam || has(["UDYAM", "MSME"]),
-      cibil: prev.cibil || has(["CIBIL", "BUREAU", "TRANSUNION"]),
-      aml:   prev.aml   || has(["AML", "SANCTION", "COMPASS"]),
-    }));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kycVerificationsList]);
+  // KYC statuses for GST, Bank BAV, Udyam, CIBIL, and AML in Checker review are strictly
+  // derived from Checker execution in dsa_verifications (dsa.verifications) and session state,
+  // not pre-populated from onboarding/applicant kyc_verifications.
 
   const openDdNoteModal = () => {
     if (isMakerUser && !hasCheckerGeneratedReport) {
@@ -5028,33 +5033,37 @@ export function DsaProfilePage({ id }: { id: string }) {
     }
   }, [tab, appFormSubTab, dsa?.id, fetchDeviationReport]);
 
+  const isPanFailed = isKycTypeFailed("pan", ["PAN"]);
+  const isGstFailed = isKycTypeFailed("gst", ["GST_BASIC", "GST_BASIC_DETAILS", "GST"]);
+  const isBankFailed = isKycTypeFailed("bank", ["BANK", "BAV"]);
+  const isUdyamFailed = isKycTypeFailed("udyam", ["UDYAM", "MSME"]);
+  const isCibilFailed = isKycTypeFailed("cibil", ["CIBIL", "BUREAU", "TRANSUNION"]);
+  const isAmlFailed = isKycTypeFailed("aml", ["AML", "SANCTION", "COMPASS"]);
+
   const isPanChecked =
-    !failedKyc.pan &&
-    (Boolean(dsa?.pan) ||
-      Boolean(verifiedKyc.pan) ||
-      isKycTypeVerified("pan", ["PAN"], true));
+    !isPanFailed &&
+    (Boolean(verifiedKyc.pan) ||
+      isKycTypeVerified("pan", ["PAN", "PAN_ENTITY", "PAN_ADVANCED_INDIVIDUAL"], true) ||
+      Boolean(dsa?.pan));
   const isGstChecked =
-    !failedKyc.gst &&
+    !isGstFailed &&
     (Boolean(verifiedKyc.gst) ||
-      // exactTypes prevents PAN_TO_GSTIN from satisfying the GST slot: its type
-      // contains "GST", so a plain substring match made a PAN check appear to
-      // verify GST as well.
-      isKycTypeVerified("gst", ["GST"], true, ["GST_BASIC", "GST_BASIC_DETAILS", "GST"]));
+      isKycTypeVerified("gst", ["GST_BASIC", "GST_BASIC_DETAILS", "GST"], false));
   const isBankChecked =
-    !failedKyc.bank &&
-    (Boolean(verifiedKyc.bank) || isKycTypeVerified("bank", ["BANK", "BAV"]));
+    !isBankFailed &&
+    (Boolean(verifiedKyc.bank) || isKycTypeVerified("bank", ["BANK", "BAV"], false));
   const isUdyamChecked =
-    !failedKyc.udyam &&
+    !isUdyamFailed &&
     (Boolean(verifiedKyc.udyam) ||
-      isKycTypeVerified("udyam", ["UDYAM", "MSME"]));
+      isKycTypeVerified("udyam", ["UDYAM", "MSME"], false));
   const isCibilChecked =
-    !failedKyc.cibil &&
+    !isCibilFailed &&
     (Boolean(verifiedKyc.cibil) ||
-      isKycTypeVerified("cibil", ["CIBIL", "BUREAU", "TRANSUNION"]));
+      isKycTypeVerified("cibil", ["CIBIL", "BUREAU", "TRANSUNION"], false));
   const isAmlChecked =
-    !failedKyc.aml &&
+    !isAmlFailed &&
     (Boolean(verifiedKyc.aml) ||
-      isKycTypeVerified("aml", ["AML", "SANCTION", "COMPASS"]));
+      isKycTypeVerified("aml", ["AML", "SANCTION", "COMPASS"], false));
 
   // View Data button access. Two independent gates, BOTH required:
   //  1. Role: PAN -> Maker + Checker only; all others -> Checker only.
@@ -7920,20 +7929,13 @@ const resolveStageStatus = (
                       KYC Verification
                     </h3>
                     <div className="flex items-center gap-2">
-                      {canCheckerVerifyKyc && (
+                      {canCheckerVerifyKyc && !isAllKycVerified && (
                         <Button
                           size="sm"
                           type="button"
                           disabled={Object.values(verifyingKyc).some(Boolean)}
                           onClick={async () => {
                             if (!dsa) return;
-                            setVerifyingKyc({
-                              gst: true,
-                              bank: true,
-                              udyam: true,
-                              cibil: true,
-                              aml: true,
-                            });
                             const dsaIdNum = Number(dsa.id);
                             let hasError = false;
                             const newVerified: { [key: string]: boolean } = {};
@@ -7943,7 +7945,18 @@ const resolveStageStatus = (
                                 key: string;
                                 promise: Promise<any>;
                               }[] = [];
-                              if (dsa.gst_applicable && dsa.gst) {
+                              if (dsa.pan && !isPanChecked) {
+                                const isEntity =
+                                  (dsa.dsa_type || "").toUpperCase() === "ENTITY" ||
+                                  (dsa.entity_type || "").toUpperCase() === "ENTITY" ||
+                                  ((dsa.business_type || "").toUpperCase() !== "INDIVIDUAL" && (dsa.business_type || "").trim() !== "");
+                                const panCode = isEntity ? "PAN_ENTITY" : "PAN_ADVANCED_INDIVIDUAL";
+                                tasks.push({
+                                  key: "pan",
+                                  promise: triggerCheckerVerification(dsa.id, panCode, { pan: dsa.pan }),
+                                });
+                              }
+                              if (dsa.gst_applicable && dsa.gst && !isGstChecked) {
                                 tasks.push({
                                   key: "gst",
                                   promise: triggerCheckerVerification(
@@ -7953,7 +7966,7 @@ const resolveStageStatus = (
                                   ),
                                 });
                               }
-                              if (dsa.account_number && dsa.ifsc) {
+                              if (dsa.account_number && dsa.ifsc && !isBankChecked) {
                                 tasks.push({
                                   key: "bank",
                                   promise: (async () => {
@@ -7980,7 +7993,7 @@ const resolveStageStatus = (
                                 (dsa as any)?.udyam_no ||
                                 (dsa as any)?.udyam_registration_no ||
                                 (dsa.business_license_no && /UDYAM-[A-Z]{2}-\d{2}-\d{7}/i.test(dsa.business_license_no) ? dsa.business_license_no : "");
-                              if (regNo) {
+                              if (regNo && !isUdyamChecked) {
                                 tasks.push({
                                   key: "udyam",
                                   promise: triggerCheckerVerification(
@@ -8003,26 +8016,35 @@ const resolveStageStatus = (
                                 const cibilCode = isEntity
                                   ? "CIBIL_COMMERCIAL"
                                   : "CIBIL_CONSUMER";
-                                tasks.push({
-                                  key: "cibil",
-                                  promise: triggerCheckerVerification(
-                                    dsa.id,
-                                    cibilCode,
-                                    {
-                                      pan: dsa.pan,
-                                      entity_name: dsa.entity_name || dsa.name,
-                                    },
-                                  ),
-                                });
-                                tasks.push({
-                                  key: "aml",
-                                  promise: triggerCheckerVerification(
-                                    dsa.id,
-                                    "AML_COMPASS",
-                                    { name: dsa.name, pan: dsa.pan },
-                                  ),
-                                });
+                                if (!isCibilChecked) {
+                                  tasks.push({
+                                    key: "cibil",
+                                    promise: triggerCheckerVerification(
+                                      dsa.id,
+                                      cibilCode,
+                                      {
+                                        pan: dsa.pan,
+                                        entity_name: dsa.entity_name || dsa.name,
+                                      },
+                                    ),
+                                  });
+                                }
+                                if (!isAmlChecked) {
+                                  tasks.push({
+                                    key: "aml",
+                                    promise: triggerCheckerVerification(
+                                      dsa.id,
+                                      "AML_COMPASS",
+                                      { name: dsa.name, pan: dsa.pan },
+                                    ),
+                                  });
+                                }
                               }
+
+                              if (tasks.length === 0) return;
+                              const runningVerifs: { [key: string]: boolean } = {};
+                              tasks.forEach((t) => { runningVerifs[t.key] = true; });
+                              setVerifyingKyc(runningVerifs);
 
                               const results = await Promise.allSettled(
                                 tasks.map((t) => t.promise),
@@ -8096,15 +8118,10 @@ const resolveStageStatus = (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />
                               Checking All...
                             </>
-                          ) : !isAllKycVerified ? (
+                          ) : (
                             <>
                               <ShieldCheck className="h-3.5 w-3.5" />
                               Check All KYC
-                            </>
-                          ) : (
-                            <>
-                              <Check className="h-3.5 w-3.5 text-emerald-400" />
-                              Re-Check All KYC
                             </>
                           )}
                         </Button>
@@ -8129,7 +8146,7 @@ const resolveStageStatus = (
                     // cannot satisfy the requested slot.
                     const getVerif = (
                       code: string,
-                      includeKycTable = true,
+                      includeKycTable = false,
                       allowedTypes?: string[],
                     ) => {
                       const matchesType = (t: string) => {
@@ -8175,21 +8192,19 @@ const resolveStageStatus = (
                     const panVerif = isEntityDsa
                       ? (getVerif("PAN_ENTITY", true, ["PAN_ENTITY", "pan-entity"]) ?? getVerif("PAN", true))
                       : (getVerif("PAN_ADVANCED_INDIVIDUAL", true, ["PAN_ADVANCED_INDIVIDUAL", "PAN_ADVANCE", "pan-advance"]) ?? getVerif("PAN", true));
-                    // PAN_TO_GSTIN must NOT satisfy the GST slot: its type string contains
-                    // "GST", so a substring match would let a PAN-to-GSTIN row satisfy both.
+                    // Checker GST verification is strictly from dsa_verifications
                     const panToGstVerif =
-                      getVerif("PAN_TO_GSTIN") || getVerif("pan_to_gstin");
+                      getVerif("PAN_TO_GSTIN", false) || getVerif("pan_to_gstin", false);
                     const gstBasicVerif =
-                      getVerif("GST_BASIC_DETAILS") || getVerif("GST_BASIC");
+                      getVerif("GST_BASIC_DETAILS", false) || getVerif("GST_BASIC", false);
                     const gstVerif =
-                      getVerif("GST", true, ["GST_BASIC"]) ??
-                      getVerif("GSTIN", true, ["GST_BASIC"]) ??
-                      panToGstVerif ??
-                      gstBasicVerif;
-                    const bankVerif = getVerif("BANK") || getVerif("BAV");
-                    const udyamVerif = getVerif("UDYAM");
-                    const cibilVerif = getVerif("CIBIL");
-                    const amlVerif = getVerif("AML");
+                      gstBasicVerif ??
+                      getVerif("GST", false, ["GST_BASIC"]) ??
+                      getVerif("GSTIN", false, ["GST_BASIC"]);
+                    const bankVerif = getVerif("BANK", false) || getVerif("BAV", false);
+                    const udyamVerif = getVerif("UDYAM", false);
+                    const cibilVerif = getVerif("CIBIL", false);
+                    const amlVerif = getVerif("AML", false);
 
                     const extractAllGstins = (obj: any): string[] => {
                       const gsts = new Set<string>();
@@ -8294,7 +8309,7 @@ const resolveStageStatus = (
                               PAN Verification
                             </span>
                             <StatusBadge
-                              status={isPanChecked ? "Verified" : "Pending"}
+                              status={isPanFailed ? "Failed" : isPanChecked ? "Verified" : "Pending"}
                             />
                           </div>
                           <div>
@@ -8308,13 +8323,15 @@ const resolveStageStatus = (
                           <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                             <span className="text-[11px] text-slate-500">
                               {panVerif?.executed_at
-                                ? `Checked on ${formatDate(panVerif.executed_at)} via ${panVerif.provider === "scoreme" ? "ScoreMe" : "NSDL"}`
-                                : isPanChecked
-                                  ? (isCheckerRole ? "Checked via NSDL / Income Tax Dept" : "Verified via NSDL / Income Tax Dept")
-                                  : "NSDL / Income Tax Dept"}
+                                ? `${isPanFailed ? "Failed" : "Checked"} on ${formatDate(panVerif.executed_at)} via ${panVerif.provider === "scoreme" ? "ScoreMe" : "NSDL"}`
+                                : isPanFailed
+                                  ? "Verification Failed · Please Retry"
+                                  : isPanChecked
+                                    ? (isCheckerRole ? "Checked via NSDL / Income Tax Dept" : "Verified via NSDL / Income Tax Dept")
+                                    : "NSDL / Income Tax Dept"}
                             </span>
                             <div className="flex items-center gap-1.5">
-                              {canViewPanKycData && Boolean(dsa.pan || isPanChecked) && (
+                              {canViewPanKycData && Boolean(dsa.pan || isPanChecked) && !isPanFailed && (
                                 <Button
                                   size="sm"
                                   type="button"
@@ -8329,28 +8346,18 @@ const resolveStageStatus = (
                                   View Data
                                 </Button>
                               )}
-                              {canVerifyPanKyc && (
+                              {canVerifyPanKyc && !isPanChecked && (
                                 <Button
                                   size="sm"
                                   type="button"
                                   disabled={verifyingKyc.pan}
                                   onClick={() => handleVerifyKyc("pan", "PAN")}
-                                  className={cn(
-                                    "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
-                                    isPanChecked
-                                      ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                                      : "bg-blue-600 hover:bg-blue-700 text-white",
-                                  )}
+                                  className="text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
                                 >
                                   {verifyingKyc.pan ? (
                                     <>
                                       <Loader2 className="h-3 w-3 animate-spin" />
                                       Checking...
-                                    </>
-                                  ) : isPanChecked ? (
-                                    <>
-                                      <Check className="h-3 w-3 text-emerald-600" />
-                                      Re-Check PAN
                                     </>
                                   ) : (
                                     <>
@@ -8372,11 +8379,13 @@ const resolveStageStatus = (
                             </span>
                             <StatusBadge
                               status={
-                                isGstChecked
-                                  ? "Verified"
-                                  : dsa?.gst_applicable
-                                    ? "Pending"
-                                    : "Not Applicable"
+                                isGstFailed
+                                  ? "Failed"
+                                  : isGstChecked
+                                    ? "Verified"
+                                    : dsa?.gst_applicable
+                                      ? "Pending"
+                                      : "Not Applicable"
                               }
                             />
                           </div>
@@ -8387,11 +8396,22 @@ const resolveStageStatus = (
                                   {resolvedGstNumber}
                                 </p>
                                 <p className="text-xs text-slate-500 mt-0.5">
-                                  {isGstChecked
-                                    ? "Taxpayer Status: Regular · Active"
-                                    : dsa.gst_applicable
-                                      ? "GST Applicable (Certificate on File)"
-                                      : "Taxpayer Status: Pending Verification"}
+                                  {isGstFailed
+                                    ? "Verification Failed · Please Retry"
+                                    : isGstChecked
+                                      ? "Taxpayer Status: Regular · Active"
+                                      : dsa.gst_applicable
+                                        ? "GST Applicable (Certificate on File)"
+                                        : "Taxpayer Status: Pending Verification"}
+                                </p>
+                              </div>
+                            ) : isGstFailed ? (
+                              <div>
+                                <p className="text-sm font-semibold text-rose-700">
+                                  GST Verification Failed
+                                </p>
+                                <p className="text-xs text-rose-500 mt-0.5">
+                                  GST validation returned error · Please check again
                                 </p>
                               </div>
                             ) : isGstChecked ? (
@@ -8427,17 +8447,19 @@ const resolveStageStatus = (
                           <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
                             <span className="text-[11px] text-slate-500">
                               {gstVerif?.executed_at
-                                ? `Checked on ${formatDate(gstVerif.executed_at)} via ${gstVerif.provider === "scoreme" ? "GSTN" : "GSTN"}`
-                                : isGstChecked
-                                  ? "GSTN Master Database"
-                                  : dsa.gst
+                                ? `${isGstFailed ? "Failed" : "Checked"} on ${formatDate(gstVerif.executed_at)} via ${gstVerif.provider === "scoreme" ? "GSTN" : "GSTN"}`
+                                : isGstFailed
+                                  ? "Verification Failed · Please Retry"
+                                  : isGstChecked
                                     ? "GSTN Master Database"
-                                    : isMakerUser
-                                      ? "Pending Checker Verification"
-                                      : "ScoreMe GST Basic Details"}
+                                    : dsa.gst
+                                      ? "GSTN Master Database"
+                                      : isMakerUser
+                                        ? "Pending Checker Verification"
+                                        : "ScoreMe GST Basic Details"}
                             </span>
                             <div className="flex items-center gap-1.5">
-                              {canViewGstKycData && (
+                              {canViewGstKycData && !isGstFailed && (
                                 <Button
                                   size="sm"
                                   type="button"
@@ -8453,7 +8475,7 @@ const resolveStageStatus = (
                                   View Data
                                 </Button>
                               )}
-                              {canCheckerVerifyKyc && (
+                              {canCheckerVerifyKyc && !isGstChecked && (
                                 <Button
                                   size="sm"
                                   type="button"
@@ -8461,22 +8483,12 @@ const resolveStageStatus = (
                                   onClick={() =>
                                     handleVerifyKyc("gst", "GSTIN")
                                   }
-                                  className={cn(
-                                    "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
-                                    isGstChecked
-                                      ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                                      : "bg-blue-600 hover:bg-blue-700 text-white",
-                                  )}
+                                  className="text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
                                 >
                                   {verifyingKyc.gst ? (
                                     <>
                                       <Loader2 className="h-3 w-3 animate-spin" />
                                       Checking...
-                                    </>
-                                  ) : isGstChecked ? (
-                                    <>
-                                      <Check className="h-3 w-3 text-emerald-600" />
-                                      Re-Check GSTIN
                                     </>
                                   ) : (
                                     <>
@@ -8497,7 +8509,7 @@ const resolveStageStatus = (
                               Bank Account (BAV)
                             </span>
                             <StatusBadge
-                              status={isBankChecked ? "Verified" : "Pending"}
+                              status={isBankFailed ? "Failed" : isBankChecked ? "Verified" : "Pending"}
                             />
                           </div>
                           <div>
@@ -8513,15 +8525,17 @@ const resolveStageStatus = (
                           <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
                             <span className="text-[11px] text-slate-500">
                               {bankVerif?.executed_at
-                                ? `Checked on ${formatDate(bankVerif.executed_at)} via BAV`
-                                : isBankChecked
-                                  ? (isCheckerRole ? "Bank Account Checked (BAV)" : "Bank Account Verification (BAV)")
-                                  : isMakerUser
-                                    ? "Pending Checker Verification"
-                                    : "Bank Account Verification (BAV)"}
+                                ? `${isBankFailed ? "Failed" : "Checked"} on ${formatDate(bankVerif.executed_at)} via BAV`
+                                : isBankFailed
+                                  ? "Verification Failed · Please Retry"
+                                  : isBankChecked
+                                    ? (isCheckerRole ? "Bank Account Checked (BAV)" : "Bank Account Verification (BAV)")
+                                    : isMakerUser
+                                      ? "Pending Checker Verification"
+                                      : "Bank Account Verification (BAV)"}
                             </span>
                             <div className="flex items-center gap-1.5">
-                              {canViewBankKycData && (
+                              {canViewBankKycData && !isBankFailed && (
                                 <Button
                                   size="sm"
                                   type="button"
@@ -8536,7 +8550,7 @@ const resolveStageStatus = (
                                   View Data
                                 </Button>
                               )}
-                              {canCheckerVerifyKyc && (
+                              {canCheckerVerifyKyc && !isBankChecked && (
                                 <Button
                                   size="sm"
                                   type="button"
@@ -8548,22 +8562,12 @@ const resolveStageStatus = (
                                       "pennydrop",
                                     )
                                   }
-                                  className={cn(
-                                    "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
-                                    isBankChecked
-                                      ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                                      : "bg-blue-600 hover:bg-blue-700 text-white",
-                                  )}
+                                  className="text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
                                 >
                                   {verifyingKyc.bank ? (
                                     <>
                                       <Loader2 className="h-3 w-3 animate-spin" />
                                       Checking...
-                                    </>
-                                  ) : isBankChecked ? (
-                                    <>
-                                      <Check className="h-3 w-3 text-emerald-600" />
-                                      Re-Check Bank
                                     </>
                                   ) : (
                                     <>
@@ -8598,7 +8602,7 @@ const resolveStageStatus = (
                                     Udyam Registration
                                   </span>
                                   <StatusBadge
-                                    status={isUdyamChecked ? "Verified" : "Pending"}
+                                    status={isUdyamFailed ? "Failed" : isUdyamChecked ? "Verified" : "Pending"}
                                   />
                                 </div>
                                 <div>
@@ -8614,15 +8618,17 @@ const resolveStageStatus = (
                                 <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                                   <span className="text-[11px] text-slate-500">
                                     {udyamVerif?.executed_at
-                                      ? `Checked on ${formatDate(udyamVerif.executed_at)} via MSME Portal`
-                                      : isUdyamChecked
-                                        ? "Ministry of MSME Portal"
-                                        : isMakerUser
-                                          ? "Pending Checker Verification"
-                                          : "Ministry of MSME Portal"}
+                                      ? `${isUdyamFailed ? "Failed" : "Checked"} on ${formatDate(udyamVerif.executed_at)} via MSME Portal`
+                                      : isUdyamFailed
+                                        ? "Verification Failed · Please Retry"
+                                        : isUdyamChecked
+                                          ? "Ministry of MSME Portal"
+                                          : isMakerUser
+                                            ? "Pending Checker Verification"
+                                            : "Ministry of MSME Portal"}
                                   </span>
                                   <div className="flex items-center gap-1.5">
-                                    {canViewUdyamKycData && (
+                                    {canViewUdyamKycData && !isUdyamFailed && (
                                       <Button
                                         size="sm"
                                         type="button"
@@ -8637,7 +8643,7 @@ const resolveStageStatus = (
                                         View Data
                                       </Button>
                                     )}
-                                    {canCheckerVerifyKyc && (
+                                    {canCheckerVerifyKyc && !isUdyamChecked && (
                                       <Button
                                         size="sm"
                                         type="button"
@@ -8648,22 +8654,12 @@ const resolveStageStatus = (
                                             "Udyam Registration",
                                           )
                                         }
-                                        className={cn(
-                                          "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
-                                          isUdyamChecked
-                                            ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                                            : "bg-blue-600 hover:bg-blue-700 text-white",
-                                        )}
+                                        className="text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
                                       >
                                         {verifyingKyc.udyam ? (
                                           <>
                                             <Loader2 className="h-3 w-3 animate-spin" />
                                             Checking...
-                                          </>
-                                        ) : isUdyamChecked ? (
-                                          <>
-                                            <Check className="h-3 w-3 text-emerald-600" />
-                                            Re-Check Udyam
                                           </>
                                         ) : (
                                           <>
@@ -8741,31 +8737,37 @@ const resolveStageStatus = (
                               CIBIL Bureau Assessment
                             </span>
                             <StatusBadge
-                              status={isCibilChecked ? "Verified" : "Pending"}
+                              status={isCibilFailed ? "Failed" : isCibilChecked ? "Verified" : "Pending"}
                             />
                           </div>
                           <div>
                             <p className="text-sm font-bold text-slate-900">
-                              {isCibilChecked
-                                ? "Bureau Score Evaluated · Active"
-                                : "Pending Bureau Assessment"}
+                              {isCibilFailed
+                                ? "Bureau Assessment Failed"
+                                : isCibilChecked
+                                  ? "Bureau Score Evaluated · Active"
+                                  : "Pending Bureau Assessment"}
                             </p>
                             <p className="text-xs text-slate-500 mt-0.5">
-                              Applicant Credit Bureau &amp; Track Record
+                              {isCibilFailed
+                                ? "Applicant Credit Bureau check failed · Please retry"
+                                : "Applicant Credit Bureau & Track Record"}
                             </p>
                           </div>
                           <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                             <span className="text-[11px] text-slate-500">
                               {cibilVerif?.executed_at
-                                ? `Checked on ${formatDate(cibilVerif.executed_at)} via TransUnion`
-                                : isCibilChecked
-                                  ? "TransUnion CIBIL Gateway"
-                                  : isMakerUser
-                                    ? "Pending Checker Verification"
-                                    : "TransUnion CIBIL Gateway"}
+                                ? `${isCibilFailed ? "Failed" : "Checked"} on ${formatDate(cibilVerif.executed_at)} via TransUnion`
+                                : isCibilFailed
+                                  ? "Verification Failed · Please Retry"
+                                  : isCibilChecked
+                                    ? "TransUnion CIBIL Gateway"
+                                    : isMakerUser
+                                      ? "Pending Checker Verification"
+                                      : "TransUnion CIBIL Gateway"}
                             </span>
                             <div className="flex items-center gap-1.5">
-                              {canViewCibilKycData && (
+                              {canViewCibilKycData && !isCibilFailed && (
                                 <Button
                                   size="sm"
                                   type="button"
@@ -8780,7 +8782,7 @@ const resolveStageStatus = (
                                   View Data
                                 </Button>
                               )}
-                              {canCheckerVerifyKyc && (
+                              {canCheckerVerifyKyc && !isCibilChecked && (
                                 <Button
                                   size="sm"
                                   type="button"
@@ -8788,22 +8790,12 @@ const resolveStageStatus = (
                                   onClick={() =>
                                     handleVerifyKyc("cibil", "CIBIL Bureau")
                                   }
-                                  className={cn(
-                                    "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
-                                    isCibilChecked
-                                      ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                                      : "bg-blue-600 hover:bg-blue-700 text-white",
-                                  )}
+                                  className="text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
                                 >
                                   {verifyingKyc.cibil ? (
                                     <>
                                       <Loader2 className="h-3 w-3 animate-spin" />
                                       Checking...
-                                    </>
-                                  ) : isCibilChecked ? (
-                                    <>
-                                      <Check className="h-3 w-3 text-emerald-600" />
-                                      Re-Check CIBIL
                                     </>
                                   ) : (
                                     <>
@@ -8824,31 +8816,37 @@ const resolveStageStatus = (
                               AML / Sanctions Screening
                             </span>
                             <StatusBadge
-                              status={isAmlChecked ? "Verified" : "Pending"}
+                              status={isAmlFailed ? "Failed" : isAmlChecked ? "Verified" : "Pending"}
                             />
                           </div>
                           <div>
                             <p className="text-sm font-bold text-slate-900">
-                              {isAmlChecked
-                                ? "Negative Database Clean · Passed"
-                                : "Pending AML Screening"}
+                              {isAmlFailed
+                                ? "AML Screening Failed · Match / Error"
+                                : isAmlChecked
+                                  ? "Negative Database Clean · Passed"
+                                  : "Pending AML Screening"}
                             </p>
                             <p className="text-xs text-slate-500 mt-0.5">
-                              PEP, Sanctions &amp; Negative List Screening
+                              {isAmlFailed
+                                ? "Screening returned error · Please check again"
+                                : "PEP, Sanctions & Negative List Screening"}
                             </p>
                           </div>
                           <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                             <span className="text-[11px] text-slate-500">
                               {amlVerif?.executed_at
-                                ? `Screened on ${formatDate(amlVerif.executed_at)} via Compass`
-                                : isAmlChecked
-                                  ? "Compass AML Gateway"
-                                  : isMakerUser
-                                    ? "Pending Checker Verification"
-                                    : "Compass AML Gateway"}
+                                ? `${isAmlFailed ? "Failed" : "Screened"} on ${formatDate(amlVerif.executed_at)} via Compass`
+                                : isAmlFailed
+                                  ? "Screening Failed · Please Retry"
+                                  : isAmlChecked
+                                    ? "Compass AML Gateway"
+                                    : isMakerUser
+                                      ? "Pending Checker Verification"
+                                      : "Compass AML Gateway"}
                             </span>
                             <div className="flex items-center gap-1.5">
-                              {canViewAmlKycData && (
+                              {canViewAmlKycData && !isAmlFailed && (
                                 <Button
                                   size="sm"
                                   type="button"
@@ -8863,7 +8861,7 @@ const resolveStageStatus = (
                                   View Data
                                 </Button>
                               )}
-                              {canCheckerVerifyKyc && (
+                              {canCheckerVerifyKyc && !isAmlChecked && (
                                 <Button
                                   size="sm"
                                   type="button"
@@ -8871,22 +8869,12 @@ const resolveStageStatus = (
                                   onClick={() =>
                                     handleVerifyKyc("aml", "AML Screening")
                                   }
-                                  className={cn(
-                                    "text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5",
-                                    isAmlChecked
-                                      ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                                      : "bg-blue-600 hover:bg-blue-700 text-white",
-                                  )}
+                                  className="text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
                                 >
                                   {verifyingKyc.aml ? (
                                     <>
                                       <Loader2 className="h-3 w-3 animate-spin" />
                                       Screening...
-                                    </>
-                                  ) : isAmlChecked ? (
-                                    <>
-                                      <Check className="h-3 w-3 text-emerald-600" />
-                                      Re-Check AML
                                     </>
                                   ) : (
                                     <>
