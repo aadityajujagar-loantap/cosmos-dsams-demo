@@ -401,6 +401,23 @@ function getDocumentUrl(
     }
   }
 
+  // CIBIL Consumer Report documents: use dedicated streaming endpoint
+  if (isCibilReportDocument(doc)) {
+    const ts = doc._timestamp || Date.now();
+    if (!useStorageFallback && targetDsaId) {
+      return `${apiBase}/api/v1/dsa/${targetDsaId}/cibil-report/pdf?t=${ts}`;
+    }
+    if (doc.file_path) {
+      return `${apiBase}/storage/${doc.file_path.replace(/^\/+/, "")}?t=${ts}`;
+    }
+    if (doc.file_url || doc.url) {
+      return doc.file_url || doc.url;
+    }
+    if (targetDsaId) {
+      return `${apiBase}/api/v1/dsa/${targetDsaId}/cibil-report/pdf?t=${ts}`;
+    }
+  }
+
   // 1. Primary path: Use dedicated API endpoint for authenticated / backend streaming if document ID is a real DB ID (< 100000)
   if (
     !useStorageFallback &&
@@ -482,6 +499,25 @@ export function isDdReviewReportDocument(docOrType?: any): boolean {
   );
 }
 
+export function isCibilReportDocument(docOrType?: any): boolean {
+  if (!docOrType) return false;
+  const rawType =
+    typeof docOrType === "object"
+      ? docOrType.document_type || docOrType.type || docOrType.file_name || ""
+      : docOrType;
+  const t = String(rawType).toUpperCase().trim();
+  return (
+    t === "CIBIL_REPORT" ||
+    t === "CIBIL_CONSUMER_REPORT" ||
+    t === "DSA_CIBIL_REPORT" ||
+    t.includes("CIBIL_REPORT") ||
+    t.includes("CIBIL_CONSUMER") ||
+    (typeof docOrType === "object" &&
+      typeof docOrType.file_name === "string" &&
+      docOrType.file_name.toLowerCase().includes("cibil_report"))
+  );
+}
+
 export function isPhotographDocument(docOrType?: any): boolean {
   if (!docOrType) return false;
   const rawType =
@@ -507,6 +543,7 @@ export function formatDocumentType(type?: string): string {
   if (isVisitReportDocument(type)) return "Physical Visit Report";
   if (isApplicationFormDocument(type)) return "Application Form";
   if (isDdReviewReportDocument(type)) return "Due Diligence Review Report";
+  if (isCibilReportDocument(type)) return "TransUnion CIBIL Consumer Report (CIR)";
   if (typeof type === "string" && type.startsWith("itr_year_")) {
     const yr = type.replace("itr_year_", "");
     const suffix = yr === "1" ? "st" : yr === "2" ? "nd" : yr === "3" ? "rd" : "th";
@@ -717,7 +754,7 @@ export function DocumentViewerBody({
           <div className="flex items-center gap-2">
             <a
               href={`${url}${url.includes("?") ? "&" : "?"}download=1`}
-              download={previewDoc.file_name || (isApplicationFormDocument(previewDoc) ? `dsa_application_form_${dsaId || previewDoc.dsa_id || "document"}.pdf` : "document.pdf")}
+              download={previewDoc.file_name || (isApplicationFormDocument(previewDoc) ? `dsa_application_form_${dsaId || previewDoc.dsa_id || "document"}.pdf` : isCibilReportDocument(previewDoc) ? `cibil_consumer_report_${dsaId || previewDoc.dsa_id || "report"}.pdf` : "document.pdf")}
               className="inline-flex items-center gap-1.5 text-xs text-slate-700 hover:text-slate-900 font-semibold px-2.5 py-1 rounded-md bg-white border border-slate-200 shadow-2xs hover:bg-slate-50 transition-colors"
             >
               <Download className="h-3.5 w-3.5 text-slate-600" />
@@ -857,6 +894,8 @@ export function DocumentViewerBody({
         </div>
         <div className="flex items-center justify-end gap-2 flex-wrap">
           {!isApplicationFormDocument(previewDoc) &&
+          !isDdReviewReportDocument(previewDoc) &&
+          !isCibilReportDocument(previewDoc) &&
           isBankUser &&
           effectiveStatus !== "Verified" &&
           effectiveStatus !== "Failed" ? (
@@ -884,7 +923,7 @@ export function DocumentViewerBody({
           {url ? (
             <a
               href={`${url}${url.includes("?") ? "&" : "?"}download=1`}
-              download={previewDoc.file_name || (isApplicationFormDocument(previewDoc) ? `dsa_application_form_${dsaId || previewDoc.dsa_id || "document"}.pdf` : "document.pdf")}
+              download={previewDoc.file_name || (isApplicationFormDocument(previewDoc) ? `dsa_application_form_${dsaId || previewDoc.dsa_id || "document"}.pdf` : isCibilReportDocument(previewDoc) ? `cibil_consumer_report_${dsaId || previewDoc.dsa_id || "report"}.pdf` : "document.pdf")}
               className="inline-flex items-center gap-1.5 text-xs text-slate-700 hover:text-slate-900 font-medium px-3.5 py-1.5 h-auto rounded-lg border border-slate-200 bg-white hover:bg-slate-50 shadow-2xs transition-colors"
             >
               <Download className="h-3.5 w-3.5 text-slate-600" />
@@ -3357,6 +3396,10 @@ export function DsaProfilePage({ id }: { id: string }) {
   // Due Diligence Note modal state (shown for Level 2 through Level 7)
   const [viewingDdNoteModal, setViewingDdNoteModal] = useState(false);
 
+  // CIBIL Consumer Report (L2 to L7 View & Download)
+  const [cibilReportMeta, setCibilReportMeta] = useState<any>(null);
+  const [loadingCibilReport, setLoadingCibilReport] = useState<boolean>(false);
+
   // Revert Modal state (for Level 3+ to revert back to Checker)
   const [revertingDsa, setRevertingDsa] = useState<any | null>(null);
   const [revertReason, setRevertReason] = useState("");
@@ -3629,6 +3672,22 @@ export function DsaProfilePage({ id }: { id: string }) {
     normUserRole === "SUPERADMIN" ||
     rawAuthRolesNorm.includes("ADMIN") ||
     rawAuthRolesNorm.includes("SUPERADMIN"),
+  );
+
+  const canL2ToL7ViewCibilReport = Boolean(
+    (!isMakerUser && currentUser?.role !== "DSA Partner") &&
+    (
+      isCheckerRole ||
+      isCheckerLevel ||
+      isSubRegionRole ||
+      isDgmRole ||
+      isRegionHeadRole ||
+      isHoOfficerRole ||
+      isHoHeadRole ||
+      isL7User ||
+      isAdminOrSuperAdmin ||
+      (workflowLevelInfo && workflowLevelInfo.currentLevel >= 2)
+    )
   );
 
   const DEVIATION_AUTHORITY_ROLES = [
@@ -4779,6 +4838,30 @@ export function DsaProfilePage({ id }: { id: string }) {
       fetchBackendDocuments();
     }
   }, [dsa?.id, fetchBackendDocuments]);
+  useEffect(() => {
+    if (!dsa?.id || !canL2ToL7ViewCibilReport) return;
+    let active = true;
+    setLoadingCibilReport(true);
+    adminApi
+      .getCibilReport(dsa.id)
+      .then((res: any) => {
+        if (!active) return;
+        const data = res?.data ?? res;
+        if (data && (data.success || data.generated || data.document || data.score)) {
+          setCibilReportMeta(data);
+        }
+      })
+      .catch(() => {
+        // CIBIL report not yet generated
+      })
+      .finally(() => {
+        if (active) setLoadingCibilReport(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [dsa?.id, canL2ToL7ViewCibilReport, backendDocs]);
+
 
   const openDocPreview = async (doc: any) => {
     if (isDdReviewReportDocument(doc) && dsa?.id) {
@@ -4813,6 +4896,20 @@ export function DsaProfilePage({ id }: { id: string }) {
       } finally {
         setLoadingPreviewDocId(null);
       }
+    }
+
+    if (isCibilReportDocument(doc) && dsa?.id) {
+      const freshDoc = {
+        ...doc,
+        document_type: "CIBIL_REPORT",
+        file_name: doc.file_name || `cibil_report_${dsa.id}.pdf`,
+        _timestamp: Date.now(),
+      };
+      setPreviewDoc(freshDoc);
+      if (freshDoc.id) {
+        setViewedDocIds((prev) => new Set([...prev, freshDoc.id]));
+      }
+      return;
     }
 
     if (isApplicationFormDocument(doc) && dsa?.id) {
@@ -5199,6 +5296,7 @@ const resolveStageStatus = (
   const canApproveDoc = (doc: any): boolean =>
     canApproveDocs &&
     !isApplicationFormDocument(doc) &&
+    !isCibilReportDocument(doc) &&
     (!isDdReviewReportDocument(doc) ||
       isCheckerRole ||
       (isCheckerLevel && !isMakerUser));
@@ -5332,6 +5430,7 @@ const resolveStageStatus = (
     ...(docChecklist?.checklist?.filter((item: any) => {
       // Rely solely on the checklist API's is_uploaded flag (authoritative)
       if (item.is_uploaded) return false;
+      if (isCibilReportDocument(item)) return false;
       if (item.document_type === "gst_certificate" && !dsa?.gst_applicable)
         return false;
       const hasExp = Boolean(
@@ -9010,16 +9109,36 @@ const resolveStageStatus = (
                   { id: "other", label: "Other Documents", icon: FileText },
                 ];
 
+                const cibilReportDoc =
+                  allDisplayDocs.find((d: any) => isCibilReportDocument(d)) ||
+                  backendDocs.find((d: any) => isCibilReportDocument(d)) ||
+                  (cibilReportMeta?.document ? cibilReportMeta.document : null);
+
+                const isCibilReportAvailable = Boolean(
+                  cibilReportDoc ||
+                  cibilReportMeta?.generated ||
+                  (cibilReportMeta?.score !== undefined && cibilReportMeta?.score !== null && String(cibilReportMeta?.score) !== "0") ||
+                  (dsa?.cibil_score && String(dsa?.cibil_score).trim() !== "" && String(dsa?.cibil_score) !== "0") ||
+                  (dsa?.cibil_status && String(dsa?.cibil_status).toUpperCase() === "SUCCESS")
+                );
+
+                const showCibilReportBlock =
+                  docSubTab === "kyc" &&
+                  canL2ToL7ViewCibilReport &&
+                  isCibilReportAvailable;
+
                 const categoryUploadedDocs = allDisplayDocs.filter(
-                  (d) => getDocumentCategory(d) === docSubTab,
+                  (d) => getDocumentCategory(d) === docSubTab && !isCibilReportDocument(d),
                 );
                 const categoryMissingDocs = missingProfileDocuments.filter(
-                  (d) => getDocumentCategory(d) === docSubTab,
+                  (d) => getDocumentCategory(d) === docSubTab && !isCibilReportDocument(d),
                 );
 
                 const kycUploadedCount = allDisplayDocs.filter(
-                  (d) => getDocumentCategory(d) === "kyc",
-                ).length;
+                  (d) =>
+                    getDocumentCategory(d) === "kyc" &&
+                    (!isCibilReportDocument(d) || canL2ToL7ViewCibilReport),
+                ).length + (showCibilReportBlock && !allDisplayDocs.some(isCibilReportDocument) ? 1 : 0);
                 const expUploadedCount = allDisplayDocs.filter(
                   (d) => getDocumentCategory(d) === "exp",
                 ).length;
@@ -9185,6 +9304,89 @@ const resolveStageStatus = (
                         </div>
                       )}
                     </div>
+
+
+                    {/* Dedicated CIBIL Consumer Report Block (Visible strictly to L2–L7 reviewers when report is available) */}
+                    {showCibilReportBlock && (
+                      <div className="rounded-xl border border-sky-200 bg-gradient-to-r from-sky-50/80 via-blue-50/40 to-white p-4.5 sm:p-5 shadow-xs transition-all hover:border-sky-300">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                          <div className="flex items-start gap-3.5">
+                            <div className="w-10 h-10 rounded-lg bg-sky-600 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
+                              <ShieldCheck className="h-5 w-5" />
+                            </div>
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h4 className="text-sm font-bold text-slate-900 tracking-tight">
+                                  TransUnion CIBIL Consumer Credit Information Report (CIR)
+                                </h4>
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200">
+                                  <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                                  Report Generated
+                                </span>
+                                {(dsa?.cibil_score || cibilReportMeta?.score) ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2.5 py-0.5 text-[11px] font-bold text-sky-800 border border-sky-200">
+                                    Score: {dsa?.cibil_score || cibilReportMeta?.score}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <p className="text-xs text-slate-500 max-w-2xl leading-relaxed">
+                                Official credit bureau CIR document generated via TransUnion CIBIL Consumer API. Reviewer copy with score, repayment history, account summary, and enquiry records.
+                              </p>
+                              <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 pt-0.5">
+                                <span className="font-medium text-slate-700">
+                                  {cibilReportDoc?.file_name || `cibil_report_${dsa?.id || ""}.pdf`}
+                                </span>
+                                {cibilReportDoc?.file_size ? (
+                                  <span>• {cibilReportDoc.file_size}</span>
+                                ) : null}
+                                <span className="text-slate-400">• Available for L2–L7 Authorities</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2 sm:self-center shrink-0">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                const reportToPreview = cibilReportDoc || {
+                                  id: "cibil_consumer_report",
+                                  document_type: "CIBIL_REPORT",
+                                  file_name: `cibil_report_${dsa.id}.pdf`,
+                                  owner_name: dsa?.name,
+                                  status: "Uploaded",
+                                };
+                                openDocPreview(reportToPreview);
+                              }}
+                              className="text-xs px-3 py-1.5 h-8 flex items-center gap-1.5 font-semibold text-sky-800 bg-white hover:bg-sky-50 border-sky-300 shadow-2xs"
+                            >
+                              <Eye className="h-3.5 w-3.5 text-sky-600" />
+                              View Report
+                            </Button>
+
+                            <a
+                              href={`${(process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").replace(/\/api\/?$/, "")}/api/v1/dsa/${dsa.id}/cibil-report/view`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 h-8 rounded-md font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 shadow-2xs transition-colors"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5 text-slate-500" />
+                              HTML View
+                            </a>
+
+                            <a
+                              href={`${(process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").replace(/\/api\/?$/, "")}/api/v1/dsa/${dsa.id}/cibil-report/pdf?download=1`}
+                              download={`cibil_consumer_report_${dsa.id}.pdf`}
+                              className="inline-flex items-center gap-1.5 text-xs px-3.5 py-1.5 h-8 rounded-md font-semibold text-white bg-sky-600 hover:bg-sky-700 shadow-2xs transition-colors"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                              Download PDF
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Uploaded Documents Grid */}
                     <div className="grid gap-4 lg:grid-cols-2">
@@ -9416,7 +9618,7 @@ const resolveStageStatus = (
                           </div>
                         );
                       })}
-                      {categoryUploadedDocs.length === 0 ? (
+                      {categoryUploadedDocs.length === 0 && !showCibilReportBlock ? (
                         <div className="col-span-full py-8 text-center rounded-lg border border-dashed border-slate-200 bg-slate-50/50">
                           <p className="text-sm font-medium text-slate-500">
                             {docSubTab === "kyc"

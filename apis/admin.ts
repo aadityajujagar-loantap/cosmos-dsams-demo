@@ -674,6 +674,32 @@ export const adminApi = {
     return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/dd-review-report/pdf`, { method: "GET" });
   },
 
+  getCibilReport: async (idOrCode: number | string): Promise<BackendResponse<{
+    success: boolean;
+    dsa_id: number;
+    score: number | string;
+    status: string;
+    generated: boolean;
+    document?: any;
+    report_data?: any;
+    pdf_url?: string;
+  }>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/cibil-report`, { method: "GET" });
+  },
+
+  getCibilReportPdfMeta: async (idOrCode: number | string): Promise<BackendResponse<{
+    document_id: number;
+    document_type: string;
+    file_name: string;
+    file_path: string;
+    file_url: string;
+    download_url: string;
+    size?: string;
+    base64?: string;
+  }>> => {
+    return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/cibil-report/pdf?format=base64`, { method: "GET" });
+  },
+
   submitCheckerApplication: async (
     idOrCode: number | string,
     payload?: { remarks?: string; dd_note?: any }
