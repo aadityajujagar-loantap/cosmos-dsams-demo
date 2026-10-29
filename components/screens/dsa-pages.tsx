@@ -541,6 +541,7 @@ export function isPhotographDocument(docOrType?: any): boolean {
 export function formatDocumentType(type?: string, doc?: any): string {
   if (!type && !doc) return "Document Preview";
   const actualType = type || doc?.document_type || doc?.type || "";
+  if (isCibilReportDocument(actualType)) return "TransUnion CIBIL Consumer Report (CIR)";
   if (isVisitReportDocument(actualType)) return "Physical Visit Report";
   if (isApplicationFormDocument(actualType)) return "Application Form";
   if (isDdReviewReportDocument(actualType)) return "Due Diligence Review Report";
@@ -5464,6 +5465,7 @@ const resolveStageStatus = (
     ...(docChecklist?.checklist?.filter((item: any) => {
       // Rely solely on the checklist API's is_uploaded flag (authoritative)
       if (item.is_uploaded) return false;
+      if (isCibilReportDocument(item)) return false;
 
       // Exclude documents already uploaded in backendDocs or dsa.documents
       const targetType = String(item.document_type || "").toLowerCase();
