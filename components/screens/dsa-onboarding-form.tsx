@@ -2767,7 +2767,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
             const selectedFy = isItrDoc ? (itrFinancialYears[docType] || (docType === "itr_year_1" ? availableFinancialYears[0] : docType === "itr_year_2" ? availableFinancialYears[1] : availableFinancialYears[2])) : undefined;
 
             await adminApi.uploadDsaDocument(dsaId, {
-              document_type: isItrDoc ? "itr_returns" : docType,
+              document_type: docType,
               document_base64: docData.base64,
               file_name: docData.name,
               financial_year: selectedFy,

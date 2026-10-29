@@ -1163,9 +1163,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       <UserAccountModal
         fallbackUser={currentUser}
         onClose={() => setProfileOpen(false)}
-        onSignOut={() => {
+        onSignOut={async () => {
           setProfileOpen(false);
-          logout();
+          await logout();
           router.push("/login");
         }}
         open={profileOpen}

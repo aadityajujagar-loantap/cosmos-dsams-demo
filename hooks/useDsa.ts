@@ -993,6 +993,9 @@ export function useDsa() {
           idOrCode,
           remarks ? { remarks } : {},
         );
+        if (typeof window !== "undefined") {
+          localStorage.setItem("active_locked_dsa_case_id", String(idOrCode));
+        }
         toast({
           title: "Case acquired",
           description:
@@ -1054,6 +1057,9 @@ export function useDsa() {
           idOrCode,
           remarks ? { remarks } : {},
         );
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("active_locked_dsa_case_id");
+        }
         toast({
           title: "Case released (un-acquired)",
           description:

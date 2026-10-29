@@ -1660,7 +1660,21 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     [toast],
   );
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    // Release active case lock so other users with the same role can access it immediately
+    if (typeof window !== "undefined") {
+      const activeCaseId = localStorage.getItem("active_locked_dsa_case_id");
+      if (activeCaseId) {
+        try {
+          await adminApi.releaseCase(activeCaseId, { remarks: "Released on user logout" });
+        } catch (releaseErr) {
+          console.warn("Failed to release active locked case on logout:", releaseErr);
+        } finally {
+          localStorage.removeItem("active_locked_dsa_case_id");
+        }
+      }
+    }
+
     // Revoke Sanctum access token on the Laravel backend
     authApi.logout().catch((err) => console.warn("Backend logout request failed:", err));
 

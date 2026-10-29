@@ -502,16 +502,30 @@ export function isPhotographDocument(docOrType?: any): boolean {
   );
 }
 
-export function formatDocumentType(type?: string): string {
-  if (!type) return "Document Preview";
-  if (isVisitReportDocument(type)) return "Physical Visit Report";
-  if (isApplicationFormDocument(type)) return "Application Form";
-  if (isDdReviewReportDocument(type)) return "Due Diligence Review Report";
-  if (typeof type === "string" && type.startsWith("itr_year_")) {
-    const yr = type.replace("itr_year_", "");
-    const suffix = yr === "1" ? "st" : yr === "2" ? "nd" : yr === "3" ? "rd" : "th";
-    return `${yr}${suffix} Year ITR with computation`;
+export function formatDocumentType(type?: string, doc?: any): string {
+  if (!type && !doc) return "Document Preview";
+  const actualType = type || doc?.document_type || doc?.type || "";
+  if (isVisitReportDocument(actualType)) return "Physical Visit Report";
+  if (isApplicationFormDocument(actualType)) return "Application Form";
+  if (isDdReviewReportDocument(actualType)) return "Due Diligence Review Report";
+
+  let fy = "";
+  if (doc?.financial_year) {
+    fy = String(doc.financial_year).trim();
+  } else if (doc?.remarks && /financial year:\s*([^|]+)/i.test(doc.remarks)) {
+    const m = doc.remarks.match(/financial year:\s*([^|]+)/i);
+    if (m?.[1]) fy = m[1].trim();
   }
+
+  if (typeof actualType === "string" && actualType.startsWith("itr_year_")) {
+    const yr = actualType.replace("itr_year_", "");
+    const suffix = yr === "1" ? "st" : yr === "2" ? "nd" : yr === "3" ? "rd" : "th";
+    return `${yr}${suffix} Year ITR with computation${fy ? ` (${fy})` : ""}`;
+  }
+  if (actualType === "itr_returns" || actualType === "itr" || actualType === "it_returns") {
+    return fy ? `ITR with computation (${fy})` : "IT Returns with Computation";
+  }
+
   const map: Record<string, string> = {
     aadhaar_card: "Aadhaar Card",
     aadhaar_card_front: "Aadhaar Card (Front)",
@@ -520,11 +534,20 @@ export function formatDocumentType(type?: string): string {
     stakeholder_aadhaar_card_front: "Key Person Aadhaar Card (Front)",
     stakeholder_aadhaar_card_back: "Key Person Aadhaar Card (Back)",
     pan_card: "PAN Card",
+    entity_pan_card: "Business Entity PAN Card",
+    stakeholder_pan_card: "Key Person PAN Card",
+    recent_photograph: "Recent Photograph",
+    stakeholder_photograph: "Key Person Photograph",
+    photograph: "Recent Photograph",
+    business_license: "Business License (Udyam / Shop Act)",
+    business_license_shop_act: "Shop Act License",
+    business_license_udyam: "Udyam Registration Certificate",
+    education_certificate: "Educational Qualification Certificate",
+    dsa_consent_dpdp: "DSA Consent Format (DPDP Act)",
     gst_certificate: "GST Certificate",
     msme_certificate: "MSME Certificate",
     cin_llpin: "CIN / LLPIN Certificate",
     bank_statement: "Bank Statement",
-    itr: "ITR / Tax Return",
     visit_report: "Physical Visit Report",
     cheque_leaf: "Cancelled Cheque Leaf",
     address_proof: "Address Proof",
@@ -534,9 +557,9 @@ export function formatDocumentType(type?: string): string {
     rent_agreement: "Rent Agreement (Residence / office as applicable)",
     rental_agreement: "Rent Agreement (Residence / office as applicable)",
   };
-  const key = String(type).toLowerCase().trim();
+  const key = String(actualType).toLowerCase().trim();
   if (map[key]) return map[key];
-  return String(type)
+  return String(actualType)
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -4326,6 +4349,9 @@ export function DsaProfilePage({ id }: { id: string }) {
         const data = res?.data as
           | { lock_status?: string; message?: string }
           | undefined;
+        if (typeof window !== "undefined") {
+          localStorage.setItem("active_locked_dsa_case_id", String(id));
+        }
         const alreadyMine = data?.lock_status === "LOCKED";
         toast({
           title: alreadyMine
@@ -5341,6 +5367,23 @@ const resolveStageStatus = (
     ...(docChecklist?.checklist?.filter((item: any) => {
       // Rely solely on the checklist API's is_uploaded flag (authoritative)
       if (item.is_uploaded) return false;
+
+      // Exclude documents already uploaded in backendDocs or dsa.documents
+      const targetType = String(item.document_type || "").toLowerCase();
+      const docsToCheck = backendDocs.length > 0 ? backendDocs : (dsa?.documents || []);
+      const alreadyUploaded = docsToCheck.some((d: any) => {
+        const dt = String(d.document_type || d.type || "").toLowerCase();
+        if (dt === targetType) return true;
+        if (targetType.startsWith("itr_year_") && (dt === targetType || dt === "itr_returns" || dt === "itr")) return true;
+        if (targetType === "business_license" && (dt.startsWith("business_license") || dt.includes("shop_act") || dt.includes("udyam"))) return true;
+        if (targetType === "recent_photograph" && (dt.includes("photo") || dt.includes("photograph"))) return true;
+        if (targetType === "stakeholder_photograph" && (dt.includes("photo") || dt.includes("photograph"))) return true;
+        if (targetType === "pan_card" && (dt === "pan" || dt === "pan_card" || dt === "entity_pan_card")) return true;
+        if (targetType === "aadhaar_card" && dt.includes("aadhaar")) return true;
+        return false;
+      });
+      if (alreadyUploaded) return false;
+
       if (item.document_type === "gst_certificate" && !dsa?.gst_applicable)
         return false;
       const hasExp = Boolean(
@@ -5355,7 +5398,7 @@ const resolveStageStatus = (
       if (isVisitReport && Boolean((dsa as any)?.visit_report_file))
         return false;
       if (isVisitReport && !isBankUser) return false;
-      const canUploadStaffDoc = isMakerUserOrLevel || isCheckerUserOrLevel;
+      const canUploadStaffDoc = isMakerUser;
       if (isVisitReport && !canUploadStaffDoc) return false;
       return item.is_required || (item.staff_only && canUploadStaffDoc);
     }) ?? []),
@@ -5839,11 +5882,18 @@ const resolveStageStatus = (
     })
     .reduce((acc: any[], doc: any) => {
       const isVisit = isVisitReportDocument(doc);
-      const existingIndex = acc.findIndex((d) =>
-        isVisit
-          ? isVisitReportDocument(d)
-          : d.document_type === doc.document_type,
-      );
+      const isItr = String(doc.document_type || "").toLowerCase().startsWith("itr");
+      const isOther = String(doc.document_type || "").toLowerCase() === "other_document";
+      const isMulti = isItr || isOther;
+      const existingIndex = acc.findIndex((d) => {
+        if (isVisit) return isVisitReportDocument(d);
+        if (isMulti) {
+          // Keep every year-wise ITR and multi-document distinct unless identical id or duplicate file
+          return (typeof d.id === "number" && typeof doc.id === "number" && d.id === doc.id)
+            || (d.document_type === doc.document_type && d.file_name === doc.file_name && d.financial_year === doc.financial_year);
+        }
+        return d.document_type === doc.document_type;
+      });
       if (existingIndex >= 0) {
         acc[existingIndex] = doc;
       } else {
@@ -5891,14 +5941,14 @@ const resolveStageStatus = (
 
   if (
     !isVisitReportUploaded &&
-    (isMakerUserOrLevel || isCheckerUserOrLevel) &&
+    isMakerUser &&
     !missingProfileDocuments.some((item) => isVisitReportDocument(item))
   ) {
     missingProfileDocuments.push({
       document_type: "visit_report",
       display_name: "Physical Visit Report",
       requirement:
-        "Mandatory — Bank staff (Maker / Checker) must conduct and upload visit report",
+        "Mandatory — Maker must conduct physical visit and upload report",
       staff_only: true,
     });
   } else if (isVisitReportUploaded) {
@@ -9200,7 +9250,7 @@ const resolveStageStatus = (
                               <div className="flex items-center justify-between">
                                 <div>
                                   <p className="font-semibold text-slate-950">
-                                    {formatDocumentType(doc.document_type)}
+                                    {formatDocumentType(doc.document_type, doc)}
                                   </p>
                                   <p className="text-sm text-slate-500">
                                     {doc.file_name}{" "}
@@ -9226,7 +9276,7 @@ const resolveStageStatus = (
                                         onClick={async () => {
                                           if (
                                             !window.confirm(
-                                              `Delete "${formatDocumentType(doc.document_type)}"? This cannot be undone.`,
+                                              `Delete "${formatDocumentType(doc.document_type, doc)}"? This cannot be undone.`,
                                             )
                                           )
                                             return;
@@ -9376,7 +9426,7 @@ const resolveStageStatus = (
                                         });
                                         toast({
                                           title: "Document Verified",
-                                          description: `${formatDocumentType(doc.document_type)} has been verified successfully.`,
+                                          description: `${formatDocumentType(doc.document_type, doc)} has been verified successfully.`,
                                           variant: "success",
                                         });
                                       }}
@@ -11917,7 +11967,7 @@ const resolveStageStatus = (
         open={Boolean(previewDoc)}
         title={
           previewDoc
-            ? formatDocumentType(previewDoc.document_type)
+            ? formatDocumentType(previewDoc.document_type, previewDoc)
             : "Document Preview"
         }
         description={
@@ -11980,7 +12030,7 @@ const resolveStageStatus = (
               setPreviewDoc(null);
               toast({
                 title: "Document Checked",
-                description: `${formatDocumentType(targetDoc.document_type)} has been checked successfully.`,
+                description: `${formatDocumentType(targetDoc.document_type, targetDoc)} has been checked successfully.`,
                 variant: "success",
               });
             }}
@@ -12014,7 +12064,7 @@ const resolveStageStatus = (
               setPreviewDoc(null);
               toast({
                 title: "Document Rejected",
-                description: `${formatDocumentType(targetDoc.document_type)} has been marked as failed/rejected.`,
+                description: `${formatDocumentType(targetDoc.document_type, targetDoc)} has been marked as failed/rejected.`,
                 variant: "warning",
               });
             }}
