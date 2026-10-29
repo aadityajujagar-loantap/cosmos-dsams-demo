@@ -1070,7 +1070,7 @@ export const adminApi = {
 
   uploadDsaDocument: async (
     idOrCode: number | string,
-    payload: { file?: File; document_base64?: string; file_name?: string; document_type: string; owner_name?: string; remarks?: string }
+    payload: { file?: File; document_base64?: string; file_name?: string; document_type: string; owner_name?: string; remarks?: string; financial_year?: string }
   ): Promise<BackendResponse<DsaDocument>> => {
     if (payload.file && payload.file.size > 10 * 1024 * 1024) {
       throw new Error("File size exceeds maximum allowed limit of 10MB.");
@@ -1098,6 +1098,7 @@ export const adminApi = {
         file_name: fileName || "document.pdf",
         document_base64: base64Data,
         owner_name: payload.owner_name || null,
+        financial_year: payload.financial_year || null,
         remarks: payload.remarks || "Uploaded during onboarding"
       }),
     });

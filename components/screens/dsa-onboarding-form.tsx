@@ -525,6 +525,33 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     };
   } | null>(null);
   const [extraItrYears, setExtraItrYears] = useState<number[]>([]);
+  const availableFinancialYears = useMemo(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    // Exactly matches ItrPolicy.php: lastCompletedStart is month < 4 ? year - 2 : year - 1
+    const lastCompletedStart = currentMonth < 4 ? currentYear - 2 : currentYear - 1;
+    const years: string[] = [];
+    for (let start = lastCompletedStart; start >= lastCompletedStart - 5; start--) {
+      const endYearShort = String((start + 1) % 100).padStart(2, "0");
+      years.push(`${start}-${endYearShort}`);
+    }
+    return years;
+  }, []);
+  const [itrFinancialYears, setItrFinancialYears] = useState<Record<string, string>>(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const lastCompletedStart = currentMonth < 4 ? currentYear - 2 : currentYear - 1;
+    const y0 = `${lastCompletedStart}-${String((lastCompletedStart + 1) % 100).padStart(2, "0")}`;
+    const y1 = `${lastCompletedStart - 1}-${String(lastCompletedStart % 100).padStart(2, "0")}`;
+    const y2 = `${lastCompletedStart - 2}-${String((lastCompletedStart - 1) % 100).padStart(2, "0")}`;
+    return {
+      itr_year_1: y0,
+      itr_year_2: y1,
+      itr_year_3: y2,
+    };
+  });
   const [showAadhaarBack, setShowAadhaarBack] = useState<boolean>(false);
   const [verifyingStakeholderIdx, setVerifyingStakeholderIdx] = useState<number | null>(null);
   const [email, setEmail] = useState<string>("");
@@ -920,6 +947,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         if (data.otpSent !== undefined) setOtpSent(Boolean(data.otpSent));
         if (data.otpVerified !== undefined) setOtpVerified(Boolean(data.otpVerified));
         if (data.uploadedDocs) setUploadedDocs(parseUploadedDocs(data.uploadedDocs));
+        if (Array.isArray(data.extraItrYears)) setExtraItrYears(data.extraItrYears);
+        if (data.itrFinancialYears && typeof data.itrFinancialYears === "object") setItrFinancialYears(data.itrFinancialYears);
         if (data.applicantTitle !== undefined) setApplicantTitle(data.applicantTitle);
         if (data.firstName !== undefined) setFirstName(data.firstName);
         if (data.middleName !== undefined) setMiddleName(data.middleName);
@@ -1150,6 +1179,20 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     setUploadedDocs({});
     setShowAadhaarBack(false);
     setExtraItrYears([]);
+    setItrFinancialYears(() => {
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1;
+      const lastCompletedStart = currentMonth < 4 ? currentYear - 2 : currentYear - 1;
+      const y0 = `${lastCompletedStart}-${String((lastCompletedStart + 1) % 100).padStart(2, "0")}`;
+      const y1 = `${lastCompletedStart - 1}-${String(lastCompletedStart % 100).padStart(2, "0")}`;
+      const y2 = `${lastCompletedStart - 2}-${String((lastCompletedStart - 1) % 100).padStart(2, "0")}`;
+      return {
+        itr_year_1: y0,
+        itr_year_2: y1,
+        itr_year_3: y2,
+      };
+    });
     setVisitReportRemarks("");
     setDeclarationAgreed(false);
     setCreatedDsaId(null);
@@ -1191,6 +1234,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           otpSent,
           otpVerified,
           uploadedDocs: serializedDocs,
+          extraItrYears,
+          itrFinancialYears,
           applicantTitle,
           firstName,
           middleName,
@@ -2719,11 +2764,15 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           if (docType === "visit_report" && mode === "branch") {
             await adminApi.uploadDsaVisitReport(dsaId, docData.file, visitReportRemarks);
           } else {
+            const isItrDoc = docType.startsWith("itr_");
+            const selectedFy = isItrDoc ? (itrFinancialYears[docType] || (docType === "itr_year_1" ? availableFinancialYears[0] : docType === "itr_year_2" ? availableFinancialYears[1] : availableFinancialYears[2])) : undefined;
+
             await adminApi.uploadDsaDocument(dsaId, {
-              document_type: docType,
+              document_type: isItrDoc ? "itr_returns" : docType,
               document_base64: docData.base64,
               file_name: docData.name,
-              remarks: "Attached during onboarding",
+              financial_year: selectedFy,
+              remarks: isItrDoc && selectedFy ? `Financial Year: ${selectedFy}` : "Attached during onboarding",
             });
           }
         } catch (uploadErr: any) {
@@ -5196,9 +5245,29 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           <span className="text-[10px] text-slate-400 block font-normal ml-6 mt-0.5">
                             Allowed formats: .pdf, .jpg, .jpeg, .png (Max 10MB)
                           </span>
+                          <div className="ml-6 mt-2 flex items-center gap-2">
+                            <label className="text-[11px] font-semibold text-slate-600">Financial Year:</label>
+                            <select
+                              value={itrFinancialYears[doc.type] || availableFinancialYears[idx] || ""}
+                              onChange={(e) => {
+                                const selectedYear = e.target.value;
+                                setItrFinancialYears((prev) => ({
+                                  ...prev,
+                                  [doc.type]: selectedYear,
+                                }));
+                              }}
+                              className="text-xs font-semibold px-2 py-0.5 bg-white border border-slate-300 rounded shadow-2xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            >
+                              {availableFinancialYears.map((fy) => (
+                                <option key={fy} value={fy}>
+                                  FY {fy}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                           {attached && (
-                            <span className="text-[11px] text-emerald-700 font-medium ml-6 block mt-0.5">
-                              ✓ {attached.name} ({attached.size})
+                            <span className="text-[11px] text-emerald-700 font-medium ml-6 block mt-1">
+                              ✓ {attached.name} ({attached.size}) — FY {itrFinancialYears[doc.type] || availableFinancialYears[idx] || ""}
                             </span>
                           )}
                         </div>
@@ -5262,6 +5331,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     onClick={() => {
                       const nextYear = extraItrYears.length > 0 ? Math.max(...extraItrYears) + 1 : 3;
                       setExtraItrYears((prev) => [...prev, nextYear]);
+                      setItrFinancialYears((prev) => ({
+                        ...prev,
+                        [`itr_year_${nextYear}`]: availableFinancialYears[nextYear] || "2022-23",
+                      }));
                     }}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-white border border-blue-300 rounded-md shadow-2xs hover:bg-blue-50 transition-colors"
                   >
