@@ -3288,8 +3288,6 @@ export function DsaProfilePage({ id }: { id: string }) {
     }
     return years;
   }, []);
-  const [makerItrUploadFy, setMakerItrUploadFy] = useState<string>("");
-  const [makerItrUploading, setMakerItrUploading] = useState<boolean>(false);
   const authUser = typeof window !== "undefined" ? authService.getUser() : null;
   const rawAuthRoles =
     typeof window !== "undefined" ? authService.getRoles() : [];
@@ -9407,116 +9405,7 @@ const resolveStageStatus = (
                     </div>
 
 
-                    {/* Maker ITR Year-Wise Upload Section */}
-                    {docSubTab === "exp" && canMakerReuploadDocs && (
-                      <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-white p-4 shadow-2xs">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <FileText className="h-4 w-4 text-blue-600" />
-                              <h4 className="text-sm font-bold text-slate-800">
-                                Upload ITR with Financial Year
-                              </h4>
-                              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
-                                2 Years Mandatory
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-500">
-                              Upload Income Tax Returns with Computation. Select the applicable Financial Year for each upload.
-                            </p>
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-2">
-                            <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs">
-                              <label className="text-[11px] font-semibold text-slate-600 whitespace-nowrap">
-                                Financial Year:
-                              </label>
-                              <select
-                                value={makerItrUploadFy || availableFinancialYears[0] || ""}
-                                onChange={(e) => setMakerItrUploadFy(e.target.value)}
-                                className="text-xs font-semibold bg-transparent text-slate-800 focus:outline-none cursor-pointer"
-                              >
-                                {availableFinancialYears.map((fy) => (
-                                  <option key={fy} value={fy}>
-                                    FY {fy}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-
-                            <input
-                              id="maker-itr-file-input"
-                              type="file"
-                              accept=".pdf,.jpg,.jpeg,.png"
-                              className="sr-only"
-                              disabled={makerItrUploading}
-                              onChange={async (e) => {
-                                const target = e.currentTarget;
-                                const file = target.files?.[0];
-                                if (file) {
-                                  target.value = "";
-                                  if (file.size > 10 * 1024 * 1024) {
-                                    toast({
-                                      title: "File too large",
-                                      description: "Maximum allowed file size is 10MB.",
-                                      variant: "warning",
-                                    });
-                                    return;
-                                  }
-                                  const chosenFy = makerItrUploadFy || availableFinancialYears[0];
-                                  const fyIndex = availableFinancialYears.indexOf(chosenFy);
-                                  const targetDocType = fyIndex === 0 ? "itr_year_1" : fyIndex === 1 ? "itr_year_2" : `itr_year_${fyIndex + 1}`;
-
-                                  setMakerItrUploading(true);
-                                  try {
-                                    await uploadDsaDocument(dsa.id, {
-                                      file,
-                                      document_type: targetDocType,
-                                      owner_name: dsa.name,
-                                      financial_year: chosenFy,
-                                      remarks: `Financial Year: ${chosenFy} | Uploaded by Maker (${currentUser?.name || "Maker"})`,
-                                    });
-                                    await fetchDsaDetail(dsa.id);
-                                    await fetchBackendDocuments(true);
-                                    adminApi.getDsaDocumentChecklist(dsa.id).then((res: any) => setDocChecklist(res?.data ?? res)).catch(() => {});
-                                    toast({
-                                      title: "ITR Uploaded",
-                                      description: `ITR for FY ${chosenFy} uploaded successfully. Deviation rechecked.`,
-                                      variant: "success",
-                                    });
-                                  } catch (err: any) {
-                                    toast({
-                                      title: "Upload Failed",
-                                      description: err?.message || "Failed to upload ITR.",
-                                      variant: "warning",
-                                    });
-                                  } finally {
-                                    setMakerItrUploading(false);
-                                  }
-                                }
-                              }}
-                            />
-
-                            <label
-                              htmlFor="maker-itr-file-input"
-                              className={cn(
-                                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 cursor-pointer shadow-sm transition-colors",
-                                makerItrUploading && "opacity-60 pointer-events-none"
-                              )}
-                            >
-                              {makerItrUploading ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <UploadCloud className="h-3.5 w-3.5" />
-                              )}
-                              <span>{makerItrUploading ? "Uploading..." : "+ Upload / Add Another Year ITR"}</span>
-                            </label>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Uploaded Documents Grid */}
+{/* Uploaded Documents Grid */}
                     <div className="grid gap-4 lg:grid-cols-2">
                       {categoryUploadedDocs.map((doc) => {
                         const effectiveStatus = getEffectiveDocStatus(doc);
@@ -9803,7 +9692,7 @@ const resolveStageStatus = (
                               className="text-xs font-semibold text-blue-700 border-blue-300 hover:bg-blue-100/60 flex items-center gap-1.5 shrink-0"
                             >
                               <Plus className="h-3.5 w-3.5" />
-                              + Upload Another Year ITR
+                              Upload Another Year ITR
                             </Button>
                           </div>
                         ) : (
