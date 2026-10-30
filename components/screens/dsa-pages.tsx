@@ -506,15 +506,44 @@ export function isPhotographDocument(docOrType?: any): boolean {
   );
 }
 
-export function formatDocumentType(type?: string): string {
-  if (!type) return "Document Preview";
-  if (isVisitReportDocument(type)) return "Physical Visit Report";
-  if (isApplicationFormDocument(type)) return "Application Form";
-  if (isDdReviewReportDocument(type)) return "Due Diligence Review Report";
-  if (typeof type === "string" && type.startsWith("itr_year_")) {
-    const yr = type.replace("itr_year_", "");
+export function isItrDocument(docOrType?: any): boolean {
+  if (!docOrType) return false;
+  const rawType =
+    typeof docOrType === "object"
+      ? docOrType.document_type || docOrType.type || ""
+      : docOrType;
+  const t = String(rawType).toLowerCase().trim();
+  return (
+    t === "itr_returns" ||
+    t === "itr" ||
+    t === "it_returns" ||
+    t.startsWith("itr_") ||
+    t.includes("itr")
+  );
+}
+
+export function formatDocumentType(type?: string, doc?: any): string {
+  if (!type && !doc) return "Document Preview";
+  const actualType = type || doc?.document_type || doc?.type || "";
+  if (isVisitReportDocument(actualType)) return "Physical Visit Report";
+  if (isApplicationFormDocument(actualType)) return "Application Form";
+  if (isDdReviewReportDocument(actualType)) return "Due Diligence Review Report";
+
+  let fy = "";
+  if (doc?.financial_year) {
+    fy = String(doc.financial_year).trim();
+  } else if (doc?.remarks) {
+    const m = String(doc.remarks).match(/(?:financial year|fy)[:\s]*([0-9]{2,4}[-–\/_][0-9]{2,4})/i);
+    if (m?.[1]) fy = m[1].replace("_", "-").trim();
+  }
+
+  if (typeof actualType === "string" && actualType.startsWith("itr_year_")) {
+    const yr = actualType.replace("itr_year_", "");
     const suffix = yr === "1" ? "st" : yr === "2" ? "nd" : yr === "3" ? "rd" : "th";
-    return `${yr}${suffix} Year ITR with computation`;
+    return `${yr}${suffix} Year ITR with computation${fy ? ` (${fy})` : ""}`;
+  }
+  if (actualType === "itr_returns" || actualType === "itr" || actualType === "it_returns") {
+    return fy ? `IT Returns with Computation (${fy})` : "IT Returns with Computation";
   }
   const map: Record<string, string> = {
     aadhaar_card: "Aadhaar Card",
@@ -3270,6 +3299,20 @@ export function DsaProfilePage({ id }: { id: string }) {
   const [appFormSubTab, setAppFormSubTab] = useState<
     "applicant" | "kyc" | "ddl"
   >("applicant");
+  const availableFinancialYears = useMemo(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const lastCompletedStart = currentMonth < 4 ? currentYear - 2 : currentYear - 1;
+    const years: string[] = [];
+    for (let start = lastCompletedStart; start >= lastCompletedStart - 5; start--) {
+      const endYearShort = String((start + 1) % 100).padStart(2, "0");
+      years.push(`${start}-${endYearShort}`);
+    }
+    return years;
+  }, []);
+  const [makerItrUploadFy, setMakerItrUploadFy] = useState<string>("");
+  const [makerItrUploading, setMakerItrUploading] = useState<boolean>(false);
   const authUser = typeof window !== "undefined" ? authService.getUser() : null;
   const rawAuthRoles =
     typeof window !== "undefined" ? authService.getRoles() : [];
@@ -5372,11 +5415,17 @@ const resolveStageStatus = (
           `Re-uploaded by Maker (${currentUser?.name || "Maker"})`,
         );
       } else {
+        const isItr = isItrDocument(doc);
+        let fy = doc.financial_year || (doc.remarks && /financial year:\s*([^|]+)/i.exec(doc.remarks)?.[1]?.trim());
+        if (!fy && isItr) {
+          fy = docType === "itr_year_1" ? availableFinancialYears[0] : docType === "itr_year_2" ? availableFinancialYears[1] : availableFinancialYears[0];
+        }
         await uploadDsaDocument(dsa.id, {
           file,
           document_type: docType,
           owner_name: dsa.name,
-          remarks: `Re-uploaded by Maker (${currentUser?.name || "Maker"})`,
+          financial_year: fy,
+          remarks: fy ? `Financial Year: ${fy} | Re-uploaded by Maker (${currentUser?.name || "Maker"})` : `Re-uploaded by Maker (${currentUser?.name || "Maker"})`,
         });
       }
 
@@ -9278,6 +9327,115 @@ const resolveStageStatus = (
                       )}
                     </div>
 
+                    {/* Maker ITR Year-Wise Upload Section */}
+                    {docSubTab === "exp" && canMakerReuploadDocs && (
+                      <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-white p-4 shadow-2xs">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-4 w-4 text-blue-600" />
+                              <h4 className="text-sm font-bold text-slate-800">
+                                Upload ITR with Financial Year
+                              </h4>
+                              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                                2 Years Mandatory
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500">
+                              Upload Income Tax Returns with Computation. Select the applicable Financial Year for each upload.
+                            </p>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs">
+                              <label className="text-[11px] font-semibold text-slate-600 whitespace-nowrap">
+                                Financial Year:
+                              </label>
+                              <select
+                                value={makerItrUploadFy || availableFinancialYears[0] || ""}
+                                onChange={(e) => setMakerItrUploadFy(e.target.value)}
+                                className="text-xs font-semibold bg-transparent text-slate-800 focus:outline-none cursor-pointer"
+                              >
+                                {availableFinancialYears.map((fy) => (
+                                  <option key={fy} value={fy}>
+                                    FY {fy}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <input
+                              id="maker-itr-file-input"
+                              type="file"
+                              accept=".pdf,.jpg,.jpeg,.png"
+                              className="sr-only"
+                              disabled={makerItrUploading}
+                              onChange={async (e) => {
+                                const target = e.currentTarget;
+                                const file = target.files?.[0];
+                                if (file) {
+                                  target.value = "";
+                                  if (file.size > 10 * 1024 * 1024) {
+                                    toast({
+                                      title: "File too large",
+                                      description: "Maximum allowed file size is 10MB.",
+                                      variant: "warning",
+                                    });
+                                    return;
+                                  }
+                                  const chosenFy = makerItrUploadFy || availableFinancialYears[0];
+                                  const fyIndex = availableFinancialYears.indexOf(chosenFy);
+                                  const targetDocType = fyIndex === 0 ? "itr_year_1" : fyIndex === 1 ? "itr_year_2" : `itr_year_${fyIndex + 1}`;
+
+                                  setMakerItrUploading(true);
+                                  try {
+                                    await uploadDsaDocument(dsa.id, {
+                                      file,
+                                      document_type: targetDocType,
+                                      owner_name: dsa.name,
+                                      financial_year: chosenFy,
+                                      remarks: `Financial Year: ${chosenFy} | Uploaded by Maker (${currentUser?.name || "Maker"})`,
+                                    });
+                                    await fetchDsaDetail(dsa.id);
+                                    await fetchBackendDocuments(true);
+                                    adminApi.getDsaDocumentChecklist(dsa.id).then((res: any) => setDocChecklist(res?.data ?? res)).catch(() => {});
+                                    toast({
+                                      title: "ITR Uploaded",
+                                      description: `ITR for FY ${chosenFy} uploaded successfully. Deviation rechecked.`,
+                                      variant: "success",
+                                    });
+                                  } catch (err: any) {
+                                    toast({
+                                      title: "Upload Failed",
+                                      description: err?.message || "Failed to upload ITR.",
+                                      variant: "warning",
+                                    });
+                                  } finally {
+                                    setMakerItrUploading(false);
+                                  }
+                                }
+                              }}
+                            />
+
+                            <label
+                              htmlFor="maker-itr-file-input"
+                              className={cn(
+                                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 cursor-pointer shadow-sm transition-colors",
+                                makerItrUploading && "opacity-60 pointer-events-none"
+                              )}
+                            >
+                              {makerItrUploading ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <UploadCloud className="h-3.5 w-3.5" />
+                              )}
+                              <span>{makerItrUploading ? "Uploading..." : "+ Upload / Add Another Year ITR"}</span>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Uploaded Documents Grid */}
                     <div className="grid gap-4 lg:grid-cols-2">
                       {categoryUploadedDocs.map((doc) => {
@@ -9294,6 +9452,7 @@ const resolveStageStatus = (
                         const docType = doc.document_type || doc.type;
                         const isCurrentlyReuploading =
                           reuploadingDocType === docType;
+                        const docFy = doc.financial_year || (doc.remarks && /financial year:\s*([^|]+)/i.exec(doc.remarks)?.[1]?.trim());
 
                         return (
                           <div
@@ -9303,9 +9462,16 @@ const resolveStageStatus = (
                             <div className="flex flex-col gap-2 w-full">
                               <div className="flex items-center justify-between">
                                 <div>
-                                  <p className="font-semibold text-slate-950">
-                                    {formatDocumentType(doc.document_type)}
-                                  </p>
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-semibold text-slate-950">
+                                      {formatDocumentType(doc.document_type, doc)}
+                                    </p>
+                                    {isItrDocument(doc) && docFy && (
+                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                                        FY {docFy}
+                                      </span>
+                                    )}
+                                  </div>
                                   <p className="text-sm text-slate-500">
                                     {doc.file_name}{" "}
                                     {doc.size ? `• ${doc.size}` : ""}

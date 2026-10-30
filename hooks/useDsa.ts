@@ -878,7 +878,7 @@ export function useDsa() {
   );
 
   const uploadDsaDocument = useCallback(
-    async (idOrCode: number | string, payload: { file: File; document_type: string; owner_name?: string; remarks?: string }) => {
+    async (idOrCode: number | string, payload: { file: File; document_type: string; owner_name?: string; remarks?: string; financial_year?: string }) => {
       setActionLoading(true);
       try {
         const response = await adminApi.uploadDsaDocument(idOrCode, payload);
