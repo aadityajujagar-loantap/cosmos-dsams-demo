@@ -20,6 +20,12 @@ import {
 
 export type KycDataType = "pan" | "gst" | "bank" | "udyam" | "cibil" | "aml";
 
+const isProprietorshipDsa = (dsa: any): boolean => {
+  if (!dsa) return false;
+  const c = String(dsa.legal_constitution || dsa.constitution || dsa.business_type || "").toLowerCase().trim();
+  return c.includes("proprietor");
+};
+
 interface DsaKycDataModalProps {
   open: boolean;
   onClose: () => void;
@@ -184,7 +190,8 @@ export function DsaKycDataModal({
           (dsa.dsa_type || "").toUpperCase() === "ENTITY" ||
           (dsa.entity_type || "").toUpperCase() === "ENTITY" ||
           ((dsa.business_type || "").toUpperCase() !== "INDIVIDUAL" && (dsa.business_type || "").trim() !== "");
-        const code = isEntity ? "CIBIL_COMMERCIAL" : "CIBIL_CONSUMER";
+        const isProprietorship = isProprietorshipDsa(dsa);
+        const code = (isEntity && !isProprietorship) ? "CIBIL_COMMERCIAL" : "CIBIL_CONSUMER";
         res = await adminApi.triggerCheckerVerification(dsa.id, code, {
           pan: dsa.pan,
           entity_name: dsa.entity_name || dsa.name,
@@ -1274,13 +1281,20 @@ function CibilDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
     dsa.dsa_type === "Entity" ||
     dsa.entity_type === "ENTITY";
 
-  const hasCibilCommercial =
-    normalized.cmr_rank !== undefined ||
-    normalized.total_credit_facilities !== undefined ||
-    normalized.total_outstanding !== undefined ||
-    (apiData?.status === "SUCCESS" && isEntity);
+  const isProprietorship = isProprietorshipDsa(dsa);
+  const isConsumerCibil =
+    apiData?.verification_code === "CIBIL_CONSUMER" ||
+    apiData?.data?.verification_code === "CIBIL_CONSUMER" ||
+    (normalized.cibil_score !== undefined && normalized.cmr_rank === undefined);
 
-  if (isEntity || normalized.cmr_rank !== undefined) {
+  const hasCibilCommercial =
+    !isProprietorship &&
+    (normalized.cmr_rank !== undefined ||
+      normalized.total_credit_facilities !== undefined ||
+      normalized.total_outstanding !== undefined ||
+      (apiData?.status === "SUCCESS" && isEntity && !isConsumerCibil));
+
+  if (!isProprietorship && ((isEntity && !isConsumerCibil) || normalized.cmr_rank !== undefined)) {
     const cmrRank = normalized.cmr_rank;
     const rankDesc = normalized.rank_description || (cmrRank ? `CMR-${cmrRank}` : "");
     const facilities = normalized.total_credit_facilities;

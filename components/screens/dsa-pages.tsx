@@ -229,6 +229,12 @@ const businessTypes: BusinessType[] = [
   "Public Limited",
 ];
 
+const isProprietorshipDsa = (dsa: any): boolean => {
+  if (!dsa) return false;
+  const c = String(dsa.legal_constitution || dsa.constitution || dsa.business_type || "").toLowerCase().trim();
+  return c.includes("proprietor");
+};
+
 const queueStatuses: DsaStatus[] = [
   "Submitted",
   "Pending Branch Approval",
@@ -4149,7 +4155,8 @@ export function DsaProfilePage({ id }: { id: string }) {
           (dsa.dsa_type || "").toUpperCase() === "ENTITY" ||
           (dsa.entity_type || "").toUpperCase() === "ENTITY" ||
           ((dsa.business_type || "").toUpperCase() !== "INDIVIDUAL" && (dsa.business_type || "").trim() !== "");
-        const cibilCode = isEntity ? "CIBIL_COMMERCIAL" : "CIBIL_CONSUMER";
+        const isProprietorship = isProprietorshipDsa(dsa);
+        const cibilCode = (isEntity && !isProprietorship) ? "CIBIL_COMMERCIAL" : "CIBIL_CONSUMER";
         const res = await triggerCheckerVerification(dsa.id, cibilCode, {
           pan: dsa.pan,
           entity_name: dsa.entity_name || dsa.name,
@@ -5713,18 +5720,22 @@ const resolveStageStatus = (
       ]
     : [];
 
-  const requiredCheckerVerifications = isIndividualDsa
+  const isProprietorship = isProprietorshipDsa(dsa);
+
+  const requiredCheckerVerifications = (isIndividualDsa || isProprietorship)
     ? [
         ...gstCheckerVerif,
         ...udyamCheckerVerif,
         {
           code: "CIBIL_CONSUMER",
           label: "Transunion CIBIL Consumer Hard Pull",
-          dsaType: "Individual",
+          dsaType: isProprietorship ? "Proprietorship" : "Individual",
           triggeredBy: "Checker",
           ifFail: "Continue; remark in DD note",
           ifAdverse: "Deviation if < 700; reject if < 550",
-          desc: "Bureau hard credit pull for individual credit history and score",
+          desc: isProprietorship
+            ? "Bureau hard credit pull for proprietor credit history and score"
+            : "Bureau hard credit pull for individual credit history and score",
         },
         {
           code: "AML_COMPASS",
@@ -6183,8 +6194,7 @@ const resolveStageStatus = (
   const isDdlReportVerified = ddlReportDoc
     ? getEffectiveDocStatus(ddlReportDoc) === "Verified"
     : false;
-  const hasUnverifiedDdlReport =
-    hasCheckerGeneratedReport && Boolean(ddlReportDoc) && !isDdlReportVerified;
+  const hasUnverifiedDdlReport = false;
 
   const getWorkflowBlockReason = (): string | null => {
     if (isMakerLevel) {
@@ -6210,9 +6220,6 @@ const resolveStageStatus = (
       }
       if (!hasCheckerGeneratedReport) {
         return "Due Diligence Report Required: Please generate and submit the Due Diligence & Deviations Report in the Reports tab.";
-      }
-      if (hasUnverifiedDdlReport) {
-        return "Due Diligence Report Verification Required: Please view and verify the updated Due Diligence Review Report in the Documents tab.";
       }
     }
     if (workflowLevelInfo.currentLevel >= 3 && workflowLevelInfo.currentLevel <= 7) {
@@ -7889,7 +7896,7 @@ const resolveStageStatus = (
           tabs={[
             { label: "DSA Approval", value: "actions", dot: Boolean(getWorkflowBlockReason()) },
             { label: "DSA Application Form", value: "overview", dot: !isMakerUser && (pendingCheckerVerifications.length > 0 || !hasCheckerDdNote || !hasCheckerGeneratedReport) },
-            { label: "Documents Checklist", value: "documents", dot: hasUnverifiedApplicantDocs || missingProfileDocuments.length > 0 || (!isMakerUser && hasUnverifiedDdlReport) },
+            { label: "Documents Checklist", value: "documents", dot: hasUnverifiedApplicantDocs || missingProfileDocuments.length > 0 },
             ...(canViewAgreementsTab
               ? [{
                   label: "Agreements",
@@ -8138,7 +8145,8 @@ const resolveStageStatus = (
                                   (dsa.dsa_type || "").toUpperCase() === "ENTITY" ||
                                   (dsa.entity_type || "").toUpperCase() === "ENTITY" ||
                                   ((dsa.business_type || "").toUpperCase() !== "INDIVIDUAL" && (dsa.business_type || "").trim() !== "");
-                                const cibilCode = isEntity
+                                const isProprietorship = isProprietorshipDsa(dsa);
+                                const cibilCode = (isEntity && !isProprietorship)
                                   ? "CIBIL_COMMERCIAL"
                                   : "CIBIL_CONSUMER";
                                 if (!isCibilChecked) {
@@ -11428,18 +11436,6 @@ const resolveStageStatus = (
                       });
                       setApprovalRemarksError(
                         "Please submit the Due Diligence Report in the Reports tab first.",
-                      );
-                      return;
-                    }
-                    if (hasUnverifiedDdlReport) {
-                      toast({
-                        title: "Due Diligence Report Verification Required",
-                        description:
-                          "Please view and verify the updated Due Diligence Review Report in the Documents tab before recommending to Sub-Region Head.",
-                        variant: "warning",
-                      });
-                      setApprovalRemarksError(
-                        "Please verify the updated Due Diligence Review Report in the Documents tab first.",
                       );
                       return;
                     }
