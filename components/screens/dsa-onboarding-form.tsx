@@ -407,7 +407,7 @@ function getDocDisplayLabel(key: string, docList?: DocDef[]): string {
     dsa_consent_dpdp: "DSA Consent & Declaration (DPDP Act)",
     visit_report: "Office Visit Report",
     brief_profile: "Brief Profile of DSA",
-    itr_returns: "IT Returns (Last 2 F.Y.)",
+    itr_returns: "IT Returns with Computation",
     other_document: "Other Supporting Document",
     gst_certificate: "GST Certificate",
     rent_agreement: "Rent Agreement (Residence / office as applicable)",
@@ -1535,8 +1535,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       return {
         type: `itr_year_${yr}`,
         label: `${yr}${suffix} Year ITR with computation`,
-        required: yr <= 2,
-        requirementLabel: yr <= 2 ? "Mandatory" : "Optional",
+        required: yr === 1,
+        requirementLabel: yr === 1 ? "Mandatory" : "Optional",
       };
     });
   }, [allItrYears]);
@@ -2533,9 +2533,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
       if (!uploadedDocs["itr_year_1"]) {
         missing.push("1st Year ITR with computation");
-      }
-      if (!uploadedDocs["itr_year_2"]) {
-        missing.push("2nd Year ITR with computation");
       }
 
       if (!uploadedDocs["dsa_consent_dpdp"]) {
@@ -5216,7 +5213,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     </div>
                   </div>
                   <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-blue-100 text-blue-700">
-                    Mandatory (Last 2 F.Y.)
+                    1st Year Mandatory (Additional Years Optional)
                   </span>
                 </div>
 
@@ -5224,7 +5221,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   {itrDocDefs.map((doc, idx) => {
                     const yrNum = allItrYears[idx];
                     const attached = uploadedDocs[doc.type];
-                    const isExtraYear = yrNum > 2;
+                    const isExtraYear = yrNum > 1;
 
                     return (
                       <div

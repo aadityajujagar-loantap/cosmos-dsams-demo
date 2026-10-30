@@ -4813,6 +4813,10 @@ export function DsaProfilePage({ id }: { id: string }) {
   const [reuploadingDocType, setReuploadingDocType] = useState<string | null>(
     null,
   );
+  const [showAddItrSlot, setShowAddItrSlot] = useState<boolean>(false);
+  const [extraItrYearNum, setExtraItrYearNum] = useState<number>(2);
+  const [extraItrFy, setExtraItrFy] = useState<string>("2023-24");
+  const [isUploadingExtraItr, setIsUploadingExtraItr] = useState<boolean>(false);
   const [loadingPreviewDocId, setLoadingPreviewDocId] = useState<any>(null);
   const [loadingDdReportModal, setLoadingDdReportModal] = useState<boolean>(false);
 
@@ -9611,6 +9615,174 @@ const resolveStageStatus = (
                         </div>
                       ) : null}
                     </div>
+
+                    {/* Upload Additional Year-wise ITR (Maker only, Experience/Financials subtab) */}
+                    {docSubTab === "exp" && canMakerReuploadDocs && (
+                      <div className="pt-2">
+                        {!showAddItrSlot ? (
+                          <div className="flex items-center justify-between p-3 rounded-lg border border-dashed border-blue-200 bg-blue-50/40">
+                            <div>
+                              <p className="text-xs font-bold text-slate-800">
+                                Additional Financial Year ITRs (Optional)
+                              </p>
+                              <p className="text-[11px] text-slate-500 mt-0.5">
+                                1st Year ITR is mandatory. You can optionally upload 2nd, 3rd, 4th, or 5th Year ITR with computation.
+                              </p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const uploadedItrYears = allDisplayDocs
+                                  .filter((d: any) => {
+                                    const t = String(d.document_type || "").toLowerCase();
+                                    return t.startsWith("itr_year_");
+                                  })
+                                  .map((d: any) => {
+                                    const yr = parseInt(String(d.document_type).replace(/[^0-9]/g, ""), 10);
+                                    return isNaN(yr) ? 1 : yr;
+                                  });
+                                const nextYear = uploadedItrYears.length > 0 ? Math.max(...uploadedItrYears) + 1 : 2;
+                                setExtraItrYearNum(nextYear > 5 ? 2 : nextYear);
+                                setShowAddItrSlot(true);
+                              }}
+                              className="text-xs font-semibold text-blue-700 border-blue-300 hover:bg-blue-100/60 flex items-center gap-1.5 shrink-0"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                              + Upload Another Year ITR
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <FileText className="h-4 w-4 text-blue-600" />
+                                <span className="text-sm font-bold text-slate-900">
+                                  Upload Year-wise ITR with Computation (Optional)
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setShowAddItrSlot(false)}
+                                className="text-slate-400 hover:text-slate-600 p-1 rounded"
+                                title="Close"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                            <div className="grid sm:grid-cols-3 gap-3 items-end">
+                              <div>
+                                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                                  ITR Year Slot:
+                                </label>
+                                <select
+                                  value={extraItrYearNum}
+                                  onChange={(e) => setExtraItrYearNum(Number(e.target.value))}
+                                  className="w-full text-xs font-semibold px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                >
+                                  {[2, 3, 4, 5].map((yr) => {
+                                    const suffix = yr === 2 ? "nd" : yr === 3 ? "rd" : "th";
+                                    return (
+                                      <option key={yr} value={yr}>
+                                        {yr}{suffix} Year ITR with computation
+                                      </option>
+                                    );
+                                  })}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                                  Financial Year:
+                                </label>
+                                <select
+                                  value={extraItrFy}
+                                  onChange={(e) => setExtraItrFy(e.target.value)}
+                                  className="w-full text-xs font-semibold px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                >
+                                  {["2024-25", "2023-24", "2022-23", "2021-22", "2020-21"].map((fy) => (
+                                    <option key={fy} value={fy}>
+                                      FY {fy}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <input
+                                  id={`upload-extra-itr-${dsa.id}`}
+                                  type="file"
+                                  accept=".pdf,.jpg,.jpeg,.png"
+                                  className="sr-only"
+                                  disabled={isUploadingExtraItr}
+                                  onChange={async (e) => {
+                                    const file = e.currentTarget.files?.[0];
+                                    if (!file) return;
+                                    e.currentTarget.value = "";
+                                    if (file.size > 10 * 1024 * 1024) {
+                                      toast({
+                                        title: "File too large",
+                                        description: "Maximum allowed file size is 10MB.",
+                                        variant: "warning",
+                                      });
+                                      return;
+                                    }
+                                    setIsUploadingExtraItr(true);
+                                    try {
+                                      const docType = `itr_year_${extraItrYearNum}`;
+                                      await uploadDsaDocument(dsa.id, {
+                                        file,
+                                        document_type: docType,
+                                        owner_name: dsa.name,
+                                        remarks: `Financial Year: ${extraItrFy} | Uploaded by Maker (${currentUser?.name || "Maker"})`,
+                                      });
+                                      await fetchDsaDetail(dsa.id);
+                                      await fetchBackendDocuments(true);
+                                      adminApi
+                                        .getDsaDocumentChecklist(dsa.id)
+                                        .then((res: any) => setDocChecklist(res?.data ?? res))
+                                        .catch(() => {});
+                                      toast({
+                                        title: "ITR Document Uploaded",
+                                        description: `${extraItrYearNum}${extraItrYearNum === 2 ? "nd" : extraItrYearNum === 3 ? "rd" : "th"} Year ITR (FY ${extraItrFy}) uploaded successfully.`,
+                                        variant: "success",
+                                      });
+                                      setShowAddItrSlot(false);
+                                    } catch (err: any) {
+                                      toast({
+                                        title: "Upload Failed",
+                                        description: err?.message || "Failed to upload ITR document.",
+                                        variant: "warning",
+                                      });
+                                    } finally {
+                                      setIsUploadingExtraItr(false);
+                                    }
+                                  }}
+                                />
+                                <label
+                                  htmlFor={`upload-extra-itr-${dsa.id}`}
+                                  className={cn(
+                                    "w-full inline-flex h-8 cursor-pointer items-center justify-center gap-2 rounded-md bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700 transition",
+                                    isUploadingExtraItr ? "opacity-60 cursor-not-allowed" : ""
+                                  )}
+                                >
+                                  {isUploadingExtraItr ? (
+                                    <>
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      Uploading...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <UploadCloud className="h-3.5 w-3.5" />
+                                      Attach & Upload File
+                                    </>
+                                  )}
+                                </label>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Missing Documents Grid (Maker Upload) */}
                     {categoryMissingDocs.length > 0 && canMakerReuploadDocs ? (
