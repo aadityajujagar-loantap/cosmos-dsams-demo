@@ -541,7 +541,7 @@ export function isPhotographDocument(docOrType?: any): boolean {
 export function formatDocumentType(type?: string, doc?: any): string {
   if (!type && !doc) return "Document Preview";
   const actualType = type || doc?.document_type || doc?.type || "";
-  if (isCibilReportDocument(actualType)) return "TransUnion CIBIL Consumer Report (CIR)";
+  if (isCibilReportDocument(actualType)) return "CIBIL Report";
   if (isVisitReportDocument(actualType)) return "Physical Visit Report";
   if (isApplicationFormDocument(actualType)) return "Application Form";
   if (isDdReviewReportDocument(actualType)) return "Due Diligence Review Report";
@@ -4140,6 +4140,16 @@ export function DsaProfilePage({ id }: { id: string }) {
         ) {
           setVerifiedKyc((prev) => ({ ...prev, cibil: true }));
           setFailedKyc((prev) => ({ ...prev, cibil: false }));
+          await fetchBackendDocuments(true);
+          try {
+            const reportRes: any = await adminApi.getCibilReport(dsa.id);
+            const reportData = reportRes?.data ?? reportRes;
+            if (reportData && (reportData.success || reportData.generated || reportData.document || reportData.score)) {
+              setCibilReportMeta(reportData);
+            }
+          } catch {
+            // non-critical
+          }
         } else {
           setVerifiedKyc((prev) => ({ ...prev, cibil: false }));
           setFailedKyc((prev) => ({ ...prev, cibil: true }));
@@ -5342,7 +5352,7 @@ const resolveStageStatus = (
   // - Returns "Pending" if newly uploaded, re-uploaded by Maker, or awaiting Checker verification
   const getEffectiveDocStatus = (doc: any): string => {
     if (!doc) return "Pending";
-    if (isApplicationFormDocument(doc)) return "Verified";
+    if (isApplicationFormDocument(doc) || isCibilReportDocument(doc)) return "Verified";
     if (manuallyFailedDocIds.has(doc.id)) return "Failed";
     if (manuallyVerifiedDocIds.has(doc.id) || checkerVerifiedDocIds.has(doc.id))
       return "Verified";
@@ -5953,6 +5963,32 @@ const resolveStageStatus = (
     });
   }
 
+  if (
+    (cibilReportMeta?.document ||
+      cibilReportMeta?.generated ||
+      (dsa?.cibil_score && String(dsa?.cibil_score).trim() !== "" && String(dsa?.cibil_score) !== "0") ||
+      (dsa?.cibil_status && String(dsa?.cibil_status).toUpperCase() === "SUCCESS") ||
+      isCibilChecked ||
+      verifiedKyc.cibil) &&
+    !rawDocList.some((d: any) => isCibilReportDocument(d))
+  ) {
+    const apiBase = (
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
+    ).replace(/\/api\/?$/, "");
+    const docMeta = cibilReportMeta?.document;
+    rawDocList.push({
+      id: docMeta?.id || (typeof dsa?.id === "number" ? dsa.id * 100000 + 888 : 888888),
+      document_type: "cibil_report",
+      file_name: docMeta?.file_name || `cibil_report_${dsa?.id || ""}.pdf`,
+      file_path: docMeta?.file_path || `dsa_cibil_reports/${dsa?.id}/cibil_report_${dsa?.id}.pdf`,
+      file_url: docMeta?.file_url || `${apiBase}/api/v1/dsa/${dsa?.id}/cibil-report/pdf`,
+      size: docMeta?.size || "PDF",
+      status: "Verified",
+      uploaded_at: docMeta?.uploaded_at || (dsa as any)?.cibil_fetched_at || new Date().toISOString(),
+      remarks: "Bureau CIR Report Generated via TransUnion CIBIL Gateway",
+    });
+  }
+
   const hasCheckerGeneratedReport = Boolean(
     rawDocList.some(
       (d: any) =>
@@ -6019,7 +6055,8 @@ const resolveStageStatus = (
       dt !== "DUE_DILIGENCE_REVIEW_REPORT" &&
       dt !== "EMPANELMENT_LETTER" &&
       dt !== "AGREEMENT" &&
-      dt !== "SIGNED_AGREEMENT"
+      dt !== "SIGNED_AGREEMENT" &&
+      !isCibilReportDocument(d)
     );
   });
   const applicantVerifiedDocsCount = applicantReviewDocs.filter(
@@ -9147,36 +9184,22 @@ const resolveStageStatus = (
                   { id: "other", label: "Other Documents", icon: FileText },
                 ];
 
-                const cibilReportDoc =
-                  allDisplayDocs.find((d: any) => isCibilReportDocument(d)) ||
-                  backendDocs.find((d: any) => isCibilReportDocument(d)) ||
-                  (cibilReportMeta?.document ? cibilReportMeta.document : null);
-
-                const isCibilReportAvailable = Boolean(
-                  cibilReportDoc ||
-                  cibilReportMeta?.generated ||
-                  (cibilReportMeta?.score !== undefined && cibilReportMeta?.score !== null && String(cibilReportMeta?.score) !== "0") ||
-                  (dsa?.cibil_score && String(dsa?.cibil_score).trim() !== "" && String(dsa?.cibil_score) !== "0") ||
-                  (dsa?.cibil_status && String(dsa?.cibil_status).toUpperCase() === "SUCCESS")
-                );
-
-                const showCibilReportBlock =
-                  docSubTab === "kyc" &&
-                  canL2ToL7ViewCibilReport &&
-                  isCibilReportAvailable;
-
                 const categoryUploadedDocs = allDisplayDocs.filter(
-                  (d) => getDocumentCategory(d) === docSubTab && !isCibilReportDocument(d),
+                  (d) =>
+                    getDocumentCategory(d) === docSubTab &&
+                    (!isCibilReportDocument(d) || canL2ToL7ViewCibilReport),
                 );
                 const categoryMissingDocs = missingProfileDocuments.filter(
-                  (d) => getDocumentCategory(d) === docSubTab && !isCibilReportDocument(d),
+                  (d) =>
+                    getDocumentCategory(d) === docSubTab &&
+                    !isCibilReportDocument(d),
                 );
 
                 const kycUploadedCount = allDisplayDocs.filter(
                   (d) =>
                     getDocumentCategory(d) === "kyc" &&
                     (!isCibilReportDocument(d) || canL2ToL7ViewCibilReport),
-                ).length + (showCibilReportBlock && !allDisplayDocs.some(isCibilReportDocument) ? 1 : 0);
+                ).length;
                 const expUploadedCount = allDisplayDocs.filter(
                   (d) => getDocumentCategory(d) === "exp",
                 ).length;
@@ -9344,88 +9367,6 @@ const resolveStageStatus = (
                     </div>
 
 
-                    {/* Dedicated CIBIL Consumer Report Block (Visible strictly to L2–L7 reviewers when report is available) */}
-                    {showCibilReportBlock && (
-                      <div className="rounded-xl border border-sky-200 bg-gradient-to-r from-sky-50/80 via-blue-50/40 to-white p-4.5 sm:p-5 shadow-xs transition-all hover:border-sky-300">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                          <div className="flex items-start gap-3.5">
-                            <div className="w-10 h-10 rounded-lg bg-sky-600 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
-                              <ShieldCheck className="h-5 w-5" />
-                            </div>
-                            <div className="space-y-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <h4 className="text-sm font-bold text-slate-900 tracking-tight">
-                                  TransUnion CIBIL Consumer Credit Information Report (CIR)
-                                </h4>
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200">
-                                  <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                                  Report Generated
-                                </span>
-                                {(dsa?.cibil_score || cibilReportMeta?.score) ? (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2.5 py-0.5 text-[11px] font-bold text-sky-800 border border-sky-200">
-                                    Score: {dsa?.cibil_score || cibilReportMeta?.score}
-                                  </span>
-                                ) : null}
-                              </div>
-                              <p className="text-xs text-slate-500 max-w-2xl leading-relaxed">
-                                Official credit bureau CIR document generated via TransUnion CIBIL Consumer API. Reviewer copy with score, repayment history, account summary, and enquiry records.
-                              </p>
-                              <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 pt-0.5">
-                                <span className="font-medium text-slate-700">
-                                  {cibilReportDoc?.file_name || `cibil_report_${dsa?.id || ""}.pdf`}
-                                </span>
-                                {cibilReportDoc?.file_size ? (
-                                  <span>• {cibilReportDoc.file_size}</span>
-                                ) : null}
-                                <span className="text-slate-400">• Available for L2–L7 Authorities</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-2 sm:self-center shrink-0">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                const reportToPreview = cibilReportDoc || {
-                                  id: "cibil_consumer_report",
-                                  document_type: "CIBIL_REPORT",
-                                  file_name: `cibil_report_${dsa.id}.pdf`,
-                                  owner_name: dsa?.name,
-                                  status: "Uploaded",
-                                };
-                                openDocPreview(reportToPreview);
-                              }}
-                              className="text-xs px-3 py-1.5 h-8 flex items-center gap-1.5 font-semibold text-sky-800 bg-white hover:bg-sky-50 border-sky-300 shadow-2xs"
-                            >
-                              <Eye className="h-3.5 w-3.5 text-sky-600" />
-                              View Report
-                            </Button>
-
-                            <a
-                              href={`${(process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").replace(/\/api\/?$/, "")}/api/v1/dsa/${dsa.id}/cibil-report/view`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 h-8 rounded-md font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 shadow-2xs transition-colors"
-                            >
-                              <ExternalLink className="h-3.5 w-3.5 text-slate-500" />
-                              HTML View
-                            </a>
-
-                            <a
-                              href={`${(process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").replace(/\/api\/?$/, "")}/api/v1/dsa/${dsa.id}/cibil-report/pdf?download=1`}
-                              download={`cibil_consumer_report_${dsa.id}.pdf`}
-                              className="inline-flex items-center gap-1.5 text-xs px-3.5 py-1.5 h-8 rounded-md font-semibold text-white bg-sky-600 hover:bg-sky-700 shadow-2xs transition-colors"
-                            >
-                              <Download className="h-3.5 w-3.5" />
-                              Download PDF
-                            </a>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
                     {/* Uploaded Documents Grid */}
                     <div className="grid gap-4 lg:grid-cols-2">
                       {categoryUploadedDocs.map((doc) => {
@@ -9434,6 +9375,8 @@ const resolveStageStatus = (
                         const isVisitReport = isVisitReportDocument(doc);
                         const isAppForm = isApplicationFormDocument(doc);
                         const isDdReport = isDdReviewReportDocument(doc);
+                        const isCibilReport = isCibilReportDocument(doc);
+                        const isViewOnlyDoc = isAppForm || isCibilReport;
                         const canVerifyCurrentDoc = canApproveDoc(doc);
                         const isPendingVerification =
                           canVerifyCurrentDoc &&
@@ -9462,13 +9405,13 @@ const resolveStageStatus = (
                                 <div className="flex flex-col items-end gap-1">
                                   <StatusBadge
                                     status={
-                                      isAppForm
+                                      isViewOnlyDoc
                                         ? "Generated"
                                         : getDocDisplayStatus(effectiveStatus)
                                     }
                                   />
                                   {canMakerReuploadDocs &&
-                                    !isAppForm &&
+                                    !isViewOnlyDoc &&
                                     !isDdReport &&
                                     typeof doc.id === "number" && (
                                       <button
@@ -9543,7 +9486,7 @@ const resolveStageStatus = (
                                     View
                                   </Button>
                                   {canMakerReuploadDocs &&
-                                    !isAppForm &&
+                                    !isViewOnlyDoc &&
                                     !isDdReport && (
                                       <>
                                         <input
@@ -9656,7 +9599,7 @@ const resolveStageStatus = (
                           </div>
                         );
                       })}
-                      {categoryUploadedDocs.length === 0 && !showCibilReportBlock ? (
+                      {categoryUploadedDocs.length === 0 ? (
                         <div className="col-span-full py-8 text-center rounded-lg border border-dashed border-slate-200 bg-slate-50/50">
                           <p className="text-sm font-medium text-slate-500">
                             {docSubTab === "kyc"
