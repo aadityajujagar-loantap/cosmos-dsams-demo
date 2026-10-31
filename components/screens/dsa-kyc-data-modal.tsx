@@ -700,6 +700,20 @@ function GstDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
   }
 
   const gstin = gstBasic.gstin || gstBasic.gstinId || dsa.gst || "";
+
+  if (!hasApiData && !gstin) {
+    return (
+      <div className="py-8 text-center bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+        <AlertCircle className="h-8 w-8 text-slate-400 mx-auto" />
+        <p className="text-sm font-semibold text-slate-700">
+          No GST available for this applicant
+        </p>
+        <p className="text-xs text-slate-500">
+          The applicant is not registered for GST or turnover is exempt.
+        </p>
+      </div>
+    );
+  }
   const pan = gstBasic.pan || (gstin.length >= 12 ? gstin.substring(2, 12) : (dsa.pan || ""));
   const legalName = gstBasic.legalName || gstBasic.legal_name || "";
   const tradeName = gstBasic.tradeName || gstBasic.trade_name || "";

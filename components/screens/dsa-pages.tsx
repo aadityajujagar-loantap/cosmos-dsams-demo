@@ -8339,6 +8339,7 @@ const resolveStageStatus = (
                     const cibilVerif = getVerif("CIBIL", false);
                     const amlVerif = getVerif("AML", false);
 
+                    const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Zz][0-9A-Z]{1}$/;
                     const extractAllGstins = (obj: any): string[] => {
                       const gsts = new Set<string>();
                       if (!obj) return [];
@@ -8346,23 +8347,15 @@ const resolveStageStatus = (
                         if (!item) return;
                         if (typeof item === "string") {
                           const trimmed = item.trim().toUpperCase();
-                          const matches = trimmed.match(
-                            /\b\d{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Zz][0-9A-Z]{1}\b/g,
-                          );
-                          if (matches) {
-                            matches.forEach((m) => gsts.add(m));
-                          } else if (
-                            trimmed.length === 15 &&
-                            /^[0-9]{2}[A-Z]{5}/.test(trimmed)
-                          ) {
+                          if (GSTIN_REGEX.test(trimmed)) {
                             gsts.add(trimmed);
-                          } else if (trimmed.includes(",")) {
-                            trimmed.split(/[,;\s]+/).forEach((part) => {
-                              const p = part.trim().toUpperCase();
-                              if (p.length >= 10 && p.length <= 18) {
-                                gsts.add(p);
-                              }
-                            });
+                          } else {
+                            const matches = trimmed.match(
+                              /\b[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Zz][0-9A-Z]{1}\b/g,
+                            );
+                            if (matches) {
+                              matches.forEach((m) => gsts.add(m.toUpperCase()));
+                            }
                           }
                           return;
                         }
@@ -8374,18 +8367,18 @@ const resolveStageStatus = (
                           for (const [k, v] of Object.entries(item)) {
                             const kLower = k.toLowerCase();
                             if (
-                              typeof v === "string" &&
-                              (kLower.includes("gst") || kLower.includes("tax"))
+                              kLower.includes("gstin") ||
+                              kLower === "gst" ||
+                              kLower === "gst_number" ||
+                              kLower === "gstins" ||
+                              kLower === "records" ||
+                              kLower === "data" ||
+                              kLower === "normalized_data" ||
+                              kLower === "response_payload" ||
+                              kLower === "raw_response"
                             ) {
-                              const parts = v.split(/[,;\s]+/);
-                              for (const part of parts) {
-                                const vTrim = part.trim().toUpperCase();
-                                if (vTrim && vTrim.length >= 10 && vTrim.length <= 18) {
-                                  gsts.add(vTrim);
-                                }
-                              }
+                              traverse(v);
                             }
-                            traverse(v);
                           }
                         }
                       };
@@ -8393,22 +8386,23 @@ const resolveStageStatus = (
                       return Array.from(gsts);
                     };
 
+                    const parseExplicitGst = (val: any): string[] => {
+                      if (!val) return [];
+                      return String(val)
+                        .split(/[,;\s]+/)
+                        .map((s) => s.trim().toUpperCase())
+                        .filter((s) => GSTIN_REGEX.test(s));
+                    };
+
                     const allDiscoveredGsts: string[] = Array.from(
                       new Set([
-                        ...(dsa.gst
-                          ? String(dsa.gst).split(/[,;\s]+/).map((s: string) => s.trim().toUpperCase()).filter((s: string) => s.length >= 10 && s.length <= 18)
-                          : []),
-                        ...(dsa.gstin
-                          ? String(dsa.gstin).split(/[,;\s]+/).map((s: string) => s.trim().toUpperCase()).filter((s: string) => s.length >= 10 && s.length <= 18)
-                          : []),
-                        ...(dsa.gst_number
-                          ? String(dsa.gst_number).split(/[,;\s]+/).map((s: string) => s.trim().toUpperCase()).filter((s: string) => s.length >= 10 && s.length <= 18)
-                          : []),
+                        ...parseExplicitGst(dsa.gst),
+                        ...parseExplicitGst(dsa.gstin),
+                        ...parseExplicitGst(dsa.gst_number),
                         ...extractAllGstins(gstVerif),
                         ...extractAllGstins(panToGstVerif),
                         ...extractAllGstins(gstBasicVerif),
                         ...extractAllGstins(discoveredGstins),
-                        ...(((dsa as any)?.verifications || []).flatMap((v: any) => extractAllGstins(v))),
                       ]),
                     ).filter(Boolean);
 
@@ -8424,14 +8418,16 @@ const resolveStageStatus = (
                           v.response_payload?.data?.gstinDetailedInformartion?.gstin ||
                           v.response_payload?.data?.gstin ||
                           v.request_payload?.gstin;
-                        if (g) fetchedGstinSet.add(String(g).trim().toUpperCase());
+                        if (g && GSTIN_REGEX.test(String(g).trim().toUpperCase())) {
+                          fetchedGstinSet.add(String(g).trim().toUpperCase());
+                        }
                       }
                     });
 
                     const resolvedGstNumber: string | null =
                       allDiscoveredGsts.length > 0
                         ? allDiscoveredGsts[0]
-                        : dsa.gst || dsa.gstin || null;
+                        : null;
 
                     return (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -8512,13 +8508,15 @@ const resolveStageStatus = (
                             </span>
                             <StatusBadge
                               status={
-                                isGstFailed
-                                  ? "Failed"
-                                  : isGstChecked
-                                    ? "Verified"
-                                    : dsa?.gst_applicable
-                                      ? "Pending"
-                                      : "Not Applicable"
+                                !resolvedGstNumber
+                                  ? "Not Applicable"
+                                  : isGstFailed
+                                    ? "Failed"
+                                    : isGstChecked
+                                      ? "Verified"
+                                      : dsa?.gst_applicable
+                                        ? "Pending"
+                                        : "Not Applicable"
                               }
                             />
                           </div>
@@ -8538,61 +8536,37 @@ const resolveStageStatus = (
                                         : "Taxpayer Status: Pending Verification"}
                                 </p>
                               </div>
-                            ) : isGstFailed ? (
-                              <div>
-                                <p className="text-sm font-semibold text-rose-700">
-                                  GST Verification Failed
-                                </p>
-                                <p className="text-xs text-rose-500 mt-0.5">
-                                  GST validation returned error · Please check again
-                                </p>
-                              </div>
-                            ) : isGstChecked ? (
-                              <>
-                                <p className="text-base font-semibold text-slate-900">
-                                  {isCheckerRole ? "Checked via GSTN Database" : "Verified via GSTN Database"}
-                                </p>
-                                <p className="text-xs text-emerald-700 font-medium mt-0.5">
-                                  {dsa.pan
-                                    ? `PAN ${dsa.pan} record validated · Active Taxpayer`
-                                    : (isCheckerRole ? "Checked & Active" : "Verified & Active")}
-                                </p>
-                              </>
-                            ) : dsa.gst_applicable ? (
-                              <div>
-                                <p className="text-sm font-semibold text-emerald-800">
-                                  GST Applicable (Certificate on File)
-                                </p>
-                                <p className="text-xs text-slate-500 mt-0.5">
-                                  Registered Business Proof:{" "}
-                                  {dsa.registered_business_proof ||
-                                    "GST Document Attached"}
-                                </p>
-                              </div>
                             ) : (
                               <div>
-                                <p className="text-sm text-slate-400 italic">
-                                  No GST number provided by the applicant.
+                                <p className="text-base font-semibold text-slate-800">
+                                  No GST available for this applicant
+                                </p>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                  {dsa.gst_applicable
+                                    ? "No GSTIN found linked to this PAN on GSTN"
+                                    : "Not registered for GST · Exempt turnover"}
                                 </p>
                               </div>
                             )}
                           </div>
                           <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
                             <span className="text-[11px] text-slate-500">
-                              {gstVerif?.executed_at
-                                ? `${isGstFailed ? "Failed" : "Checked"} on ${formatDate(gstVerif.executed_at)} via ${gstVerif.provider === "scoreme" ? "GSTN" : "GSTN"}`
-                                : isGstFailed
-                                  ? "Verification Failed · Please Retry"
-                                  : isGstChecked
-                                    ? "GSTN Master Database"
-                                    : dsa.gst
+                              {resolvedGstNumber
+                                ? gstVerif?.executed_at
+                                  ? `${isGstFailed ? "Failed" : "Checked"} on ${formatDate(gstVerif.executed_at)} via GSTN`
+                                  : isGstFailed
+                                    ? "Verification Failed · Please Retry"
+                                    : isGstChecked
                                       ? "GSTN Master Database"
-                                      : isMakerUser
-                                        ? "Pending Checker Verification"
-                                        : "ScoreMe GST Basic Details"}
+                                      : dsa.gst
+                                        ? "GSTN Master Database"
+                                        : isMakerUser
+                                          ? "Pending Checker Verification"
+                                          : "ScoreMe GST Basic Details"
+                                : "GSTN Master Database · No Record Found"}
                             </span>
                             <div className="flex items-center gap-1.5">
-                              {canViewGstKycData && !isGstFailed && (
+                              {canViewGstKycData && Boolean(resolvedGstNumber) && !isGstFailed && (
                                 <Button
                                   size="sm"
                                   type="button"
@@ -8608,7 +8582,7 @@ const resolveStageStatus = (
                                   View Data
                                 </Button>
                               )}
-                              {canCheckerVerifyKyc && !isGstChecked && (
+                              {canCheckerVerifyKyc && !isGstChecked && Boolean(resolvedGstNumber || dsa.gst_applicable) && (
                                 <Button
                                   size="sm"
                                   type="button"
