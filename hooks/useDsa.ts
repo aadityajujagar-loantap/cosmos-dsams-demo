@@ -177,6 +177,32 @@ export function normalizeDsaData(dsa: any): any {
       ? (rawDsaCode.code || "")
       : rawDsaCode;
 
+  let normalizedOtherBanksExp = dsa.other_banks_experience;
+  if (typeof normalizedOtherBanksExp === "string") {
+    try {
+      normalizedOtherBanksExp = JSON.parse(normalizedOtherBanksExp);
+    } catch {
+      normalizedOtherBanksExp = [];
+    }
+  }
+  if (!Array.isArray(normalizedOtherBanksExp) || normalizedOtherBanksExp.length === 0) {
+    if (dsa.bank_or_institution_name) {
+      normalizedOtherBanksExp = [
+        {
+          bank_or_institution_name: dsa.bank_or_institution_name,
+          empanelment_since_year: dsa.empanelment_since_year,
+          empanelled_loan_products: dsa.empanelled_loan_products,
+          products_mobilized_last_3_years: dsa.products_mobilized_last_3_years,
+          avg_ticket_size_lakhs: dsa.avg_ticket_size_lakhs,
+          commission_rate_percent: dsa.commission_rate_percent,
+          avg_disbursed_proposals_per_month: dsa.avg_disbursed_proposals_per_month,
+        },
+      ];
+    } else {
+      normalizedOtherBanksExp = [];
+    }
+  }
+
   const rawCode = dsa.code;
   const normalizedCode =
     typeof rawCode === "object" && rawCode !== null
@@ -205,6 +231,10 @@ export function normalizeDsaData(dsa: any): any {
     business_premises_ownership: businessPremisesOwnership,
     applicant_prior_experience: applicantPriorExperience,
     experience_years: experienceYears,
+    other_banks_experience: normalizedOtherBanksExp,
+    last_financial_year: dsa.last_financial_year || null,
+    last_fy_net_sales: dsa.last_fy_net_sales !== undefined ? dsa.last_fy_net_sales : null,
+    last_fy_net_profit_after_tax: dsa.last_fy_net_profit_after_tax !== undefined ? dsa.last_fy_net_profit_after_tax : null,
   };
 }
 

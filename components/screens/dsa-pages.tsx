@@ -7265,15 +7265,15 @@ const resolveStageStatus = (
               </tr>
               <tr>
                 <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Income Details for F.Y.</td>
-                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{finDd.income_details_fy || ""}</td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{finDd.income_details_fy || finDd.last_financial_year || dsa?.last_financial_year || ""}</td>
               </tr>
               <tr>
                 <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Net Sales / Revenue as per latest F.Y.</td>
-                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{finDd.net_sales_revenue || ""}</td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{finDd.net_sales_revenue || (dsa?.last_fy_net_sales ? `Rs. ${dsa.last_fy_net_sales} Lakh` : "")}</td>
               </tr>
               <tr>
                 <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Net profit after Tax as per latest F.Y.</td>
-                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{finDd.net_profit_after_tax || ""}</td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{finDd.net_profit_after_tax || (dsa?.last_fy_net_profit_after_tax ? `Rs. ${dsa.last_fy_net_profit_after_tax} Lakh` : "")}</td>
               </tr>
               <tr>
                 <td className="border border-slate-900 px-3 py-1.5 text-slate-800">CIBIL Score (CV Score)</td>
@@ -7289,6 +7289,84 @@ const resolveStageStatus = (
                   {finDd.existing_banking_relationship ? `Yes (${finDd.existing_banking_relationship})` : "No"}
                 </td>
               </tr>
+
+              {/* Details of DSA Experience with other Banks / Institutions (Entity) */}
+              {isEntity && (
+                <>
+                  <tr className="bg-slate-100 font-bold">
+                    <td colSpan={2} className="border border-slate-900 px-3 py-2 text-slate-900">
+                      Details of DSA Experience with other Banks / Institutions
+                    </td>
+                  </tr>
+                  {(() => {
+                    const banksList: any[] = Array.isArray(finDd.other_banks_experience) && finDd.other_banks_experience.length > 0
+                      ? finDd.other_banks_experience
+                      : Array.isArray(dsa?.other_banks_experience) && dsa.other_banks_experience.length > 0
+                      ? dsa.other_banks_experience
+                      : (finDd.bank_or_institution_name || dsa?.bank_or_institution_name)
+                      ? [{
+                          bank_or_institution_name: finDd.bank_or_institution_name || dsa?.bank_or_institution_name,
+                          empanelment_since_year: finDd.empanelment_since_year || dsa?.empanelment_since_year,
+                          empanelled_loan_products: finDd.empanelled_loan_products || dsa?.empanelled_loan_products,
+                          products_mobilized_last_3_years: finDd.products_mobilized_last_3_years || dsa?.products_mobilized_last_3_years,
+                          avg_ticket_size_lakhs: finDd.avg_ticket_size_lakhs || dsa?.avg_ticket_size_lakhs,
+                          commission_rate_percent: finDd.commission_rate_percent || dsa?.commission_rate_percent,
+                          avg_disbursed_proposals_per_month: finDd.avg_disbursed_proposals_per_month || dsa?.avg_disbursed_proposals_per_month,
+                        }]
+                      : [];
+
+                    if (banksList.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={2} className="border border-slate-900 px-3 py-2 text-slate-500 italic">
+                            No prior experience with other banks / institutions declared.
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return banksList.map((bExp, bIdx) => (
+                      <React.Fragment key={bIdx}>
+                        {banksList.length > 1 && (
+                          <tr className="bg-slate-50 font-semibold">
+                            <td colSpan={2} className="border border-slate-900 px-3 py-1.5 text-xs text-blue-900">
+                              Bank / Institution {bIdx + 1}: {bExp.bank_or_institution_name || "—"}
+                            </td>
+                          </tr>
+                        )}
+                        <tr>
+                          <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Name of the Bank / Financial Institution / Others</td>
+                          <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.bank_or_institution_name || "—"}</td>
+                        </tr>
+                        <tr>
+                          <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Empanelment since (Year)</td>
+                          <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.empanelment_since_year || "—"}</td>
+                        </tr>
+                        <tr>
+                          <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Empanelment for which Loan Products</td>
+                          <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.empanelled_loan_products || "—"}</td>
+                        </tr>
+                        <tr>
+                          <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Type of Products mobilized during last 3 years</td>
+                          <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.products_mobilized_last_3_years || "—"}</td>
+                        </tr>
+                        <tr>
+                          <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Average ticket size (Rs. In Lakh)</td>
+                          <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.avg_ticket_size_lakhs ? `Rs. ${bExp.avg_ticket_size_lakhs} Lakh` : "—"}</td>
+                        </tr>
+                        <tr>
+                          <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Commission rate (%)</td>
+                          <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.commission_rate_percent ? `${bExp.commission_rate_percent}%` : "—"}</td>
+                        </tr>
+                        <tr>
+                          <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Average No. of proposals disbursed per month (Nos.)</td>
+                          <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.avg_disbursed_proposals_per_month || "—"}</td>
+                        </tr>
+                      </React.Fragment>
+                    ));
+                  })()}
+                </>
+              )}
 
               {/* Background and Reputational Verification */}
               <tr className="bg-slate-100 font-bold">

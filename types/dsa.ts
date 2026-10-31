@@ -176,6 +176,24 @@ export interface Dsa {
   office_mobile_no?: string | null;
   business_premises_ownership?: string | null;
   account_type?: string | null;
+  last_financial_year?: string | null;
+  last_fy_net_sales?: number | string | null;
+  last_fy_net_profit_after_tax?: number | string | null;
+  bank_or_institution_name?: string | null;
+  empanelled_loan_products?: string | null;
+  products_mobilized_last_3_years?: string | null;
+  avg_ticket_size_lakhs?: number | string | null;
+  commission_rate_percent?: number | string | null;
+  avg_disbursed_proposals_per_month?: number | string | null;
+  other_banks_experience?: Array<{
+    bank_or_institution_name?: string | null;
+    empanelment_since_year?: string | number | null;
+    empanelled_loan_products?: string | null;
+    products_mobilized_last_3_years?: string | null;
+    avg_ticket_size_lakhs?: number | string | null;
+    commission_rate_percent?: number | string | null;
+    avg_disbursed_proposals_per_month?: number | string | null;
+  }> | null;
   reference_1_name?: string | null;
   reference_1_contact_no?: string | null;
   reference_2_name?: string | null;
