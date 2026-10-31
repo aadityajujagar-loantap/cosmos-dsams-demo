@@ -1,4 +1,4 @@
-import { request } from "./client";
+import { request, requestBlob } from "./client";
 import type { MakerRequest, MakerRequestActionType, MakerRequestStatus } from "@/types/makerChecker";
 import type { Permission, Role, User, BranchRole } from "@/types/auth";
 import type { ActivityLog } from "@/types/activityLog";
@@ -672,6 +672,10 @@ export const adminApi = {
     size?: string;
   }>> => {
     return request<BackendResponse<any>>(`/v1/dsa/${idOrCode}/dd-review-report/pdf`, { method: "GET" });
+  },
+
+  downloadDdReviewReportPdfBlob: async (idOrCode: number | string): Promise<{ blob: Blob; fileName?: string }> => {
+    return requestBlob(`/v1/dsa/${idOrCode}/dd-review-report/pdf?download=1`, { method: "GET" });
   },
 
   getCibilReport: async (idOrCode: number | string): Promise<BackendResponse<{
