@@ -30,6 +30,7 @@ import {
   CreditCard,
   Sparkles,
   Home,
+  TrendingUp,
 } from "lucide-react";
 import { adminApi } from "@/apis/admin";
 import { useMockStore } from "@/lib/store";
@@ -592,6 +593,62 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   const [accountType, setAccountType] = useState<string>("");
   const [ifsc, setIfsc] = useState<string>("");
 
+  // Entity Financial Highlights & Experience with other Banks
+  const [lastFinancialYear, setLastFinancialYear] = useState<string>("2023-24");
+  const [lastFyNetSales, setLastFyNetSales] = useState<string>("");
+  const [lastFyNetProfitAfterTax, setLastFyNetProfitAfterTax] = useState<string>("");
+  const [otherBanksExperience, setOtherBanksExperience] = useState<Array<{
+    bank_or_institution_name: string;
+    empanelment_since_year: string;
+    empanelled_loan_products: string;
+    products_mobilized_last_3_years: string;
+    avg_ticket_size_lakhs: string;
+    commission_rate_percent: string;
+    avg_disbursed_proposals_per_month: string;
+  }>>([
+    {
+      bank_or_institution_name: "",
+      empanelment_since_year: "",
+      empanelled_loan_products: "",
+      products_mobilized_last_3_years: "",
+      avg_ticket_size_lakhs: "",
+      commission_rate_percent: "",
+      avg_disbursed_proposals_per_month: "",
+    },
+  ]);
+
+  const addBankExperience = () => {
+    setOtherBanksExperience((prev) => [
+      ...prev,
+      {
+        bank_or_institution_name: "",
+        empanelment_since_year: "",
+        empanelled_loan_products: "",
+        products_mobilized_last_3_years: "",
+        avg_ticket_size_lakhs: "",
+        commission_rate_percent: "",
+        avg_disbursed_proposals_per_month: "",
+      },
+    ]);
+  };
+
+  const removeBankExperience = (index: number) => {
+    setOtherBanksExperience((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((_, idx) => idx !== index);
+    });
+  };
+
+  const updateBankExperience = (index: number, field: string, value: string) => {
+    setOtherBanksExperience((prev) => {
+      const updated = [...prev];
+      if (updated[index]) {
+        updated[index] = { ...updated[index], [field]: value };
+      }
+      return updated;
+    });
+  };
+
   // References
   const [reference1Name, setReference1Name] = useState<string>("");
   const [reference1Contact, setReference1Contact] = useState<string>("");
@@ -1054,6 +1111,12 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         if (data.confirmAccountNumber !== undefined) setConfirmAccountNumber(data.confirmAccountNumber);
         if (data.accountType !== undefined) setAccountType(data.accountType);
         if (data.ifsc !== undefined) setIfsc(data.ifsc);
+        if (data.lastFinancialYear !== undefined) setLastFinancialYear(data.lastFinancialYear);
+        if (data.lastFyNetSales !== undefined) setLastFyNetSales(String(data.lastFyNetSales));
+        if (data.lastFyNetProfitAfterTax !== undefined) setLastFyNetProfitAfterTax(String(data.lastFyNetProfitAfterTax));
+        if (Array.isArray(data.otherBanksExperience) && data.otherBanksExperience.length > 0) {
+          setOtherBanksExperience(data.otherBanksExperience);
+        }
         if (data.reference1Name !== undefined) setReference1Name(data.reference1Name);
         if (data.reference1Contact !== undefined) setReference1Contact(data.reference1Contact);
         if (data.reference2Name !== undefined) setReference2Name(data.reference2Name);
@@ -1168,6 +1231,18 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     setConfirmAccountNumber("");
     setAccountType("");
     setIfsc("");
+    setLastFinancialYear("2023-24");
+    setLastFyNetSales("");
+    setLastFyNetProfitAfterTax("");
+    setOtherBanksExperience([{
+      bank_or_institution_name: "",
+      empanelment_since_year: "",
+      empanelled_loan_products: "",
+      products_mobilized_last_3_years: "",
+      avg_ticket_size_lakhs: "",
+      commission_rate_percent: "",
+      avg_disbursed_proposals_per_month: "",
+    }]);
 
     // Reset References
     setReference1Name("");
@@ -1279,6 +1354,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           confirmAccountNumber,
           accountType,
           ifsc,
+          lastFinancialYear,
+          lastFyNetSales,
+          lastFyNetProfitAfterTax,
+          otherBanksExperience,
           reference1Name,
           reference1Contact,
           reference2Name,
@@ -1422,13 +1501,16 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
     const dynamicDocs: DocDef[] = [];
 
-    // Prior experience / empanelment certificate: populates only when experience is selected > 0
-    if (experienceYears !== "0" && experienceYears !== "") {
+    // Prior experience / empanelment certificate: populates when experience is selected > 0 OR other banks experience entered
+    const hasOtherBanksExp = otherBanksExperience.some(
+      (b) => (b.bank_or_institution_name || "").trim().length > 0
+    );
+    if ((experienceYears !== "0" && experienceYears !== "") || hasOtherBanksExp) {
       dynamicDocs.push({
         type: "experience_certificate",
-        label: `Experience certificates / FIs (${experienceYears} yrs)`,
-        required: true,
-        requirementLabel: "Mandatory",
+        label: "Experience Certificates / Empanelment Letters / Payout Sheets from Banks / FIs",
+        required: false,
+        requirementLabel: "Optional",
       });
     }
 
@@ -2708,6 +2790,34 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       payload.nature_of_business = natureOfBusiness;
       if (dateOfBirth) payload.date_of_birth = dateOfBirth;
       if (resolvedAge) payload.age = Number(resolvedAge);
+      if (lastFinancialYear) payload.last_financial_year = lastFinancialYear;
+      if (lastFyNetSales) payload.last_fy_net_sales = Number(lastFyNetSales) || 0;
+      if (lastFyNetProfitAfterTax) payload.last_fy_net_profit_after_tax = Number(lastFyNetProfitAfterTax) || 0;
+
+      const filteredBanks = otherBanksExperience
+        .filter((b) => (b.bank_or_institution_name || "").trim().length > 0)
+        .map((b) => ({
+          bank_or_institution_name: (b.bank_or_institution_name || "").trim(),
+          empanelment_since_year: b.empanelment_since_year ? Number(b.empanelment_since_year) : null,
+          empanelled_loan_products: (b.empanelled_loan_products || "").trim(),
+          products_mobilized_last_3_years: (b.products_mobilized_last_3_years || "").trim(),
+          avg_ticket_size_lakhs: b.avg_ticket_size_lakhs ? Number(b.avg_ticket_size_lakhs) : null,
+          commission_rate_percent: b.commission_rate_percent ? Number(b.commission_rate_percent) : null,
+          avg_disbursed_proposals_per_month: b.avg_disbursed_proposals_per_month ? Number(b.avg_disbursed_proposals_per_month) : null,
+        }));
+
+      if (filteredBanks.length > 0) {
+        payload.other_banks_experience = filteredBanks;
+        const first = filteredBanks[0];
+        payload.bank_or_institution_name = first.bank_or_institution_name;
+        payload.empanelment_since_year = first.empanelment_since_year;
+        payload.empanelled_loan_products = first.empanelled_loan_products;
+        payload.products_mobilized_last_3_years = first.products_mobilized_last_3_years;
+        payload.avg_ticket_size_lakhs = first.avg_ticket_size_lakhs;
+        payload.commission_rate_percent = first.commission_rate_percent;
+        payload.avg_disbursed_proposals_per_month = first.avg_disbursed_proposals_per_month;
+      }
+
       payload.stakeholders = stakeholders.map((s) => ({
         stakeholder_type: s.stakeholder_type,
         name: s.name,
@@ -2800,7 +2910,9 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         const checklist = checklistRes?.data ?? checklistRes;
         if (checklist && checklist.is_complete === false && checklist.missing_mandatory_count > 0) {
           const missing = (checklist.missing_mandatory_documents ?? []).filter((docName: string) => {
-            if (docName.toLowerCase().includes("visit report")) return false;
+            const lower = docName.toLowerCase();
+            if (lower.includes("visit report")) return false;
+            if (lower.includes("experience") || lower.includes("empanelment")) return false;
             return true;
           });
           if (missing.length > 0) {
@@ -4597,6 +4709,223 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   />
                 </div>
               </div>
+
+              {/* ENTITY: KEY FINANCIAL HIGHLIGHTS & OTHER BANKS EXPERIENCE */}
+              {dsaType === "ENTITY" && (
+                <div className="space-y-6 pt-4 border-t border-slate-200">
+                  {/* Key Financial Highlights */}
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-4">
+                    <div>
+                      <span className="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                        <TrendingUp className="h-4 w-4 text-blue-600" />
+                        Key Financial Highlights of Applicant Entity
+                      </span>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Financial metrics as per latest audited/filed financial year
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <Label htmlFor="last_financial_year" className="text-sm font-bold text-slate-700 leading-none">
+                          Last F.Y.
+                        </Label>
+                        <Select
+                          id="last_financial_year"
+                          value={lastFinancialYear}
+                          onChange={(e) => setLastFinancialYear(e.target.value)}
+                          className="mt-1.5 text-sm"
+                        >
+                          <option value="2024-25">2024-25</option>
+                          <option value="2023-24">2023-24</option>
+                          <option value="2022-23">2022-23</option>
+                          <option value="2021-22">2021-22</option>
+                          <option value="2020-21">2020-21</option>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="last_fy_net_sales" className="text-sm font-bold text-slate-700 leading-none">
+                          Net Sales / Revenue (₹ in Lakh)
+                        </Label>
+                        <Input
+                          id="last_fy_net_sales"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={lastFyNetSales}
+                          onChange={(e) => setLastFyNetSales(e.target.value)}
+                          placeholder="e.g. 50.00"
+                          className="mt-1.5 font-mono text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="last_fy_net_profit_after_tax" className="text-sm font-bold text-slate-700 leading-none">
+                          Net Profit after Tax (₹ in Lakh)
+                        </Label>
+                        <Input
+                          id="last_fy_net_profit_after_tax"
+                          type="number"
+                          step="0.01"
+                          value={lastFyNetProfitAfterTax}
+                          onChange={(e) => setLastFyNetProfitAfterTax(e.target.value)}
+                          placeholder="e.g. 8.50"
+                          className="mt-1.5 font-mono text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Details of DSA Experience with other Banks / Institutions */}
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div>
+                        <span className="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                          <Building className="h-4 w-4 text-blue-600" />
+                          Details of DSA Experience with other Banks / Institutions
+                        </span>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Please enclose payout sheets / supportive documents / empanelment letters / experience certificates issued by the Banks / FIs for reference.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addBankExperience}
+                        className="text-xs font-semibold flex items-center gap-1 shrink-0 self-start sm:self-auto border-blue-300 text-blue-700 hover:bg-blue-50"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Add Another Bank / FI
+                      </Button>
+                    </div>
+
+                    <div className="space-y-4">
+                      {otherBanksExperience.map((bank, index) => (
+                        <div
+                          key={index}
+                          className="rounded-lg border border-slate-200 bg-white p-4 space-y-3 relative shadow-sm"
+                        >
+                          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                            <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                              Bank / Institution #{index + 1}
+                            </span>
+                            {otherBanksExperience.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeBankExperience(index)}
+                                className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
+                                title="Remove this bank"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="sm:col-span-2">
+                              <Label className="text-xs font-bold text-slate-700 leading-none">
+                                Name of the Bank / Financial Institution / Others
+                              </Label>
+                              <Input
+                                value={bank.bank_or_institution_name || ""}
+                                onChange={(e) => updateBankExperience(index, "bank_or_institution_name", e.target.value)}
+                                placeholder="e.g. HDFC Bank, ICICI Bank, SBI"
+                                className="mt-1 text-sm"
+                              />
+                            </div>
+
+                            <div>
+                              <Label className="text-xs font-bold text-slate-700 leading-none">
+                                Empanelment since (Year)
+                              </Label>
+                              <Input
+                                type="number"
+                                min="1980"
+                                max={new Date().getFullYear()}
+                                value={bank.empanelment_since_year || ""}
+                                onChange={(e) => updateBankExperience(index, "empanelment_since_year", e.target.value)}
+                                placeholder="e.g. 2020"
+                                className="mt-1 font-mono text-sm"
+                              />
+                            </div>
+
+                            <div>
+                              <Label className="text-xs font-bold text-slate-700 leading-none">
+                                Empanelment for which Loan Products
+                              </Label>
+                              <Input
+                                value={bank.empanelled_loan_products || ""}
+                                onChange={(e) => updateBankExperience(index, "empanelled_loan_products", e.target.value)}
+                                placeholder="e.g. Home Loan, LAP, Business Loan"
+                                className="mt-1 text-sm"
+                              />
+                            </div>
+
+                            <div>
+                              <Label className="text-xs font-bold text-slate-700 leading-none">
+                                Type of Products mobilized during last 3 years
+                              </Label>
+                              <Input
+                                value={bank.products_mobilized_last_3_years || ""}
+                                onChange={(e) => updateBankExperience(index, "products_mobilized_last_3_years", e.target.value)}
+                                placeholder="e.g. Retail Mortgages, MSME"
+                                className="mt-1 text-sm"
+                              />
+                            </div>
+
+                            <div>
+                              <Label className="text-xs font-bold text-slate-700 leading-none">
+                                Average ticket size (Rs. In Lakh)
+                              </Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={bank.avg_ticket_size_lakhs || ""}
+                                onChange={(e) => updateBankExperience(index, "avg_ticket_size_lakhs", e.target.value)}
+                                placeholder="e.g. 35.50"
+                                className="mt-1 font-mono text-sm"
+                              />
+                            </div>
+
+                            <div>
+                              <Label className="text-xs font-bold text-slate-700 leading-none">
+                                Commission rate (%)
+                              </Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                max="100"
+                                value={bank.commission_rate_percent || ""}
+                                onChange={(e) => updateBankExperience(index, "commission_rate_percent", e.target.value)}
+                                placeholder="e.g. 0.75"
+                                className="mt-1 font-mono text-sm"
+                              />
+                            </div>
+
+                            <div>
+                              <Label className="text-xs font-bold text-slate-700 leading-none">
+                                Average No. of proposals disbursed per month (Nos.)
+                              </Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                value={bank.avg_disbursed_proposals_per_month || ""}
+                                onChange={(e) => updateBankExperience(index, "avg_disbursed_proposals_per_month", e.target.value)}
+                                placeholder="e.g. 8"
+                                className="mt-1 font-mono text-sm"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -5701,6 +6030,90 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     </tbody>
                   </table>
                 </div>
+
+                {dsaType === "ENTITY" && (
+                  <>
+                    {/* Key Financial Highlights */}
+                    <div className="mt-3">
+                      <div className="bg-slate-700 text-white px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-t">
+                        Key Financial Highlights of Applicant Entity
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
+                          <thead>
+                            <tr className="bg-slate-100 text-slate-700 font-bold">
+                              <th className="border border-slate-300 p-2 text-left w-1/2">Particulars</th>
+                              <th className="border border-slate-300 p-2 text-left w-1/2">Last F.Y. {lastFinancialYear ? `(${lastFinancialYear})` : ""}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td className="border border-slate-300 p-2 font-medium text-slate-700">Net Sales / Revenue</td>
+                              <td className="border border-slate-300 p-2 font-mono font-bold text-slate-900">
+                                {lastFyNetSales ? `₹ ${lastFyNetSales} Lakh` : "—"}
+                              </td>
+                            </tr>
+                            <tr>
+                              <td className="border border-slate-300 p-2 font-medium text-slate-700">Net Profit after Tax</td>
+                              <td className="border border-slate-300 p-2 font-mono font-bold text-slate-900">
+                                {lastFyNetProfitAfterTax ? `₹ ${lastFyNetProfitAfterTax} Lakh` : "—"}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Details of DSA Experience with other Banks / Institutions */}
+                    <div className="mt-3">
+                      <div className="bg-slate-700 text-white px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-t">
+                        Details of DSA Experience with other Banks / Institutions
+                      </div>
+                      <div className="overflow-x-auto">
+                        {otherBanksExperience.filter((b) => (b.bank_or_institution_name || "").trim().length > 0).length === 0 ? (
+                          <div className="p-3 border border-slate-300 bg-white text-xs text-slate-500 italic">
+                            No prior experience with other banks / institutions declared.
+                          </div>
+                        ) : (
+                          <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
+                            <thead>
+                              <tr className="bg-slate-100 text-slate-700 font-bold">
+                                <th className="border border-slate-300 p-2 text-center w-10">#</th>
+                                <th className="border border-slate-300 p-2 text-left w-[20%]">Bank / FI</th>
+                                <th className="border border-slate-300 p-2 text-center w-16">Since</th>
+                                <th className="border border-slate-300 p-2 text-left">Empanelled Products</th>
+                                <th className="border border-slate-300 p-2 text-left">Products (Last 3 Yrs)</th>
+                                <th className="border border-slate-300 p-2 text-right w-24">Avg Ticket</th>
+                                <th className="border border-slate-300 p-2 text-right w-16">Comm. %</th>
+                                <th className="border border-slate-300 p-2 text-center w-16">Disb/Mo</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {otherBanksExperience
+                                .filter((b) => (b.bank_or_institution_name || "").trim().length > 0)
+                                .map((b, idx) => (
+                                  <tr key={idx} className="bg-white">
+                                    <td className="border border-slate-300 p-2 text-center text-slate-500">{idx + 1}</td>
+                                    <td className="border border-slate-300 p-2 font-bold text-slate-900">{b.bank_or_institution_name}</td>
+                                    <td className="border border-slate-300 p-2 text-center font-mono">{b.empanelment_since_year || "—"}</td>
+                                    <td className="border border-slate-300 p-2">{b.empanelled_loan_products || "—"}</td>
+                                    <td className="border border-slate-300 p-2">{b.products_mobilized_last_3_years || "—"}</td>
+                                    <td className="border border-slate-300 p-2 text-right font-mono">
+                                      {b.avg_ticket_size_lakhs ? `₹${b.avg_ticket_size_lakhs}L` : "—"}
+                                    </td>
+                                    <td className="border border-slate-300 p-2 text-right font-mono">
+                                      {b.commission_rate_percent ? `${b.commission_rate_percent}%` : "—"}
+                                    </td>
+                                    <td className="border border-slate-300 p-2 text-center font-mono">{b.avg_disbursed_proposals_per_month || "—"}</td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* SECTION 4: REFERENCES / STAKEHOLDERS */}

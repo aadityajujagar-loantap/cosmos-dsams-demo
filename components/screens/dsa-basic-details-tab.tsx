@@ -18,6 +18,7 @@ import {
   Plus,
   Trash2,
   ChevronDown,
+  TrendingUp,
 } from "lucide-react";
 import { Button, Input, Label, Select, StatusBadge } from "@/components/ui/primitives";
 import { cn, formatDate } from "@/lib/utils";
@@ -438,6 +439,40 @@ export function DsaBasicDetailsTab({
 
   const pickSupportingFile = (field: string, f: File | null) =>
     setSupportingFiles((prev) => ({ ...prev, [field]: f }));
+  const addBankExperience = () => {
+    setFormData((prev) => ({
+      ...prev,
+      other_banks_experience: [
+        ...(Array.isArray(prev.other_banks_experience) ? prev.other_banks_experience : []),
+        {
+          bank_or_institution_name: "",
+          empanelment_since_year: "",
+          empanelled_loan_products: "",
+          products_mobilized_last_3_years: "",
+          avg_ticket_size_lakhs: "",
+          commission_rate_percent: "",
+          avg_disbursed_proposals_per_month: "",
+        },
+      ],
+    }));
+  };
+
+  const removeBankExperience = (index: number) => {
+    setFormData((prev) => {
+      const arr = Array.isArray(prev.other_banks_experience) ? [...prev.other_banks_experience] : [];
+      arr.splice(index, 1);
+      return { ...prev, other_banks_experience: arr };
+    });
+  };
+
+  const updateBankExperience = (index: number, field: string, val: string) => {
+    setFormData((prev) => {
+      const arr = Array.isArray(prev.other_banks_experience) ? [...prev.other_banks_experience] : [];
+      arr[index] = { ...arr[index], [field]: val };
+      return { ...prev, other_banks_experience: arr };
+    });
+  };
+
   const clearSupportingFile = (field: string) =>
     setSupportingFiles((prev) => {
       const next = { ...prev };
@@ -597,17 +632,36 @@ export function DsaBasicDetailsTab({
         });
         break;
 
-      case "bank":
+      case "bank": {
+        let initialBanks: any[] = [];
+        if (Array.isArray(dsa.other_banks_experience) && dsa.other_banks_experience.length > 0) {
+          initialBanks = dsa.other_banks_experience.map((b: any) => ({ ...b }));
+        } else if (dsa.bank_or_institution_name) {
+          initialBanks = [
+            {
+              bank_or_institution_name: dsa.bank_or_institution_name || "",
+              empanelment_since_year: dsa.empanelment_since_year || "",
+              empanelled_loan_products: dsa.empanelled_loan_products || "",
+              products_mobilized_last_3_years: dsa.products_mobilized_last_3_years || "",
+              avg_ticket_size_lakhs: dsa.avg_ticket_size_lakhs ?? "",
+              commission_rate_percent: dsa.commission_rate_percent ?? "",
+              avg_disbursed_proposals_per_month: dsa.avg_disbursed_proposals_per_month ?? "",
+            },
+          ];
+        }
         setFormData({
           bank_name: dsa.bank_name || "",
           account_name: dsa.account_name || dsa.name || "",
           account_number: dsa.account_number || "",
           account_type: dsa.account_type || "",
           ifsc: dsa.ifsc || "",
-          last_fy_net_sales: dsa.last_fy_net_sales || "",
-          last_fy_net_profit_after_tax: dsa.last_fy_net_profit_after_tax || "",
+          last_financial_year: dsa.last_financial_year || "2023-24",
+          last_fy_net_sales: dsa.last_fy_net_sales ?? "",
+          last_fy_net_profit_after_tax: dsa.last_fy_net_profit_after_tax ?? "",
+          other_banks_experience: initialBanks,
         });
         break;
+      }
 
       case "references":
         setFormData({
@@ -2120,131 +2174,428 @@ export function DsaBasicDetailsTab({
       >
 
         {activeEditBlock === "bank" ? (
-          <div className="bg-slate-50/70 p-4 rounded-lg border border-slate-200">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
-                <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Settlement Bank Name *</Label>
-                <Input
-                  value={formData.bank_name || ""}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, bank_name: e.target.value }))}
-                  placeholder="e.g. Cosmos Co-operative Bank"
-                />
-                {errors.bank_name && <p className="text-red-500 text-xs mt-1">{errors.bank_name}</p>}
-              </div>
+          <div className="bg-slate-50/70 p-4 rounded-lg border border-slate-200 space-y-5">
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2.5 flex items-center gap-1.5">
+                <BadgeIndianRupee className="h-4 w-4 text-emerald-600" />
+                Settlement Bank Account Details
+              </h4>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
+                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Settlement Bank Name *</Label>
+                  <Input
+                    value={formData.bank_name || ""}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, bank_name: e.target.value }))}
+                    placeholder="e.g. Cosmos Co-operative Bank"
+                  />
+                  {errors.bank_name && <p className="text-red-500 text-xs mt-1">{errors.bank_name}</p>}
+                </div>
 
-              <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
-                <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Beneficiary Account Name *</Label>
-                <Input
-                  value={formData.account_name || ""}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, account_name: e.target.value }))}
-                  placeholder="Name as per bank records"
-                />
-                {errors.account_name && <p className="text-red-500 text-xs mt-1">{errors.account_name}</p>}
-              </div>
+                <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
+                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Beneficiary Account Name *</Label>
+                  <Input
+                    value={formData.account_name || ""}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, account_name: e.target.value }))}
+                    placeholder="Name as per bank records"
+                  />
+                  {errors.account_name && <p className="text-red-500 text-xs mt-1">{errors.account_name}</p>}
+                </div>
 
-              <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
-                <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Bank Account Number *</Label>
-                <Input
-                  value={formData.account_number || ""}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, account_number: e.target.value }))}
-                  placeholder="Account number"
-                  className="font-mono font-semibold"
-                />
-                {errors.account_number && <p className="text-red-500 text-xs mt-1">{errors.account_number}</p>}
-              </div>
+                <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
+                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Bank Account Number *</Label>
+                  <Input
+                    value={formData.account_number || ""}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, account_number: e.target.value }))}
+                    placeholder="Account number"
+                    className="font-mono font-semibold"
+                  />
+                  {errors.account_number && <p className="text-red-500 text-xs mt-1">{errors.account_number}</p>}
+                </div>
 
-              <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
-                <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Account Type</Label>
-                <Select
-                  value={formData.account_type || ""}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, account_type: e.target.value }))}
-                >
-                  <option value="">Select Account Type</option>
-                  <option value="Savings">Savings Account</option>
-                  <option value="Current">Current Account</option>
-                  <option value="Overdraft">Overdraft Account</option>
-                  <option value="Cash Credit">Cash Credit</option>
-                </Select>
-              </div>
+                <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
+                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Account Type</Label>
+                  <Select
+                    value={formData.account_type || ""}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, account_type: e.target.value }))}
+                  >
+                    <option value="">Select Account Type</option>
+                    <option value="Savings">Savings Account</option>
+                    <option value="Current">Current Account</option>
+                    <option value="Overdraft">Overdraft Account</option>
+                    <option value="Cash Credit">Cash Credit</option>
+                  </Select>
+                </div>
 
-              <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
-                <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">IFSC Code (11 Chars)</Label>
-                <Input
-                  value={formData.ifsc || ""}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, ifsc: e.target.value.toUpperCase() }))}
-                  placeholder="COSB0000012"
-                  maxLength={11}
-                  className="font-mono uppercase font-bold"
-                />
-                {errors.ifsc && <p className="text-red-500 text-xs mt-1">{errors.ifsc}</p>}
-              </div>
-
-              <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
-                <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Last FY Net Sales (₹ Lakhs)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={formData.last_fy_net_sales || ""}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, last_fy_net_sales: e.target.value }))}
-                  placeholder="Net Sales in Lakhs"
-                />
-              </div>
-
-              <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
-                <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Last FY PAT (₹ Lakhs)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={formData.last_fy_net_profit_after_tax || ""}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, last_fy_net_profit_after_tax: e.target.value }))}
-                  placeholder="Net Profit after tax in Lakhs"
-                />
+                <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
+                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">IFSC Code (11 Chars)</Label>
+                  <Input
+                    value={formData.ifsc || ""}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, ifsc: e.target.value.toUpperCase() }))}
+                    placeholder="COSB0000012"
+                    maxLength={11}
+                    className="font-mono uppercase font-bold"
+                  />
+                  {errors.ifsc && <p className="text-red-500 text-xs mt-1">{errors.ifsc}</p>}
+                </div>
               </div>
             </div>
+
+            {isEntity && (
+              <>
+                <div className="pt-4 border-t border-slate-200">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2.5 flex items-center gap-1.5">
+                    <TrendingUp className="h-4 w-4 text-emerald-600" />
+                    Key Financial Highlights of Applicant Entity
+                  </h4>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
+                      <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Last Financial Year</Label>
+                      <Input
+                        value={formData.last_financial_year || ""}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, last_financial_year: e.target.value }))}
+                        placeholder="e.g. 2023-24"
+                      />
+                    </div>
+                    <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
+                      <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Last FY Net Sales (₹ Lakhs)</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={formData.last_fy_net_sales ?? ""}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, last_fy_net_sales: e.target.value }))}
+                        placeholder="Net Sales in Lakhs"
+                      />
+                    </div>
+                    <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
+                      <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Last FY PAT (₹ Lakhs)</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={formData.last_fy_net_profit_after_tax ?? ""}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, last_fy_net_profit_after_tax: e.target.value }))}
+                        placeholder="Net Profit after tax in Lakhs"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                        <Building2 className="h-4 w-4 text-blue-600" />
+                        Details of DSA Experience with other Banks / Institutions
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Add or update details of empanelment with other financial institutions.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addBankExperience}
+                      className="text-xs font-semibold flex items-center gap-1 border-blue-300 text-blue-700 hover:bg-blue-50"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add Bank / FI
+                    </Button>
+                  </div>
+
+                  {Array.isArray(formData.other_banks_experience) && formData.other_banks_experience.length > 0 ? (
+                    <div className="space-y-3">
+                      {formData.other_banks_experience.map((bank: any, idx: number) => (
+                        <div key={idx} className="rounded-lg border border-slate-200 bg-white p-3.5 space-y-3 shadow-2xs">
+                          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                              <span className="h-5 w-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold">
+                                {idx + 1}
+                              </span>
+                              Bank / FI Experience #{idx + 1}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => removeBankExperience(idx)}
+                              className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
+                              title="Remove Bank Entry"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+                            <div className="sm:col-span-2">
+                              <Label className="text-[11px] font-semibold text-slate-600 mb-1 block">Name of Bank / FI / Others *</Label>
+                              <Input
+                                value={bank.bank_or_institution_name || ""}
+                                onChange={(e) => updateBankExperience(idx, "bank_or_institution_name", e.target.value)}
+                                placeholder="e.g. HDFC Bank, ICICI Bank"
+                                className="h-8 text-xs"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[11px] font-semibold text-slate-600 mb-1 block">Empanelment since (Year)</Label>
+                              <Input
+                                type="number"
+                                value={bank.empanelment_since_year || ""}
+                                onChange={(e) => updateBankExperience(idx, "empanelment_since_year", e.target.value)}
+                                placeholder="e.g. 2021"
+                                className="h-8 text-xs font-mono"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[11px] font-semibold text-slate-600 mb-1 block">Empanelled for Loan Products</Label>
+                              <Input
+                                value={bank.empanelled_loan_products || ""}
+                                onChange={(e) => updateBankExperience(idx, "empanelled_loan_products", e.target.value)}
+                                placeholder="e.g. Home Loan, MSME, LAP"
+                                className="h-8 text-xs"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[11px] font-semibold text-slate-600 mb-1 block">Products Mobilized (Last 3 Yrs)</Label>
+                              <Input
+                                value={bank.products_mobilized_last_3_years || ""}
+                                onChange={(e) => updateBankExperience(idx, "products_mobilized_last_3_years", e.target.value)}
+                                placeholder="e.g. Home Loans, Retail"
+                                className="h-8 text-xs"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[11px] font-semibold text-slate-600 mb-1 block">Average Ticket Size (₹ Lakh)</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={bank.avg_ticket_size_lakhs ?? ""}
+                                onChange={(e) => updateBankExperience(idx, "avg_ticket_size_lakhs", e.target.value)}
+                                placeholder="e.g. 25"
+                                className="h-8 text-xs font-mono"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[11px] font-semibold text-slate-600 mb-1 block">Commission Rate (%)</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={bank.commission_rate_percent ?? ""}
+                                onChange={(e) => updateBankExperience(idx, "commission_rate_percent", e.target.value)}
+                                placeholder="e.g. 0.85"
+                                className="h-8 text-xs font-mono"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[11px] font-semibold text-slate-600 mb-1 block">Avg Monthly Disbursed Proposals</Label>
+                              <Input
+                                type="number"
+                                value={bank.avg_disbursed_proposals_per_month ?? ""}
+                                onChange={(e) => updateBankExperience(idx, "avg_disbursed_proposals_per_month", e.target.value)}
+                                placeholder="e.g. 8"
+                                className="h-8 text-xs font-mono"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-3 border border-dashed border-slate-200 rounded-lg text-center text-xs text-slate-500 bg-white">
+                      No other bank experience entries added. Click "Add Bank / FI" to include previous empanelment details.
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         ) : (
-          <DetailGrid>
-            <DetailItem
-              label="Settlement Bank Name"
-              value={dsa.bank_name || "—"}
-            />
-            <DetailItem
-              label="Beneficiary Account Name"
-              value={dsa.account_name || dsa.name}
-            />
-            <DetailItem
-              label="Bank Account Number"
-              value={<span className="font-mono font-semibold text-slate-900">{dsa.account_number}</span>}
-            />
-            <DetailItem
-              label="Account Type"
-              value={dsa.account_type || "—"}
-            />
-            <DetailItem
-              label="IFSC Code"
-              value={<span className="font-mono font-bold text-slate-900">{dsa.ifsc}</span>}
-            />
-            <DetailItem
-              label="Disbursement &amp; Payout Routing"
-              value={
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                  <Check className="h-3 w-3" /> Direct Bank Transfer (NEFT/RTGS)
-                </span>
-              }
-            />
-            {dsa.last_fy_net_sales ? (
-              <DetailItem
-                label="Last FY Net Sales"
-                value={`₹ ${dsa.last_fy_net_sales} Lakhs`}
-              />
-            ) : null}
-            {dsa.last_fy_net_profit_after_tax ? (
-              <DetailItem
-                label="Last FY Net Profit (PAT)"
-                value={`₹ ${dsa.last_fy_net_profit_after_tax} Lakhs`}
-              />
-            ) : null}
-          </DetailGrid>
+          <div className="space-y-6">
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 mb-3 flex items-center gap-1.5">
+                <BadgeIndianRupee className="h-4 w-4 text-emerald-600" />
+                Settlement Bank Account Details
+              </h4>
+              <DetailGrid>
+                <DetailItem
+                  label="Settlement Bank Name"
+                  value={dsa.bank_name || "—"}
+                />
+                <DetailItem
+                  label="Beneficiary Account Name"
+                  value={dsa.account_name || dsa.name || "—"}
+                />
+                <DetailItem
+                  label="Bank Account Number"
+                  value={<span className="font-mono font-semibold text-slate-900">{dsa.account_number || "—"}</span>}
+                />
+                <DetailItem
+                  label="Account Type"
+                  value={dsa.account_type || "—"}
+                />
+                <DetailItem
+                  label="IFSC Code"
+                  value={<span className="font-mono font-bold text-slate-900">{dsa.ifsc || "—"}</span>}
+                />
+                <DetailItem
+                  label="Disbursement & Payout Routing"
+                  value={
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      <Check className="h-3 w-3" /> Direct Bank Transfer (NEFT/RTGS)
+                    </span>
+                  }
+                />
+              </DetailGrid>
+            </div>
+
+            {(isEntity || dsa.last_financial_year || (dsa.last_fy_net_sales !== null && dsa.last_fy_net_sales !== undefined && dsa.last_fy_net_sales !== "")) && (
+              <div className="pt-4 border-t border-slate-200">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2.5 flex items-center gap-1.5">
+                  <TrendingUp className="h-4 w-4 text-emerald-600" />
+                  Key Financial Highlights of Applicant Entity
+                </h4>
+                <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-2xs">
+                  <table className="w-full text-xs text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-700">
+                        <th className="py-2.5 px-3 font-semibold">Particulars</th>
+                        <th className="py-2.5 px-3 font-semibold text-right">
+                          Last F.Y. {dsa.last_financial_year ? `(${dsa.last_financial_year})` : ""}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-800">
+                      <tr>
+                        <td className="py-2.5 px-3 font-medium text-slate-600">Net Sales / Revenue</td>
+                        <td className="py-2.5 px-3 font-semibold text-right font-mono">
+                          {dsa.last_fy_net_sales !== null && dsa.last_fy_net_sales !== undefined && dsa.last_fy_net_sales !== ""
+                            ? `₹ ${dsa.last_fy_net_sales} Lakhs`
+                            : "—"}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="py-2.5 px-3 font-medium text-slate-600">Net Profit after Tax</td>
+                        <td className="py-2.5 px-3 font-semibold text-right font-mono">
+                          {dsa.last_fy_net_profit_after_tax !== null && dsa.last_fy_net_profit_after_tax !== undefined && dsa.last_fy_net_profit_after_tax !== ""
+                            ? `₹ ${dsa.last_fy_net_profit_after_tax} Lakhs`
+                            : "—"}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {(isEntity || (Array.isArray(dsa.other_banks_experience) && dsa.other_banks_experience.length > 0) || dsa.bank_or_institution_name) && (
+              <div className="pt-4 border-t border-slate-200">
+                <div className="flex items-center justify-between mb-2.5">
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                      <Building2 className="h-4 w-4 text-blue-600" />
+                      Details of DSA Experience with other Banks / Institutions
+                    </h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Empanelment details and performance track record across other Banks / FIs.
+                    </p>
+                  </div>
+                  {Array.isArray(dsa.other_banks_experience) && dsa.other_banks_experience.length > 0 && (
+                    <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                      {dsa.other_banks_experience.length} Empanelled Institution{dsa.other_banks_experience.length > 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+
+                {(() => {
+                  const banks = Array.isArray(dsa.other_banks_experience) && dsa.other_banks_experience.length > 0
+                    ? dsa.other_banks_experience
+                    : dsa.bank_or_institution_name
+                      ? [{
+                          bank_or_institution_name: dsa.bank_or_institution_name,
+                          empanelment_since_year: dsa.empanelment_since_year,
+                          empanelled_loan_products: dsa.empanelled_loan_products,
+                          products_mobilized_last_3_years: dsa.products_mobilized_last_3_years,
+                          avg_ticket_size_lakhs: dsa.avg_ticket_size_lakhs,
+                          commission_rate_percent: dsa.commission_rate_percent,
+                          avg_disbursed_proposals_per_month: dsa.avg_disbursed_proposals_per_month,
+                        }]
+                      : [];
+
+                  if (banks.length === 0) {
+                    return (
+                      <div className="p-3 border border-slate-200 rounded-lg bg-slate-50 text-xs text-slate-500 italic">
+                        No previous DSA experience with other banks or financial institutions recorded.
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-3">
+                      {banks.map((bank: any, idx: number) => (
+                        <div key={idx} className="rounded-lg border border-slate-200 bg-white overflow-hidden shadow-2xs">
+                          <div className="bg-slate-50 px-3.5 py-2 border-b border-slate-200 flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                              <span className="h-5 w-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold">
+                                {idx + 1}
+                              </span>
+                              {bank.bank_or_institution_name || `Bank / Financial Institution #${idx + 1}`}
+                            </span>
+                            {bank.empanelment_since_year && (
+                              <span className="text-[11px] font-medium text-slate-600">
+                                Empanelled since: <strong className="text-slate-900">{bank.empanelment_since_year}</strong>
+                              </span>
+                            )}
+                          </div>
+                          <div className="p-3">
+                            <table className="w-full text-xs border-collapse">
+                              <tbody className="divide-y divide-slate-100 text-slate-800">
+                                <tr>
+                                  <td className="w-1/2 py-1.5 pr-2 font-medium text-slate-600">Name of the Bank / Financial Institution / Others</td>
+                                  <td className="py-1.5 pl-2 font-semibold text-slate-900">{bank.bank_or_institution_name || "—"}</td>
+                                </tr>
+                                <tr>
+                                  <td className="py-1.5 pr-2 font-medium text-slate-600">Empanelment since (Year)</td>
+                                  <td className="py-1.5 pl-2 font-semibold text-slate-900 font-mono">{bank.empanelment_since_year || "—"}</td>
+                                </tr>
+                                <tr>
+                                  <td className="py-1.5 pr-2 font-medium text-slate-600">Empanelment for which Loan Products</td>
+                                  <td className="py-1.5 pl-2 font-semibold text-slate-900">{bank.empanelled_loan_products || "—"}</td>
+                                </tr>
+                                <tr>
+                                  <td className="py-1.5 pr-2 font-medium text-slate-600">Type of Products mobilized during last 3 years</td>
+                                  <td className="py-1.5 pl-2 font-semibold text-slate-900">{bank.products_mobilized_last_3_years || "—"}</td>
+                                </tr>
+                                <tr>
+                                  <td className="py-1.5 pr-2 font-medium text-slate-600">Average ticket size (Rs. In Lakh)</td>
+                                  <td className="py-1.5 pl-2 font-semibold text-slate-900 font-mono">
+                                    {bank.avg_ticket_size_lakhs !== null && bank.avg_ticket_size_lakhs !== undefined && bank.avg_ticket_size_lakhs !== ""
+                                      ? `₹ ${bank.avg_ticket_size_lakhs} Lakhs`
+                                      : "—"}
+                                  </td>
+                                </tr>
+                                <tr>
+                                  <td className="py-1.5 pr-2 font-medium text-slate-600">Commission rate (%)</td>
+                                  <td className="py-1.5 pl-2 font-semibold text-slate-900 font-mono">
+                                    {bank.commission_rate_percent !== null && bank.commission_rate_percent !== undefined && bank.commission_rate_percent !== ""
+                                      ? `${bank.commission_rate_percent}%`
+                                      : "—"}
+                                  </td>
+                                </tr>
+                                <tr>
+                                  <td className="py-1.5 pr-2 font-medium text-slate-600">Average No. of proposals disbursed per month (Nos.)</td>
+                                  <td className="py-1.5 pl-2 font-semibold text-slate-900 font-mono">
+                                    {bank.avg_disbursed_proposals_per_month !== null && bank.avg_disbursed_proposals_per_month !== undefined && bank.avg_disbursed_proposals_per_month !== ""
+                                      ? `${bank.avg_disbursed_proposals_per_month} Nos.`
+                                      : "—"}
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
         )}
       </SectionBlock>
 
