@@ -1,7 +1,27 @@
 import { authService } from "@/services/authService";
 import { withBasePath } from "@/lib/base-path";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+export const getBaseUrl = (): string => {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (typeof window !== "undefined" && window.location.hostname) {
+    const host = window.location.hostname;
+    const isLocalhost = host === "localhost" || host === "127.0.0.1";
+    if (envUrl) {
+      try {
+        const parsed = new URL(envUrl);
+        if ((parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") && !isLocalhost) {
+          parsed.hostname = host;
+          return parsed.toString().replace(/\/$/, "");
+        }
+      } catch {}
+      return envUrl.replace(/\/$/, "");
+    }
+    return `${window.location.protocol}//${host}:8000/api`;
+  }
+  return envUrl ? envUrl.replace(/\/$/, "") : "http://localhost:8000/api";
+};
+
+export const BASE_URL = getBaseUrl();
 
 export interface RequestError extends Error {
   status?: number;
@@ -56,7 +76,8 @@ export async function request<T = unknown>(
     delete headers["Content-Type"];
   }
 
-  const response = await fetch(`${BASE_URL}/${endpoint.replace(/^\//, "")}`, {
+  const baseUrl = getBaseUrl();
+  const response = await fetch(`${baseUrl}/${endpoint.replace(/^\//, "")}`, {
     ...options,
     headers,
   });
@@ -113,11 +134,53 @@ export async function request<T = unknown>(
   return response.json() as Promise<T>;
 }
 
+export async function requestBlob(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<{ blob: Blob; fileName?: string }> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const baseUrl = getBaseUrl();
+
+  const headers: Record<string, string> = {
+    "Accept": "application/pdf, application/octet-stream, */*",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(options.headers ? (options.headers as Record<string, string>) : {}),
+  };
+
+  const response = await fetch(`${baseUrl}/${endpoint.replace(/^\//, "")}`, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    let errorMsg = `HTTP error ${response.status}`;
+    try {
+      const errJson = await response.json();
+      errorMsg = errJson.message || errJson.error || errorMsg;
+    } catch {}
+    const error = new Error(errorMsg) as RequestError;
+    error.status = response.status;
+    throw error;
+  }
+
+  let fileName: string | undefined;
+  const disposition = response.headers.get("Content-Disposition");
+  if (disposition) {
+    const filenameMatch = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/i);
+    if (filenameMatch?.[1]) {
+      fileName = filenameMatch[1].replace(/['"]/g, "").trim();
+    }
+  }
+
+  const blob = await response.blob();
+  return { blob, fileName };
+}
+
 export async function rawRequest(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<Response> {
-  const rootUrl = BASE_URL.replace(/\/api$/, "");
+  const rootUrl = getBaseUrl().replace(/\/api$/, "");
   const response = await fetch(`${rootUrl}/${endpoint.replace(/^\//, "")}`, options);
   return response;
 }

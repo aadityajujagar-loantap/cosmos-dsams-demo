@@ -308,9 +308,19 @@ function getDocumentUrl(
   useStorageFallback = false,
 ): string {
   if (!doc) return "";
-  const apiBase = (
-    process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
-  ).replace(/\/api\/?$/, "");
+  let rawApi = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (
+      host &&
+      host !== "localhost" &&
+      host !== "127.0.0.1" &&
+      (rawApi.includes("localhost") || rawApi.includes("127.0.0.1"))
+    ) {
+      rawApi = `${window.location.protocol}//${host}:8000/api`;
+    }
+  }
+  const apiBase = rawApi.replace(/\/api\/?$/, "");
   const targetDsaId = dsaId || doc.dsa_id;
 
   // Visit report documents: use streaming endpoint if available, fallback to storage
@@ -4655,32 +4665,35 @@ export function DsaProfilePage({ id }: { id: string }) {
     }
 
     try {
-      const pdfRes = await adminApi.getDdReviewReportPdf(dsa.id);
-      if (pdfRes?.data?.file_url) {
-        fetchDeviationReport(dsa.id)
-          .then((fresh) => {
-            if (fresh) setDeviationReportData(fresh);
-          })
-          .catch(() => {});
-        fetchBackendDocuments(true).catch(() => {});
-        const link = document.createElement("a");
-        link.href = pdfRes.data.file_url;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        link.download =
-          pdfRes.data.file_name ||
-          `DSA-${getEffectiveDsaCode(dsa)}-DD-Review-Report.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        toast({
-          title: "Report Downloaded",
-          description: "Fresh Due Diligence Review Report PDF generated.",
-          variant: "success",
-        });
-        return;
-      }
-    } catch {
+      const { blob, fileName: serverFileName } =
+        await adminApi.downloadDdReviewReportPdfBlob(dsa.id);
+      fetchDeviationReport(dsa.id)
+        .then((fresh) => {
+          if (fresh) setDeviationReportData(fresh);
+        })
+        .catch(() => {});
+      fetchBackendDocuments(true).catch(() => {});
+
+      const fileName =
+        serverFileName ||
+        `DSA-${getEffectiveDsaCode(dsa)}-DD-Review-Report.pdf`;
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 10000);
+
+      toast({
+        title: "Report Downloaded",
+        description: "Fresh Due Diligence Review Report PDF downloaded.",
+        variant: "success",
+      });
+      return;
+    } catch (err: any) {
+      console.warn("PDF blob download failed, falling back to text report:", err);
       // Fallback to text report generation if PDF generation is not available
     }
 
