@@ -467,24 +467,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submittedDsa, setSubmittedDsa] = useState<any | null>(null);
   const [createdDsaId, setCreatedDsaId] = useState<number | string | null>(null);
-  const [pendingVerificationDsa, setPendingVerificationDsa] = useState<{
-    dsaId: string | number;
-    code: string;
-    email: string;
-    applicantName: string;
-    verificationUrl?: string;
-    newDsaRecord: any;
-    resultDsa: any;
-  } | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const saved = sessionStorage.getItem(`cosmos_dsa_pending_verification_${mode}`);
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return null;
-  });
-  const [isCheckingStatus, setIsCheckingStatus] = useState<boolean>(false);
-  const [isResendingEmail, setIsResendingEmail] = useState<boolean>(false);
 
   // Self-Onboarding OTP verification state
   const [branchId, setBranchId] = useState<string>("");
@@ -3021,38 +3003,26 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         })),
       };
 
-      const isEmailAlreadyVerified = Boolean(
-        resultDsa?.email_verified_at ||
-        resultDsa?.email_verified ||
-        (resultDsa?.data && (resultDsa.data.email_verified_at || resultDsa.data.email_verified))
-      );
-
-      if (!isEmailAlreadyVerified) {
-        const pendingData = {
-          dsaId: String(dsaId),
-          code: String(resultDsa?.dsa_code || resultDsa?.code || newDsaRecord.code),
-          email: email || selfEmail || resultDsa?.email || "applicant",
-          applicantName: applicantName || "Applicant",
-          verificationUrl: resultDsa?.verification_url || (resultDsa?.data && resultDsa.data.verification_url),
-          newDsaRecord,
-          resultDsa,
-        };
-        setPendingVerificationDsa(pendingData);
-        toast({
-          title: "Consent Email Dispatched",
-          description: `Consent verification email sent to ${pendingData.email}. Application cannot proceed until verified.`,
-          variant: "warning",
-        });
-        setIsSubmitting(false);
-        return;
+      try {
+        createItem("dsas", newDsaRecord as any);
+      } catch (storeErr) {
+        console.warn("Local store sync warning:", storeErr);
       }
 
-      completeVerifiedSubmission({
-        dsaId,
-        code: newDsaRecord.code,
-        newDsaRecord,
-        resultDsa,
+      clearDraft();
+      try {
+        sessionStorage.removeItem(`cosmos_dsa_pending_verification_${mode}`);
+      } catch {}
+      setSubmittedDsa(resultDsa || newDsaRecord);
+      toast({
+        title: "Application Submitted Successfully",
+        description: `DSA record created with code ${newDsaRecord.code}. Sent to verification queue.`,
+        variant: "success",
       });
+
+      if (onSuccess) {
+        onSuccess(resultDsa || newDsaRecord);
+      }
     } catch (err: any) {
       console.warn("Backend submit error:", err);
 
@@ -3073,127 +3043,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       });
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const completeVerifiedSubmission = useCallback(
-    (pendingData: { dsaId?: string | number; code: string; newDsaRecord: any; resultDsa: any }) => {
-      try {
-        createItem("dsas", pendingData.newDsaRecord as any);
-      } catch (storeErr) {
-        console.warn("Local store sync warning:", storeErr);
-      }
-
-      clearDraft();
-      try {
-        sessionStorage.removeItem(`cosmos_dsa_pending_verification_${mode}`);
-      } catch {}
-      setPendingVerificationDsa(null);
-      setSubmittedDsa(pendingData.resultDsa || pendingData.newDsaRecord);
-      toast({
-        title: "Consent & Email Verified",
-        description: `Applicant consent approved. Application #${pendingData.code} forwarded to Checker review queue.`,
-        variant: "success",
-      });
-
-      if (onSuccess) {
-        onSuccess(pendingData.resultDsa || pendingData.newDsaRecord);
-      }
-    },
-    [clearDraft, createItem, mode, onSuccess, toast]
-  );
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      if (pendingVerificationDsa) {
-        sessionStorage.setItem(`cosmos_dsa_pending_verification_${mode}`, JSON.stringify(pendingVerificationDsa));
-      } else {
-        sessionStorage.removeItem(`cosmos_dsa_pending_verification_${mode}`);
-      }
-    } catch {}
-  }, [pendingVerificationDsa, mode]);
-
-  useEffect(() => {
-    if (!pendingVerificationDsa) return;
-
-    let isMountedLocal = true;
-    const checkStatus = async () => {
-      try {
-        const res = await adminApi.getDsaVerificationStatus(pendingVerificationDsa.dsaId);
-        const data = res?.data ?? res;
-        if (data?.email_verified && isMountedLocal) {
-          completeVerifiedSubmission(pendingVerificationDsa);
-        }
-      } catch {
-        // quiet poll
-      }
-    };
-
-    const interval = setInterval(checkStatus, 3000);
-
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key?.startsWith("email_verified_")) {
-        checkStatus();
-      }
-    };
-    window.addEventListener("storage", handleStorageChange);
-
-    return () => {
-      isMountedLocal = false;
-      clearInterval(interval);
-      window.removeEventListener("storage", handleStorageChange);
-    };
-  }, [pendingVerificationDsa, completeVerifiedSubmission]);
-
-  const handleManualCheckVerification = async () => {
-    if (!pendingVerificationDsa) return;
-    setIsCheckingStatus(true);
-    try {
-      const res = await adminApi.getDsaVerificationStatus(pendingVerificationDsa.dsaId);
-      const data = res?.data ?? res;
-      if (data?.email_verified) {
-        completeVerifiedSubmission(pendingVerificationDsa);
-      } else {
-        toast({
-          title: "Verification Pending",
-          description: `Applicant has not yet verified. Please click "Provide Consent & Verify Email" in the email sent to ${pendingVerificationDsa.email}.`,
-          variant: "warning",
-        });
-      }
-    } catch (err: any) {
-      toast({
-        title: "Status Check Failed",
-        description: err?.message || "Could not retrieve verification status.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsCheckingStatus(false);
-    }
-  };
-
-  const handleResendVerificationEmail = async () => {
-    if (!pendingVerificationDsa) return;
-    setIsResendingEmail(true);
-    try {
-      const res = await adminApi.resendDsaVerificationEmail(pendingVerificationDsa.dsaId);
-      const data = res?.data ?? res;
-      if (data?.verification_url) {
-        setPendingVerificationDsa((prev) => (prev ? { ...prev, verificationUrl: data.verification_url } : null));
-      }
-      toast({
-        title: "Consent Email Resent",
-        description: `A fresh consent email has been dispatched to ${pendingVerificationDsa.email}.`,
-        variant: "success",
-      });
-    } catch (err: any) {
-      toast({
-        title: "Resend Failed",
-        description: err?.message || "Failed to resend verification email.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsResendingEmail(false);
     }
   };
 
@@ -3223,101 +3072,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         <Link href="/">
           <Button variant="primary">Return to Dashboard</Button>
         </Link>
-      </div>
-    );
-  }
-
-  if (pendingVerificationDsa) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center w-full min-h-[calc(100vh-10rem)] p-4 sm:p-6 my-auto">
-        <Card className="w-full max-w-2xl border-amber-300 bg-white shadow-xl overflow-hidden text-center mx-auto">
-          <div className="bg-gradient-to-r from-amber-600 to-amber-700 py-8 px-6 text-white">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm mb-4">
-              <MailCheck className="h-9 w-9 text-white animate-pulse" />
-            </div>
-            <span className="inline-flex items-center rounded-full bg-white/20 px-3 py-1 text-xs font-bold uppercase tracking-wider text-amber-100 mb-2">
-              Action Required â€¢ Awaiting Applicant Approval
-            </span>
-            <h2 className="text-2xl font-bold tracking-tight">DSA Consent Email Dispatched</h2>
-            <p className="mt-2 text-amber-100 text-sm max-w-md mx-auto">
-              A verification &amp; consent email has been sent to{" "}
-              <strong className="text-white underline">{pendingVerificationDsa.email}</strong>.
-            </p>
-          </div>
-
-          <CardContent className="p-6 sm:p-8 space-y-6">
-            <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 text-xs text-slate-700 leading-relaxed text-left space-y-2">
-              <div className="flex items-center gap-2 font-bold text-amber-900 text-sm">
-                <Info className="h-4 w-4 text-amber-700 shrink-0" />
-                <span>Mandatory Applicant Consent &amp; Verification</span>
-              </div>
-              <p>
-                In compliance with regulatory and due diligence policies, the applicant must click{" "}
-                <strong>&quot;Provide Consent &amp; Verify Email&quot;</strong> in the email sent by Cosmos Co-operative Bank Ltd.
-                This application <strong>will not proceed to Checker review</strong> until this approval is received.
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs space-y-2 text-left">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                <span className="font-semibold text-slate-500">Application Reference No:</span>
-                <span className="font-mono font-bold text-slate-900">{pendingVerificationDsa.code}</span>
-              </div>
-              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                <span className="font-semibold text-slate-500">Applicant / Entity Name:</span>
-                <span className="font-bold text-slate-900">{pendingVerificationDsa.applicantName}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-slate-500">Approval Status:</span>
-                <span className="inline-flex items-center gap-1.5 font-bold text-amber-700">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Waiting for Applicant to Verify Email...
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-              <Button
-                type="button"
-                onClick={handleManualCheckVerification}
-                disabled={isCheckingStatus}
-                className="gap-2 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white px-5 py-2.5 shadow-sm"
-              >
-                {isCheckingStatus ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-                Check Verification Status
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleResendVerificationEmail}
-                disabled={isResendingEmail}
-                className="gap-2 text-xs font-semibold border-slate-300 text-slate-700 hover:bg-slate-100"
-              >
-                {isResendingEmail ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Mail className="h-4 w-4 text-blue-600" />
-                )}
-                Resend Consent Email
-              </Button>
-
-              {pendingVerificationDsa.verificationUrl && (
-                <a
-                  href={pendingVerificationDsa.verificationUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline px-3 py-2"
-                >
-                  Open Verification Link (Test Link) <ExternalLink className="h-3.5 w-3.5" />
-                </a>
-              )}
-            </div>
-          </CardContent>
-        </Card>
       </div>
     );
   }
