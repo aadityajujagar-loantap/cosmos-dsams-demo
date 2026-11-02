@@ -407,15 +407,26 @@ export const adminApi = {
     });
   },
 
-  getBranchesDropdown: async (districtCode?: string): Promise<BackendResponse<BranchOption[]>> => {
-    const query = districtCode ? `?district_code=${districtCode}` : "";
+  getBranchesDropdown: async (filters?: { district_code?: string; region_code?: string; sub_region_code?: string } | string): Promise<BackendResponse<BranchOption[]>> => {
+    let query = "";
+    if (typeof filters === "string") {
+      query = filters ? `?district_code=${encodeURIComponent(filters)}` : "";
+    } else if (filters) {
+      const q = new URLSearchParams();
+      if (filters.district_code) q.append("district_code", filters.district_code);
+      if (filters.region_code) q.append("region_code", filters.region_code);
+      if (filters.sub_region_code) q.append("sub_region_code", filters.sub_region_code);
+      const str = q.toString();
+      if (str) query = `?${str}`;
+    }
     return request<BackendResponse<BranchOption[]>>(`/branches/dropdown${query}`, {
       method: "GET",
     });
   },
 
-  getSubRegionsDropdown: async (): Promise<BackendResponse<SubRegionOption[]>> => {
-    return request<BackendResponse<SubRegionOption[]>>("/sub-regions/dropdown", { method: "GET" });
+  getSubRegionsDropdown: async (regionCode?: string): Promise<BackendResponse<SubRegionOption[]>> => {
+    const query = regionCode ? `?region_code=${encodeURIComponent(regionCode)}` : "";
+    return request<BackendResponse<SubRegionOption[]>>(`/sub-regions/dropdown${query}`, { method: "GET" });
   },
 
   getRegionsDropdown: async (): Promise<BackendResponse<RegionOption[]>> => {
@@ -1577,8 +1588,9 @@ export const adminApi = {
     return response;
   },
 
-  getAdminSubRegionsDropdown: async (): Promise<BackendResponse<SubRegionOption[]>> => {
-    return request<BackendResponse<SubRegionOption[]>>("/admin/sub-regions/dropdown", { method: "GET" });
+  getAdminSubRegionsDropdown: async (regionCode?: string): Promise<BackendResponse<SubRegionOption[]>> => {
+    const query = regionCode ? `?region_code=${encodeURIComponent(regionCode)}` : "";
+    return request<BackendResponse<SubRegionOption[]>>(`/admin/sub-regions/dropdown${query}`, { method: "GET" });
   },
 
   // ── State APIs ─────────────────────────────────────────────────────────────

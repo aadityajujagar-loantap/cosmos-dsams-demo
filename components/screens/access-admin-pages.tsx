@@ -249,109 +249,75 @@ export function UsersPage() {
     setForm((current) => ({ ...current, [name]: value }));
   }
 
-  function handleRegionChange(newRegionCode: string) {
-    setForm((current) => {
-      let nextSubRegion = current.sub_region_code;
-      let nextBranch = current.branch_code;
+  async function handleRegionChange(newRegionCode: string) {
+    setForm((current) => ({
+      ...current,
+      region_code: newRegionCode,
+      sub_region_code: "",
+      branch_code: "",
+    }));
 
-      if (newRegionCode) {
-        if (nextSubRegion) {
-          const sr = subRegions.find((s) => s.sub_region_code === nextSubRegion);
-          if (sr && sr.region_code !== newRegionCode) {
-            nextSubRegion = "";
-          }
+    if (newRegionCode) {
+      try {
+        const res = await adminApi
+          .getAdminSubRegionsDropdown(newRegionCode)
+          .catch(() => adminApi.getSubRegionsDropdown(newRegionCode));
+        if (res && Array.isArray((res as any).data) && (res as any).data.length > 0) {
+          setSubRegions((prev) => {
+            const fresh = (res as any).data as SubRegionOption[];
+            const map = new Map(prev.map((s) => [s.sub_region_code, s]));
+            fresh.forEach((s) => map.set(s.sub_region_code, s));
+            return Array.from(map.values());
+          });
         }
-        if (nextBranch) {
-          const br = branches.find((b) => b.branch_code === nextBranch);
-          const brRegion = br?.region_code || subRegions.find((s) => s.sub_region_code === br?.sub_region_code)?.region_code;
-          if (brRegion && brRegion !== newRegionCode) {
-            nextBranch = "";
-          }
-        }
-      }
-
-      return {
-        ...current,
-        region_code: newRegionCode,
-        sub_region_code: nextSubRegion,
-        branch_code: nextBranch,
-      };
-    });
+      } catch {}
+    }
   }
 
-  function handleSubRegionChange(newSubRegionCode: string) {
-    setForm((current) => {
-      let nextRegion = current.region_code;
-      let nextBranch = current.branch_code;
+  async function handleSubRegionChange(newSubRegionCode: string) {
+    setForm((current) => ({
+      ...current,
+      sub_region_code: newSubRegionCode,
+      branch_code: "",
+    }));
 
-      if (newSubRegionCode) {
-        const sr = subRegions.find((s) => s.sub_region_code === newSubRegionCode);
-        if (sr?.region_code) {
-          nextRegion = sr.region_code;
+    if (newSubRegionCode) {
+      try {
+        const res = await adminApi.getBranchesDropdown({ sub_region_code: newSubRegionCode });
+        if (res && Array.isArray((res as any).data) && (res as any).data.length > 0) {
+          setBranches((prev) => {
+            const fresh = (res as any).data as BranchOption[];
+            const map = new Map(prev.map((b) => [b.branch_code, b]));
+            fresh.forEach((b) => map.set(b.branch_code, b));
+            return Array.from(map.values());
+          });
         }
-        if (nextBranch) {
-          const br = branches.find((b) => b.branch_code === nextBranch);
-          if (br && br.sub_region_code && br.sub_region_code !== newSubRegionCode) {
-            nextBranch = "";
-          }
-        }
-      }
-
-      return {
-        ...current,
-        region_code: nextRegion,
-        sub_region_code: newSubRegionCode,
-        branch_code: nextBranch,
-      };
-    });
+      } catch {}
+    }
   }
 
   function handleBranchChange(newBranchCode: string) {
-    setForm((current) => {
-      let nextRegion = current.region_code;
-      let nextSubRegion = current.sub_region_code;
-
-      if (newBranchCode) {
-        const br = branches.find((b) => b.branch_code === newBranchCode);
-        if (br?.sub_region_code) {
-          nextSubRegion = br.sub_region_code;
-        }
-        if (br?.region_code) {
-          nextRegion = br.region_code;
-        } else if (nextSubRegion) {
-          const sr = subRegions.find((s) => s.sub_region_code === nextSubRegion);
-          if (sr?.region_code) {
-            nextRegion = sr.region_code;
-          }
-        }
-      }
-
-      return {
-        ...current,
-        region_code: nextRegion,
-        sub_region_code: nextSubRegion,
-        branch_code: newBranchCode,
-      };
-    });
+    setForm((current) => ({
+      ...current,
+      branch_code: newBranchCode,
+    }));
   }
 
   const availableSubRegions = useMemo(() => {
-    if (!form.region_code) return subRegions;
-    return subRegions.filter((sr) => sr.region_code === form.region_code);
+    if (!form.region_code) return [];
+    const rCode = form.region_code.trim().toUpperCase();
+    return subRegions.filter(
+      (sr) => (sr.region_code || "").trim().toUpperCase() === rCode
+    );
   }, [subRegions, form.region_code]);
 
   const availableBranches = useMemo(() => {
-    return branches.filter((b) => {
-      if (form.sub_region_code && b.sub_region_code && b.sub_region_code !== form.sub_region_code) {
-        return false;
-      }
-      const bRegion = b.region_code || subRegions.find((s) => s.sub_region_code === b.sub_region_code)?.region_code;
-      if (form.region_code && bRegion && bRegion !== form.region_code) {
-        return false;
-      }
-      return true;
-    });
-  }, [branches, subRegions, form.sub_region_code, form.region_code]);
+    if (!form.sub_region_code) return [];
+    const srCode = form.sub_region_code.trim().toUpperCase();
+    return branches.filter(
+      (b) => (b.sub_region_code || "").trim().toUpperCase() === srCode
+    );
+  }, [branches, form.sub_region_code]);
 
   async function syncRoles(userId: number, previousNames: string[], nextNames: string[]) {
     const roleByName = new Map(roles.map((role) => [role.name, role]));
@@ -646,10 +612,13 @@ export function UsersPage() {
             <Field className="sm:col-span-1">
               <Label>Sub-Region</Label>
               <Select
+                disabled={!form.region_code}
                 onChange={(event) => handleSubRegionChange(event.target.value)}
                 value={form.sub_region_code}
               >
-                <option value="">Select Sub-Region (or None)</option>
+                <option value="">
+                  {form.region_code ? "Select Sub-Region (or None)" : "Select Region first"}
+                </option>
                 {availableSubRegions.map((sr) => (
                   <option key={sr.sub_region_code} value={sr.sub_region_code}>
                     {sr.sub_region_name} ({sr.sub_region_code})
@@ -664,10 +633,13 @@ export function UsersPage() {
             <Field className="sm:col-span-1">
               <Label>Branch</Label>
               <Select
+                disabled={!form.sub_region_code}
                 onChange={(event) => handleBranchChange(event.target.value)}
                 value={form.branch_code}
               >
-                <option value="">Select Branch (or None)</option>
+                <option value="">
+                  {form.sub_region_code ? "Select Branch (or None)" : "Select Sub-Region first"}
+                </option>
                 {availableBranches.map((b) => (
                   <option key={b.branch_code} value={b.branch_code}>
                     {b.branch_name ? `${b.branch_name} (${b.branch_code})` : b.branch_code}
