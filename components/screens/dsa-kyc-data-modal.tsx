@@ -3,8 +3,9 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Modal, Button } from "@/components/ui/primitives";
 import { adminApi } from "@/apis/admin";
+import { getBaseUrl } from "@/apis/client";
 import { cn } from "@/lib/utils";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, FileText } from "lucide-react";
 
 export type KycDataType = "pan" | "gst" | "bank" | "udyam" | "cibil" | "aml";
 
@@ -1410,6 +1411,33 @@ function CibilDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
 
     return (
       <div className="space-y-3">
+        {dsa?.id && (
+          <div className="flex items-center justify-between p-2.5 bg-sky-50/80 border border-sky-200 rounded-lg">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-sky-700 shrink-0" />
+              <div>
+                <div className="text-xs font-semibold text-sky-950">Official TransUnion CIBIL Bureau Report</div>
+                <div className="text-[11px] text-sky-700">Detailed bureau report with needle gauge score &amp; accounts track</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => window.open(`${getBaseUrl()}/v1/dsa/${dsa.id}/cibil-report/view`, "_blank")}
+                className="inline-flex items-center px-2 py-1 text-xs font-medium text-sky-800 bg-white border border-sky-300 rounded hover:bg-sky-50 transition-colors shadow-sm"
+              >
+                View Report
+              </button>
+              <button
+                type="button"
+                onClick={() => window.open(`${getBaseUrl()}/v1/dsa/${dsa.id}/cibil-report/pdf?download=1`, "_blank")}
+                className="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-sky-700 rounded hover:bg-sky-800 transition-colors shadow-sm"
+              >
+                Download PDF
+              </button>
+            </div>
+          </div>
+        )}
         {/* Table 1: Basic CMR Score & Entity Details */}
         <TableWrapper
           title="1. Basic Commercial Score & Entity Profile"
@@ -1562,6 +1590,33 @@ function CibilDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
 
   return (
     <div className="space-y-3">
+      {dsa?.id && (
+        <div className="flex items-center justify-between p-2.5 bg-sky-50/80 border border-sky-200 rounded-lg">
+          <div className="flex items-center gap-2">
+            <FileText className="w-4 h-4 text-sky-700 shrink-0" />
+            <div>
+              <div className="text-xs font-semibold text-sky-950">Official TransUnion CIBIL Bureau Report</div>
+              <div className="text-[11px] text-sky-700">Detailed bureau report with needle gauge score &amp; accounts track</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => window.open(`${getBaseUrl()}/v1/dsa/${dsa.id}/cibil-report/view`, "_blank")}
+              className="inline-flex items-center px-2 py-1 text-xs font-medium text-sky-800 bg-white border border-sky-300 rounded hover:bg-sky-50 transition-colors shadow-sm"
+            >
+              View Report
+            </button>
+            <button
+              type="button"
+              onClick={() => window.open(`${getBaseUrl()}/v1/dsa/${dsa.id}/cibil-report/pdf?download=1`, "_blank")}
+              className="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-sky-700 rounded hover:bg-sky-800 transition-colors shadow-sm"
+            >
+              Download PDF
+            </button>
+          </div>
+        </div>
+      )}
       {/* Table 1: Basic Credit Score & Profile Summary */}
       <TableWrapper
         title="1. Basic Credit Score & Bureau Summary"
