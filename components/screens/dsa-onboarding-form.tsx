@@ -556,7 +556,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       entityName?: boolean;
     };
   } | null>(null);
-  const [extraItrYears, setExtraItrYears] = useState<number[]>([]);
+  const [extraItrYears, setExtraItrYears] = useState<number[]>([2]);
   const availableFinancialYears = useMemo(() => {
     const now = new Date();
     const currentYear = now.getFullYear();
@@ -1020,7 +1020,13 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         if (data.otpSent !== undefined) setOtpSent(Boolean(data.otpSent));
         if (data.otpVerified !== undefined) setOtpVerified(Boolean(data.otpVerified));
         if (data.uploadedDocs) setUploadedDocs(parseUploadedDocs(data.uploadedDocs));
-        if (Array.isArray(data.extraItrYears)) setExtraItrYears(data.extraItrYears);
+        if (Array.isArray(data.extraItrYears)) {
+          const years = [...data.extraItrYears];
+          if (data.uploadedDocs?.itr_year_2 && !years.includes(2)) years.push(2);
+          setExtraItrYears(years.sort((a, b) => a - b));
+        } else if (data.extraItrYears === undefined) {
+          setExtraItrYears([2]);
+        }
         if (data.itrFinancialYears && typeof data.itrFinancialYears === "object") setItrFinancialYears(data.itrFinancialYears);
         if (data.applicantTitle !== undefined) setApplicantTitle(data.applicantTitle);
         if (data.firstName !== undefined) setFirstName(data.firstName);
@@ -1271,7 +1277,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     // Reset Documents & Declaration
     setUploadedDocs({});
     setShowAadhaarBack(false);
-    setExtraItrYears([]);
+    setExtraItrYears([2]);
     setItrFinancialYears(() => {
       const now = new Date();
       const currentYear = now.getFullYear();
@@ -1411,6 +1417,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     otpSent,
     otpVerified,
     uploadedDocs,
+    extraItrYears,
+    itrFinancialYears,
     applicantTitle,
     firstName,
     middleName,
@@ -1624,7 +1632,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   ]);
 
   const allItrYears = useMemo(() => {
-    const base = [1, 2];
+    const base = [1];
     const combined = [...base, ...extraItrYears];
     return Array.from(new Set(combined)).sort((a, b) => a - b);
   }, [extraItrYears]);
@@ -1635,8 +1643,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       return {
         type: `itr_year_${yr}`,
         label: `${yr}${suffix} Year ITR with computation`,
-        required: yr <= 2,
-        requirementLabel: yr <= 2 ? "Mandatory" : "Optional",
+        required: yr === 1,
+        requirementLabel: yr === 1 ? "Mandatory" : "Optional",
       };
     });
   }, [allItrYears]);
@@ -2640,9 +2648,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
       if (!uploadedDocs["itr_year_1"]) {
         missing.push("1st Year ITR with computation");
-      }
-      if (!uploadedDocs["itr_year_2"]) {
-        missing.push("2nd Year ITR with computation");
       }
 
       if (!uploadedDocs["dsa_consent_dpdp"]) {
@@ -5813,7 +5818,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     </div>
                   </div>
                   <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-blue-100 text-blue-700">
-                    Mandatory (Last 2 F.Y.)
+                    1st Year Mandatory (Additional Years Optional)
                   </span>
                 </div>
 
@@ -5821,7 +5826,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   {itrDocDefs.map((doc, idx) => {
                     const yrNum = allItrYears[idx];
                     const attached = uploadedDocs[doc.type];
-                    const isExtraYear = yrNum > 2;
+                    const isExtraYear = yrNum > 1;
 
                     return (
                       <div
@@ -5876,6 +5881,11 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                               onClick={() => {
                                 setExtraItrYears((prev) => prev.filter((y) => y !== yrNum));
                                 removeDoc(doc.type);
+                                setItrFinancialYears((prev) => {
+                                  const copy = { ...prev };
+                                  delete copy[doc.type];
+                                  return copy;
+                                });
                               }}
                               className="text-slate-400 hover:text-rose-600 p-1 rounded"
                               title="Remove this extra year"
@@ -5925,17 +5935,25 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   <button
                     type="button"
                     onClick={() => {
-                      const nextYear = extraItrYears.length > 0 ? Math.max(...extraItrYears) + 1 : 3;
+                      const currentYears = new Set([1, ...extraItrYears]);
+                      let nextYear = 2;
+                      while (currentYears.has(nextYear)) {
+                        nextYear++;
+                      }
                       setExtraItrYears((prev) => [...prev, nextYear]);
                       setItrFinancialYears((prev) => ({
                         ...prev,
-                        [`itr_year_${nextYear}`]: availableFinancialYears[nextYear] || "2022-23",
+                        [`itr_year_${nextYear}`]:
+                          prev[`itr_year_${nextYear}`] ||
+                          availableFinancialYears[nextYear - 1] ||
+                          availableFinancialYears[availableFinancialYears.length - 1] ||
+                          "2022-23",
                       }));
                     }}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-white border border-blue-300 rounded-md shadow-2xs hover:bg-blue-50 transition-colors"
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    + Add Another Year ITR
+                    Add Another Year ITR
                   </button>
                 </div>
               </div>
