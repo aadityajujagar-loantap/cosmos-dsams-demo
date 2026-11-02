@@ -6139,6 +6139,9 @@ const resolveStageStatus = (
     hasCheckerGeneratedReport && Boolean(ddlReportDoc) && !isDdlReportVerified;
 
   const getWorkflowBlockReason = (): string | null => {
+    if (!dsa?.email_verified_at) {
+      return "Applicant Consent Pending: The applicant must click 'Provide Consent & Verify Email' from their email before this application can proceed in workflow.";
+    }
     if (isMakerLevel) {
       if (!isVisitReportUploaded) {
         return "Physical Visit Report is required. Please upload the Physical Visit Report in the Documents tab before submitting to Checker.";

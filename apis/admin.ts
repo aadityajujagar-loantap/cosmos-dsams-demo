@@ -535,6 +535,18 @@ export const adminApi = {
     });
   },
 
+  getDsaVerificationStatus: async (idOrCode: number | string): Promise<any> => {
+    return request<any>(`/v1/dsa/${idOrCode}/verification-status`, {
+      method: "GET",
+    });
+  },
+
+  resendDsaVerificationEmail: async (idOrCode: number | string): Promise<any> => {
+    return request<any>(`/v1/dsa/${idOrCode}/resend-verification-email`, {
+      method: "POST",
+    });
+  },
+
   uploadDsaVisitReport: async (
     idOrCode: number | string,
     file: File,
