@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 64" width="320" height="64">
+  <!-- TransUnion Swirl / Arc Icon -->
+  <g transform="translate(4, 6)">
+    <!-- Outer loop -->
+    <path d="M 26 6 C 14.95 6 6 14.95 6 26 C 6 37.05 14.95 46 26 46 C 35.8 46 43.9 38.9 45.6 29.5 L 39.5 29.5 C 38 35.6 32.5 40.2 26 40.2 C 18.16 40.2 11.8 33.84 11.8 26 C 11.8 18.16 18.16 11.8 26 11.8 C 31.8 11.8 36.8 15.3 38.9 20.3 L 33.5 20.3 C 32 17.5 29.2 15.6 26 15.6 C 20.26 15.6 15.6 20.26 15.6 26 C 15.6 31.74 20.26 36.4 26 36.4 C 29.5 36.4 32.5 34.6 34.3 31.8 L 40.2 31.8 C 37.8 37 32.3 40.5 26 40.5 C 18 40.5 11.5 34 11.5 26 C 11.5 18 18 11.5 26 11.5 C 34.01 11.5 40.5 18 40.5 26" fill="#00a6ca" />
+    <circle cx="43" cy="18" r="3.5" fill="#00a6ca" />
+  </g>
+  <!-- Text: TransUnion -->
+  <text x="62" y="38" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-size="25" font-weight="600" fill="#00a6ca" letter-spacing="-0.5">TransUnion<tspan fill="#00a6ca">.</tspan></text>
+  <!-- Divider -->
+  <line x1="214" y1="16" x2="214" y2="44" stroke="#cbd5e1" stroke-width="2" />
+  <!-- Text: CIBIL -->
+  <text x="224" y="38" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-size="25" font-weight="800" fill="#002e4d" letter-spacing="0.5">CIBIL</text>
+</svg>
