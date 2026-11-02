@@ -2410,6 +2410,14 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           return false;
         }
       } else {
+        if (!selectedLicenses || selectedLicenses.length === 0) {
+          toast({
+            title: "Business Proof Required",
+            description: "Please select and update either Shop Act or Udyam as Registered Business Proof.",
+            variant: "warning",
+          });
+          return false;
+        }
         if (selectedLicenses.includes("SHOP_ACT") && !shopActNumber.trim()) {
           toast({ title: "Shop Act Number Required", description: "Please enter Shop Act license / registration number.", variant: "warning" });
           return false;
@@ -2691,6 +2699,16 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         description: "Only Maker can onboard a DSA. Checker is not authorized.",
         variant: "destructive",
       });
+      return;
+    }
+
+    if (!gstApplicable && (!selectedLicenses || selectedLicenses.length === 0)) {
+      toast({
+        title: "Business Proof Required",
+        description: "Please select and update either Shop Act or Udyam as Registered Business Proof.",
+        variant: "warning",
+      });
+      setStep(1);
       return;
     }
 
@@ -3964,7 +3982,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       <div className="flex flex-col">
                         <div className="h-5 flex items-center">
                           <Label htmlFor="individual_business_licenses" className="text-sm font-bold text-slate-700 leading-none">
-                            Registered Business Proof
+                            Registered Business Proof *
                           </Label>
                         </div>
                         <CheckboxDropdown
@@ -4233,7 +4251,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       <div className="flex flex-col">
                         <div className="h-5 flex items-center">
                           <Label htmlFor="entity_business_licenses" className="text-sm font-bold text-slate-700 leading-none">
-                            Entity Registered Business Proof
+                            Entity Registered Business Proof *
                           </Label>
                         </div>
                         <CheckboxDropdown

@@ -6984,7 +6984,6 @@ const resolveStageStatus = (
         dsa?.agreement_status === "SIGNED_VERIFIED" ||
         dsa?.operational_status === "ACTIVE" ||
         workflowLevelInfo.isCompleted ||
-
         (Number(dsa?.current_approval_level) >= 7 &&
           ((dsa as any)?.status === "APPROVED" ||
             (dsa as any)?.action === "APPROVE")),
@@ -7005,6 +7004,74 @@ const resolveStageStatus = (
         Number(dsa?.current_approval_level) > 2 ||
         (dsa as any)?.is_l2_actioned,
     );
+
+    const l1Approval = dsa?.approvals?.find(
+      (a: any) => Number(a.approval_level) === 1 || a.stage_code === "LEVEL_1_MAKER"
+    );
+    const makerName =
+      makerHist?.name ||
+      l1Approval?.actioned_by?.name ||
+      (dsa?.created_by_user as any)?.name ||
+      (dsa?.createdByUser as any)?.name ||
+      "Branch Maker";
+    const makerDesignation =
+      makerHist?.designation ||
+      (l1Approval?.actioned_by as any)?.role ||
+      "Maker / Branch Staff";
+    const makerDate = formatDt(
+      makerHist?.date || l1Approval?.actioned_at || dsa?.created_at
+    );
+    const makerRemarksText =
+      getCleanRemark(makerHist?.remarks) ||
+      (l1Approval?.remarks ? getCleanRemark(l1Approval.remarks) : "") ||
+      "Application submitted and forwarded to Checker for Due Diligence Review.";
+
+    const hasVal = (val: any) =>
+      val !== undefined &&
+      val !== null &&
+      String(val).trim() !== "" &&
+      String(val).trim() !== "—" &&
+      String(val).trim() !== "-" &&
+      String(val).trim().toUpperCase() !== "N/A" &&
+      String(val).trim().toUpperCase() !== "NULL";
+
+    const hasGst = Boolean(
+      (dsa as any)?.gst_applicable &&
+      ((dsa as any)?.gst || basicInfo?.gst || rep?.api_checks?.find((c: any) => c.verification_code === "GSTIN")?.is_success)
+    );
+    const hasUdyam = Boolean(
+      (dsa as any)?.udyam_no || basicInfo?.udyam || (basicInfo?.business_license_type && /udyam/i.test(basicInfo.business_license_type))
+    );
+    const hasShopAct = Boolean(
+      (dsa as any)?.shop_act_no || (basicInfo?.business_license_type && /shop/i.test(basicInfo.business_license_type))
+    );
+    const hasAadhaar = Boolean(
+      basicInfo.aadhaar || dsa?.aadhaar_no || dsa?.aadhaar
+    );
+
+    const opCap =
+      rep?.operational_capability ||
+      (rep as any)?.operationalCapability ||
+      {};
+    const staffStrength = opCap.staff_strength || (dsa as any)?.staff_strength || "";
+    const infraAdequacy = opCap.infrastructure_adequacy || (dsa as any)?.infrastructure_adequacy || "";
+    const hasOpCap = hasVal(staffStrength) || hasVal(infraAdequacy);
+
+    const compDoc =
+      rep?.compliance_documentation ||
+      (rep as any)?.complianceDocumentation ||
+      {};
+
+    const ovRep =
+      rep?.office_visit_report ||
+      (rep as any)?.officeVisitReport ||
+      {};
+    const visitDate = ovRep.date_of_visit || "";
+    const visitedBy = ovRep.visited_by || "";
+    const obsInfra = ovRep.observation_infrastructure || "";
+    const empInteract = ovRep.employee_interaction || "";
+    const origVerif = ovRep.original_verified || "";
+    const hasOfficeVisit = hasVal(visitDate) || hasVal(visitedBy) || hasVal(obsInfra) || hasVal(empInteract) || hasVal(origVerif);
 
     const checkerName =
       checkerRemarks?.name ||
@@ -7147,18 +7214,27 @@ const resolveStageStatus = (
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Registered Office Full Address</td>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.registered_office_address || dsa?.address || "—"}</td>
                   </tr>
-                  <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Ownership</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.ownership || "—"}</td>
-                  </tr>
-                  <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Branch Office Address (if any)</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.branch_office_address || basicInfo.registered_office_address || dsa?.address || "—"}</td>
-                  </tr>
-                  <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Name of the promotor / Key Person (Proprietor/ Partner/ Directors)</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.promoter_key_person || dsa?.contact_person || "—"}</td>
-                  </tr>
+                  {hasVal(basicInfo.ownership) && (
+                    <tr>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Ownership</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.ownership}</td>
+                    </tr>
+                  )}
+                  {hasVal(basicInfo.branch_office_address) &&
+                    basicInfo.branch_office_address !== basicInfo.registered_office_address &&
+                    basicInfo.branch_office_address !== dsa?.address &&
+                    basicInfo.branch_office_address !== "Same as Registered Office Address" && (
+                    <tr>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Branch Office Address (if any)</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.branch_office_address}</td>
+                    </tr>
+                  )}
+                  {hasVal(basicInfo.promoter_key_person || dsa?.contact_person) && (
+                    <tr>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Name of the promotor / Key Person (Proprietor/ Partner/ Directors)</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.promoter_key_person || dsa?.contact_person}</td>
+                    </tr>
+                  )}
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Office Contact Number</td>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.office_contact_number || dsa?.mobile || "—"}</td>
@@ -7167,30 +7243,39 @@ const resolveStageStatus = (
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Office Mail ID</td>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.office_email || dsa?.email || "—"}</td>
                   </tr>
-                  <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Date of Establishment</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.date_of_establishment || dsa?.dob || "—"}</td>
-                  </tr>
+                  {hasVal(basicInfo.date_of_establishment || dsa?.dob) && (
+                    <tr>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Date of Establishment</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.date_of_establishment || dsa?.dob}</td>
+                    </tr>
+                  )}
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">PAN No.</td>
                     <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">{basicInfo.pan || dsa?.pan || "—"}</td>
                   </tr>
-                  <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business License Type</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.business_license_type || "—"}</td>
-                  </tr>
-                  <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business License No.</td>
-                    <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">{basicInfo.business_license_number || "—"}</td>
-                  </tr>
+                  {hasVal(basicInfo.business_license_type) && (
+                    <tr>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business License Type</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.business_license_type}</td>
+                    </tr>
+                  )}
+                  {hasVal(basicInfo.business_license_number) && (
+                    <tr>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business License No.</td>
+                      <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">{basicInfo.business_license_number}</td>
+                    </tr>
+                  )}
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Branches to Assign</td>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.branches_to_assign || dsaBranchName}</td>
                   </tr>
-                  <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Expected Monthly Business Commitment</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.expected_monthly_business_commitment || "—"}</td>
-                  </tr>
+                  {hasVal(basicInfo.expected_monthly_business_commitment) &&
+                    String(basicInfo.expected_monthly_business_commitment).trim() !== "0" && (
+                    <tr>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Expected Monthly Business Commitment</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.expected_monthly_business_commitment}</td>
+                    </tr>
+                  )}
                 </>
               ) : (
                 <>
@@ -7202,22 +7287,31 @@ const resolveStageStatus = (
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Constitution</td>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.constitution || "—"}</td>
                   </tr>
-                  <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Date of Birth</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.date_of_birth || dsa?.dob || "—"}</td>
-                  </tr>
+                  {hasVal(basicInfo.date_of_birth || dsa?.dob) && (
+                    <tr>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Date of Birth</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.date_of_birth || dsa?.dob}</td>
+                    </tr>
+                  )}
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Residence Address</td>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.residence_address || dsa?.address || "—"}</td>
                   </tr>
-                  <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business / Office Address (if any)</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.business_office_address || basicInfo.residence_address || dsa?.address || "—"}</td>
-                  </tr>
-                  <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Ownership</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.ownership || "—"}</td>
-                  </tr>
+                  {hasVal(basicInfo.business_office_address) &&
+                    basicInfo.business_office_address !== basicInfo.residence_address &&
+                    basicInfo.business_office_address !== dsa?.address &&
+                    basicInfo.business_office_address !== "Same as Registered Office Address" && (
+                    <tr>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business / Office Address (if any)</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.business_office_address}</td>
+                    </tr>
+                  )}
+                  {hasVal(basicInfo.ownership) && (
+                    <tr>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Ownership</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.ownership}</td>
+                    </tr>
+                  )}
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Contact Number</td>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.contact_number || dsa?.mobile || "—"}</td>
@@ -7230,26 +7324,35 @@ const resolveStageStatus = (
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">PAN No.</td>
                     <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">{basicInfo.pan || dsa?.pan || "—"}</td>
                   </tr>
-                  <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Aadhar No.</td>
-                    <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">{basicInfo.aadhaar || dsa?.aadhaar_no || dsa?.aadhaar || "—"}</td>
-                  </tr>
-                  <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business License Type</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.business_license_type || "—"}</td>
-                  </tr>
-                  <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business License No.</td>
-                    <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">{basicInfo.business_license_number || "—"}</td>
-                  </tr>
+                  {hasVal(basicInfo.aadhaar || dsa?.aadhaar_no || dsa?.aadhaar) && (
+                    <tr>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Aadhar No.</td>
+                      <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">{basicInfo.aadhaar || dsa?.aadhaar_no || dsa?.aadhaar}</td>
+                    </tr>
+                  )}
+                  {hasVal(basicInfo.business_license_type) && (
+                    <tr>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business License Type</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.business_license_type}</td>
+                    </tr>
+                  )}
+                  {hasVal(basicInfo.business_license_number) && (
+                    <tr>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business License No.</td>
+                      <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">{basicInfo.business_license_number}</td>
+                    </tr>
+                  )}
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Regions to Assign</td>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.regions_to_assign || basicInfo.branches_to_assign || dsaBranchName}</td>
                   </tr>
-                  <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Expected Monthly Business Commitment (INR)</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.expected_monthly_business_commitment || "—"}</td>
-                  </tr>
+                  {hasVal(basicInfo.expected_monthly_business_commitment) &&
+                    String(basicInfo.expected_monthly_business_commitment).trim() !== "0" && (
+                    <tr>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Expected Monthly Business Commitment (INR)</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.expected_monthly_business_commitment}</td>
+                    </tr>
+                  )}
                 </>
               )}
 
@@ -7263,18 +7366,45 @@ const resolveStageStatus = (
                 <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Income Tax Returns Submitted</td>
                 <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{finDd.itr_submitted || finDd.income_tax_returns_submitted || "No"}</td>
               </tr>
-              <tr>
-                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Income Details for F.Y.</td>
-                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{finDd.income_details_fy || finDd.last_financial_year || dsa?.last_financial_year || ""}</td>
-              </tr>
-              <tr>
-                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Net Sales / Revenue as per latest F.Y.</td>
-                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{finDd.net_sales_revenue || (dsa?.last_fy_net_sales ? `Rs. ${dsa.last_fy_net_sales} Lakh` : "")}</td>
-              </tr>
-              <tr>
-                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Net profit after Tax as per latest F.Y.</td>
-                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{finDd.net_profit_after_tax || (dsa?.last_fy_net_profit_after_tax ? `Rs. ${dsa.last_fy_net_profit_after_tax} Lakh` : "")}</td>
-              </tr>
+              {hasVal(finDd.income_details_fy || finDd.last_financial_year || dsa?.last_financial_year) && (
+                <tr>
+                  <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Income Details for F.Y.</td>
+                  <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{`F. Y. ${finDd.income_details_fy || finDd.last_financial_year || dsa?.last_financial_year}`}</td>
+                </tr>
+              )}
+              {hasVal(finDd.net_sales_revenue || dsa?.last_fy_net_sales) && (
+                <tr>
+                  <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Net Sales / Revenue as per latest F.Y.</td>
+                  <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                    {(() => {
+                      const val = finDd.net_sales_revenue || (dsa?.last_fy_net_sales ? `Rs. ${dsa.last_fy_net_sales} Lakh` : "");
+                      return String(val).startsWith("Rs.") || String(val).startsWith("₹") ? val : `Rs. ${val} Lakh`;
+                    })()}
+                  </td>
+                </tr>
+              )}
+              {hasVal(finDd.net_profit_after_tax || dsa?.last_fy_net_profit_after_tax) && (
+                <tr>
+                  <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Net profit after Tax as per latest F.Y.</td>
+                  <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                    {(() => {
+                      const val = finDd.net_profit_after_tax || (dsa?.last_fy_net_profit_after_tax ? `Rs. ${dsa.last_fy_net_profit_after_tax} Lakh` : "");
+                      return String(val).startsWith("Rs.") || String(val).startsWith("₹") ? val : `Rs. ${val} Lakh`;
+                    })()}
+                  </td>
+                </tr>
+              )}
+              {hasVal(finDd.net_worth || (dsa as any)?.net_worth) && (
+                <tr>
+                  <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Net Worth (as per financials)</td>
+                  <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                    {(() => {
+                      const val = finDd.net_worth || (dsa as any)?.net_worth;
+                      return String(val).startsWith("Rs.") || String(val).startsWith("₹") ? val : `Rs. ${val} Lakh`;
+                    })()}
+                  </td>
+                </tr>
+              )}
               <tr>
                 <td className="border border-slate-900 px-3 py-1.5 text-slate-800">CIBIL Score (CV Score)</td>
                 <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
@@ -7291,41 +7421,33 @@ const resolveStageStatus = (
               </tr>
 
               {/* Details of DSA Experience with other Banks / Institutions (Entity) */}
-              {isEntity && (
-                <>
-                  <tr className="bg-slate-100 font-bold">
-                    <td colSpan={2} className="border border-slate-900 px-3 py-2 text-slate-900">
-                      Details of DSA Experience with other Banks / Institutions
-                    </td>
-                  </tr>
-                  {(() => {
-                    const banksList: any[] = Array.isArray(finDd.other_banks_experience) && finDd.other_banks_experience.length > 0
-                      ? finDd.other_banks_experience
-                      : Array.isArray(dsa?.other_banks_experience) && dsa.other_banks_experience.length > 0
-                      ? dsa.other_banks_experience
-                      : (finDd.bank_or_institution_name || dsa?.bank_or_institution_name)
-                      ? [{
-                          bank_or_institution_name: finDd.bank_or_institution_name || dsa?.bank_or_institution_name,
-                          empanelment_since_year: finDd.empanelment_since_year || dsa?.empanelment_since_year,
-                          empanelled_loan_products: finDd.empanelled_loan_products || dsa?.empanelled_loan_products,
-                          products_mobilized_last_3_years: finDd.products_mobilized_last_3_years || dsa?.products_mobilized_last_3_years,
-                          avg_ticket_size_lakhs: finDd.avg_ticket_size_lakhs || dsa?.avg_ticket_size_lakhs,
-                          commission_rate_percent: finDd.commission_rate_percent || dsa?.commission_rate_percent,
-                          avg_disbursed_proposals_per_month: finDd.avg_disbursed_proposals_per_month || dsa?.avg_disbursed_proposals_per_month,
-                        }]
-                      : [];
+              {isEntity && (() => {
+                const banksList: any[] = Array.isArray(finDd.other_banks_experience) && finDd.other_banks_experience.length > 0
+                  ? finDd.other_banks_experience
+                  : Array.isArray(dsa?.other_banks_experience) && dsa.other_banks_experience.length > 0
+                  ? dsa.other_banks_experience
+                  : (finDd.bank_or_institution_name || dsa?.bank_or_institution_name)
+                  ? [{
+                      bank_or_institution_name: finDd.bank_or_institution_name || dsa?.bank_or_institution_name,
+                      empanelment_since_year: finDd.empanelment_since_year || dsa?.empanelment_since_year,
+                      empanelled_loan_products: finDd.empanelled_loan_products || dsa?.empanelled_loan_products,
+                      products_mobilized_last_3_years: finDd.products_mobilized_last_3_years || dsa?.products_mobilized_last_3_years,
+                      avg_ticket_size_lakhs: finDd.avg_ticket_size_lakhs || dsa?.avg_ticket_size_lakhs,
+                      commission_rate_percent: finDd.commission_rate_percent || dsa?.commission_rate_percent,
+                      avg_disbursed_proposals_per_month: finDd.avg_disbursed_proposals_per_month || dsa?.avg_disbursed_proposals_per_month,
+                    }]
+                  : [];
 
-                    if (banksList.length === 0) {
-                      return (
-                        <tr>
-                          <td colSpan={2} className="border border-slate-900 px-3 py-2 text-slate-500 italic">
-                            No prior experience with other banks / institutions declared.
-                          </td>
-                        </tr>
-                      );
-                    }
+                if (banksList.length === 0) return null;
 
-                    return banksList.map((bExp, bIdx) => (
+                return (
+                  <>
+                    <tr className="bg-slate-100 font-bold">
+                      <td colSpan={2} className="border border-slate-900 px-3 py-2 text-slate-900">
+                        Details of DSA Experience with other Banks / Institutions
+                      </td>
+                    </tr>
+                    {banksList.map((bExp, bIdx) => (
                       <React.Fragment key={bIdx}>
                         {banksList.length > 1 && (
                           <tr className="bg-slate-50 font-semibold">
@@ -7338,35 +7460,47 @@ const resolveStageStatus = (
                           <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Name of the Bank / Financial Institution / Others</td>
                           <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.bank_or_institution_name || "—"}</td>
                         </tr>
-                        <tr>
-                          <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Empanelment since (Year)</td>
-                          <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.empanelment_since_year || "—"}</td>
-                        </tr>
-                        <tr>
-                          <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Empanelment for which Loan Products</td>
-                          <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.empanelled_loan_products || "—"}</td>
-                        </tr>
-                        <tr>
-                          <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Type of Products mobilized during last 3 years</td>
-                          <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.products_mobilized_last_3_years || "—"}</td>
-                        </tr>
-                        <tr>
-                          <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Average ticket size (Rs. In Lakh)</td>
-                          <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.avg_ticket_size_lakhs ? `Rs. ${bExp.avg_ticket_size_lakhs} Lakh` : "—"}</td>
-                        </tr>
-                        <tr>
-                          <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Commission rate (%)</td>
-                          <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.commission_rate_percent ? `${bExp.commission_rate_percent}%` : "—"}</td>
-                        </tr>
-                        <tr>
-                          <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Average No. of proposals disbursed per month (Nos.)</td>
-                          <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.avg_disbursed_proposals_per_month || "—"}</td>
-                        </tr>
+                        {hasVal(bExp.empanelment_since_year) && (
+                          <tr>
+                            <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Empanelment since (Year)</td>
+                            <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.empanelment_since_year}</td>
+                          </tr>
+                        )}
+                        {hasVal(bExp.empanelled_loan_products) && (
+                          <tr>
+                            <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Empanelment for which Loan Products</td>
+                            <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.empanelled_loan_products}</td>
+                          </tr>
+                        )}
+                        {hasVal(bExp.products_mobilized_last_3_years) && (
+                          <tr>
+                            <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Type of Products mobilized during last 3 years</td>
+                            <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.products_mobilized_last_3_years}</td>
+                          </tr>
+                        )}
+                        {hasVal(bExp.avg_ticket_size_lakhs) && (
+                          <tr>
+                            <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Average ticket size (Rs. In Lakh)</td>
+                            <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{`Rs. ${bExp.avg_ticket_size_lakhs} Lakh`}</td>
+                          </tr>
+                        )}
+                        {hasVal(bExp.commission_rate_percent) && (
+                          <tr>
+                            <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Commission rate (%)</td>
+                            <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{`${bExp.commission_rate_percent}%`}</td>
+                          </tr>
+                        )}
+                        {hasVal(bExp.avg_disbursed_proposals_per_month) && (
+                          <tr>
+                            <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Average No. of proposals disbursed per month (Nos.)</td>
+                            <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.avg_disbursed_proposals_per_month}</td>
+                          </tr>
+                        )}
                       </React.Fragment>
-                    ));
-                  })()}
-                </>
-              )}
+                    ))}
+                  </>
+                );
+              })()}
 
               {/* Background and Reputational Verification */}
               <tr className="bg-slate-100 font-bold">
@@ -7378,8 +7512,10 @@ const resolveStageStatus = (
                 <td className="border border-slate-900 px-3 py-1.5 text-slate-800">KYC Documents verified</td>
                 <td className="border border-slate-900 px-3 py-1.5 text-slate-900 leading-relaxed">
                   PAN<br />
-                  GST<br />
-                  Udyam
+                  {hasGst && <>GST<br /></>}
+                  {hasUdyam && <>Udyam<br /></>}
+                  {hasShopAct && <>Shop Act<br /></>}
+                  {!isEntity && hasAadhaar && <>Aadhaar<br /></>}
                 </td>
               </tr>
               <tr>
@@ -7398,6 +7534,91 @@ const resolveStageStatus = (
                     : (bgRep.compass_matching_percentage || "No")}
                 </td>
               </tr>
+
+              {/* Operational Capability Assessment */}
+              {hasOpCap && (
+                <>
+                  <tr className="bg-slate-100 font-bold">
+                    <td colSpan={2} className="border border-slate-900 px-3 py-2 text-slate-900">
+                      Operational Capability Assessment
+                    </td>
+                  </tr>
+                  {hasVal(staffStrength) && (
+                    <tr>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Staff Strength</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{staffStrength}</td>
+                    </tr>
+                  )}
+                  {hasVal(infraAdequacy) && (
+                    <tr>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Infrastructure adequacy</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{infraAdequacy}</td>
+                    </tr>
+                  )}
+                </>
+              )}
+
+              {/* Compliance and Documentation */}
+              <tr className="bg-slate-100 font-bold">
+                <td colSpan={2} className="border border-slate-900 px-3 py-2 text-slate-900">
+                  Compliance and Documentation
+                </td>
+              </tr>
+              <tr>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Application form submitted</td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{compDoc.application_form_submitted || "Yes"}</td>
+              </tr>
+              <tr>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">All KYC documents submitted</td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{compDoc.all_kyc_documents_submitted || "Yes"}</td>
+              </tr>
+              <tr>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">PAN / GST / Registration certificates verified</td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                  {compDoc.statutory_certificates_verified || (hasGst ? "Yes" : "Yes (PAN, Udyam / Shop Act verified)")}
+                </td>
+              </tr>
+
+              {/* Office Visit Report */}
+              {hasOfficeVisit && (
+                <>
+                  <tr className="bg-slate-100 font-bold">
+                    <td colSpan={2} className="border border-slate-900 px-3 py-2 text-slate-900">
+                      Office Visit Report
+                    </td>
+                  </tr>
+                  {hasVal(visitDate) && (
+                    <tr>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Date of Visit</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{visitDate}</td>
+                    </tr>
+                  )}
+                  {hasVal(visitedBy) && (
+                    <tr>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Visited by AGM / Subregion Head</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{visitedBy}</td>
+                    </tr>
+                  )}
+                  {hasVal(obsInfra) && (
+                    <tr>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Observation on infrastructure</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{obsInfra}</td>
+                    </tr>
+                  )}
+                  {hasVal(empInteract) && (
+                    <tr>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Employee interaction</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{empInteract}</td>
+                    </tr>
+                  )}
+                  {hasVal(origVerif) && (
+                    <tr>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Photo copies of documents are verified from original</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{origVerif}</td>
+                    </tr>
+                  )}
+                </>
+              )}
 
               {/* Deviation Details */}
               <tr className="bg-slate-100 font-bold">
@@ -7454,6 +7675,18 @@ const resolveStageStatus = (
               )}
 
               {/* Authority Remarks */}
+              <tr>
+                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top">
+                  <div className="font-bold">Maker Remarks</div>
+                  <div className="text-xs text-slate-700 mt-1"><strong>Name:</strong> {makerName}</div>
+                  <div className="text-xs text-slate-700"><strong>Designation:</strong> {makerDesignation}</div>
+                  <div className="text-xs text-slate-700"><strong>Date:</strong> {makerDate}</div>
+                </td>
+                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap">
+                  {makerRemarksText}
+                </td>
+              </tr>
+
               <tr>
                 <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top">
                   <div className="font-bold">Checker Remarks</div>

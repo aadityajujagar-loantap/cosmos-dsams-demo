@@ -1630,7 +1630,7 @@ export function DsaBasicDetailsTab({
 
               <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
                 <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">
-                  Registered Business Proof
+                  Registered Business Proof {!formData.gst_applicable ? "*" : ""}
                 </Label>
                 <CheckboxDropdown
                   id="maker_registered_business_proof"
