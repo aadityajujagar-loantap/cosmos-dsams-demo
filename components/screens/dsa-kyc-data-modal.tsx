@@ -248,17 +248,20 @@ export function DsaKycDataModal({
 
       // If we already have cached verif details for this type, initialize state immediately
       const initialCachedDetails =
+        cachedVerif?.raw_response ||
         cachedVerif?.normalized_data ||
         cachedVerif?.details ||
         cachedVerif?.response_payload ||
-        cachedVerif?.raw_response ||
         (cachedVerif as any)?.data?.details;
       if (initialCachedDetails) {
         setApiData({
           data: {
             details: initialCachedDetails,
             normalized_data: cachedVerif?.normalized_data,
+            raw_response: cachedVerif?.raw_response,
           },
+          raw_response: cachedVerif?.raw_response,
+          normalized_data: cachedVerif?.normalized_data,
         });
       } else {
         fetchKycData();
@@ -460,13 +463,33 @@ function TableRow({
 }) {
   const displayValue = value === undefined || value === null ? "" : value;
 
+  const badgeStyles: Record<string, string> = {
+    success: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    warning: "bg-amber-50 text-amber-700 border-amber-200",
+    danger: "bg-rose-50 text-rose-700 border-rose-200",
+    info: "bg-blue-50 text-blue-700 border-blue-200",
+    neutral: "bg-slate-100 text-slate-700 border-slate-200",
+  };
+
   return (
     <tr className="hover:bg-slate-50/70 transition">
       <td className="px-3 py-1.5 font-medium text-slate-600 bg-slate-50/40 border-r border-slate-150 align-top leading-tight">
         {label}
       </td>
       <td className="px-3 py-1.5 text-slate-900 align-top leading-tight">
-        <span className={cn(isMono && "font-mono font-bold text-slate-950")}>{displayValue}</span>
+        {badge ? (
+          <span
+            className={cn(
+              "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold border",
+              badgeStyles[badge] || badgeStyles.neutral,
+              isMono && "font-mono"
+            )}
+          >
+            {displayValue}
+          </span>
+        ) : (
+          <span className={cn(isMono && "font-mono font-bold text-slate-950")}>{displayValue}</span>
+        )}
       </td>
     </tr>
   );
@@ -632,77 +655,53 @@ function PanDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
   );
 }
 
-// 2. GST Verification Table (2 Categorized Tables)
+// 2. GST Verification Table
 function GstDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
-  const normData =
-    apiData?.data?.normalized_data ||
-    apiData?.normalized_data ||
-    apiData?.data?.details?.normalized_data ||
-    (apiData?.data?.details && !apiData?.data?.details?.data && !apiData?.data?.details?.responseCode && apiData?.data?.details?.gst_status ? apiData.data.details : null) ||
-    {};
-
-  const rawDetails =
-    apiData?.data?.details?.data ||
-    apiData?.data?.details?.result ||
+  // Extract container from all possible nesting levels
+  const rawContainer =
+    apiData?.raw_response ||
+    apiData?.data?.raw_response ||
+    apiData?.data?.details?.raw_response ||
     apiData?.data?.details ||
     apiData?.data ||
-    apiData?.result ||
+    apiData?.details ||
+    apiData ||
     {};
 
-  const isArrayLookup = Array.isArray(rawDetails);
-  const detailedInfo =
-    rawDetails && typeof rawDetails === "object" && !isArrayLookup
-      ? rawDetails.gstBasicInfo ||
-        rawDetails.gstinDetailedInformartion ||
-        rawDetails.result ||
-        rawDetails
-      : {};
+  const dataArray = Array.isArray(rawContainer?.data)
+    ? rawContainer.data
+    : Array.isArray(rawContainer)
+      ? rawContainer
+      : null;
 
-  const gstBasic = { ...normData, ...(typeof detailedInfo === "object" ? detailedInfo : {}) };
+  // Single record extraction (match dsa.gst or take first item)
+  const item = dataArray && dataArray.length > 0
+    ? (dataArray.find((it: any) => it?.gstin && dsa?.gst && String(it.gstin).toUpperCase() === String(dsa.gst).toUpperCase()) || dataArray[0])
+    : (typeof rawContainer === "object" && !Array.isArray(rawContainer) ? rawContainer : {});
 
-  const hasApiData = Boolean(
-    (isArrayLookup && rawDetails.length > 0) ||
-      (gstBasic &&
-        Object.keys(gstBasic).length > 0 &&
-        (gstBasic.gstin ||
-          gstBasic.legalName ||
-          gstBasic.legal_name ||
-          gstBasic.tradeName ||
-          gstBasic.trade_name ||
-          gstBasic.currentRegistrationStatus ||
-          gstBasic.status ||
-          gstBasic.gst_status)),
-  );
+  const gstinVal =
+    item?.gstin ||
+    item?.gstBasicInfo?.gstin ||
+    apiData?.normalized_data?.gstin ||
+    apiData?.data?.normalized_data?.gstin ||
+    dsa?.gst ||
+    "";
 
-  if (isArrayLookup && rawDetails.length > 0) {
-    return (
-      <div className="space-y-6">
-        <TableWrapper title="1. Registered GSTIN Entity List" subtitle="Multi-State Tax Registrations">
-          {rawDetails.map((item: any, idx: number) => {
-            const state = item.state || item.stateName || item.gstBasicInfo?.state || "";
-            const gstin = item.gstin || item.gstinId || item.gstBasicInfo?.gstin || "";
-            const status = item.status || item.gstBasicInfo?.currentRegistrationStatus || "";
-            const taxpayerType = item.taxpayerType || item.gstBasicInfo?.taxpayerType || "";
-            const legalName = item.legalName || item.gstBasicInfo?.legalName || "";
+  const basic =
+    item?.gstBasicInfo ||
+    item?.gstinDetailedInformartion ||
+    apiData?.normalized_data?.gst_basic_info ||
+    apiData?.data?.normalized_data?.gst_basic_info ||
+    (typeof item === "object" && (item?.legalName || item?.tradeName || item?.currentRegistrationStatus) ? item : null);
 
-            return (
-              <TableRow
-                key={idx}
-                label={`${state || "GSTIN"} (${gstin})`}
-                value={`Status: ${status || "N/A"} · Taxpayer Type: ${taxpayerType || "Regular"}${legalName ? ` · Legal: ${legalName}` : ""}`}
-                badge="success"
-                isMono
-              />
-            );
-          })}
-        </TableWrapper>
-      </div>
-    );
-  }
+  const summary =
+    item?.bussinessSummary ||
+    item?.businessSummary ||
+    apiData?.normalized_data?.bussiness_summary ||
+    apiData?.data?.normalized_data?.bussiness_summary ||
+    null;
 
-  const gstin = gstBasic.gstin || gstBasic.gstinId || dsa.gst || "";
-
-  if (!hasApiData && !gstin) {
+  if (!basic && !gstinVal) {
     return (
       <div className="py-8 text-center bg-slate-50 border border-slate-200 rounded-xl space-y-2">
         <AlertCircle className="h-8 w-8 text-slate-400 mx-auto" />
@@ -715,138 +714,153 @@ function GstDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
       </div>
     );
   }
-  const pan = gstBasic.pan || (gstin.length >= 12 ? gstin.substring(2, 12) : (dsa.pan || ""));
-  const legalName = gstBasic.legalName || gstBasic.legal_name || "";
-  const tradeName = gstBasic.tradeName || gstBasic.trade_name || "";
-  const status = gstBasic.currentRegistrationStatus || gstBasic.gst_status || gstBasic.status || "";
-  const taxpayerType = gstBasic.taxpayerType || gstBasic.taxpayer_type || "";
-  const constitution = gstBasic.businessConstitution || gstBasic.constitution || "";
-  const regDate = gstBasic.registerDate || gstBasic.registrationDate || gstBasic.registration_date || gstBasic.date_of_registration || "";
-  const cancellationDate = gstBasic.registerCancellationDate || "";
-  const state = gstBasic.state || gstBasic.stateJurisdiction || "";
-  const stateJurisdiction = gstBasic.stateJurisdiction || gstBasic.state_jurisdiction || "";
-  const centralJurisdiction = gstBasic.centralJurisdiction || gstBasic.central_jurisdiction || "";
+
+  const pan = basic?.pan || (gstinVal.length >= 12 ? gstinVal.substring(2, 12) : (dsa?.pan || ""));
+  const legalName = basic?.legalName || basic?.legal_name || "";
+  const tradeName = basic?.tradeName || basic?.trade_name || "";
+  const status = basic?.currentRegistrationStatus || basic?.gst_status || basic?.status || "";
+  const taxpayerType = basic?.taxpayerType || basic?.taxpayer_type || "";
+  const constitution = basic?.businessConstitution || basic?.constitution || "";
+  const registerDate = basic?.registerDate || basic?.registrationDate || basic?.registration_date || "";
+  const registerCancellationDate = basic?.registerCancellationDate || "";
+  const state = basic?.state || "";
+  const stateJurisdiction = basic?.stateJurisdiction || basic?.state_jurisdiction || "";
+  const centralJurisdiction = basic?.centralJurisdiction || basic?.central_jurisdiction || "";
   const rawAddress =
-    gstBasic.primaryBusinessRegisteredAddress ||
-    gstBasic.principalPlaceOfBusiness ||
-    gstBasic.principal_place_of_business ||
-    gstBasic.registeredAddress ||
-    gstBasic.registered_address ||
-    gstBasic.address ||
+    basic?.primaryBusinessRegisteredAddress ||
+    basic?.principalPlaceOfBusiness ||
+    basic?.registeredAddress ||
     "";
   const address =
     typeof rawAddress === "string"
       ? rawAddress
       : rawAddress && typeof rawAddress === "object"
         ? [
-            rawAddress.buildingName || rawAddress.bno || rawAddress.building_name || "",
+            rawAddress.buildingName || rawAddress.bno || "",
             rawAddress.street || rawAddress.st || "",
             rawAddress.location || rawAddress.loc || "",
-            rawAddress.district || rawAddress.dst || rawAddress.city || "",
-            rawAddress.state || rawAddress.stcd || "",
-            rawAddress.pinCode || rawAddress.pncd || rawAddress.pincode || "",
+            rawAddress.district || rawAddress.city || "",
+            rawAddress.state || "",
+            rawAddress.pinCode || rawAddress.pincode || "",
           ]
             .filter(Boolean)
             .join(", ")
         : "";
-  const otherAddresses = Array.isArray(gstBasic.businessAddress?.otherBusinessAddressRegisteredAddress)
-    ? gstBasic.businessAddress.otherBusinessAddressRegisteredAddress.join("; ")
-    : gstBasic.additionalTradeName || "";
 
-  const signatories = Array.isArray(gstBasic.authorizedSignatory)
-    ? gstBasic.authorizedSignatory.join(", ")
-    : (gstBasic.authorizedSignatory || "");
+  const additionalTradeName = basic?.additionalTradeName || "";
+  const aadhaarAuth = basic?.aadhaarAuthenticatedStatus || "";
+  const aadhaarAuthDate = basic?.aadhaarAuthenticatedDate || "";
+  const eKycStatus = basic?.eKycVerificationStatus || "";
+  const eKycDate = basic?.eKycVerificationDate || "";
+  const einvoiceStatus = basic?.einvoiceStatus || "";
+  const isFieldVisit = basic?.isFieldVisitConducted || "";
 
-  const turnover = gstBasic.turnoverDetail?.aggregateTurnover || "";
-  const turnoverFY = gstBasic.turnoverDetail?.aggregateTurnoverFinancialYear || "";
-
-  const natureOfActivities = Array.isArray(gstBasic.bussinessSummary?.natureOfBusinessActivities)
-    ? gstBasic.bussinessSummary.natureOfBusinessActivities.join(", ")
-    : (gstBasic.natureOfBusinessActivities || gstBasic.nature_of_business || "");
-
-  const aadhaarAuth = gstBasic.aadhaarAuthenticatedStatus || "";
-  const aadhaarAuthDate = gstBasic.aadhaarAuthenticatedDate || "";
-  const einvoiceStatus = gstBasic.einvoiceStatus || gstBasic.mandateEInvoice || "";
-  const isFieldVisit = gstBasic.isFieldVisitConducted || "";
-  const returnFilingCompliance = hasApiData
-    ? (gstBasic.returnFilingStatus || gstBasic.filing_status || "")
-    : "";
-
-  const hasTable2Data = Boolean(
-    stateJurisdiction ||
-      centralJurisdiction ||
-      address ||
-      otherAddresses ||
-      signatories ||
-      turnover ||
-      natureOfActivities ||
-      aadhaarAuth ||
-      einvoiceStatus ||
-      isFieldVisit ||
-      returnFilingCompliance,
-  );
+  // bussinessSummary fields
+  const coreBusinessActivity = summary?.coreBusinessActivity || "";
+  const natureOfBusinessActivities: string[] = Array.isArray(summary?.natureOfBusinessActivities)
+    ? summary.natureOfBusinessActivities
+    : summary?.natureOfBusinessActivities
+      ? [String(summary.natureOfBusinessActivities)]
+      : [];
+  const goodsDetail: Array<{ hsnCode?: string; goods?: string }> = Array.isArray(summary?.goodsDetail)
+    ? summary.goodsDetail
+    : [];
+  const servicesDetail: Array<{ sacCode?: string; service?: string; services?: string }> = Array.isArray(summary?.servicesDetail)
+    ? summary.servicesDetail
+    : [];
 
   return (
-    <div className="space-y-3">
-      {/* Table 1: Basic Registration Details */}
-      <TableWrapper title="1. Basic Registration Details" subtitle="GST Identification & Constitution">
-        <TableRow label="GSTIN Number" value={gstin} isMono badge="success" />
-        <TableRow label="PAN Linked with GSTIN" value={pan} isMono />
-        <TableRow label="Legal Name of Business" value={legalName} />
-        <TableRow label="Trade Name" value={tradeName} />
-        <TableRow
-          label="Registration Status"
-          value={status}
-          badge={status === "Active" ? "success" : status ? "warning" : undefined}
-        />
-        <TableRow label="Taxpayer Type" value={taxpayerType} />
-        <TableRow label="Business Constitution" value={constitution} />
-        <TableRow label="Date of Registration" value={regDate} />
-        {cancellationDate && (
-          <TableRow label="Cancellation Date" value={cancellationDate} badge="danger" />
+    <div className="space-y-3.5">
+      {/* 1. Basic GST Registration Information */}
+      <TableWrapper title="1. GST Basic Information" subtitle="GSTIN & Constitution">
+        <TableRow label="GSTIN Number" value={gstinVal} isMono badge="success" />
+        {pan && <TableRow label="PAN Linked with GSTIN" value={pan} isMono />}
+        {legalName && <TableRow label="Legal Name of Business" value={legalName} />}
+        {tradeName && <TableRow label="Trade Name" value={tradeName} />}
+        {status && (
+          <TableRow
+            label="Registration Status"
+            value={status}
+            badge={status.toLowerCase() === "active" ? "success" : "warning"}
+          />
         )}
-        <TableRow label="Registered State" value={state} />
+        {taxpayerType && <TableRow label="Taxpayer Type" value={taxpayerType} />}
+        {constitution && <TableRow label="Business Constitution" value={constitution} />}
+        {registerDate && <TableRow label="Date of Registration" value={registerDate} />}
+        {registerCancellationDate && (
+          <TableRow label="Cancellation Date" value={registerCancellationDate} badge="danger" />
+        )}
+        {state && <TableRow label="Registered State" value={state} />}
+        {stateJurisdiction && <TableRow label="State Jurisdiction" value={stateJurisdiction} />}
+        {centralJurisdiction && <TableRow label="Central Jurisdiction" value={centralJurisdiction} />}
+        {address && <TableRow label="Principal Registered Address" value={address} />}
+        {additionalTradeName && <TableRow label="Additional Trade Name" value={additionalTradeName} />}
+        {aadhaarAuth && (
+          <TableRow
+            label="Aadhaar Authenticated"
+            value={`${aadhaarAuth}${aadhaarAuthDate ? ` (Date: ${aadhaarAuthDate})` : ""}`}
+            badge={aadhaarAuth.toLowerCase() === "yes" ? "success" : "info"}
+          />
+        )}
+        {eKycStatus && eKycStatus !== "Not Applicable" && (
+          <TableRow
+            label="e-KYC Verification"
+            value={`${eKycStatus}${eKycDate ? ` (Date: ${eKycDate})` : ""}`}
+          />
+        )}
+        {einvoiceStatus && (
+          <TableRow
+            label="E-Invoice Status"
+            value={einvoiceStatus.toLowerCase() === "yes" ? "Enabled / Active" : einvoiceStatus}
+          />
+        )}
+        {isFieldVisit && <TableRow label="Field Visit Conducted" value={isFieldVisit} />}
       </TableWrapper>
 
-      {/* Table 2: Jurisdiction, Address & Compliance Profile */}
-      {hasTable2Data && (
-        <TableWrapper title="2. Jurisdiction, Address & Compliance Profile" subtitle="Locations, Signatories & Compliance">
-          {stateJurisdiction && <TableRow label="State Jurisdiction" value={stateJurisdiction} />}
-          {centralJurisdiction && <TableRow label="Central Jurisdiction" value={centralJurisdiction} />}
-          {address && <TableRow label="Principal Registered Address" value={address} />}
-          {otherAddresses && (
-            <TableRow label="Additional Business Locations" value={otherAddresses} />
+      {/* 2. Business Summary (Core Activity, Nature of Business & Goods/Services) */}
+      {summary && (
+        <TableWrapper title="2. Business Summary" subtitle="Core Activities & Commodities">
+          {coreBusinessActivity && (
+            <TableRow label="Core Business Activity" value={coreBusinessActivity} isMono />
           )}
-          {signatories && (
-            <TableRow label="Authorized Signatories" value={signatories} />
-          )}
-          {turnover && (
+          {natureOfBusinessActivities.length > 0 && (
             <TableRow
-              label={`Aggregate Turnover (${turnoverFY || "Latest FY"})`}
-              value={turnover}
-              badge="info"
+              label="Nature of Business Activities"
+              value={natureOfBusinessActivities.join(", ")}
             />
           )}
-          {natureOfActivities && <TableRow label="Nature of Business Activities" value={natureOfActivities} />}
-          {aadhaarAuth && (
+          {goodsDetail.length > 0 && (
             <TableRow
-              label="Aadhaar Authenticated"
-              value={`${aadhaarAuth}${aadhaarAuthDate ? ` (Date: ${aadhaarAuthDate})` : ""}`}
-              badge={aadhaarAuth === "Yes" ? "success" : "info"}
+              label="Goods Detail (HSN)"
+              value={
+                <div className="space-y-1.5 py-0.5">
+                  {goodsDetail.map((g, idx) => (
+                    <div key={idx} className="flex items-start gap-2 text-[11px]">
+                      <span className="font-mono font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 shrink-0">
+                        HSN {g.hsnCode || "-"}
+                      </span>
+                      <span className="text-slate-700 leading-tight">{g.goods || "-"}</span>
+                    </div>
+                  ))}
+                </div>
+              }
             />
           )}
-          {einvoiceStatus && (
+          {servicesDetail.length > 0 && (
             <TableRow
-              label="E-Invoice System Status"
-              value={einvoiceStatus === "Yes" ? "Enabled / Mandate Active" : einvoiceStatus}
-            />
-          )}
-          {isFieldVisit && <TableRow label="Field Visit Conducted" value={isFieldVisit} />}
-          {returnFilingCompliance && (
-            <TableRow
-              label="Return Filing Compliance"
-              value={returnFilingCompliance}
-              badge="info"
+              label="Services Detail (SAC)"
+              value={
+                <div className="space-y-1.5 py-0.5">
+                  {servicesDetail.map((s, idx) => (
+                    <div key={idx} className="flex items-start gap-2 text-[11px]">
+                      <span className="font-mono font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 shrink-0">
+                        SAC {s.sacCode || "-"}
+                      </span>
+                      <span className="text-slate-700 leading-tight">{s.services || s.service || "-"}</span>
+                    </div>
+                  ))}
+                </div>
+              }
             />
           )}
         </TableWrapper>
@@ -1066,7 +1080,10 @@ function UdyamOnboardingTable({ dsa }: { dsa: any }) {
 
 // 4. Udyam MSME Registration Table (2 Categorized Tables, or 1 combined in comparison mode)
 function UdyamDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiData: any; isComparison?: boolean }) {
-  const details =
+  const rawContainer =
+    apiData?.raw_response ||
+    apiData?.data?.raw_response ||
+    apiData?.data?.details?.raw_response ||
     apiData?.data?.details?.data ||
     apiData?.data?.details?.result ||
     apiData?.data?.normalized_data ||
@@ -1074,6 +1091,11 @@ function UdyamDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiD
     apiData?.data ||
     apiData?.result ||
     {};
+
+  const details =
+    rawContainer?.data && typeof rawContainer.data === "object" && !Array.isArray(rawContainer.data)
+      ? rawContainer.data
+      : (Array.isArray(rawContainer?.data) ? rawContainer.data[0] : (typeof rawContainer === "object" ? rawContainer : {}));
 
   const hasApiData = Boolean(
     apiData?.data?.details ||
@@ -1095,11 +1117,27 @@ function UdyamDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiD
     details.enterprise_name ||
     "";
 
-  const enterpriseType =
-    details.typeOfEnterprise ||
-    details.enterpriseType ||
-    details.enterprise_type ||
-    "";
+  // 3. typeOfEnterprise parsing & cleaning
+  const rawEnterpriseType = String(
+    details.typeOfEnterprise || details.enterpriseType || details.enterprise_type || ""
+  ).trim();
+
+  const parseEnterpriseType = (str: string) => {
+    if (!str) return "";
+    const match = str.match(/^(MICRO|SMALL|MEDIUM)/i);
+    const category = match ? match[1].toUpperCase() : str;
+    const fyMatches = Array.from(str.matchAll(/FY\s*(\d{4}[-\/]\d{2,4})/gi)).map((m) => m[1]);
+    if (fyMatches.length > 0) {
+      const earliest = fyMatches[fyMatches.length - 1];
+      const latest = fyMatches[0];
+      return earliest !== latest
+        ? `${category} (FY ${earliest} to FY ${latest})`
+        : `${category} (FY ${latest})`;
+    }
+    return category;
+  };
+
+  const formattedEnterpriseType = parseEnterpriseType(rawEnterpriseType) || rawEnterpriseType;
 
   const orgType =
     details.organisationType ||
@@ -1196,33 +1234,62 @@ function UdyamDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiD
         <TableRow label="Enterprise Legal Name" value={enterpriseName} />
         <TableRow
           label="Enterprise Classification"
-          value={enterpriseType}
-          badge={enterpriseType ? "success" : undefined}
+          value={formattedEnterpriseType}
+          badge={formattedEnterpriseType ? "success" : undefined}
         />
         <TableRow label="Organisation Structure" value={orgType} />
         <TableRow label="Major Business Activity" value={majorActivity} />
         <TableRow label="Date of Udyam Registration" value={regDate} />
-        <TableRow label="Date of Incorporation" value={incorporationDate} />
-        <TableRow label="Date of Commencement" value={commencementDate} />
-        <TableRow label="Social Category" value={socialCategory} />
-        <TableRow label="District Industries Centre (DIC)" value={dic} />
-        <TableRow label="MSME Development Institute (DI)" value={msmeDi} />
         {formattedOfficialAddress && (
-          <TableRow label="Official Registered Address" value={formattedOfficialAddress} />
+          <TableRow
+            label="Official Address of Enterprise"
+            value={
+              <div className="space-y-1 py-0.5">
+                <p className="text-slate-800 leading-tight">{formattedOfficialAddress}</p>
+                {(offMobile || offEmail) && (
+                  <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-500 pt-0.5">
+                    {offMobile && <span><strong>Mobile:</strong> {offMobile}</span>}
+                    {offEmail && <span><strong>Email:</strong> {offEmail}</span>}
+                  </div>
+                )}
+              </div>
+            }
+          />
         )}
-        {offMobile && (
-          <TableRow label="Enterprise Registered Mobile" value={offMobile} />
+        {unitList.length > 0 && (
+          <TableRow
+            label="Unit / Plant Details"
+            value={
+              <div className="space-y-1.5 py-0.5">
+                {unitList.map((u: any, idx: number) => {
+                  const addrParts = [
+                    u.flat,
+                    u.building,
+                    u.road,
+                    u.block,
+                    u.villageTown,
+                    u.city && u.city !== u.villageTown ? u.city : null,
+                    u.district,
+                    u.state,
+                    u.pin ? `PIN: ${u.pin}` : null,
+                  ].filter(Boolean).join(", ");
+
+                  return (
+                    <div key={idx} className="p-2 rounded bg-slate-50 border border-slate-200/80 text-[11px] space-y-0.5">
+                      <div className="font-semibold text-slate-900 flex items-center justify-between">
+                        <span>{u.unitName || `Unit ${idx + 1}`}</span>
+                        <span className="text-[10px] font-mono text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                          Unit {idx + 1}
+                        </span>
+                      </div>
+                      {addrParts && <p className="text-slate-600 leading-tight">{addrParts}</p>}
+                    </div>
+                  );
+                })}
+              </div>
+            }
+          />
         )}
-        {offEmail && (
-          <TableRow label="Enterprise Registered Email" value={offEmail} />
-        )}
-        {formattedUnitAddress && (
-          <TableRow label="Plant / Unit Locations" value={formattedUnitAddress} />
-        )}
-        <TableRow label="NIC 2-Digit Group" value={nic2} />
-        <TableRow label="NIC 4-Digit Class" value={nic4} />
-        <TableRow label="NIC 5-Digit Sub-Class" value={nic5} />
-        <TableRow label="NIC Activity Description" value={nicActivity ? `${nicActivity}${nicDate ? ` (Effective: ${nicDate})` : ""}` : ""} />
         <TableRow
           label="MSME Portal Verification"
           value={msmePortalVerification}
@@ -1240,8 +1307,8 @@ function UdyamDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiD
         <TableRow label="Enterprise Legal Name" value={enterpriseName} />
         <TableRow
           label="Enterprise Classification"
-          value={enterpriseType}
-          badge={enterpriseType ? "success" : undefined}
+          value={formattedEnterpriseType}
+          badge={formattedEnterpriseType ? "success" : undefined}
         />
         <TableRow label="Organisation Structure" value={orgType} />
         <TableRow label="Major Business Activity" value={majorActivity} />
@@ -1253,24 +1320,58 @@ function UdyamDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiD
         <TableRow label="MSME Development Institute (DI)" value={msmeDi} />
       </TableWrapper>
 
-      {/* Table 2: Official Contact, Plant Locations & NIC Classifications */}
-      <TableWrapper title="2. Official Contact, Unit Locations & NIC Codes" subtitle="Operating Units & Industry Categorization">
+      {/* Table 2: Official Contact & Plant Locations */}
+      <TableWrapper title="2. Official Contact & Unit Locations" subtitle="Operating Units & Facilities">
         {formattedOfficialAddress && (
-          <TableRow label="Official Registered Address" value={formattedOfficialAddress} />
+          <TableRow
+            label="Official Address of Enterprise"
+            value={
+              <div className="space-y-1 py-0.5">
+                <p className="text-slate-800 leading-tight">{formattedOfficialAddress}</p>
+                {(offMobile || offEmail) && (
+                  <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-500 pt-0.5">
+                    {offMobile && <span><strong>Mobile:</strong> {offMobile}</span>}
+                    {offEmail && <span><strong>Email:</strong> {offEmail}</span>}
+                  </div>
+                )}
+              </div>
+            }
+          />
         )}
-        {offMobile && (
-          <TableRow label="Enterprise Registered Mobile" value={offMobile} />
+        {unitList.length > 0 && (
+          <TableRow
+            label="Unit / Plant Details"
+            value={
+              <div className="space-y-1.5 py-0.5">
+                {unitList.map((u: any, idx: number) => {
+                  const addrParts = [
+                    u.flat,
+                    u.building,
+                    u.road,
+                    u.block,
+                    u.villageTown,
+                    u.city && u.city !== u.villageTown ? u.city : null,
+                    u.district,
+                    u.state,
+                    u.pin ? `PIN: ${u.pin}` : null,
+                  ].filter(Boolean).join(", ");
+
+                  return (
+                    <div key={idx} className="p-2 rounded bg-slate-50 border border-slate-200/80 text-[11px] space-y-0.5">
+                      <div className="font-semibold text-slate-900 flex items-center justify-between">
+                        <span>{u.unitName || `Unit ${idx + 1}`}</span>
+                        <span className="text-[10px] font-mono text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                          Unit {idx + 1}
+                        </span>
+                      </div>
+                      {addrParts && <p className="text-slate-600 leading-tight">{addrParts}</p>}
+                    </div>
+                  );
+                })}
+              </div>
+            }
+          />
         )}
-        {offEmail && (
-          <TableRow label="Enterprise Registered Email" value={offEmail} />
-        )}
-        {formattedUnitAddress && (
-          <TableRow label="Plant / Unit Locations" value={formattedUnitAddress} />
-        )}
-        <TableRow label="NIC 2-Digit Group" value={nic2} />
-        <TableRow label="NIC 4-Digit Class" value={nic4} />
-        <TableRow label="NIC 5-Digit Sub-Class" value={nic5} />
-        <TableRow label="NIC Activity Description" value={nicActivity ? `${nicActivity}${nicDate ? ` (Effective: ${nicDate})` : ""}` : ""} />
         <TableRow
           label="MSME Portal Verification"
           value={msmePortalVerification}
