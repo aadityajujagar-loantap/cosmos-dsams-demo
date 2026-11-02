@@ -13,6 +13,8 @@ import {
   RefreshCw,
   MailCheck,
   Lock,
+  FileText,
+  Download,
 } from "lucide-react";
 import { adminApi } from "@/apis/admin";
 import { withBasePath } from "@/lib/base-path";
@@ -51,7 +53,21 @@ interface VerificationError {
   };
 }
 
-type VerificationState = "loading" | "success" | "error";
+type VerificationState = "loading" | "consent" | "success" | "error";
+
+interface DsaConsentData {
+  token: string;
+  dsa_id?: number | string;
+  dsa_code?: string;
+  dsa_type?: string;
+  applicant_name?: string;
+  entity_name?: string;
+  email?: string;
+  mobile?: string;
+  pan?: string;
+  branch_name?: string;
+  email_verified?: boolean;
+}
 
 interface VerificationResult {
   message: string;
@@ -159,6 +175,54 @@ export function DsaVerifyEmailScreen({ token, type, applicationId }: DsaVerifyEm
   const [resendStatus, setResendStatus] = useState<string | null>(null);
   const [manualToken, setManualToken] = useState("");
   const [manualAppId, setManualAppId] = useState("");
+  const [consentData, setConsentData] = useState<DsaConsentData | null>(null);
+  const [consentAgreed, setConsentAgreed] = useState(false);
+  const [submittingConsent, setSubmittingConsent] = useState(false);
+
+  const handleGiveConsent = async () => {
+    const activeToken = token || consentData?.token;
+    if (!activeToken || !consentAgreed) return;
+    const cleanToken = extractCleanToken(activeToken);
+    if (!cleanToken) return;
+
+    setSubmittingConsent(true);
+    try {
+      const res = (await adminApi.verifyDsaEmail(cleanToken)) as VerificationApiResponse;
+      if (res?.status === true || res?.status === "success" || res?.status_code === 200) {
+        const successRes: VerificationResult = {
+          message: res?.message || "Consent provided and email verified successfully.",
+          dsaCode: res?.data?.dsa_code || res?.dsa_code || consentData?.dsa_code || getStoredDsaCode(),
+          dsaId: res?.data?.dsa_id || res?.dsa_id || consentData?.dsa_id,
+          isLoan: false,
+        };
+        saveCachedVerification(cleanToken, successRes);
+        verifiedTokensRef.current.add(cleanToken);
+        setResult(successRes);
+        setState("success");
+      } else {
+        const rawMsg = res?.message || res?.data?.message || "Failed to submit consent. Please try again.";
+        alert(rawMsg);
+      }
+    } catch (err: unknown) {
+      const vErr = err as VerificationError;
+      const rawMsg = vErr?.data?.message || vErr?.message || "Failed to submit consent.";
+      if (isAlreadyOrExpiredMessage(rawMsg)) {
+        const fallbackSuccess: VerificationResult = {
+          message: "Consent has already been provided and verified.",
+          dsaCode: consentData?.dsa_code || getStoredDsaCode(),
+          dsaId: consentData?.dsa_id,
+          isLoan: false,
+        };
+        saveCachedVerification(cleanToken, fallbackSuccess);
+        setResult(fallbackSuccess);
+        setState("success");
+      } else {
+        alert(rawMsg);
+      }
+    } finally {
+      setSubmittingConsent(false);
+    }
+  };
 
   const getEffectiveAppId = useCallback(() => {
     if (applicationId) return applicationId;
@@ -323,18 +387,25 @@ export function DsaVerifyEmailScreen({ token, type, applicationId }: DsaVerifyEm
       }
 
       try {
-        const res = (await adminApi.verifyDsaEmail(cleanToken)) as VerificationApiResponse;
+        const res = (await adminApi.getDsaConsentDetails(cleanToken)) as any;
 
-        if (res?.status === true || res?.status === "success" || res?.status_code === 200) {
-          const successRes: VerificationResult = {
-            message: res?.message || "Email address verified successfully.",
-            dsaCode: res?.data?.dsa_code || res?.dsa_code || getStoredDsaCode(),
-            dsaId: res?.data?.dsa_id || res?.dsa_id,
-            isLoan: false,
-          };
-          saveCachedVerification(cleanToken, successRes);
-          setResult(successRes);
-          setState("success");
+        if (res?.status === true && res?.data) {
+          const consent = res.data as DsaConsentData;
+          if (consent.email_verified) {
+            const successRes: VerificationResult = {
+              message: "Consent has already been provided and email verified.",
+              dsaCode: consent.dsa_code || getStoredDsaCode(),
+              dsaId: consent.dsa_id,
+              isLoan: false,
+            };
+            saveCachedVerification(cleanToken, successRes);
+            setResult(successRes);
+            setState("success");
+            return;
+          }
+
+          setConsentData(consent);
+          setState("consent");
           return;
         } else {
           // Fallback: Check if this token corresponds to a borrower loan verification
@@ -461,7 +532,7 @@ export function DsaVerifyEmailScreen({ token, type, applicationId }: DsaVerifyEm
 
       {/* Main Container */}
       <main className="flex-1 flex items-center justify-center p-4 sm:p-6 py-12">
-        <div className="w-full max-w-lg">
+        <div className={`w-full ${state === "consent" ? "max-w-2xl" : "max-w-lg"}`}>
           {/* STATE 1: LOADING */}
           {state === "loading" && (
             <Card className="border-slate-200 bg-white shadow-xl overflow-hidden text-center animate-in fade-in duration-300">
@@ -469,7 +540,7 @@ export function DsaVerifyEmailScreen({ token, type, applicationId }: DsaVerifyEm
                 <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/15 backdrop-blur-md mb-4 shadow-inner">
                   <Loader2 className="h-10 w-10 text-white animate-spin" />
                 </div>
-                <h2 className="text-2xl font-bold tracking-tight">Verifying Your Email</h2>
+                <h2 className="text-2xl font-bold tracking-tight">Loading Verification</h2>
                 <p className="mt-2 text-blue-100 text-sm">
                   Connecting to Cosmos Bank security server...
                 </p>
@@ -490,6 +561,210 @@ export function DsaVerifyEmailScreen({ token, type, applicationId }: DsaVerifyEm
             </Card>
           )}
 
+          {/* STATE: CONSENT FORM */}
+          {state === "consent" && consentData && (
+            <Card className="border-blue-200 bg-white shadow-2xl overflow-hidden animate-in fade-in-50 duration-300">
+              {/* Header Banner */}
+              <div className="bg-gradient-to-r from-[#0b2853] via-[#1e3a8a] to-[#0b2853] py-7 px-6 sm:px-8 text-white relative">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-white/10 text-amber-300 text-xs font-semibold uppercase tracking-wider mb-2 border border-white/15">
+                      Cosmos Co-operative Bank Ltd.
+                    </div>
+                    <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
+                      DSA Onboarding Consent Form
+                    </h2>
+                    <p className="mt-1 text-blue-100 text-xs sm:text-sm">
+                      Digital Personal Data Protection (DPDP) Act, 2023 &amp; Verification Consent
+                    </p>
+                  </div>
+                  <div className="hidden sm:flex h-14 w-14 items-center justify-center rounded-xl bg-white/10 border border-white/20 backdrop-blur-xs flex-shrink-0">
+                    <ShieldCheck className="h-8 w-8 text-amber-300" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Gold Accent Bar */}
+              <div className="h-1 bg-gradient-to-r from-amber-500 via-amber-300 to-amber-500" />
+
+              <CardContent className="p-6 sm:p-8 space-y-6">
+                {/* Application Particulars Card */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-5 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                    <div>
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block">
+                        DSA Application Reference
+                      </span>
+                      <span className="font-mono text-base font-bold text-slate-900">
+                        {consentData.dsa_code || "DSA-NEW"}
+                      </span>
+                    </div>
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-800 border border-blue-200">
+                      {consentData.dsa_type === "ENTITY" ? "Business Entity" : "Individual DSA"}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
+                    <div>
+                      <span className="text-slate-500 block">Applicant / Firm Name</span>
+                      <span className="font-semibold text-slate-800 text-sm">
+                        {consentData.applicant_name || consentData.entity_name || "Applicant"}
+                      </span>
+                    </div>
+                    {consentData.pan && (
+                      <div>
+                        <span className="text-slate-500 block">Permanent Account Number (PAN)</span>
+                        <span className="font-mono font-semibold text-slate-800">
+                          {consentData.pan}
+                        </span>
+                      </div>
+                    )}
+                    {consentData.email && (
+                      <div>
+                        <span className="text-slate-500 block">Registered Email</span>
+                        <span className="font-semibold text-slate-800 truncate block">
+                          {consentData.email}
+                        </span>
+                      </div>
+                    )}
+                    {consentData.mobile && (
+                      <div>
+                        <span className="text-slate-500 block">Registered Mobile</span>
+                        <span className="font-semibold text-slate-800">
+                          +91 {consentData.mobile}
+                        </span>
+                      </div>
+                    )}
+                    {consentData.branch_name && (
+                      <div className="sm:col-span-2">
+                        <span className="text-slate-500 block">Sourcing Branch</span>
+                        <span className="font-semibold text-slate-800">
+                          {consentData.branch_name}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Structured Declarations */}
+                <div className="space-y-3 text-left">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-blue-600" />
+                    Consent Declarations &amp; Undertakings
+                  </h3>
+
+                  <div className="max-h-72 overflow-y-auto space-y-3 pr-2 text-xs text-slate-600 rounded-lg border border-slate-200 bg-slate-50/50 p-4">
+                    {/* Clause 1 */}
+                    <div className="border-b border-slate-200/80 pb-3">
+                      <h4 className="font-bold text-slate-900 mb-1 flex items-center gap-1.5">
+                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-100 text-blue-700 text-[10px]">1</span>
+                        Express DPDP Act Consent
+                      </h4>
+                      <p className="leading-relaxed text-slate-600">
+                        I/We hereby grant free, specific, informed, unconditional, and unambiguous consent under the Digital Personal Data Protection (DPDP) Act, 2023 to The Cosmos Co-operative Bank Ltd. (&quot;Bank&quot;) to collect, process, store, verify, and cross-reference my/our personal data, identity credentials, KYC records, credit information, and business documents for the purpose of empanelment, onboarding due diligence, and retail loan sourcing operations.
+                      </p>
+                    </div>
+
+                    {/* Clause 2 */}
+                    <div className="border-b border-slate-200/80 pb-3">
+                      <h4 className="font-bold text-slate-900 mb-1 flex items-center gap-1.5">
+                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-100 text-blue-700 text-[10px]">2</span>
+                        Credit Information Report (CIBIL / Bureau) Authorization
+                      </h4>
+                      <p className="leading-relaxed text-slate-600">
+                        I/We explicitly authorize The Cosmos Co-operative Bank Ltd. and its accredited credit bureau partners to access, fetch, generate, and review my/our Credit Information Reports (including Consumer CIBIL, Commercial CIBIL, Equifax, Experian, and CRIF High Mark) to assess creditworthiness, repayment history, and risk evaluation.
+                      </p>
+                    </div>
+
+                    {/* Clause 3 */}
+                    <div className="border-b border-slate-200/80 pb-3">
+                      <h4 className="font-bold text-slate-900 mb-1 flex items-center gap-1.5">
+                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-100 text-blue-700 text-[10px]">3</span>
+                        KYC &amp; Statutory Due Diligence Authorization
+                      </h4>
+                      <p className="leading-relaxed text-slate-600">
+                        I/We authorize the Bank to authenticate my/our identity and registration credentials across statutory authorities, including UIDAI (Aadhaar), NSDL / Income Tax Department (PAN), Ministry of Corporate Affairs (MCA), Goods and Services Tax Network (GSTN), and Udyam Portal, as well as penny-less / penny-drop Bank Account Verification (BAV).
+                      </p>
+                    </div>
+
+                    {/* Clause 4 */}
+                    <div className="border-b border-slate-200/80 pb-3">
+                      <h4 className="font-bold text-slate-900 mb-1 flex items-center gap-1.5">
+                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-100 text-blue-700 text-[10px]">4</span>
+                        Authenticity &amp; Solvency Declaration
+                      </h4>
+                      <p className="leading-relaxed text-slate-600">
+                        I/We affirm that all information, documents, certificates, and statements submitted during application are authentic, true, and complete. I/We declare and confirm that I/we am/are not a willful defaulter to any bank, financial institution, or NBFC, and that no insolvency, bankruptcy, or criminal proceedings are initiated, pending, or threatened against me/our entity or key persons.
+                      </p>
+                    </div>
+
+                    {/* Clause 5 */}
+                    <div>
+                      <h4 className="font-bold text-slate-900 mb-1 flex items-center gap-1.5">
+                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-100 text-blue-700 text-[10px]">5</span>
+                        Electronic Communication &amp; Contact Consent
+                      </h4>
+                      <p className="leading-relaxed text-slate-600">
+                        I/We expressly authorize The Cosmos Co-operative Bank Ltd. to communicate with me/us via Telephone Calls, SMS, WhatsApp, and Email regarding onboarding, lead status, commission processing, audit, and operational guidelines.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Download PDF option */}
+                  <div className="flex justify-end pt-1">
+                    <a
+                      href={withBasePath("/documents/Cosmos_Bank_DSA_Consent_Form.pdf")}
+                      download="Cosmos_Bank_DSA_Consent_Form.pdf"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Download Official Consent Format (PDF)
+                    </a>
+                  </div>
+                </div>
+
+                {/* Mandatory Acceptance Checkbox */}
+                <div className="rounded-xl border-2 border-blue-200 bg-blue-50/60 p-4">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={consentAgreed}
+                      onChange={(e) => setConsentAgreed(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <span className="text-xs font-medium text-slate-800 leading-relaxed select-none">
+                      I have read, understood, and accept all declarations stated above, and hereby provide my explicit consent to <strong className="text-slate-900">The Cosmos Co-operative Bank Ltd.</strong> for CIBIL credit report generation, KYC identity verification, and email verification.
+                    </span>
+                  </label>
+                </div>
+
+                {/* Action Button at End Below */}
+                <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-2">
+                  <Button
+                    type="button"
+                    onClick={handleGiveConsent}
+                    disabled={!consentAgreed || submittingConsent}
+                    className="w-full sm:w-auto bg-[#0b2853] hover:bg-[#1e3a8a] text-white font-bold px-8 py-2.5 text-sm shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    {submittingConsent ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Submitting Consent &amp; Verifying...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="mr-2 h-4 w-4 text-emerald-400" />
+                        Give Consent &amp; Verify Email
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* STATE 2: SUCCESS */}
           {state === "success" && (
             <Card className="border-emerald-200 bg-white shadow-2xl overflow-hidden text-center animate-in zoom-in-95 duration-300">
@@ -497,9 +772,9 @@ export function DsaVerifyEmailScreen({ token, type, applicationId }: DsaVerifyEm
                 <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/20 backdrop-blur-md mb-4 shadow-lg border border-white/30">
                   <CheckCircle2 className="h-12 w-12 text-white" />
                 </div>
-                <h2 className="text-2xl font-bold tracking-tight">Email Verified Successfully!</h2>
+                <h2 className="text-2xl font-bold tracking-tight">Consent &amp; Email Confirmed!</h2>
                 <p className="mt-2 text-emerald-100 text-sm max-w-sm mx-auto">
-                  {result.message || "Your email address has been confirmed."}
+                  {result.message || "Your consent has been recorded and email verified successfully."}
                 </p>
               </div>
 
@@ -528,7 +803,7 @@ export function DsaVerifyEmailScreen({ token, type, applicationId }: DsaVerifyEm
                     <span className="text-slate-600">Verification Status</span>
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-0.5 text-xs font-bold text-emerald-800">
                       <MailCheck className="h-3.5 w-3.5 text-emerald-600" />
-                      Email Confirmed
+                      {result.isLoan ? "Email Confirmed" : "Consent & Email Confirmed"}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
