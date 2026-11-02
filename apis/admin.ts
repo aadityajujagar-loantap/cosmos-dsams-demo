@@ -529,15 +529,9 @@ export const adminApi = {
     });
   },
 
-  getDsaConsentDetails: async (token: string): Promise<any> => {
-    return request<any>(`/v1/dsa/verify-email/${token}?preview=1`, {
-      method: "GET",
-    });
-  },
-
   verifyDsaEmail: async (token: string): Promise<any> => {
     return request<any>(`/v1/dsa/verify-email/${token}`, {
-      method: "POST",
+      method: "GET",
     });
   },
 

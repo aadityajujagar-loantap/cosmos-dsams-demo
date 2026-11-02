@@ -8092,7 +8092,7 @@ const resolveStageStatus = (
                   )}
                   Due Diligence Report
                 </Button>
-                <Button
+                {/* <Button
                   size="sm"
                   type="button"
                   variant="outline"
@@ -8102,7 +8102,7 @@ const resolveStageStatus = (
                 >
                   <Download className="h-3.5 w-3.5 text-blue-600" />
                   Download DD Report
-                </Button>
+                </Button> */}
               </>
             )}
             {canManageDsaLifecycle && (
