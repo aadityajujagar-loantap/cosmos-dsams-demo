@@ -2572,10 +2572,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         }
         for (let i = 0; i < stakeholders.length; i++) {
           const s = stakeholders[i];
-          if (!s.stakeholder_type.trim() || !s.name.trim() || !s.pan.trim() || !s.mobile_no.trim()) {
+          if (!s.stakeholder_type.trim() || !s.name.trim() || !s.pan.trim() || !s.mobile_no.trim() || !s.date_of_birth?.trim()) {
             toast({
               title: `Stakeholder ${i + 1} Incomplete`,
-              description: "Role, Name, PAN, and Mobile are mandatory for each key person.",
+              description: "Role, Name, PAN, Mobile, and Date of Birth are mandatory for each key person.",
               variant: "warning",
             });
             return false;
@@ -5161,7 +5161,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           </div>
                           <div>
                             <div className="flex items-center justify-between">
-                              <Label className="text-sm font-bold text-slate-700 leading-none">Date of Birth</Label>
+                              <Label className="text-sm font-bold text-slate-700 leading-none">Date of Birth *</Label>
                               {s.dob_locked && (
                                 <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
                                   PAN Verified
