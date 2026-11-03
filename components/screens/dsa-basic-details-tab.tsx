@@ -655,7 +655,7 @@ export function DsaBasicDetailsTab({
           account_number: dsa.account_number || "",
           account_type: dsa.account_type || "",
           ifsc: dsa.ifsc || "",
-          last_financial_year: dsa.last_financial_year || "2023-24",
+          last_financial_year: dsa.last_financial_year || "2026-27",
           last_fy_net_sales: dsa.last_fy_net_sales ?? "",
           last_fy_net_profit_after_tax: dsa.last_fy_net_profit_after_tax ?? "",
           other_banks_experience: initialBanks,
@@ -2251,27 +2251,27 @@ export function DsaBasicDetailsTab({
                       <Input
                         value={formData.last_financial_year || ""}
                         onChange={(e) => setFormData((prev) => ({ ...prev, last_financial_year: e.target.value }))}
-                        placeholder="e.g. 2023-24"
+                        placeholder="e.g. 2026-27"
                       />
                     </div>
                     <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
-                      <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Last FY Net Sales (₹ Lakhs)</Label>
+                      <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Last FY Net Sales (₹)</Label>
                       <Input
                         type="number"
                         step="0.01"
                         value={formData.last_fy_net_sales ?? ""}
                         onChange={(e) => setFormData((prev) => ({ ...prev, last_fy_net_sales: e.target.value }))}
-                        placeholder="Net Sales in Lakhs"
+                        placeholder="e.g. 5000000"
                       />
                     </div>
                     <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
-                      <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Last FY PAT (₹ Lakhs)</Label>
+                      <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Last FY PAT (₹)</Label>
                       <Input
                         type="number"
                         step="0.01"
                         value={formData.last_fy_net_profit_after_tax ?? ""}
                         onChange={(e) => setFormData((prev) => ({ ...prev, last_fy_net_profit_after_tax: e.target.value }))}
-                        placeholder="Net Profit after tax in Lakhs"
+                        placeholder="e.g. 850000"
                       />
                     </div>
                   </div>
@@ -2359,13 +2359,13 @@ export function DsaBasicDetailsTab({
                               />
                             </div>
                             <div>
-                              <Label className="text-[11px] font-semibold text-slate-600 mb-1 block">Average Ticket Size (₹ Lakh)</Label>
+                              <Label className="text-[11px] font-semibold text-slate-600 mb-1 block">Average Ticket Size (₹)</Label>
                               <Input
                                 type="number"
                                 step="0.01"
                                 value={bank.avg_ticket_size_lakhs ?? ""}
                                 onChange={(e) => updateBankExperience(idx, "avg_ticket_size_lakhs", e.target.value)}
-                                placeholder="e.g. 25"
+                                placeholder="e.g. 3500000"
                                 className="h-8 text-xs font-mono"
                               />
                             </div>
@@ -2460,7 +2460,7 @@ export function DsaBasicDetailsTab({
                         <td className="py-2.5 px-3 font-medium text-slate-600">Net Sales / Revenue</td>
                         <td className="py-2.5 px-3 font-semibold text-right font-mono">
                           {dsa.last_fy_net_sales !== null && dsa.last_fy_net_sales !== undefined && dsa.last_fy_net_sales !== ""
-                            ? `₹ ${dsa.last_fy_net_sales} Lakhs`
+                            ? (!isNaN(Number(dsa.last_fy_net_sales)) ? `₹ ${Number(dsa.last_fy_net_sales).toLocaleString("en-IN")}` : `₹ ${dsa.last_fy_net_sales}`)
                             : "—"}
                         </td>
                       </tr>
@@ -2468,7 +2468,7 @@ export function DsaBasicDetailsTab({
                         <td className="py-2.5 px-3 font-medium text-slate-600">Net Profit after Tax</td>
                         <td className="py-2.5 px-3 font-semibold text-right font-mono">
                           {dsa.last_fy_net_profit_after_tax !== null && dsa.last_fy_net_profit_after_tax !== undefined && dsa.last_fy_net_profit_after_tax !== ""
-                            ? `₹ ${dsa.last_fy_net_profit_after_tax} Lakhs`
+                            ? (!isNaN(Number(dsa.last_fy_net_profit_after_tax)) ? `₹ ${Number(dsa.last_fy_net_profit_after_tax).toLocaleString("en-IN")}` : `₹ ${dsa.last_fy_net_profit_after_tax}`)
                             : "—"}
                         </td>
                       </tr>
@@ -2555,10 +2555,10 @@ export function DsaBasicDetailsTab({
                                   <td className="py-1.5 pl-2 font-semibold text-slate-900">{bank.products_mobilized_last_3_years || "—"}</td>
                                 </tr>
                                 <tr>
-                                  <td className="py-1.5 pr-2 font-medium text-slate-600">Average ticket size (Rs. In Lakh)</td>
+                                  <td className="py-1.5 pr-2 font-medium text-slate-600">Average ticket size (Rs.)</td>
                                   <td className="py-1.5 pl-2 font-semibold text-slate-900 font-mono">
                                     {bank.avg_ticket_size_lakhs !== null && bank.avg_ticket_size_lakhs !== undefined && bank.avg_ticket_size_lakhs !== ""
-                                      ? `₹ ${bank.avg_ticket_size_lakhs} Lakhs`
+                                      ? (!isNaN(Number(bank.avg_ticket_size_lakhs)) ? `₹ ${Number(bank.avg_ticket_size_lakhs).toLocaleString("en-IN")}` : `₹ ${bank.avg_ticket_size_lakhs}`)
                                       : "—"}
                                   </td>
                                 </tr>

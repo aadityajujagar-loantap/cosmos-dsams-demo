@@ -607,7 +607,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   const [ifsc, setIfsc] = useState<string>("");
 
   // Entity Financial Highlights & Other Banks Experience
-  const [lastFinancialYear, setLastFinancialYear] = useState<string>("2024-25");
+  const [lastFinancialYear, setLastFinancialYear] = useState<string>("2026-27");
   const [lastFyNetSales, setLastFyNetSales] = useState<string>("");
   const [lastFyNetProfitAfterTax, setLastFyNetProfitAfterTax] = useState<string>("");
   const [otherBanksExperience, setOtherBanksExperience] = useState<OtherBankExperience[]>([
@@ -1235,7 +1235,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     setConfirmAccountNumber("");
     setAccountType("");
     setIfsc("");
-    setLastFinancialYear("2024-25");
+    setLastFinancialYear("2026-27");
     setLastFyNetSales("");
     setLastFyNetProfitAfterTax("");
     setOtherBanksExperience([
@@ -4766,6 +4766,8 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           onChange={(e) => setLastFinancialYear(e.target.value)}
                           className="mt-1.5 text-sm"
                         >
+                          <option value="2026-27">2026-27</option>
+                          <option value="2025-26">2025-26</option>
                           <option value="2024-25">2024-25</option>
                           <option value="2023-24">2023-24</option>
                           <option value="2022-23">2022-23</option>
@@ -4776,7 +4778,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
                       <div>
                         <Label htmlFor="last_fy_net_sales" className="text-sm font-bold text-slate-700 leading-none">
-                          Net Sales / Revenue (₹ in Lakh)
+                          Net Sales / Revenue (₹)
                         </Label>
                         <Input
                           id="last_fy_net_sales"
@@ -4785,14 +4787,14 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           min="0"
                           value={lastFyNetSales}
                           onChange={(e) => setLastFyNetSales(e.target.value)}
-                          placeholder="e.g. 50.00"
+                          placeholder="e.g. 5000000"
                           className="mt-1.5 font-mono text-sm"
                         />
                       </div>
 
                       <div>
                         <Label htmlFor="last_fy_net_profit_after_tax" className="text-sm font-bold text-slate-700 leading-none">
-                          Net Profit after Tax (₹ in Lakh)
+                          Net Profit after Tax (₹)
                         </Label>
                         <Input
                           id="last_fy_net_profit_after_tax"
@@ -4800,7 +4802,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                           step="0.01"
                           value={lastFyNetProfitAfterTax}
                           onChange={(e) => setLastFyNetProfitAfterTax(e.target.value)}
-                          placeholder="e.g. 8.50"
+                          placeholder="e.g. 850000"
                           className="mt-1.5 font-mono text-sm"
                         />
                       </div>
@@ -4907,7 +4909,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
                             <div>
                               <Label className="text-xs font-bold text-slate-700 leading-none">
-                                Average ticket size (Rs. In Lakh)
+                                Average ticket size (₹)
                               </Label>
                               <Input
                                 type="number"
@@ -4915,7 +4917,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                                 min="0"
                                 value={bank.avg_ticket_size_lakhs || ""}
                                 onChange={(e) => updateBankExperience(index, "avg_ticket_size_lakhs", e.target.value)}
-                                placeholder="e.g. 35.50"
+                                placeholder="e.g. 3500000"
                                 className="mt-1 font-mono text-sm"
                               />
                             </div>
@@ -6091,13 +6093,13 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                             <tr>
                               <td className="border border-slate-300 p-2 font-medium text-slate-700">Net Sales / Revenue</td>
                               <td className="border border-slate-300 p-2 font-mono font-bold text-slate-900">
-                                {lastFyNetSales ? `₹ ${lastFyNetSales} Lakh` : "—"}
+                                {lastFyNetSales ? (!isNaN(Number(lastFyNetSales)) ? `₹ ${Number(lastFyNetSales).toLocaleString("en-IN")}` : `₹ ${lastFyNetSales}`) : "—"}
                               </td>
                             </tr>
                             <tr>
                               <td className="border border-slate-300 p-2 font-medium text-slate-700">Net Profit after Tax</td>
                               <td className="border border-slate-300 p-2 font-mono font-bold text-slate-900">
-                                {lastFyNetProfitAfterTax ? `₹ ${lastFyNetProfitAfterTax} Lakh` : "—"}
+                                {lastFyNetProfitAfterTax ? (!isNaN(Number(lastFyNetProfitAfterTax)) ? `₹ ${Number(lastFyNetProfitAfterTax).toLocaleString("en-IN")}` : `₹ ${lastFyNetProfitAfterTax}`) : "—"}
                               </td>
                             </tr>
                           </tbody>
@@ -6140,7 +6142,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                                     <td className="border border-slate-300 p-2">{b.empanelled_loan_products || "—"}</td>
                                     <td className="border border-slate-300 p-2">{b.products_mobilized_last_3_years || "—"}</td>
                                     <td className="border border-slate-300 p-2 text-right font-mono">
-                                      {b.avg_ticket_size_lakhs ? `₹${b.avg_ticket_size_lakhs}L` : "—"}
+                                      {b.avg_ticket_size_lakhs ? (!isNaN(Number(b.avg_ticket_size_lakhs)) ? `₹ ${Number(b.avg_ticket_size_lakhs).toLocaleString("en-IN")}` : `₹ ${b.avg_ticket_size_lakhs}`) : "—"}
                                     </td>
                                     <td className="border border-slate-300 p-2 text-right font-mono">
                                       {b.commission_rate_percent ? `${b.commission_rate_percent}%` : "—"}
