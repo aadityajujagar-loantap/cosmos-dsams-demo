@@ -1497,10 +1497,7 @@ function CibilDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
             label="Total Aggregate Exposure / Outstanding"
             value={
               totalOut !== undefined && totalOut !== null
-                ? new Intl.NumberFormat("en-IN", {
-                    style: "currency",
-                    currency: "INR",
-                  }).format(totalOut)
+                ? `Rs. ${Number(totalOut).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                 : ""
             }
             isMono
@@ -1509,10 +1506,7 @@ function CibilDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
             label="Total Sanctioned Credit Limit"
             value={
               totalLimit !== undefined && totalLimit !== null
-                ? new Intl.NumberFormat("en-IN", {
-                    style: "currency",
-                    currency: "INR",
-                  }).format(totalLimit)
+                ? `Rs. ${Number(totalLimit).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                 : ""
             }
             isMono
@@ -1688,10 +1682,7 @@ function CibilDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
           label="Total Active Outstanding Balance"
           value={
             balance !== undefined && balance !== null
-              ? new Intl.NumberFormat("en-IN", {
-                  style: "currency",
-                  currency: "INR",
-                }).format(balance)
+              ? `Rs. ${Number(balance).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
               : ""
           }
           isMono
@@ -1700,10 +1691,7 @@ function CibilDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
           label="Total High Credit / Sanctioned Limit"
           value={
             totalLimit !== undefined && totalLimit !== null
-              ? new Intl.NumberFormat("en-IN", {
-                  style: "currency",
-                  currency: "INR",
-                }).format(totalLimit)
+              ? `Rs. ${Number(totalLimit).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
               : ""
           }
           isMono
