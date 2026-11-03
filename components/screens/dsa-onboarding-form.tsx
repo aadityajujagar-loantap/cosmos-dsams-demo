@@ -2819,9 +2819,21 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       payload.nature_of_business = natureOfBusiness;
       if (dateOfBirth) payload.date_of_birth = dateOfBirth;
       if (resolvedAge) payload.age = Number(resolvedAge);
+      const propStk = stakeholders.find((s) => {
+        const t = (s.stakeholder_type || "").toLowerCase();
+        return t.includes("propriet") || t.includes("proprit");
+      }) || stakeholders[0];
+      if (dateOfBirth) {
+        payload.date_of_birth = dateOfBirth;
+      } else if (propStk?.date_of_birth) {
+        payload.date_of_birth = propStk.date_of_birth;
+      }
+
       payload.stakeholders = stakeholders.map((s) => ({
         stakeholder_type: s.stakeholder_type,
         name: s.name,
+        date_of_birth: s.date_of_birth || undefined,
+        qualification: s.qualification || undefined,
         mobile_no: s.mobile_no,
         pan: s.pan.toUpperCase(),
         aadhaar: s.aadhaar || undefined,
