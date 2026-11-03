@@ -7774,7 +7774,7 @@ const resolveStageStatus = (
                   <div className="text-xs text-slate-700"><strong>Designation:</strong> {makerDesignation}</div>
                   <div className="text-xs text-slate-700"><strong>Date:</strong> {makerDate}</div>
                 </td>
-                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap">
+                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap break-words [overflow-wrap:anywhere] break-all">
                   {makerRemarksText}
                 </td>
               </tr>
@@ -7786,7 +7786,7 @@ const resolveStageStatus = (
                   <div className="text-xs text-slate-700"><strong>Designation:</strong> {checkerDesignation}</div>
                   <div className="text-xs text-slate-700"><strong>Date:</strong> {checkerDate}</div>
                 </td>
-                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap">
+                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap break-words [overflow-wrap:anywhere] break-all">
                   {checkerObs && <div>{checkerObs}</div>}
                   {checkerRem && <div className={checkerObs ? "mt-1" : ""}>{checkerRem}</div>}
                   {checkerExRem && (
@@ -7804,7 +7804,7 @@ const resolveStageStatus = (
                   <div className="text-xs text-slate-700"><strong>Designation:</strong> {l3Designation}</div>
                   <div className="text-xs text-slate-700"><strong>Date:</strong> {l3Date}</div>
                 </td>
-                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap">
+                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap break-words [overflow-wrap:anywhere] break-all">
                   {l3Remarks}
                 </td>
               </tr>
@@ -7816,7 +7816,7 @@ const resolveStageStatus = (
                   <div className="text-xs text-slate-700"><strong>Designation:</strong> {l4Designation}</div>
                   <div className="text-xs text-slate-700"><strong>Date:</strong> {l4Date}</div>
                 </td>
-                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap">
+                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap break-words [overflow-wrap:anywhere] break-all">
                   {l4Remarks}
                 </td>
               </tr>
@@ -7828,7 +7828,7 @@ const resolveStageStatus = (
                   <div className="text-xs text-slate-700"><strong>Designation:</strong> {l5Designation}</div>
                   <div className="text-xs text-slate-700"><strong>Date:</strong> {l5Date}</div>
                 </td>
-                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap">
+                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap break-words [overflow-wrap:anywhere] break-all">
                   {l5Remarks}
                 </td>
               </tr>
@@ -7840,7 +7840,7 @@ const resolveStageStatus = (
                   <div className="text-xs text-slate-700"><strong>Designation:</strong> {l6Designation}</div>
                   <div className="text-xs text-slate-700"><strong>Date:</strong> {l6Date}</div>
                 </td>
-                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap">
+                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap break-words [overflow-wrap:anywhere] break-all">
                   {l6Remarks}
                 </td>
               </tr>
@@ -7855,7 +7855,7 @@ const resolveStageStatus = (
                     DSA Code Allotted:
                   </div>
                 </td>
-                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap">
+                <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap break-words [overflow-wrap:anywhere] break-all">
                   <div>{l7Remarks}</div>
                   <div className="mt-3">
                     {canShowOfficialCode ? (
@@ -7892,21 +7892,22 @@ const resolveStageStatus = (
                   HO Credit Head Sanction Remarks{" "}
                   <span className="text-rose-500">*</span>
                 </span>
-                <span className="text-[10px] text-slate-500 font-normal">
-                  Recorded permanently in audit trail
+                <span className="text-[10px] text-slate-500 font-normal font-mono">
+                  {approvalRemarks.length}/256 | Recorded in audit trail
                 </span>
               </Label>
               <textarea
                 id="approvalRemarks"
                 rows={3}
+                maxLength={256}
                 disabled={isAlreadyApproved}
                 className="w-full rounded-lg border border-emerald-300 bg-white p-2.5 text-xs text-slate-800 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600"
                 value={approvalRemarks}
                 onChange={(e) => {
-                  setApprovalRemarks(e.target.value);
+                  setApprovalRemarks(e.target.value.slice(0, 256));
                   setApprovalRemarksError("");
                 }}
-                placeholder="Enter sanction remarks..."
+                placeholder="Enter sanction remarks (max 256 characters)..."
               />
               {approvalRemarksError && (
                 <p className="text-xs font-medium text-rose-600 mt-1">
@@ -11227,7 +11228,7 @@ const resolveStageStatus = (
           {tab === "actions" ? (
             <div className="space-y-6">
               {/* Comprehensive Review Remarks & Authority Notes by Role */}
-              <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+              <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4 min-w-0 overflow-hidden">
                   <div className="flex items-center justify-between pb-3 border-b border-slate-200">
                     <div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-700 shadow-2xs">
@@ -11241,7 +11242,7 @@ const resolveStageStatus = (
                     </div>
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="space-y-3 min-w-0">
                     {[
                       {
                         level: 1,
@@ -11359,7 +11360,7 @@ const resolveStageStatus = (
                         <div
                           key={step.level}
                           className={cn(
-                            "rounded-xl border p-4 transition-all shadow-2xs space-y-2.5",
+                            "rounded-xl border p-4 transition-all shadow-2xs space-y-2.5 min-w-0 overflow-hidden",
                             isDone
                               ? "border-emerald-300/90 bg-emerald-50/30"
                               : isBypassed
@@ -11444,7 +11445,7 @@ const resolveStageStatus = (
                           </div>
 
                           {!isCalledBackStep(step.status) && step.remarks ? (
-                            <p className="text-sm font-bold text-slate-900 whitespace-pre-wrap leading-relaxed py-0.5">
+                            <p className="text-sm font-bold text-slate-900 whitespace-pre-wrap leading-relaxed py-0.5 break-words [overflow-wrap:anywhere] break-all max-w-full">
                               &ldquo;{step.remarks}&rdquo;
                             </p>
                           ) : (
@@ -11588,25 +11589,31 @@ const resolveStageStatus = (
         {approvingDsa ? (
           <div className="space-y-4">
             <Field>
-              <Label htmlFor="approvalRemarks">
-                {workflowLevelInfo.currentLevel === 7
-                  ? "Sanction Remarks "
-                  : "Approval Remarks"}{" "}
-                <span className="text-rose-500">*</span>
+              <Label htmlFor="approvalRemarks" className="flex items-center justify-between">
+                <span>
+                  {workflowLevelInfo.currentLevel === 7
+                    ? "Sanction Remarks"
+                    : "Approval Remarks"}{" "}
+                  <span className="text-rose-500">*</span>
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono font-normal">
+                  {approvalRemarks.length}/256
+                </span>
               </Label>
               <textarea
                 id="approvalRemarks"
                 rows={3}
+                maxLength={256}
                 className="w-full rounded-md border border-slate-200 p-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 value={approvalRemarks}
                 onChange={(event) => {
-                  setApprovalRemarks(event.target.value);
+                  setApprovalRemarks(event.target.value.slice(0, 256));
                   setApprovalRemarksError("");
                 }}
                 placeholder={
                   workflowLevelInfo.currentLevel === 7
-                    ? "Enter final sanction remarks..."
-                    : "Enter approval remarks..."
+                    ? "Enter final sanction remarks (max 256 characters)..."
+                    : "Enter approval remarks (max 256 characters)..."
                 }
               />
               {approvalRemarksError ? (
@@ -11633,6 +11640,10 @@ const resolveStageStatus = (
                 onClick={async () => {
                   if (!approvalRemarks.trim()) {
                     setApprovalRemarksError("Please provide approval remarks.");
+                    return;
+                  }
+                  if (approvalRemarks.trim().length > 256) {
+                    setApprovalRemarksError("Remarks cannot exceed 256 characters.");
                     return;
                   }
                   const modalBlockReason = getWorkflowBlockReason();
