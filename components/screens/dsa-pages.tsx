@@ -6037,17 +6037,8 @@ const resolveStageStatus = (
     isAmlChecked,
   ].filter(Boolean).length;
   const dsaAny = dsa as any;
-  const rawDocList: any[] = (
-    backendDocs.length > 0 ? [...backendDocs] : [...(dsa?.documents || [])]
-  ).filter((d: any) => {
-    if (dsa?.created_at && d?.created_at) {
-      return (
-        new Date(d.created_at).getTime() >=
-        new Date(dsa.created_at).getTime() - 300000
-      );
-    }
-    return true;
-  });
+  const rawDocList: any[] =
+    backendDocs.length > 0 ? [...backendDocs] : [...(dsa?.documents || [])];
 
   const hasValidVisitReportFile =
     Boolean(dsaAny?.visit_report_file) &&
