@@ -681,6 +681,7 @@ export function DsaBasicDetailsTab({
                 mobile_no: sh.mobile_no || "",
                 pan_no: sh.pan || sh.pan_no || "",
                 qualification: sh.qualification || "",
+                date_of_birth: sh.date_of_birth ? String(sh.date_of_birth).substring(0, 10) : "",
                 din_dpin_no: sh.din_dpin_no || sh.aadhaar || "",
               }))
             : [
