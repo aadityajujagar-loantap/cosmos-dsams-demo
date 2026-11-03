@@ -1031,7 +1031,14 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         if (data.entityName !== undefined) setEntityName(data.entityName);
         if (data.constitution !== undefined) setConstitution(data.constitution);
         if (data.natureOfBusiness !== undefined) setNatureOfBusiness(data.natureOfBusiness);
-        if (data.stakeholders) setStakeholders(data.stakeholders);
+        if (data.stakeholders) {
+          setStakeholders(
+            data.stakeholders.map((s: any) => ({
+              ...s,
+              date_of_birth: s.date_of_birth || s.dateOfBirth || s.dob || "",
+            }))
+          );
+        }
         if (data.pan !== undefined) setPan(data.pan);
         if (data.panVerified !== undefined) setPanVerified(Boolean(data.panVerified));
         if (data.panVerificationData !== undefined) setPanVerificationData(data.panVerificationData);
@@ -2197,7 +2204,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
             updated.name = resolvedStakeholderName;
             updated.name_locked = true;
           }
-          const rawDob = detailsData.dob || detailsData.dobOrDoi || detailsData.dateOfBirth;
+          const rawDob = detailsData.date_of_birth || detailsData.dateOfBirth || detailsData.dob || detailsData.dobOrDoi;
           if (rawDob) {
             const parsed = parseDobOrDoi(rawDob);
             if (parsed) {
@@ -2829,21 +2836,32 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         payload.date_of_birth = propStk.date_of_birth;
       }
 
-      payload.stakeholders = stakeholders.map((s) => ({
-        stakeholder_type: s.stakeholder_type,
-        name: s.name,
-        date_of_birth: s.date_of_birth || undefined,
-        qualification: s.qualification || undefined,
-        mobile_no: s.mobile_no,
-        pan: s.pan.toUpperCase(),
-        aadhaar: s.aadhaar || undefined,
-        din_dpin_no: s.din_dpin_no || undefined,
-        gender: s.gender || undefined,
-        city: s.city || undefined,
-        state: s.state || undefined,
-        pinCode: s.pinCode || undefined,
-        address: s.address || undefined,
-      }));
+      payload.stakeholders = stakeholders.map((s) => {
+        const rawDob = (s.date_of_birth || (s as any).dateOfBirth || (s as any).dob || "").trim();
+        let formattedDob = rawDob || undefined;
+        if (formattedDob) {
+          const match = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/.exec(formattedDob);
+          if (match) {
+            const [, d, m, y] = match;
+            formattedDob = `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+          }
+        }
+        return {
+          stakeholder_type: s.stakeholder_type,
+          name: s.name,
+          date_of_birth: formattedDob || s.date_of_birth || undefined,
+          qualification: s.qualification || undefined,
+          mobile_no: s.mobile_no,
+          pan: s.pan.toUpperCase(),
+          aadhaar: s.aadhaar || undefined,
+          din_dpin_no: s.din_dpin_no || undefined,
+          gender: s.gender || undefined,
+          city: s.city || undefined,
+          state: s.state || undefined,
+          pinCode: s.pinCode || undefined,
+          address: s.address || undefined,
+        };
+      });
     }
 
     // Key Financial Highlights & Other Banks Experience (for both Individual and Entity)
