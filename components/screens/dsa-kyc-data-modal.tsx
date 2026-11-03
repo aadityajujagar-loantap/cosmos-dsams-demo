@@ -1474,18 +1474,12 @@ function CibilDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
           />
           <TableRow
             label="Total Aggregate Exposure / Outstanding"
-            value={totalOut !== undefined && totalOut !== null ? new Intl.NumberFormat("en-IN", {
-              style: "currency",
-              currency: "INR",
-            }).format(totalOut) : ""}
+            value={totalOut !== undefined && totalOut !== null ? `Rs. ${Number(totalOut).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ""}
             isMono
           />
           <TableRow
             label="Total Sanctioned Credit Limit"
-            value={totalLimit !== undefined && totalLimit !== null ? new Intl.NumberFormat("en-IN", {
-              style: "currency",
-              currency: "INR",
-            }).format(totalLimit) : ""}
+            value={totalLimit !== undefined && totalLimit !== null ? `Rs. ${Number(totalLimit).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ""}
             isMono
           />
           <TableRow
@@ -1596,18 +1590,12 @@ function CibilDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
         />
         <TableRow
           label="Total Active Outstanding Balance"
-          value={balance !== undefined && balance !== null ? new Intl.NumberFormat("en-IN", {
-            style: "currency",
-            currency: "INR",
-          }).format(balance) : ""}
+          value={balance !== undefined && balance !== null ? `Rs. ${Number(balance).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ""}
           isMono
         />
         <TableRow
           label="Total High Credit / Sanctioned Limit"
-          value={totalLimit !== undefined && totalLimit !== null ? new Intl.NumberFormat("en-IN", {
-            style: "currency",
-            currency: "INR",
-          }).format(totalLimit) : ""}
+          value={totalLimit !== undefined && totalLimit !== null ? `Rs. ${Number(totalLimit).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ""}
           isMono
         />
         <TableRow
