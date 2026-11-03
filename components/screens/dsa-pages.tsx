@@ -582,7 +582,7 @@ export function formatDocumentType(type?: string, doc?: any): string {
   if (doc?.financial_year) {
     fy = String(doc.financial_year).trim();
   } else if (doc?.remarks) {
-    const m = String(doc.remarks).match(/(?:financial year|fy)[:\s]*([0-9]{2,4}[-â€“\/_][0-9]{2,4})/i);
+    const m = String(doc.remarks).match(/(?:financial year|fy)[:\s]*([0-9]{2,4}[-–\/_][0-9]{2,4})/i);
     if (m?.[1]) fy = m[1].replace("_", "-").trim();
   }
 
@@ -1469,7 +1469,7 @@ export function DsaWorkflowChevronBar({
 
     // RE_ALLOCATE / FORWARD hand the case to a named authority. Checked FIRST so
     // a genuinely actioned stage can never be mislabelled "DGM (Skipped)" by
-    // the branch below â€” that is what made a level-jumping re-allocation read
+    // the branch below — that is what made a level-jumping re-allocation read
     // as a bypassed stage. If the case is still sitting at this same level
     // (e.g. L3 -> L3 hand-off), it stays ACTIVE, just re-assigned.
     if (recordStatus === "REALLOCATED" || recordStatus === "FORWARDED") {
@@ -1832,7 +1832,7 @@ export function DsaApprovalStepper({ dsa }: { dsa: any }) {
     {
       level: 3,
       stageNumber: "Stage 3",
-      name: "Recommendation â€” Stage 1",
+      name: "Recommendation — Stage 1",
       role: "Sub-Region Head (AGM)",
       authority: "1st Recommending Authority",
       actionOptions: "Recommend / Reject / Revert",
@@ -1840,7 +1840,7 @@ export function DsaApprovalStepper({ dsa }: { dsa: any }) {
     {
       level: 4,
       stageNumber: "Stage 4",
-      name: "Recommendation â€” Stage 2",
+      name: "Recommendation — Stage 2",
       role: "DGM (where posted)",
       authority: "2nd Recommending Authority",
       actionOptions: "Recommend / Reject / Revert",
@@ -1848,7 +1848,7 @@ export function DsaApprovalStepper({ dsa }: { dsa: any }) {
     {
       level: 5,
       stageNumber: "Stage 5",
-      name: "Recommendation â€” Stage 3",
+      name: "Recommendation — Stage 3",
       role: "Region Head",
       authority: "3rd Recommending Authority",
       actionOptions: "Recommend / Reject / Revert",
@@ -1856,7 +1856,7 @@ export function DsaApprovalStepper({ dsa }: { dsa: any }) {
     {
       level: 6,
       stageNumber: "Stage 6",
-      name: "Recommendation â€” Stage 4",
+      name: "Recommendation — Stage 4",
       role: "HO Credit Officer (AGM)",
       authority: "Credit AGM",
       actionOptions: "Recommend / Reject / Revert",
@@ -2096,9 +2096,9 @@ const agentFields: FieldConfig<User>[] = [
   },
 ];
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ------------------------------------------------------------------------------
 // DSA RECOVERY REPORTS sub-component (used in the Reports tab)
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ------------------------------------------------------------------------------
 function DsaRecoveryReports({ dsaId }: { dsaId: string }) {
   const { store } = useMockStore();
   const recoveryRows = store.dsaRecovery
@@ -2153,8 +2153,8 @@ function DsaRecoveryReports({ dsaId }: { dsaId: string }) {
         <span>
           <strong>Carry-Forward Logic:</strong> If recovery falls short of
           target in a month, the shortfall reduces next month&apos;s invoice.
-          E.g. target â‚¹10,000, recovered â‚¹8,000 â†’ shortfall â‚¹2,000 deducted from
-          next month â†’ if next month recovery is â‚¹20,000, invoice = â‚¹18,000.
+          E.g. target Rs. 10,000, recovered Rs. 8,000 -&gt; shortfall Rs. 2,000 deducted from
+          next month -&gt; if next month recovery is Rs. 20,000, invoice = Rs. 18,000.
         </span>
       </div>
 
@@ -2199,8 +2199,8 @@ function DsaRecoveryReports({ dsaId }: { dsaId: string }) {
           value: Math.round(r.recoveredAmount / 1000),
         }))}
         dataKey="value"
-        subtitle="Monthly recovery amount (â‚¹K) vs target â€” shortfalls trigger carry-forward into next invoice"
-        title="Recovery vs Target Trend (â‚¹K)"
+        subtitle="Monthly recovery amount (Rs. K) vs target - shortfalls trigger carry-forward into next invoice"
+        title="Recovery vs Target Trend (Rs. K)"
         type="area"
       />
 
@@ -2211,8 +2211,8 @@ function DsaRecoveryReports({ dsaId }: { dsaId: string }) {
           value: Math.round(r.invoiceAmount / 1000),
         }))}
         dataKey="value"
-        subtitle="Net invoice amount (â‚¹K) raised after deducting carry-forward shortfall"
-        title="Invoice Generated After Carry-Forward (â‚¹K)"
+        subtitle="Net invoice amount (Rs. K) raised after deducting carry-forward shortfall"
+        title="Invoice Generated After Carry-Forward (Rs. K)"
       />
 
       {/* Month-wise detailed table */}
@@ -2267,12 +2267,12 @@ function DsaRecoveryReports({ dsaId }: { dsaId: string }) {
                     <td className="p-3 text-right text-amber-600 text-xs">
                       {row.carryForwardIn > 0
                         ? formatCurrency(row.carryForwardIn)
-                        : "â€”"}
+                        : "—"}
                     </td>
                     <td className="p-3 text-right text-orange-600 text-xs font-medium">
                       {row.carryForwardOut > 0
                         ? formatCurrency(row.carryForwardOut)
-                        : "â€”"}
+                        : "—"}
                     </td>
                     <td className="p-3 text-right font-bold text-blue-700 text-xs">
                       {formatCurrency(row.invoiceAmount)}
@@ -2377,7 +2377,7 @@ export function DsaManagementPage() {
   const [credentialError, setCredentialError] = useState("");
   const [managementTab, setManagementTab] = useState<DsaWorkBucket>("all");
 
-  // â”€â”€ Task 20C: CALL_BACK from the management list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Task 20C: CALL_BACK from the management list -------------------------
   // A previous authority can pull a case back from the list even though the
   // row is view-only for them. Once called back the case returns to their own
   // stage (assigned + locked) and the row becomes actionable again.
@@ -2394,7 +2394,7 @@ export function DsaManagementPage() {
     : null;
   const agentOwnerDsaId = agentOwnerDsa?.id ?? "";
 
-  // Task 22 â€” role drives both bucket scoping and per-row access on this
+  // Task 22 — role drives both bucket scoping and per-row access on this
   // page, so fall back to the persisted auth session exactly like
   // DsaProfilePage does. A blank role must never be treated as "no
   // restriction" downstream.
@@ -2472,7 +2472,7 @@ export function DsaManagementPage() {
   }
 
   /**
-   * Task 20C â€” CALL_BACK issued from a view-only row.
+   * Task 20C — CALL_BACK issued from a view-only row.
    *
    * Only the exact authority who actioned the previous stage may pull the case
    * back, and only while it sits at L4/L5/L6. Those two rules depend on
@@ -3016,7 +3016,7 @@ export function DsaManagementPage() {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {dsas.map((item, index) => {
-                      // Task 22 â€” a row is only actionable when the case is at
+                      // Task 22 — a row is only actionable when the case is at
                       // this role's stage. Rows that are not are still listed
                       // (you can see it exists) but cannot be opened, edited or
                       // auto-acquired, so a stray click can never claim a case
@@ -3027,7 +3027,7 @@ export function DsaManagementPage() {
                         access.reason,
                         item.current_approval_level,
                       );
-                      // Task 20C â€” N -> N-1 rule. Only the authority at the
+                      // Task 20C — N -> N-1 rule. Only the authority at the
                       // level BELOW where the case now sits may call it back:
                       // if L3 approved to L4, only L3 can; if L4 approved to
                       // L5, only L4 can (never L5). previousActorLevel comes
@@ -3158,7 +3158,7 @@ export function DsaManagementPage() {
                               </Button>
                             ) : null}
                             {locked ? (
-                              !showCallBackAction && <span className="text-slate-300">â€”</span>
+                              !showCallBackAction && <span className="text-slate-300">—</span>
                             ) : (
                               <Button
                                 onClick={() => {
@@ -3183,7 +3183,7 @@ export function DsaManagementPage() {
           </CardContent>
           <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
             <span>
-              Page {pagination.currentPage} of {pagination.totalPages} Â·{" "}
+              Page {pagination.currentPage} of {pagination.totalPages} ·{" "}
               {pagination.total} total
             </span>
             <div className="flex gap-2">
@@ -3470,7 +3470,7 @@ export function DsaProfilePage({ id }: { id: string }) {
   const [viewKycDataCachedVerif, setViewKycDataCachedVerif] =
     useState<any>(null);
 
-  // Checker-only CIBIL/AML attempted flags â€” persisted to localStorage per DSA ID
+  // Checker-only CIBIL/AML attempted flags — persisted to localStorage per DSA ID
   // so Re-Check survives page reloads.
   const checkerKycStorageKey = `checker_kyc_attempted_${id}`;
   const getCheckerKycAttempted = (): { cibil: boolean; aml: boolean } => {
@@ -3526,7 +3526,7 @@ export function DsaProfilePage({ id }: { id: string }) {
   const [revertReason, setRevertReason] = useState("");
   const [revertError, setRevertError] = useState("");
 
-  // â”€â”€ Task 20C: RE-allocate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Task 20C: RE-allocate ------------------------------------------------
   const [reAllocatingDsa, setReAllocatingDsa] = useState<any | null>(null);
   const [reAllocateTargetId, setReAllocateTargetId] = useState<number | null>(null);
   const [reAllocateReason, setReAllocateReason] = useState("");
@@ -4147,7 +4147,7 @@ export function DsaProfilePage({ id }: { id: string }) {
               res.message ||
               (isPennyless
                 ? "Bank account verified successfully via Pennyless BAV."
-                : "Bank account verified successfully via Penny Drop (â‚¹1.00)."),
+                : "Bank account verified successfully via Penny Drop (Rs. 1.00)."),
             variant: "success",
           });
           await loadKycHistory(dsa.id);
@@ -4346,7 +4346,7 @@ export function DsaProfilePage({ id }: { id: string }) {
     // Activation credentials are dispatched by the backend automatically
     // when the Branch Checker approves the signed agreement
     // (agreement/approve endpoint).
-    // There is no separate resend endpoint â€” surfacing an info note is correct.
+    // There is no separate resend endpoint — surfacing an info note is correct.
     setResendActivationSuccess(
       `Activation credentials were dispatched to ${dsa?.email ?? "the registered DSA email"} when the agreement was approved. To re-send, contact the backend admin or re-verify the agreement.`,
     );
@@ -4470,7 +4470,7 @@ export function DsaProfilePage({ id }: { id: string }) {
     fetchDsaDetail(id);
   }, [id, fetchDsaDetail]);
 
-  // Task 22 â€” case access control. A role may only open a case that is
+  // Task 22 — case access control. A role may only open a case that is
   // currently at its own stage. Mirrors
   // DsaCaseAssignmentService::validateUserEligibilityForDsa() so the detail
   // UI is withheld entirely instead of letting a user claim (auto-acquire) a
@@ -4480,7 +4480,7 @@ export function DsaProfilePage({ id }: { id: string }) {
     [dsa, currentUser?.role],
   );
 
-  // Task 22 â€” auto-acquire on open.
+  // Task 22 — auto-acquire on open.
   // Opening a case claims the user-level lock so concurrent users cannot work
   // the same application. Fire-and-forget: a rejected acquire (locked by
   // someone else, or not this user's stage) must never block the read view,
@@ -4489,7 +4489,7 @@ export function DsaProfilePage({ id }: { id: string }) {
   const autoAcquireRef = useRef<string | null>(null);
   useEffect(() => {
     if (!id || autoAcquireRef.current === String(id)) return;
-    // Never claim a case that is not at this user's stage â€” that is the
+    // Never claim a case that is not at this user's stage — that is the
     // loophole where a stray click would auto-acquire someone else's case.
     if (!dsa || !caseAccess.allowed) return;
     autoAcquireRef.current = String(id);
@@ -4529,7 +4529,7 @@ export function DsaProfilePage({ id }: { id: string }) {
   }, [id, dsa, caseAccess.allowed, fetchDsaDetail, toast]);
 
   /**
-   * Task 22 â€” no client-side release is required after a workflow action.
+   * Task 22 — no client-side release is required after a workflow action.
    * DsaApprovalEngine already clears the lock atomically for every forward,
    * reject and revert transition (assigned_user_id = null, lock_status =
    * UNLOCKED), so the acting user is un-acquired server-side. Calling
@@ -4653,7 +4653,7 @@ export function DsaProfilePage({ id }: { id: string }) {
   }, [dsa?.id, dsa?.onboarding_status, dsa?.agreement_status, dsa?.operational_status]);
 
   // Reactively seed verifiedKyc whenever kycVerificationsList changes (fires after loadKycHistory resolves).
-  // This is what makes KYC status survive page reloads â€” statuses come from kyc_verifications DB records.
+  // This is what makes KYC status survive page reloads — statuses come from kyc_verifications DB records.
   useEffect(() => {
     if (!kycVerificationsList.length) return;
     const checkSuccess = (v: any) => {
@@ -4681,7 +4681,7 @@ export function DsaProfilePage({ id }: { id: string }) {
       ).toUpperCase();
       return pats.some((p) => {
         const pu = p.toUpperCase();
-        // UDYAM/MSME: exact match only â€” a substring hit on an unrelated
+        // UDYAM/MSME: exact match only — a substring hit on an unrelated
         // verification type must not light up the Udyam slot.
         if (pu === "UDYAM" || pu === "MSME") return t === pu || t.includes(`_${pu}`) || t.includes(`${pu}_`);
         return t.includes(pu);
@@ -4801,7 +4801,7 @@ export function DsaProfilePage({ id }: { id: string }) {
       `DSA Code:            ${getEffectiveDsaCode(dsa)}`,
       `Partner Name:        ${dsa.name}`,
       `DSA Type:            ${dsa.dsa_type || ""}`,
-      `Branch:              ${dsa.branch?.branch_name || dsa.branch_name || "â€”"}`,
+      `Branch:              ${dsa.branch?.branch_name || dsa.branch_name || "—"}`,
       `Evaluation Ref:      ${evalId}`,
       `Evaluated Timestamp: ${bre?.evaluated_at || "N/A"}`,
       `Overall Decision:    ${overallDecision}`,
@@ -4820,7 +4820,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                 `  ${i + 1}. ${typeof d === "string" ? d : d.remarks || d.rule_name}`,
             )
             .join("\n")
-        : "  None â€” All eligible rules passed standards.",
+        : "  None — All eligible rules passed standards.",
       "--------------------------------------------------------------------------------",
       "FLAGGED POLICY DEVIATIONS:",
       ...(rules.filter((r: any) => {
@@ -4903,7 +4903,7 @@ export function DsaProfilePage({ id }: { id: string }) {
       `Generated At:            ${new Date().toLocaleString()}`,
       `DSA Code:                ${getEffectiveDsaCode(dsa)}`,
       `Partner Name:            ${dsa.name}`,
-      `Branch:                  ${dsa.branch?.branch_name || dsa.branch_name || "â€”"}`,
+      `Branch:                  ${dsa.branch?.branch_name || dsa.branch_name || "—"}`,
       `Submitted By:            Checker (User ID: ${note?.checker_user_id || "Checker Authority"})`,
       `Submitted At:            ${note?.submitted_at || "N/A"}`,
       `Checker Recommendation:  ${note?.recommendation || "RECOMMEND"}`,
@@ -5113,7 +5113,7 @@ export function DsaProfilePage({ id }: { id: string }) {
       .getDsaDocumentChecklist(dsa.id)
       .then((res: any) => setDocChecklist(res?.data ?? res))
       .catch(() => {
-        /* non-fatal â€” checklist stays null */
+        /* non-fatal — checklist stays null */
       });
   }, [dsa]);
 
@@ -5351,7 +5351,7 @@ export function DsaProfilePage({ id }: { id: string }) {
  *    remarks of its own.
  *
  * A level the case has NOT reached yet (or is currently sitting at) has no
- * actioned row, so it yields "" â€” never a fabricated "Recommended by <role>".
+ * actioned row, so it yields "" — never a fabricated "Recommended by <role>".
  * Previously the default was applied unconditionally, which made upcoming
  * stages claim they had reviewed the case.
  */
@@ -5716,8 +5716,8 @@ const resolveStageStatus = (
         (dsa.entity_type || "").toUpperCase() === "INDIVIDUAL" ||
         !dsa.entity_type));
 
-  // 2.6 API Checks â€” Due Diligence Stage Specifications
-  // Note: DSA Consent must be captured before triggering any API â€” as per DPDP Act. API charges borne by Cosmos Bank.
+  // 2.6 API Checks — Due Diligence Stage Specifications
+  // Note: DSA Consent must be captured before triggering any API — as per DPDP Act. API charges borne by Cosmos Bank.
   const makerPanCheck = isIndividualDsa
     ? {
         code: "PAN_ADVANCED_INDIVIDUAL",
@@ -5787,7 +5787,7 @@ const resolveStageStatus = (
         },
         {
           code: "AML_COMPASS",
-          label: "AML & KYC â€” Compass API",
+          label: "AML & KYC — Compass API",
           dsaType: "Both",
           triggeredBy: "Checker",
           ifFail: "Manual verify; remark in DD note",
@@ -5805,11 +5805,11 @@ const resolveStageStatus = (
           triggeredBy: "Checker",
           ifFail: "Continue; remark in DD note",
           ifAdverse: "Deviation if CMR > 5",
-          desc: "Commercial bureau track record assessing entity CMR rating (CMR 1â€“10)",
+          desc: "Commercial bureau track record assessing entity CMR rating (CMR 1–10)",
         },
         {
           code: "AML_COMPASS",
-          label: "AML & KYC â€” Compass API",
+          label: "AML & KYC — Compass API",
           dsaType: "Both",
           triggeredBy: "Checker",
           ifFail: "Manual verify; remark in DD note",
@@ -6163,7 +6163,7 @@ const resolveStageStatus = (
       document_type: "visit_report",
       display_name: "Physical Visit Report",
       requirement:
-        "Mandatory â€” Bank staff (Maker / Checker) must conduct and upload visit report",
+        "Mandatory — Bank staff (Maker / Checker) must conduct and upload visit report",
       staff_only: true,
     });
   } else if (isVisitReportUploaded) {
@@ -6358,7 +6358,7 @@ const resolveStageStatus = (
       isAdminOrSuperAdmin),
   );
 
-  // â”€â”€ Task 20C: RE-allocate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Task 20C: RE-allocate ------------------------------------------------
   // Gated on the CURRENTLY PENDING level, exactly as the backend matrix does.
   const currentStepLevel = Number(dsa?.current_approval_level) || workflowLevelInfo.currentLevel;
   const showReAllocate = canReAllocate(currentStepLevel);
@@ -7122,7 +7122,7 @@ const resolveStageStatus = (
       val !== undefined &&
       val !== null &&
       String(val).trim() !== "" &&
-      String(val).trim() !== "â€”" &&
+      String(val).trim() !== "—" &&
       String(val).trim() !== "-" &&
       String(val).trim().toUpperCase() !== "N/A" &&
       String(val).trim().toUpperCase() !== "NULL";
@@ -7296,15 +7296,15 @@ const resolveStageStatus = (
                 <>
                   <tr>
                     <td className="w-1/2 border border-slate-900 px-3 py-1.5 text-slate-800">Applicant Name</td>
-                    <td className="w-1/2 border border-slate-900 px-3 py-1.5 font-medium text-slate-900">{basicInfo.applicant_name || dsa?.entity_name || dsa?.name || "â€”"}</td>
+                    <td className="w-1/2 border border-slate-900 px-3 py-1.5 font-medium text-slate-900">{basicInfo.applicant_name || dsa?.entity_name || dsa?.name || "—"}</td>
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Constitution</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.constitution || "â€”"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.constitution || "—"}</td>
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Registered Office Full Address</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.registered_office_address || dsa?.address || "â€”"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.registered_office_address || dsa?.address || "—"}</td>
                   </tr>
                   {hasVal(basicInfo.ownership) && (
                     <tr>
@@ -7312,13 +7312,14 @@ const resolveStageStatus = (
                       <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.ownership}</td>
                     </tr>
                   )}
-                  {hasVal(basicInfo.branch_office_address) &&
-                    basicInfo.branch_office_address !== basicInfo.registered_office_address &&
-                    basicInfo.branch_office_address !== dsa?.address &&
-                    basicInfo.branch_office_address !== "Same as Registered Office Address" && (
+                  {hasVal(basicInfo.branch_office_address || basicInfo.registered_office_address || dsa?.address) && (
                     <tr>
                       <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Branch Office Address (if any)</td>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.branch_office_address}</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                        {basicInfo.branch_office_address && basicInfo.branch_office_address !== "Same as Registered Office Address"
+                          ? basicInfo.branch_office_address
+                          : (basicInfo.registered_office_address || dsa?.address)}
+                      </td>
                     </tr>
                   )}
                   {hasVal(basicInfo.promoter_key_person || dsa?.contact_person) && (
@@ -7329,11 +7330,11 @@ const resolveStageStatus = (
                   )}
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Office Contact Number</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.office_contact_number || dsa?.mobile || "â€”"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.office_contact_number || dsa?.mobile || "—"}</td>
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Office Mail ID</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.office_email || dsa?.email || "â€”"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.office_email || dsa?.email || "—"}</td>
                   </tr>
                   {hasVal(basicInfo.date_of_establishment || dsa?.dob) && (
                     <tr>
@@ -7343,7 +7344,7 @@ const resolveStageStatus = (
                   )}
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">PAN No.</td>
-                    <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">{basicInfo.pan || dsa?.pan || "â€”"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">{basicInfo.pan || dsa?.pan || "—"}</td>
                   </tr>
                   {hasVal(basicInfo.business_license_type) && (
                     <tr>
@@ -7373,11 +7374,11 @@ const resolveStageStatus = (
                 <>
                   <tr>
                     <td className="w-1/2 border border-slate-900 px-3 py-1.5 text-slate-800">Name of DSA</td>
-                    <td className="w-1/2 border border-slate-900 px-3 py-1.5 font-medium text-slate-900">{basicInfo.applicant_name || basicInfo.name_of_dsa || dsa?.name || "â€”"}</td>
+                    <td className="w-1/2 border border-slate-900 px-3 py-1.5 font-medium text-slate-900">{basicInfo.applicant_name || basicInfo.name_of_dsa || dsa?.name || "—"}</td>
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Constitution</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.constitution || "â€”"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.constitution || "—"}</td>
                   </tr>
                   {hasVal(basicInfo.date_of_birth || dsa?.dob) && (
                     <tr>
@@ -7387,15 +7388,12 @@ const resolveStageStatus = (
                   )}
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Residence Address</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.residence_address || dsa?.address || "â€”"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.residence_address || dsa?.address || "—"}</td>
                   </tr>
-                  {hasVal(basicInfo.business_office_address) &&
-                    basicInfo.business_office_address !== basicInfo.residence_address &&
-                    basicInfo.business_office_address !== dsa?.address &&
-                    basicInfo.business_office_address !== "Same as Registered Office Address" && (
+                  {hasVal(basicInfo.business_office_address || basicInfo.residence_address || dsa?.address) && (
                     <tr>
                       <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business / Office Address (if any)</td>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.business_office_address}</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.business_office_address || basicInfo.residence_address || dsa?.address}</td>
                     </tr>
                   )}
                   {hasVal(basicInfo.ownership) && (
@@ -7406,15 +7404,15 @@ const resolveStageStatus = (
                   )}
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Contact Number</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.contact_number || dsa?.mobile || "â€”"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.contact_number || dsa?.mobile || "—"}</td>
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Mail ID</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.email || dsa?.email || "â€”"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.email || dsa?.email || "—"}</td>
                   </tr>
                   <tr>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-800">PAN No.</td>
-                    <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">{basicInfo.pan || dsa?.pan || "â€”"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">{basicInfo.pan || dsa?.pan || "—"}</td>
                   </tr>
                   {hasVal(basicInfo.aadhaar || dsa?.aadhaar_no || dsa?.aadhaar) && (
                     <tr>
@@ -7469,8 +7467,10 @@ const resolveStageStatus = (
                   <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Net Sales / Revenue as per latest F.Y.</td>
                   <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
                     {(() => {
-                      const val = finDd.net_sales_revenue || (dsa?.last_fy_net_sales ? `Rs. ${dsa.last_fy_net_sales} Lakh` : "");
-                      return String(val).startsWith("Rs.") || String(val).startsWith("â‚¹") ? val : `Rs. ${val} Lakh`;
+                      const raw = finDd.net_sales_revenue || dsa?.last_fy_net_sales || "";
+                      const clean = String(raw).replace(/[₹\u20B9â\u201a\u00b9]/g, "").replace(/^Rs\.?\s*/i, "").trim();
+                      const num = Number(clean.replace(/,/g, ""));
+                      return !isNaN(num) && clean !== "" ? `Rs. ${num.toLocaleString("en-IN")}` : `Rs. ${clean}`;
                     })()}
                   </td>
                 </tr>
@@ -7480,8 +7480,10 @@ const resolveStageStatus = (
                   <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Net profit after Tax as per latest F.Y.</td>
                   <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
                     {(() => {
-                      const val = finDd.net_profit_after_tax || (dsa?.last_fy_net_profit_after_tax ? `Rs. ${dsa.last_fy_net_profit_after_tax} Lakh` : "");
-                      return String(val).startsWith("Rs.") || String(val).startsWith("â‚¹") ? val : `Rs. ${val} Lakh`;
+                      const raw = finDd.net_profit_after_tax || dsa?.last_fy_net_profit_after_tax || "";
+                      const clean = String(raw).replace(/[₹\u20B9â\u201a\u00b9]/g, "").replace(/^Rs\.?\s*/i, "").trim();
+                      const num = Number(clean.replace(/,/g, ""));
+                      return !isNaN(num) && clean !== "" ? `Rs. ${num.toLocaleString("en-IN")}` : `Rs. ${clean}`;
                     })()}
                   </td>
                 </tr>
@@ -7491,8 +7493,10 @@ const resolveStageStatus = (
                   <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Net Worth (as per financials)</td>
                   <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
                     {(() => {
-                      const val = finDd.net_worth || (dsa as any)?.net_worth;
-                      return String(val).startsWith("Rs.") || String(val).startsWith("â‚¹") ? val : `Rs. ${val} Lakh`;
+                      const raw = finDd.net_worth || (dsa as any)?.net_worth || "";
+                      const clean = String(raw).replace(/[₹\u20B9â\u201a\u00b9]/g, "").replace(/^Rs\.?\s*/i, "").trim();
+                      const num = Number(clean.replace(/,/g, ""));
+                      return !isNaN(num) && clean !== "" ? `Rs. ${num.toLocaleString("en-IN")}` : `Rs. ${clean}`;
                     })()}
                   </td>
                 </tr>
@@ -7502,13 +7506,23 @@ const resolveStageStatus = (
                 <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
                   {isEntity
                     ? (finDd.cibil_cmr && finDd.cibil_cmr !== "N/A" ? finDd.cibil_cmr : "<Attached Cibil Report at the end of this form.>")
-                    : (finDd.cibil_score && finDd.cibil_score !== "N/A" ? finDd.cibil_score : "â€”")}
+                    : (finDd.cibil_score && finDd.cibil_score !== "N/A" ? finDd.cibil_score : "—")}
                 </td>
               </tr>
               <tr>
                 <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Existing Banking relationship with our Bank</td>
                 <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
-                  {finDd.existing_banking_relationship ? `Yes (${finDd.existing_banking_relationship})` : "No"}
+                  {(() => {
+                    const bankName = String(dsa?.bank_name || "");
+                    const ifsc = String(dsa?.ifsc || "");
+                    const rawRel = String(finDd.existing_banking_relationship || "").trim();
+                    const isCosmos =
+                      /cosmos/i.test(bankName) ||
+                      /^cosb/i.test(ifsc) ||
+                      /cosmos/i.test(rawRel) ||
+                      (/^yes$/i.test(rawRel) && (!bankName || /cosmos/i.test(bankName)));
+                    return isCosmos ? "Yes" : "No";
+                  })()}
                 </td>
               </tr>
 
@@ -7544,13 +7558,13 @@ const resolveStageStatus = (
                         {banksList.length > 1 && (
                           <tr className="bg-slate-50 font-semibold">
                             <td colSpan={2} className="border border-slate-900 px-3 py-1.5 text-xs text-blue-900">
-                              Bank / Institution {bIdx + 1}: {bExp.bank_or_institution_name || "â€”"}
+                              Bank / Institution {bIdx + 1}: {bExp.bank_or_institution_name || "—"}
                             </td>
                           </tr>
                         )}
                         <tr>
                           <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Name of the Bank / Financial Institution / Others</td>
-                          <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.bank_or_institution_name || "â€”"}</td>
+                          <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.bank_or_institution_name || "—"}</td>
                         </tr>
                         {hasVal(bExp.empanelment_since_year) && (
                           <tr>
@@ -7572,8 +7586,8 @@ const resolveStageStatus = (
                         )}
                         {hasVal(bExp.avg_ticket_size_lakhs) && (
                           <tr>
-                            <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Average ticket size (Rs. In Lakh)</td>
-                            <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{`Rs. ${bExp.avg_ticket_size_lakhs} Lakh`}</td>
+                            <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Average ticket size (Rs.)</td>
+                            <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{(() => { const clean = String(bExp.avg_ticket_size_lakhs).replace(/[₹\u20B9â\u201a\u00b9]/g, "").replace(/^Rs\.?\s*/i, "").replace(/lakh/i, "").trim(); const num = Number(clean.replace(/,/g, "")); return !isNaN(num) && clean !== "" ? `Rs. ${num.toLocaleString("en-IN")}` : `Rs. ${clean}`; })()}</td>
                           </tr>
                         )}
                         {hasVal(bExp.commission_rate_percent) && (
@@ -7743,7 +7757,7 @@ const resolveStageStatus = (
                                   {remMatch.remark}
                                   {(remMatch.user_name || remMatch.date) && (
                                     <span className="text-slate-500 text-[11px] ml-1.5">
-                                      ({remMatch.user_name || "Authority"}{remMatch.date ? ` â€¢ ${remMatch.date}` : ""})
+                                      ({remMatch.user_name || "Authority"}{remMatch.date ? ` · ${remMatch.date}` : ""})
                                     </span>
                                   )}
                                 </span>
@@ -8270,22 +8284,22 @@ const resolveStageStatus = (
           {tab === "overview" ? (
             <div className="space-y-6">
               {/* Sub-Category Toggle Navigation for DSA Application Form */}
-              <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-100/90 rounded-lg border border-slate-200/80">
+              <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 rounded-lg border border-slate-200">
                 <button
                   type="button"
                   onClick={() => setAppFormSubTab("applicant")}
                   className={cn(
                     "flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all",
                     appFormSubTab === "applicant"
-                      ? "bg-white text-slate-950 shadow-xs border border-slate-200/80"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60",
+                      ? "bg-blue-600 text-white shadow-xs"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-white/80",
                   )}
                 >
                   <UserCheck
                     className={cn(
                       "h-3.5 w-3.5",
                       appFormSubTab === "applicant"
-                        ? "text-blue-600"
+                        ? "text-white"
                         : "text-slate-400",
                     )}
                   />
@@ -8298,31 +8312,31 @@ const resolveStageStatus = (
                   className={cn(
                     "flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all",
                     appFormSubTab === "kyc"
-                      ? "bg-white text-slate-950 shadow-xs border border-slate-200/80"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60",
+                      ? "bg-blue-600 text-white shadow-xs"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-white/80",
                   )}
                 >
                   <ShieldCheck
                     className={cn(
                       "h-3.5 w-3.5",
                       appFormSubTab === "kyc"
-                        ? "text-blue-600"
+                        ? "text-white"
                         : "text-slate-400",
                     )}
                   />
                   <span>KYC</span>
                   {!isMakerUser && pendingCheckerVerifications.length > 0 ? (
                     <span className="relative flex h-1.5 w-1.5 shrink-0" title="Pending statutory verifications">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-60" />
-                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#0095da]" />
+                      <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-60", appFormSubTab === "kyc" ? "bg-white" : "bg-sky-400")} />
+                      <span className={cn("relative inline-flex rounded-full h-1.5 w-1.5", appFormSubTab === "kyc" ? "bg-white" : "bg-[#0095da]")} />
                     </span>
                   ) : null}
                   <span
                     className={cn(
                       "inline-flex items-center justify-center px-1.5 py-0.2 rounded-full text-[10px] font-bold min-w-4 text-center",
                       appFormSubTab === "kyc"
-                        ? "bg-slate-100 text-slate-800"
-                        : "bg-slate-200/80 text-slate-500",
+                        ? "bg-white/25 text-white"
+                        : "bg-slate-200/80 text-slate-600",
                     )}
                   >
                     {totalRequiredKycCount}
@@ -8339,23 +8353,23 @@ const resolveStageStatus = (
                     className={cn(
                       "flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all",
                       appFormSubTab === "ddl"
-                        ? "bg-white text-slate-950 shadow-xs border border-slate-200/80"
-                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60",
+                        ? "bg-blue-600 text-white shadow-xs"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-white/80",
                     )}
                   >
                     <ClipboardList
                       className={cn(
                         "h-3.5 w-3.5",
                         appFormSubTab === "ddl"
-                          ? "text-blue-600"
+                          ? "text-white"
                           : "text-slate-400",
                       )}
                     />
                     <span>Due Diligence Report</span>
                     {!isMakerUser && (!hasCheckerDdNote || !hasCheckerGeneratedReport) ? (
                       <span className="relative flex h-1.5 w-1.5 shrink-0" title="Due diligence note or report pending">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-60" />
-                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#0095da]" />
+                        <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-60", appFormSubTab === "ddl" ? "bg-white" : "bg-sky-400")} />
+                        <span className={cn("relative inline-flex rounded-full h-1.5 w-1.5", appFormSubTab === "ddl" ? "bg-white" : "bg-[#0095da]")} />
                       </span>
                     ) : null}
                   </button>
@@ -8666,7 +8680,7 @@ const resolveStageStatus = (
                       return undefined;
                     };
 
-                    // PAN reads dsa_verifications only â€” onboarding KYC rows are not approval.
+                    // PAN reads dsa_verifications only — onboarding KYC rows are not approval.
                     const panVerif = getVerif("PAN", false);
                     // PAN_TO_GSTIN must NOT satisfy the GST slot: its type string contains
                     // "GST", so a substring match would let a PAN-to-GSTIN row satisfy both.
@@ -8879,7 +8893,7 @@ const resolveStageStatus = (
                                 </p>
                                 <p className="text-xs text-slate-500 mt-0.5">
                                   {isGstChecked
-                                    ? "Taxpayer Status: Regular Â· Active"
+                                    ? "Taxpayer Status: Regular · Active"
                                     : dsa.gst_applicable
                                       ? "GST Applicable (Certificate on File)"
                                       : "Taxpayer Status: Pending Verification"}
@@ -8893,7 +8907,7 @@ const resolveStageStatus = (
                                 <p className="text-xs text-slate-500 mt-0.5">
                                   {dsa.gst_applicable
                                     ? "No GSTIN found linked to this PAN on GSTN"
-                                    : "Not registered for GST Â· Exempt turnover"}
+                                    : "Not registered for GST · Exempt turnover"}
                                 </p>
                               </div>
                             )}
@@ -8910,7 +8924,7 @@ const resolveStageStatus = (
                                       : isMakerUser
                                         ? "Pending Checker Verification"
                                         : "ScoreMe GST Basic Details"
-                                : "GSTN Master Database Â· No Record Found"}
+                                : "GSTN Master Database · No Record Found"}
                             </span>
                             <div className="flex items-center gap-1.5">
                               {canViewGstKycData && Boolean(resolvedGstNumber) && (
@@ -8982,7 +8996,7 @@ const resolveStageStatus = (
                             </p>
                             <p className="text-xs font-mono text-slate-600 mt-0.5">
                               {dsa.account_number ? `A/C: ${dsa.account_number}` : ""}
-                              {dsa.account_number && dsa.ifsc ? " Â· " : ""}
+                              {dsa.account_number && dsa.ifsc ? " · " : ""}
                               {dsa.ifsc ? `IFSC: ${dsa.ifsc}` : ""}
                             </p>
                           </div>
@@ -9223,7 +9237,7 @@ const resolveStageStatus = (
                           <div>
                             <p className="text-sm font-bold text-slate-900">
                               {isCibilChecked
-                                ? "Bureau Score Evaluated Â· Active"
+                                ? "Bureau Score Evaluated · Active"
                                 : "Pending Bureau Assessment"}
                             </p>
                             <p className="text-xs text-slate-500 mt-0.5">
@@ -9306,7 +9320,7 @@ const resolveStageStatus = (
                           <div>
                             <p className="text-sm font-bold text-slate-900">
                               {isAmlChecked
-                                ? "Negative Database Clean Â· Passed"
+                                ? "Negative Database Clean · Passed"
                                 : "Pending AML Screening"}
                             </p>
                             <p className="text-xs text-slate-500 mt-0.5">
@@ -9876,7 +9890,7 @@ const resolveStageStatus = (
                                   </div>
                                   <p className="text-sm text-slate-500">
                                     {doc.file_name}{" "}
-                                    {doc.size ? `â€¢ ${doc.size}` : ""}
+                                    {doc.size ? `· ${doc.size}` : ""}
                                   </p>
                                 </div>
                                 <div className="flex flex-col items-end gap-1">
@@ -9931,7 +9945,7 @@ const resolveStageStatus = (
                                     ) : (
                                       <span className="text-[11px] font-medium text-emerald-600 flex items-center gap-1">
                                         <Check className="h-3 w-3 text-emerald-600" />
-                                        Viewed â€¢ Ready to verify
+                                        Viewed · Ready to verify
                                       </span>
                                     )
                                   ) : (
@@ -10431,7 +10445,7 @@ const resolveStageStatus = (
                           </div>
                         )}
 
-                        {/* File Actions â€” Branch Maker & Branch Checker only */}
+                        {/* File Actions — Branch Maker & Branch Checker only */}
                         {canManageAgreementFiles && (
                           <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-center gap-3">
                             {/* Download Agreement Button */}
@@ -10591,7 +10605,7 @@ const resolveStageStatus = (
                             )}
 
 
-                            {/* Approve Signed Agreement â€” Branch Checker only */}
+                            {/* Approve Signed Agreement — Branch Checker only */}
                             {canDecideSignedAgreement &&
                               isDigitalAccepted &&
                               (signedAgreementDoc ||
@@ -10611,7 +10625,7 @@ const resolveStageStatus = (
                                 </Button>
                               )}
 
-                            {/* Reject Signed Agreement â€” Branch Checker only */}
+                            {/* Reject Signed Agreement — Branch Checker only */}
                             {canDecideSignedAgreement &&
                               (signedAgreementDoc ||
                                 isSignedAgreementUploaded) &&
@@ -10889,7 +10903,7 @@ const resolveStageStatus = (
                     ? dsaPortalUsers.map((u: any) => ({
                         id: String(u.user_id || u.mapping_id || u.id),
                         name: u.name || "Agent",
-                        email: u.email || "â€”",
+                        email: u.email || "—",
                         region: u.role_in_dsa || dsa.name,
                         status: u.deactivated_at
                           ? ("Disabled" as const)
@@ -11212,7 +11226,7 @@ const resolveStageStatus = (
                       <div>
                         <p className="font-medium text-slate-950">{action}</p>
                         <p className="text-sm text-slate-500">
-                          {actor} Â· {formatDate(atDate)} Â· {ip}
+                          {actor} · {formatDate(atDate)} · {ip}
                         </p>
                       </div>
                     </div>
@@ -11580,7 +11594,7 @@ const resolveStageStatus = (
         title={
           approvingDsa
             ? workflowLevelInfo.currentLevel === 7
-              ? "Final Approval â€” HO Credit Head"
+              ? "Final Approval — HO Credit Head"
               : `Approve DSA Application`
             : ""
         }
@@ -11996,7 +12010,7 @@ const resolveStageStatus = (
                         variant: "success",
                       });
                       closeDecisionModals();
-                      // Rejected is a dead-end for every role â€” return to dashboard.
+                      // Rejected is a dead-end for every role — return to dashboard.
                       router.push("/");
                     }
                   } catch (err: any) {
@@ -12116,7 +12130,7 @@ const resolveStageStatus = (
                           variant: "success",
                         });
                         closeDecisionModals();
-                        // Rejected is a dead-end for every role â€” return to dashboard.
+                        // Rejected is a dead-end for every role — return to dashboard.
                         router.push("/");
                       }
                     } catch (err: any) {
@@ -12505,7 +12519,7 @@ const resolveStageStatus = (
                   {viewingInvoice.invoiceNumber}
                 </p>
                 <p className="text-xs text-slate-500">
-                  {viewingInvoice.month} Â· Requested by{" "}
+                  {viewingInvoice.month} · Requested by{" "}
                   {viewingInvoice.raisedBy}
                 </p>
               </div>
@@ -12531,7 +12545,7 @@ const resolveStageStatus = (
                       <span>{formatCurrency(event.amount)}</span>
                     </div>
                     <p className="text-slate-500 mt-1">
-                      {event.actor} Â· {formatDate(event.at)}
+                      {event.actor} · {formatDate(event.at)}
                     </p>
                     {event.note ? (
                       <p className="mt-1 text-slate-700 italic border-l-2 border-slate-200 pl-2 bg-slate-50/50 p-1">
@@ -12619,7 +12633,7 @@ const resolveStageStatus = (
         description={
           previewDoc
             ? previewDoc.file_name
-              ? `${previewDoc.file_name}${previewDoc.size ? ` â€¢ ${previewDoc.size}` : ""}`
+              ? `${previewDoc.file_name}${previewDoc.size ? ` · ${previewDoc.size}` : ""}`
               : ""
             : ""
         }
@@ -12724,7 +12738,7 @@ const resolveStageStatus = (
         onClose={() => setViewingDdNoteModal(false)}
         open={viewingDdNoteModal}
         title="Checker Due Diligence (DD) Review Note"
-        description={`DSA #${getEffectiveDsaCode(dsa)} â€¢ ${dsa.name} â€¢ Submitted by Checker`}
+        description={`DSA #${getEffectiveDsaCode(dsa)} · ${dsa.name} · Submitted by Checker`}
         width="max-w-2xl"
       >
         <div className="space-y-4">
@@ -12750,7 +12764,7 @@ const resolveStageStatus = (
                       {note?.submitted_at
                         ? formatDate(note.submitted_at)
                         : "On Checker Review Completion"}{" "}
-                      â€¢ By Checker ID:{" "}
+                      · By Checker ID:{" "}
                       {note?.checker_user_id || "Branch Checker"}
                     </p>
                   </div>
@@ -12890,7 +12904,7 @@ const resolveStageStatus = (
                   });
                   closeDecisionModals();
                   // The case now sits at another authority's stage, so this
-                  // user has no viewable case â€” return to dashboard.
+                  // user has no viewable case — return to dashboard.
                   router.push("/");
                 }
               }}
@@ -12905,7 +12919,7 @@ const resolveStageStatus = (
         </div>
       </Modal>
 
-      {/* â”€â”€ Task 20C: RE_ALLOCATE modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* -- Task 20C: RE_ALLOCATE modal ------------------------------------- */}
       <Modal
         description={``}
         onClose={closeDecisionModals}
@@ -13388,7 +13402,7 @@ const resolveStageStatus = (
         onClose={() => setViewingDdReportModal(false)}
         open={viewingDdReportModal}
         title="Due Diligence Review Report"
-        description={`DSA #${getEffectiveDsaCode(dsa)} â€¢ ${dsa.name} â€¢ ${dsa.dsa_type || "INDIVIDUAL"}`}
+        description={`DSA #${getEffectiveDsaCode(dsa)} · ${dsa.name} · ${dsa.dsa_type || "INDIVIDUAL"}`}
         width="max-w-4xl"
         className="h-[88vh] max-h-[88vh]"
         bodyClassName="overflow-hidden flex flex-col p-4 sm:p-5"
