@@ -2819,34 +2819,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       payload.nature_of_business = natureOfBusiness;
       if (dateOfBirth) payload.date_of_birth = dateOfBirth;
       if (resolvedAge) payload.age = Number(resolvedAge);
-      if (lastFinancialYear) payload.last_financial_year = lastFinancialYear;
-      if (lastFyNetSales) payload.last_fy_net_sales = Number(lastFyNetSales) || 0;
-      if (lastFyNetProfitAfterTax) payload.last_fy_net_profit_after_tax = Number(lastFyNetProfitAfterTax) || 0;
-
-      const filteredBanks = otherBanksExperience
-        .filter((b) => (b.bank_or_institution_name || "").trim().length > 0)
-        .map((b) => ({
-          bank_or_institution_name: (b.bank_or_institution_name || "").trim(),
-          empanelment_since_year: b.empanelment_since_year ? Number(b.empanelment_since_year) : null,
-          empanelled_loan_products: (b.empanelled_loan_products || "").trim(),
-          products_mobilized_last_3_years: (b.products_mobilized_last_3_years || "").trim(),
-          avg_ticket_size_lakhs: b.avg_ticket_size_lakhs ? Number(b.avg_ticket_size_lakhs) : null,
-          commission_rate_percent: b.commission_rate_percent ? Number(b.commission_rate_percent) : null,
-          avg_disbursed_proposals_per_month: b.avg_disbursed_proposals_per_month ? Number(b.avg_disbursed_proposals_per_month) : null,
-        }));
-
-      if (filteredBanks.length > 0) {
-        payload.other_banks_experience = filteredBanks;
-        const first = filteredBanks[0];
-        payload.bank_or_institution_name = first.bank_or_institution_name;
-        payload.empanelment_since_year = first.empanelment_since_year;
-        payload.empanelled_loan_products = first.empanelled_loan_products;
-        payload.products_mobilized_last_3_years = first.products_mobilized_last_3_years;
-        payload.avg_ticket_size_lakhs = first.avg_ticket_size_lakhs;
-        payload.commission_rate_percent = first.commission_rate_percent;
-        payload.avg_disbursed_proposals_per_month = first.avg_disbursed_proposals_per_month;
-      }
-
       payload.stakeholders = stakeholders.map((s) => ({
         stakeholder_type: s.stakeholder_type,
         name: s.name,
@@ -2860,6 +2832,35 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         pinCode: s.pinCode || undefined,
         address: s.address || undefined,
       }));
+    }
+
+    // Key Financial Highlights & Other Banks Experience (for both Individual and Entity)
+    if (lastFinancialYear) payload.last_financial_year = lastFinancialYear;
+    if (lastFyNetSales) payload.last_fy_net_sales = Number(lastFyNetSales) || 0;
+    if (lastFyNetProfitAfterTax) payload.last_fy_net_profit_after_tax = Number(lastFyNetProfitAfterTax) || 0;
+
+    const filteredBanks = otherBanksExperience
+      .filter((b) => (b.bank_or_institution_name || "").trim().length > 0)
+      .map((b) => ({
+        bank_or_institution_name: (b.bank_or_institution_name || "").trim(),
+        empanelment_since_year: b.empanelment_since_year ? Number(b.empanelment_since_year) : null,
+        empanelled_loan_products: (b.empanelled_loan_products || "").trim(),
+        products_mobilized_last_3_years: (b.products_mobilized_last_3_years || "").trim(),
+        avg_ticket_size_lakhs: b.avg_ticket_size_lakhs ? Number(b.avg_ticket_size_lakhs) : null,
+        commission_rate_percent: b.commission_rate_percent ? Number(b.commission_rate_percent) : null,
+        avg_disbursed_proposals_per_month: b.avg_disbursed_proposals_per_month ? Number(b.avg_disbursed_proposals_per_month) : null,
+      }));
+
+    if (filteredBanks.length > 0) {
+      payload.other_banks_experience = filteredBanks;
+      const first = filteredBanks[0];
+      payload.bank_or_institution_name = first.bank_or_institution_name;
+      payload.empanelment_since_year = first.empanelment_since_year;
+      payload.empanelled_loan_products = first.empanelled_loan_products;
+      payload.products_mobilized_last_3_years = first.products_mobilized_last_3_years;
+      payload.avg_ticket_size_lakhs = first.avg_ticket_size_lakhs;
+      payload.commission_rate_percent = first.commission_rate_percent;
+      payload.avg_disbursed_proposals_per_month = first.avg_disbursed_proposals_per_month;
     }
 
     try {
@@ -4742,16 +4743,15 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                 </div>
               </div>
 
-              {/* ENTITY: KEY FINANCIAL HIGHLIGHTS & OTHER BANKS EXPERIENCE */}
-              {dsaType === "ENTITY" && (
-                <div className="space-y-6 pt-4 border-t border-slate-200">
-                  {/* Key Financial Highlights */}
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-4">
-                    <div>
-                      <span className="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                        <TrendingUp className="h-4 w-4 text-blue-600" />
-                        Key Financial Highlights of Applicant Entity
-                      </span>
+              {/* KEY FINANCIAL HIGHLIGHTS & OTHER BANKS EXPERIENCE */}
+              <div className="space-y-6 pt-4 border-t border-slate-200">
+                {/* Key Financial Highlights */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-4">
+                  <div>
+                    <span className="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                      <TrendingUp className="h-4 w-4 text-blue-600" />
+                      Key Financial Highlights of Applicant{dsaType === "ENTITY" ? " Entity" : ""}
+                    </span>
                       <p className="text-xs text-slate-500 mt-0.5">
                         Financial metrics as per latest audited/filed financial year
                       </p>
@@ -4957,7 +4957,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                     </div>
                   </div>
                 </div>
-              )}
             </div>
           )}
 
@@ -6076,12 +6075,11 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   </table>
                 </div>
 
-                {dsaType === "ENTITY" && (
                   <>
                     {/* Key Financial Highlights */}
                     <div className="mt-3">
                       <div className="bg-slate-700 text-white px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-t">
-                        Key Financial Highlights of Applicant Entity
+                        Key Financial Highlights of Applicant{dsaType === "ENTITY" ? " Entity" : ""}
                       </div>
                       <div className="overflow-x-auto">
                         <table className="w-full border-collapse border border-slate-300 text-xs table-fixed">
@@ -6158,7 +6156,6 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                       </div>
                     </div>
                   </>
-                )}
               </div>
 
               {/* SECTION 4: REFERENCES / STAKEHOLDERS */}

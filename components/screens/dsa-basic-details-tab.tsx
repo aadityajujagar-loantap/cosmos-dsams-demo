@@ -2240,13 +2240,11 @@ export function DsaBasicDetailsTab({
               </div>
             </div>
 
-            {isEntity && (
-              <>
-                <div className="pt-4 border-t border-slate-200">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2.5 flex items-center gap-1.5">
-                    <TrendingUp className="h-4 w-4 text-emerald-600" />
-                    Key Financial Highlights of Applicant Entity
-                  </h4>
+            <div className="pt-4 border-t border-slate-200">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2.5 flex items-center gap-1.5">
+                <TrendingUp className="h-4 w-4 text-emerald-600" />
+                Key Financial Highlights of Applicant{isEntity ? " Entity" : ""}
+              </h4>
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
                       <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Last Financial Year</Label>
@@ -2402,8 +2400,6 @@ export function DsaBasicDetailsTab({
                     </div>
                   )}
                 </div>
-              </>
-            )}
           </div>
         ) : (
           <div className="space-y-6">
@@ -2444,12 +2440,11 @@ export function DsaBasicDetailsTab({
               </DetailGrid>
             </div>
 
-            {(isEntity || dsa.last_financial_year || (dsa.last_fy_net_sales !== null && dsa.last_fy_net_sales !== undefined && dsa.last_fy_net_sales !== "")) && (
-              <div className="pt-4 border-t border-slate-200">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2.5 flex items-center gap-1.5">
-                  <TrendingUp className="h-4 w-4 text-emerald-600" />
-                  Key Financial Highlights of Applicant Entity
-                </h4>
+            <div className="pt-4 border-t border-slate-200">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2.5 flex items-center gap-1.5">
+                <TrendingUp className="h-4 w-4 text-emerald-600" />
+                Key Financial Highlights of Applicant{isEntity ? " Entity" : ""}
+              </h4>
                 <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-2xs">
                   <table className="w-full text-xs text-left border-collapse">
                     <thead>
@@ -2481,9 +2476,7 @@ export function DsaBasicDetailsTab({
                   </table>
                 </div>
               </div>
-            )}
 
-            {(isEntity || (Array.isArray(dsa.other_banks_experience) && dsa.other_banks_experience.length > 0) || dsa.bank_or_institution_name) && (
               <div className="pt-4 border-t border-slate-200">
                 <div className="flex items-center justify-between mb-2.5">
                   <div>
@@ -2594,7 +2587,6 @@ export function DsaBasicDetailsTab({
                   );
                 })()}
               </div>
-            )}
           </div>
         )}
       </SectionBlock>
