@@ -1,30 +1,18 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { KeyRound, Lock, ShieldCheck, User } from "lucide-react";
+import { Lock, ShieldCheck, User } from "lucide-react";
 
-import { useToast } from "@/components/ui/toast";
-import { getDemoRoleForCredentials, type SessionRole } from "@/lib/demo-identities";
+import { getDemoRoleForCredentials, DEMO_USERS, type SessionRole } from "@/lib/demo-identities";
 import { useMockStore } from "@/lib/store";
-
-const CAPTCHA_CODE = "C7K9Q";
-const DUMMY_OTP = "123456";
-const OTP_LENGTH = 6;
-const EMPTY_OTP = Array.from({ length: OTP_LENGTH }, () => "");
 
 export default function LoginPage() {
   const { login, currentUser } = useMockStore();
-  const { toast } = useToast();
   const router = useRouter();
-  const otpRefs = useRef<Array<HTMLInputElement | null>>([]);
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
-  const [captcha, setCaptcha] = useState("");
-  const [step, setStep] = useState<"credentials" | "otp">("credentials");
-  const [pendingRole, setPendingRole] = useState<SessionRole | null>(null);
-  const [otpDigits, setOtpDigits] = useState<string[]>(EMPTY_OTP);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -33,113 +21,47 @@ export default function LoginPage() {
     }
   }, [currentUser, router]);
 
-  useEffect(() => {
-    if (step !== "otp") return;
-    window.requestAnimationFrame(() => otpRefs.current[0]?.focus());
-  }, [step]);
+  const handleLogin = (roleToLogin?: SessionRole) => {
+    if (roleToLogin) {
+      login(roleToLogin);
+      return;
+    }
 
-  const resetOtp = () => {
-    setOtpDigits([...EMPTY_OTP]);
-    window.requestAnimationFrame(() => otpRefs.current[0]?.focus());
+    if (!identifier.trim()) {
+      setError("Please enter a username or select a demo account below.");
+      return;
+    }
+
+    const matchedRole =
+      getDemoRoleForCredentials(identifier, password) ||
+      (identifier.toLowerCase() === "admin"
+        ? "DSA Manager"
+        : identifier.toLowerCase() === "credit"
+          ? "DSA Credit"
+          : identifier.toLowerCase() === "branch"
+            ? "Branch User"
+            : identifier.toLowerCase() === "dsa"
+              ? "DSA Partner"
+              : identifier.toLowerCase() === "user"
+                ? "Customer"
+                : null);
+
+    if (!matchedRole) {
+      setError("Invalid credentials. Please click one of the demo accounts below.");
+      return;
+    }
+
+    login(matchedRole);
   };
 
-  const handleCredentialSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!identifier.trim() || !password) {
-      setError("Please enter username and password");
-      return;
-    }
-
-    const role = getDemoRoleForCredentials(identifier, password);
-    if (!role) {
-      setError("Invalid username or password.");
-      return;
-    }
-
-    if (captcha.trim().toUpperCase() !== CAPTCHA_CODE) {
-      setError("Captcha does not match.");
-      return;
-    }
-
-    setPendingRole(role);
-    setStep("otp");
-    setError("");
-    setOtpDigits([...EMPTY_OTP]);
-  };
-
-  const handleOtpChange = (index: number, value: string) => {
-    const nextDigits = value.replace(/\D/g, "").slice(0, OTP_LENGTH).split("");
-
-    setOtpDigits((current) => {
-      const next = [...current];
-      if (nextDigits.length === 0) {
-        next[index] = "";
-        return next;
-      }
-
-      nextDigits.forEach((digit, offset) => {
-        const targetIndex = index + offset;
-        if (targetIndex < OTP_LENGTH) {
-          next[targetIndex] = digit;
-        }
-      });
-      return next;
-    });
-
-    if (nextDigits.length > 0) {
-      const nextIndex = Math.min(index + nextDigits.length, OTP_LENGTH - 1);
-      window.requestAnimationFrame(() => otpRefs.current[nextIndex]?.focus());
-    }
-    setError("");
-  };
-
-  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Backspace" && !otpDigits[index] && index > 0) {
-      otpRefs.current[index - 1]?.focus();
-      return;
-    }
-
-    if (e.key === "ArrowLeft" && index > 0) {
-      e.preventDefault();
-      otpRefs.current[index - 1]?.focus();
-    }
-
-    if (e.key === "ArrowRight" && index < OTP_LENGTH - 1) {
-      e.preventDefault();
-      otpRefs.current[index + 1]?.focus();
-    }
-  };
-
-  const handleOtpSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const otp = otpDigits.join("");
-
-    if (otp.length !== OTP_LENGTH) {
-      setError("Enter the 6 digit OTP.");
-      toast({
-        description: "All OTP fields are required.",
-        title: "OTP verification failed",
-        variant: "warning",
-      });
-      return;
-    }
-
-    if (otp !== DUMMY_OTP || !pendingRole) {
-      setError("Incorrect OTP. Please try again.");
-      toast({
-        description: "The OTP entered is not valid.",
-        title: "OTP verification failed",
-        variant: "warning",
-      });
-      resetOtp();
-      return;
-    }
-
-    login(pendingRole);
+    handleLogin();
   };
 
   return (
     <div className="min-h-screen flex bg-slate-50 font-sans">
+      {/* Left Pane - Branding Banner */}
       <div className="hidden lg:flex lg:w-1/2 bg-slate-900 text-white flex-col justify-between p-12 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-tr from-blue-900 via-indigo-950 to-slate-900 opacity-90 z-0" />
         <div className="absolute -top-40 -left-40 w-96 h-96 bg-blue-500 rounded-full blur-3xl opacity-20 z-0" />
@@ -173,7 +95,7 @@ export default function LoginPage() {
             </div>
             <div className="h-10 w-[1px] bg-slate-800" />
             <div>
-              <p className="text-2xl font-bold text-blue-400">Rs. 729 Cr+</p>
+              <p className="text-2xl font-bold text-blue-400">₹729 Cr+</p>
               <p className="text-xs text-slate-400">Disbursed Volume</p>
             </div>
             <div className="h-10 w-[1px] bg-slate-800" />
@@ -185,168 +107,130 @@ export default function LoginPage() {
         </div>
 
         <div className="relative z-10 text-xs text-slate-500 flex justify-between border-t border-slate-800 pt-6">
-          <p>(c) 2026 Cosmos Co-operative Bank Ltd.</p>
-          <p>Privacy Policy - Terms of Use</p>
+          <p>© 2026 Cosmos Co-operative Bank Ltd.</p>
+          <p>Privacy Policy · Terms of Use</p>
         </div>
       </div>
 
+      {/* Right Pane - Form Card */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 md:p-20 bg-white">
-        <div className="w-full max-w-md space-y-8">
-          <div className="space-y-3 text-center lg:text-left">
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight">
-              {step === "credentials" ? "Sign In" : "Verify OTP"}
-            </h2>
+        <div className="w-full max-w-md space-y-7">
+          <div className="space-y-2 text-center lg:text-left">
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Sign In</h2>
             <p className="text-sm text-slate-500">
-              {step === "credentials"
-                ? "Access the direct selling console using your registered username and password."
-                : "Complete verification for the selected demo account."}
+              Access the direct selling console using demo credentials or one-click quick login.
             </p>
           </div>
 
           {error && (
             <div
               aria-live="polite"
-              className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm font-semibold"
+              className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold"
             >
               {error}
             </div>
           )}
 
-          {step === "credentials" ? (
-            <form onSubmit={handleCredentialSubmit} className="space-y-5">
-              <div className="space-y-1.5">
-                <label htmlFor="identifier" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Username
-                </label>
-                <div className="relative">
-                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                  <input
-                    id="identifier"
-                    type="text"
-                    placeholder="Enter username"
-                    value={identifier}
-                    onChange={(e) => {
-                      setIdentifier(e.target.value);
-                      setError("");
-                    }}
-                    className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none text-sm transition"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center">
-                  <label htmlFor="password" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Password
-                  </label>
-                </div>
-                <div className="relative">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                  <input
-                    id="password"
-                    type="password"
-                    placeholder="********"
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      setError("");
-                    }}
-                    className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none text-sm transition"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label htmlFor="captcha" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Captcha
-                </label>
-                <div className="grid grid-cols-[minmax(0,1fr)_132px] gap-3">
-                  <div className="relative">
-                    <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                    <input
-                      autoCapitalize="characters"
-                      id="captcha"
-                      placeholder="Enter captcha"
-                      type="text"
-                      value={captcha}
-                      onChange={(e) => {
-                        setCaptcha(e.target.value);
-                        setError("");
-                      }}
-                      className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 uppercase tracking-[0.2em] focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none text-sm transition"
-                    />
-                  </div>
-                  <div
-                    aria-label={`Captcha code ${CAPTCHA_CODE}`}
-                    className="flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-base font-black tracking-[0.24em] text-slate-800 shadow-inner"
-                  >
-                    {CAPTCHA_CODE}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="submit"
-                  className="inline-flex w-full h-11 items-center justify-center gap-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-sm font-bold shadow-md shadow-blue-100 hover:shadow-lg transition"
-                >
-                  <ShieldCheck className="h-4 w-4" />
-                  Next
-                </button>
-              </div>
-            </form>
-          ) : (
-            <form onSubmit={handleOtpSubmit} className="space-y-5">
-              <div className="space-y-3">
-                <label htmlFor="otp-0" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  One Time Password
-                </label>
-                <div className="grid grid-cols-6 gap-2 sm:gap-3">
-                  {otpDigits.map((digit, index) => (
-                    <input
-                      aria-label={`OTP digit ${index + 1}`}
-                      autoComplete={index === 0 ? "one-time-code" : "off"}
-                      className="h-12 rounded-xl border border-slate-200 bg-white text-center text-lg font-black text-slate-950 outline-none transition focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
-                      id={`otp-${index}`}
-                      inputMode="numeric"
-                      key={index}
-                      onChange={(e) => handleOtpChange(index, e.target.value)}
-                      onFocus={(e) => e.target.select()}
-                      onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                      pattern="[0-9]*"
-                      ref={(element) => {
-                        otpRefs.current[index] = element;
-                      }}
-                      type="text"
-                      value={digit}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStep("credentials");
-                    setPendingRole(null);
-                    setOtpDigits([...EMPTY_OTP]);
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <label htmlFor="identifier" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Username
+              </label>
+              <div className="relative">
+                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                <input
+                  id="identifier"
+                  type="text"
+                  placeholder="e.g. admin, branch, dsa"
+                  value={identifier}
+                  onChange={(e) => {
+                    setIdentifier(e.target.value);
                     setError("");
                   }}
-                  className="h-11 rounded-xl border border-slate-200 px-5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-                >
-                  Back
-                </button>
-                <button
-                  type="submit"
-                  className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-sm font-bold shadow-md shadow-blue-100 hover:shadow-lg transition"
-                >
-                  <KeyRound className="h-4 w-4" />
-                  Verify & Sign In
-                </button>
+                  className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none text-sm transition"
+                />
               </div>
-            </form>
-          )}
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="password" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Password
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                <input
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setError("");
+                  }}
+                  className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 outline-none text-sm transition"
+                />
+              </div>
+            </div>
+
+            <div className="pt-1">
+              <button
+                type="submit"
+                className="inline-flex w-full h-11 items-center justify-center gap-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-sm font-bold shadow-md shadow-blue-100 hover:shadow-lg transition cursor-pointer"
+              >
+                <ShieldCheck className="h-4 w-4" />
+                Sign In
+              </button>
+            </div>
+          </form>
+
+          {/* Quick Demo Login Accounts */}
+          <div className="pt-4 border-t border-slate-100 space-y-2.5">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider text-center lg:text-left">
+              Quick Login as Demo Role
+            </p>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => handleLogin("DSA Manager")}
+                className="flex items-center justify-between p-2.5 rounded-lg border border-blue-200 bg-blue-50/60 hover:bg-blue-100/80 text-blue-950 font-medium transition cursor-pointer text-left"
+              >
+                <span>DSA Manager</span>
+                <span className="text-[10px] text-blue-700 font-mono font-bold">admin</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleLogin("Branch User")}
+                className="flex items-center justify-between p-2.5 rounded-lg border border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100/80 text-emerald-950 font-medium transition cursor-pointer text-left"
+              >
+                <span>Branch User</span>
+                <span className="text-[10px] text-emerald-700 font-mono font-bold">branch</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleLogin("DSA Credit")}
+                className="flex items-center justify-between p-2.5 rounded-lg border border-purple-200 bg-purple-50/60 hover:bg-purple-100/80 text-purple-950 font-medium transition cursor-pointer text-left"
+              >
+                <span>DSA Credit</span>
+                <span className="text-[10px] text-purple-700 font-mono font-bold">credit</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleLogin("DSA Partner")}
+                className="flex items-center justify-between p-2.5 rounded-lg border border-amber-200 bg-amber-50/60 hover:bg-amber-100/80 text-amber-950 font-medium transition cursor-pointer text-left"
+              >
+                <span>DSA Partner</span>
+                <span className="text-[10px] text-amber-700 font-mono font-bold">dsa</span>
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleLogin("Customer")}
+              className="w-full flex items-center justify-between p-2.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 text-xs font-medium transition cursor-pointer text-left"
+            >
+              <span>Customer / Applicant Portal</span>
+              <span className="text-[10px] text-slate-600 font-mono font-bold">user</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
