@@ -2131,7 +2131,7 @@ export function DsaBasicDetailsTab({
                   value={
                     dsa.office_address_different && dsa.office_address_line_1
                       ? `${dsa.office_address_line_1}, ${dsa.office_city || dsa.city}, ${dsa.office_state || dsa.state} ${dsa.office_pincode || dsa.pincode}`
-                      : `Same as Registered Address (${dsa.address}, ${dsa.city})`
+                      : `${dsa.address}, ${dsa.city}`
                   }
                 />
                 <DetailItem
@@ -2143,7 +2143,7 @@ export function DsaBasicDetailsTab({
                   value={
                     dsa.office_address_different && dsa.office_city
                       ? `${dsa.office_city}, ${dsa.office_state || dsa.state} - ${dsa.office_pincode || dsa.pincode}`
-                      : `${dsa.city}, ${dsa.state} - ${dsa.pincode} (Same as Residence)`
+                      : `${dsa.city}, ${dsa.state} - ${dsa.pincode}`
                   }
                 />
                 <DetailItem
