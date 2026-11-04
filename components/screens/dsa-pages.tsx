@@ -231,7 +231,11 @@ const businessTypes: BusinessType[] = [
 
 const isProprietorshipDsa = (dsa: any): boolean => {
   if (!dsa) return false;
-  const c = String(dsa.legal_constitution || dsa.constitution || dsa.business_type || "").toLowerCase().trim();
+  const c = String(
+    dsa.legal_constitution || dsa.constitution || dsa.business_type || "",
+  )
+    .toLowerCase()
+    .trim();
   return c.includes("proprietor");
 };
 
@@ -544,7 +548,11 @@ export function isPhotographDocument(docOrType?: any): boolean {
       : docOrType;
   const rawName =
     typeof docOrType === "object"
-      ? docOrType.display_name || docOrType.title || docOrType.name || docOrType.label || ""
+      ? docOrType.display_name ||
+        docOrType.title ||
+        docOrType.name ||
+        docOrType.label ||
+        ""
       : "";
   const t = String(rawType).toLowerCase().trim();
   const n = String(rawName).toLowerCase().trim();
@@ -578,23 +586,33 @@ export function formatDocumentType(type?: string, doc?: any): string {
   if (isCibilReportDocument(actualType)) return "CIBIL Report";
   if (isVisitReportDocument(actualType)) return "Physical Visit Report";
   if (isApplicationFormDocument(actualType)) return "Application Form";
-  if (isDdReviewReportDocument(actualType)) return "Due Diligence Review Report";
+  if (isDdReviewReportDocument(actualType))
+    return "Due Diligence Review Report";
 
   let fy = "";
   if (doc?.financial_year) {
     fy = String(doc.financial_year).trim();
   } else if (doc?.remarks) {
-    const m = String(doc.remarks).match(/(?:financial year|fy)[:\s]*([0-9]{2,4}[-–\/_][0-9]{2,4})/i);
+    const m = String(doc.remarks).match(
+      /(?:financial year|fy)[:\s]*([0-9]{2,4}[-–\/_][0-9]{2,4})/i,
+    );
     if (m?.[1]) fy = m[1].replace("_", "-").trim();
   }
 
   if (typeof actualType === "string" && actualType.startsWith("itr_year_")) {
     const yr = actualType.replace("itr_year_", "");
-    const suffix = yr === "1" ? "st" : yr === "2" ? "nd" : yr === "3" ? "rd" : "th";
+    const suffix =
+      yr === "1" ? "st" : yr === "2" ? "nd" : yr === "3" ? "rd" : "th";
     return `${yr}${suffix} Year ITR with computation${fy ? ` (${fy})` : ""}`;
   }
-  if (actualType === "itr_returns" || actualType === "itr" || actualType === "it_returns") {
-    return fy ? `IT Returns with Computation (${fy})` : "IT Returns with Computation";
+  if (
+    actualType === "itr_returns" ||
+    actualType === "itr" ||
+    actualType === "it_returns"
+  ) {
+    return fy
+      ? `IT Returns with Computation (${fy})`
+      : "IT Returns with Computation";
   }
 
   const map: Record<string, string> = {
@@ -653,7 +671,10 @@ export function getEffectiveDsaCode(dsa: any): string {
       : "";
 }
 
-export function getDocDisplayStatus(status?: string, isChecker?: boolean): string {
+export function getDocDisplayStatus(
+  status?: string,
+  isChecker?: boolean,
+): string {
   if (!status) return "";
   const s = String(status).trim();
   const checker = isChecker !== undefined ? isChecker : isCheckerLoggedIn();
@@ -768,7 +789,8 @@ export function DocumentViewerBody({
       // #pagemode=none prevents opening document pages outline or thumbnail panel
       // #view=FitH fits page horizontally for required standard viewing size
       const [base, hash] = url.split("#");
-      const pdfParams = "toolbar=0&navpanes=0&scrollbar=1&pagemode=none&view=FitH";
+      const pdfParams =
+        "toolbar=0&navpanes=0&scrollbar=1&pagemode=none&view=FitH";
       return hash ? `${base}#${pdfParams}&${hash}` : `${base}#${pdfParams}`;
     }
     return url;
@@ -788,47 +810,54 @@ export function DocumentViewerBody({
       {/* Meta Toolbar */}
       {showMetaToolbar && !isDdReviewReportDocument(previewDoc) && (
         <div className="shrink-0 flex flex-wrap items-center justify-between gap-2.5 px-3.5 py-2 bg-slate-50/90 rounded-lg border border-slate-200/80 text-xs">
-        <div className="flex items-center gap-2 flex-wrap">
-          <StatusBadge status={getDocDisplayStatus(effectiveStatus)} />
-          <span className="font-mono font-semibold text-[10px] px-2 py-0.5 rounded bg-white text-slate-600 border border-slate-200 shadow-2xs uppercase">
-            {fileExt}
-          </span>
-          {previewDoc.size ? (
-            <span className="text-slate-500 text-[11px]">
-              {previewDoc.size}
+          <div className="flex items-center gap-2 flex-wrap">
+            <StatusBadge status={getDocDisplayStatus(effectiveStatus)} />
+            <span className="font-mono font-semibold text-[10px] px-2 py-0.5 rounded bg-white text-slate-600 border border-slate-200 shadow-2xs uppercase">
+              {fileExt}
             </span>
-          ) : null}
-          {previewDoc.owner_name ? (
-            <span className="text-slate-600 text-[11px] border-l border-slate-200 pl-2">
-              Owner:{" "}
-              <span className="font-medium text-slate-800">
-                {previewDoc.owner_name}
+            {previewDoc.size ? (
+              <span className="text-slate-500 text-[11px]">
+                {previewDoc.size}
               </span>
-            </span>
+            ) : null}
+            {previewDoc.owner_name ? (
+              <span className="text-slate-600 text-[11px] border-l border-slate-200 pl-2">
+                Owner:{" "}
+                <span className="font-medium text-slate-800">
+                  {previewDoc.owner_name}
+                </span>
+              </span>
+            ) : null}
+          </div>
+          {url ? (
+            <div className="flex items-center gap-2">
+              <a
+                href={`${url}${url.includes("?") ? "&" : "?"}download=1`}
+                download={
+                  previewDoc.file_name ||
+                  (isApplicationFormDocument(previewDoc)
+                    ? `dsa_application_form_${dsaId || previewDoc.dsa_id || "document"}.pdf`
+                    : isCibilReportDocument(previewDoc)
+                      ? `cibil_consumer_report_${dsaId || previewDoc.dsa_id || "report"}.pdf`
+                      : "document.pdf")
+                }
+                className="inline-flex items-center gap-1.5 text-xs text-slate-700 hover:text-slate-900 font-semibold px-2.5 py-1 rounded-md bg-white border border-slate-200 shadow-2xs hover:bg-slate-50 transition-colors"
+              >
+                <Download className="h-3.5 w-3.5 text-slate-600" />
+                Download
+              </a>
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 font-semibold px-2.5 py-1 rounded-md bg-white border border-slate-200 shadow-2xs hover:bg-slate-50 transition-colors"
+              >
+                <ExternalLink className="h-3.5 w-3.5 text-blue-600" />
+                Open in new tab
+              </a>
+            </div>
           ) : null}
         </div>
-        {url ? (
-          <div className="flex items-center gap-2">
-            <a
-              href={`${url}${url.includes("?") ? "&" : "?"}download=1`}
-              download={previewDoc.file_name || (isApplicationFormDocument(previewDoc) ? `dsa_application_form_${dsaId || previewDoc.dsa_id || "document"}.pdf` : isCibilReportDocument(previewDoc) ? `cibil_consumer_report_${dsaId || previewDoc.dsa_id || "report"}.pdf` : "document.pdf")}
-              className="inline-flex items-center gap-1.5 text-xs text-slate-700 hover:text-slate-900 font-semibold px-2.5 py-1 rounded-md bg-white border border-slate-200 shadow-2xs hover:bg-slate-50 transition-colors"
-            >
-              <Download className="h-3.5 w-3.5 text-slate-600" />
-              Download
-            </a>
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 font-semibold px-2.5 py-1 rounded-md bg-white border border-slate-200 shadow-2xs hover:bg-slate-50 transition-colors"
-            >
-              <ExternalLink className="h-3.5 w-3.5 text-blue-600" />
-              Open in new tab
-            </a>
-          </div>
-        ) : null}
-      </div>
       )}
 
       {/* Main Preview Box */}
@@ -980,7 +1009,14 @@ export function DocumentViewerBody({
           {url ? (
             <a
               href={`${url}${url.includes("?") ? "&" : "?"}download=1`}
-              download={previewDoc.file_name || (isApplicationFormDocument(previewDoc) ? `dsa_application_form_${dsaId || previewDoc.dsa_id || "document"}.pdf` : isCibilReportDocument(previewDoc) ? `cibil_consumer_report_${dsaId || previewDoc.dsa_id || "report"}.pdf` : "document.pdf")}
+              download={
+                previewDoc.file_name ||
+                (isApplicationFormDocument(previewDoc)
+                  ? `dsa_application_form_${dsaId || previewDoc.dsa_id || "document"}.pdf`
+                  : isCibilReportDocument(previewDoc)
+                    ? `cibil_consumer_report_${dsaId || previewDoc.dsa_id || "report"}.pdf`
+                    : "document.pdf")
+              }
               className="inline-flex items-center gap-1.5 text-xs text-slate-700 hover:text-slate-900 font-medium px-3.5 py-1.5 h-auto rounded-lg border border-slate-200 bg-white hover:bg-slate-50 shadow-2xs transition-colors"
             >
               <Download className="h-3.5 w-3.5 text-slate-600" />
@@ -1075,7 +1111,8 @@ export function getDsaWorkflowLevelInfo(
 
   if (isCompleted || isRejected) {
     const isChecker =
-      (currentUserRole || "").toLowerCase().includes("checker") || isCheckerLoggedIn();
+      (currentUserRole || "").toLowerCase().includes("checker") ||
+      isCheckerLoggedIn();
     return {
       currentLevel: dsa.current_approval_level || 7,
       levelName: isCompleted
@@ -1462,9 +1499,7 @@ export function DsaWorkflowChevronBar({
         state: "SKIPPED" as const,
         displayLabel:
           stage.level === 4 ? "DGM (Skipped)" : `${stage.roleName} (Skipped)`,
-        details:
-          bypassedWording ??
-          "Bypassed (No DGM posted for branch)",
+        details: bypassedWording ?? "Bypassed (No DGM posted for branch)",
         approver: record?.user_name || null,
         timestamp: record?.created_at || null,
       };
@@ -1579,10 +1614,15 @@ export function DsaWorkflowChevronBar({
     };
   });
 
-
   const STAGE_THEMES: Record<
     string,
-    { bg: string; hoverBg: string; fill: string; hoverFill: string; text: string }
+    {
+      bg: string;
+      hoverBg: string;
+      fill: string;
+      hoverFill: string;
+      text: string;
+    }
   > = {
     COMPLETED: {
       bg: "bg-emerald-600",
@@ -1668,7 +1708,11 @@ export function DsaWorkflowChevronBar({
                 tabIndex={0}
                 className={cn(
                   "relative flex-1 min-w-0 flex items-center justify-center text-xs select-none transition-colors duration-150 h-full cursor-pointer",
-                  isFirst ? "pl-3.5 pr-5" : isLast ? "pl-6 pr-3.5" : "pl-6 pr-5",
+                  isFirst
+                    ? "pl-3.5 pr-5"
+                    : isLast
+                      ? "pl-6 pr-3.5"
+                      : "pl-6 pr-5",
                   currentBg,
                   theme.text,
                 )}
@@ -1699,7 +1743,8 @@ export function DsaWorkflowChevronBar({
                   <span
                     className={cn(
                       "truncate font-medium",
-                      stage.state === "SKIPPED" && "text-slate-400 line-through",
+                      stage.state === "SKIPPED" &&
+                        "text-slate-400 line-through",
                     )}
                   >
                     {stage.displayLabel}
@@ -2099,8 +2144,9 @@ function DsaRecoveryReports({ dsaId }: { dsaId: string }) {
         <span>
           <strong>Carry-Forward Logic:</strong> If recovery falls short of
           target in a month, the shortfall reduces next month&apos;s invoice.
-          E.g. target Rs. 10,000, recovered Rs. 8,000 -&gt; shortfall Rs. 2,000 deducted from
-          next month -&gt; if next month recovery is Rs. 20,000, invoice = Rs. 18,000.
+          E.g. target Rs. 10,000, recovered Rs. 8,000 -&gt; shortfall Rs. 2,000
+          deducted from next month -&gt; if next month recovery is Rs. 20,000,
+          invoice = Rs. 18,000.
         </span>
       </div>
 
@@ -2368,7 +2414,10 @@ export function DsaManagementPage() {
       return { onboarding_status: "PENDING_APPROVAL" };
     if (normalized.includes("kyc"))
       return { onboarding_status: "COMPLIANCE_CHECK" };
-    if (normalized.includes("awaiting_agreement") || normalized.includes("awaiting agreement"))
+    if (
+      normalized.includes("awaiting_agreement") ||
+      normalized.includes("awaiting agreement")
+    )
       return { onboarding_status: "APPROVED" };
     return { onboarding_status: statusVal.toUpperCase() };
   };
@@ -2398,7 +2447,6 @@ export function DsaManagementPage() {
     if (isNetworkPage) return;
     fetchDsas(fetchParams);
   }, [fetchDsas, fetchParams, isNetworkPage]);
-
 
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(event.target.value);
@@ -2715,11 +2763,7 @@ export function DsaManagementPage() {
 
   const callBackModal = (
     <Modal
-      description={
-        callBackTarget
-          ? ``
-          : ""
-      }
+      description={callBackTarget ? `` : ""}
       onClose={() => {
         setCallBackTarget(null);
         setCallBackReason("");
@@ -2886,144 +2930,170 @@ export function DsaManagementPage() {
 
       <Card className="min-h-[500px]">
         <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-slate-100 bg-slate-50/50">
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-              <Input
-                aria-label="Search partners"
-                onChange={handleSearchChange}
-                placeholder="Search by name, code, pan, city..."
-                value={search}
-                className="w-full sm:w-[300px]"
-              />
-              <Select
-                aria-label="Filter by status"
-                onChange={handleStatusChange}
-                value={status}
-                className="w-full sm:w-[180px]"
-              >
-                <option value="">All statuses</option>
-                {managementStatuses.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <span className="text-xs text-slate-500 font-medium">
-              {listLoading
-                ? "Loading partners..."
-                : `Found ${pagination.total} partners`}
-            </span>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <Input
+              aria-label="Search partners"
+              onChange={handleSearchChange}
+              placeholder="Search by name, code, pan, city..."
+              value={search}
+              className="w-full sm:w-[300px]"
+            />
+            <Select
+              aria-label="Filter by status"
+              onChange={handleStatusChange}
+              value={status}
+              className="w-full sm:w-[180px]"
+            >
+              <option value="">All statuses</option>
+              {managementStatuses.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </Select>
           </div>
-          <CardContent className="p-0">
-            {listLoading ? (
-              <div className="flex items-center justify-center py-20">
-                <span className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" />
-              </div>
-            ) : dsaListError ? (
-              <div className="px-6 py-12">
-                <EmptyState
-                  action={
-                    <Button
-                      onClick={() => fetchDsas(fetchParams)}
-                      type="button"
-                      variant="outline"
-                    >
-                      Retry DSA API
-                    </Button>
-                  }
-                  description={dsaListError}
-                  title="DSA API unavailable"
-                />
-              </div>
-            ) : dsas.length === 0 ? (
-              <div className="px-6 py-12 text-center">
-                <p className="text-sm font-bold text-slate-800">
-                  {userBranchScope?.isBranchRestricted
-                    ? `No partner DSAs assigned to ${userBranchScope.primaryBranchName || userBranchScope.primaryBranchCode || "your branch"}`
-                    : "No partner DSAs found"}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {userBranchScope?.isBranchRestricted
-                    ? "Only applications assigned to your branch are visible to your account."
-                    : "Try changing your search keywords or filters."}
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-sm table-fixed">
-                  <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-bold uppercase tracking-wider text-slate-500">
-                      <th className="w-20 px-3 py-4 text-center whitespace-nowrap">Sr No.</th>
-                      <th className="p-4 text-center">DSA Name</th>
-                      <th className="p-4 text-center">DSA Type</th>
-                      <th className="p-4 text-center">Status</th>
-                      <th className="p-4 text-center whitespace-nowrap">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {dsas.map((item, index) => {
-                      // Task 22 — a row is only actionable when the case is at
-                      // this role's stage. Rows that are not are still listed
-                      // (you can see it exists) but cannot be opened, edited or
-                      // auto-acquired, so a stray click can never claim a case
-                      // that has moved on.
-                      const access = resolveCaseAccess(item, roleStr);
-                      const locked = !access.allowed;
-                      const lockNote = describeCaseLock(
-                        access.reason,
-                        item.current_approval_level,
-                      );
-                      // Task 20C — N -> N-1 rule. Only the authority at the
-                      // level BELOW where the case now sits may call it back:
-                      // if L3 approved to L4, only L3 can; if L4 approved to
-                      // L5, only L4 can (never L5). previousActorLevel comes
-                      // from the step history so a skipped DGM (L3 -> L5) is
-                      // still attributed to L3.
-                      const viewerLevel = resolveUserLevel(roleStr);
-                      const previousActorLevel = resolvePreviousActorLevel(
-                        item.approvals,
-                        item.current_approval_level,
-                      );
-                      const currentCaseLevel = Number(item.current_approval_level);
-                      const vLvl = Number(viewerLevel);
+          <span className="text-xs text-slate-500 font-medium">
+            {listLoading
+              ? "Loading partners..."
+              : `Found ${pagination.total} partners`}
+          </span>
+        </div>
+        <CardContent className="p-0">
+          {listLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <span className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" />
+            </div>
+          ) : dsaListError ? (
+            <div className="px-6 py-12">
+              <EmptyState
+                action={
+                  <Button
+                    onClick={() => fetchDsas(fetchParams)}
+                    type="button"
+                    variant="outline"
+                  >
+                    Retry DSA API
+                  </Button>
+                }
+                description={dsaListError}
+                title="DSA API unavailable"
+              />
+            </div>
+          ) : dsas.length === 0 ? (
+            <div className="px-6 py-12 text-center">
+              <p className="text-sm font-bold text-slate-800">
+                {userBranchScope?.isBranchRestricted
+                  ? `No partner DSAs assigned to ${userBranchScope.primaryBranchName || userBranchScope.primaryBranchCode || "your branch"}`
+                  : "No partner DSAs found"}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                {userBranchScope?.isBranchRestricted
+                  ? "Only applications assigned to your branch are visible to your account."
+                  : "Try changing your search keywords or filters."}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-sm table-fixed">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <th className="w-20 px-3 py-4 text-center whitespace-nowrap">
+                      Sr No.
+                    </th>
+                    <th className="p-4 text-center">DSA Name</th>
+                    <th className="p-4 text-center">DSA Type</th>
+                    <th className="p-4 text-center">Status</th>
+                    <th className="p-4 text-center whitespace-nowrap">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {dsas.map((item, index) => {
+                    // Task 22 — a row is only actionable when the case is at
+                    // this role's stage. Rows that are not are still listed
+                    // (you can see it exists) but cannot be opened, edited or
+                    // auto-acquired, so a stray click can never claim a case
+                    // that has moved on.
+                    const access = resolveCaseAccess(item, roleStr);
+                    const locked = !access.allowed;
+                    const lockNote = describeCaseLock(
+                      access.reason,
+                      item.current_approval_level,
+                    );
+                    // Task 20C — N -> N-1 rule. Only the authority at the
+                    // level BELOW where the case now sits may call it back:
+                    // if L3 approved to L4, only L3 can; if L4 approved to
+                    // L5, only L4 can (never L5). previousActorLevel comes
+                    // from the step history so a skipped DGM (L3 -> L5) is
+                    // still attributed to L3.
+                    const viewerLevel = resolveUserLevel(roleStr);
+                    const previousActorLevel = resolvePreviousActorLevel(
+                      item.approvals,
+                      item.current_approval_level,
+                    );
+                    const currentCaseLevel = Number(
+                      item.current_approval_level,
+                    );
+                    const vLvl = Number(viewerLevel);
 
-                      const wasActionedByMe = Boolean(
-                        currentUser?.id &&
-                          vLvl &&
-                          ((vLvl === 3 && currentCaseLevel === 4) ||
-                           (vLvl === 4 && currentCaseLevel === 5)) &&
-                          Number(item.assigned_user_id) !== Number(currentUser.id) &&
-                          (
-                            (Array.isArray(item.approvals) &&
-                              item.approvals.some(
-                                (a: any) =>
-                                  Number(a?.approval_level ?? a?.level) === vLvl &&
-                                  ["RECOMMENDED", "FORWARDED", "REALLOCATED", "CALLED_BACK"].includes(
-                                    String(a?.status || a?.action || "").toUpperCase(),
-                                  ) &&
-                                  (Number(a?.actioned_by) === Number(currentUser.id) ||
-                                   Number(a?.assigned_user_id) === Number(currentUser.id)),
-                              )) ||
-                            (Number(item.status_reason_by) === Number(currentUser.id)) ||
-                            (!Array.isArray(item.approvals) || item.approvals.length === 0)
-                          )
-                      );
-                      const showCallBackAction = canShowCallBackAction({
-                        rowLocked: locked,
-                        assignedUserId: item.assigned_user_id,
-                        accessReason: access.reason,
-                        level: item.current_approval_level,
-                        viewerLevel,
-                        previousActorLevel,
-                        wasActionedByMe,
-                      });
+                    const wasActionedByMe = Boolean(
+                      currentUser?.id &&
+                      vLvl &&
+                      ((vLvl === 3 && currentCaseLevel === 4) ||
+                        (vLvl === 4 && currentCaseLevel === 5)) &&
+                      Number(item.assigned_user_id) !==
+                        Number(currentUser.id) &&
+                      ((Array.isArray(item.approvals) &&
+                        item.approvals.some(
+                          (a: any) =>
+                            Number(a?.approval_level ?? a?.level) === vLvl &&
+                            [
+                              "RECOMMENDED",
+                              "FORWARDED",
+                              "REALLOCATED",
+                              "CALLED_BACK",
+                            ].includes(
+                              String(
+                                a?.status || a?.action || "",
+                              ).toUpperCase(),
+                            ) &&
+                            (Number(a?.actioned_by) ===
+                              Number(currentUser.id) ||
+                              Number(a?.assigned_user_id) ===
+                                Number(currentUser.id)),
+                        )) ||
+                        Number(item.status_reason_by) ===
+                          Number(currentUser.id) ||
+                        !Array.isArray(item.approvals) ||
+                        item.approvals.length === 0),
+                    );
+                    const showCallBackAction = canShowCallBackAction({
+                      rowLocked: locked,
+                      assignedUserId: item.assigned_user_id,
+                      accessReason: access.reason,
+                      level: item.current_approval_level,
+                      viewerLevel,
+                      previousActorLevel,
+                      wasActionedByMe,
+                    });
 
-                      const isIndividual = String(item.dsa_type || item.business_type || (item as any).businessType || "").toUpperCase() === "INDIVIDUAL";
-                      const displayName = isIndividual
-                        ? (item.name || item.contact_person || item.code)
-                        : ((item as any).entity_name || (item as any).company_name || item.name || item.contact_person || item.code);
+                    const isIndividual =
+                      String(
+                        item.dsa_type ||
+                          item.business_type ||
+                          (item as any).businessType ||
+                          "",
+                      ).toUpperCase() === "INDIVIDUAL";
+                    const displayName = isIndividual
+                      ? item.name || item.contact_person || item.code
+                      : (item as any).entity_name ||
+                        (item as any).company_name ||
+                        item.name ||
+                        item.contact_person ||
+                        item.code;
 
-                      return (
+                    return (
                       <tr
                         className={cn(
                           "transition",
@@ -3047,7 +3117,10 @@ export function DsaManagementPage() {
                       >
                         <td className="w-20 px-3 py-4 text-center whitespace-nowrap">
                           <span className="font-medium text-slate-700">
-                            {((pagination.currentPage || page || 1) - 1) * (pagination.perPage || 10) + index + 1}
+                            {((pagination.currentPage || page || 1) - 1) *
+                              (pagination.perPage || 10) +
+                              index +
+                              1}
                           </span>
                         </td>
                         <td className="p-4 text-center">
@@ -3104,7 +3177,9 @@ export function DsaManagementPage() {
                               </Button>
                             ) : null}
                             {locked ? (
-                              !showCallBackAction && <span className="text-slate-300">—</span>
+                              !showCallBackAction && (
+                                <span className="text-slate-300">—</span>
+                              )
                             ) : (
                               <Button
                                 onClick={() => {
@@ -3120,40 +3195,40 @@ export function DsaManagementPage() {
                           </div>
                         </td>
                       </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-          <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
-            <span>
-              Page {pagination.currentPage} of {pagination.totalPages} ·{" "}
-              {pagination.total} total
-            </span>
-            <div className="flex gap-2">
-              <Button
-                disabled={listLoading || page <= 1}
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                Previous
-              </Button>
-              <Button
-                disabled={listLoading || page >= pagination.totalPages}
-                onClick={() => setPage((current) => current + 1)}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                Next
-              </Button>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
+          )}
+        </CardContent>
+        <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
+          <span>
+            Page {pagination.currentPage} of {pagination.totalPages} ·{" "}
+            {pagination.total} total
+          </span>
+          <div className="flex gap-2">
+            <Button
+              disabled={listLoading || page <= 1}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              Previous
+            </Button>
+            <Button
+              disabled={listLoading || page >= pagination.totalPages}
+              onClick={() => setPage((current) => current + 1)}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              Next
+            </Button>
           </div>
-        </Card>
+        </div>
+      </Card>
 
       <Modal
         onClose={() => setEditing(null)}
@@ -3258,7 +3333,8 @@ export function mapBackendStatusToFrontend(
   operational?: string,
   agreement?: string,
 ): DsaStatus {
-  if (operational === "ACTIVE" && agreement === "SIGNED_VERIFIED") return "Active";
+  if (operational === "ACTIVE" && agreement === "SIGNED_VERIFIED")
+    return "Active";
   if (operational === "SUSPENDED") return "Suspended";
   if (operational === "TERMINATED") return "Blacklisted";
 
@@ -3269,10 +3345,12 @@ export function mapBackendStatusToFrontend(
   if (norm === "COMPLIANCE_CHECK") return "KYC Pending";
   if (norm === "PENDING_APPROVAL") return "Pending Credit Approval";
   if (norm === "APPROVED") {
-    if (operational === "ACTIVE" && agreement === "SIGNED_VERIFIED") return "Active";
+    if (operational === "ACTIVE" && agreement === "SIGNED_VERIFIED")
+      return "Active";
     return "awaiting_agreement_generate";
   }
-  if (norm === "AWAITING_AGREEMENT_GENERATE") return "awaiting_agreement_generate";
+  if (norm === "AWAITING_AGREEMENT_GENERATE")
+    return "awaiting_agreement_generate";
   if (norm === "REJECTED") return "Rejected";
   return "Draft";
 }
@@ -3298,9 +3376,14 @@ export function DsaProfilePage({ id }: { id: string }) {
     const now = new Date();
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth() + 1;
-    const lastCompletedStart = currentMonth < 4 ? currentYear - 2 : currentYear - 1;
+    const lastCompletedStart =
+      currentMonth < 4 ? currentYear - 2 : currentYear - 1;
     const years: string[] = [];
-    for (let start = lastCompletedStart; start >= lastCompletedStart - 5; start--) {
+    for (
+      let start = lastCompletedStart;
+      start >= lastCompletedStart - 5;
+      start--
+    ) {
       const endYearShort = String((start + 1) % 100).padStart(2, "0");
       years.push(`${start}-${endYearShort}`);
     }
@@ -3476,7 +3559,9 @@ export function DsaProfilePage({ id }: { id: string }) {
 
   // -- Task 20C: RE-allocate ------------------------------------------------
   const [reAllocatingDsa, setReAllocatingDsa] = useState<any | null>(null);
-  const [reAllocateTargetId, setReAllocateTargetId] = useState<number | null>(null);
+  const [reAllocateTargetId, setReAllocateTargetId] = useState<number | null>(
+    null,
+  );
   const [reAllocateReason, setReAllocateReason] = useState("");
   const [reAllocateError, setReAllocateError] = useState("");
   const [eligibleUsers, setEligibleUsers] = useState<DsaEligibleUser[]>([]);
@@ -3524,9 +3609,15 @@ export function DsaProfilePage({ id }: { id: string }) {
 
   const [viewingDeviationsModal, setViewingDeviationsModal] = useState(false);
   const [viewingDdReportModal, setViewingDdReportModal] = useState(false);
-  const [deviationRemarksState, setDeviationRemarksState] = useState<Record<string | number, string>>({});
-  const [savingDeviationId, setSavingDeviationId] = useState<string | number | null>(null);
-  const [deviationRemarkStatus, setDeviationRemarkStatus] = useState<Record<string | number, { success?: boolean; error?: string }>>({});
+  const [deviationRemarksState, setDeviationRemarksState] = useState<
+    Record<string | number, string>
+  >({});
+  const [savingDeviationId, setSavingDeviationId] = useState<
+    string | number | null
+  >(null);
+  const [deviationRemarkStatus, setDeviationRemarkStatus] = useState<
+    Record<string | number, { success?: boolean; error?: string }>
+  >({});
 
   const policyEvalData = useMemo(() => {
     const rep = deviationReportData;
@@ -3602,7 +3693,9 @@ export function DsaProfilePage({ id }: { id: string }) {
           return timeB - timeA;
         })[0];
 
-        const st = String(latest.execution_status || latest.status || "").toUpperCase();
+        const st = String(
+          latest.execution_status || latest.status || "",
+        ).toUpperCase();
         const isSuccess =
           Boolean(latest.is_success) ||
           st === "SUCCESS" ||
@@ -3651,11 +3744,7 @@ export function DsaProfilePage({ id }: { id: string }) {
   );
 
   const isKycTypeFailed = useCallback(
-    (
-      key: string,
-      codePatterns: string[],
-      exactTypes?: string[],
-    ) => {
+    (key: string, codePatterns: string[], exactTypes?: string[]) => {
       // 1. In-session explicit failure takes absolute precedence
       if (failedKyc[key]) return true;
       if (verifiedKyc[key]) return false;
@@ -3684,7 +3773,9 @@ export function DsaProfilePage({ id }: { id: string }) {
           return timeB - timeA;
         })[0];
 
-        const st = String(latest.execution_status || latest.status || "").toUpperCase();
+        const st = String(
+          latest.execution_status || latest.status || "",
+        ).toUpperCase();
         const isFailed =
           latest.is_success === false ||
           st === "FAILED" ||
@@ -3806,9 +3897,9 @@ export function DsaProfilePage({ id }: { id: string }) {
   );
 
   const canL2ToL7ViewCibilReport = Boolean(
-    (!isMakerUser && currentUser?.role !== "DSA Partner") &&
-    (
-      isCheckerRole ||
+    !isMakerUser &&
+    currentUser?.role !== "DSA Partner" &&
+    (isCheckerRole ||
       isCheckerLevel ||
       isSubRegionRole ||
       isDgmRole ||
@@ -3817,17 +3908,22 @@ export function DsaProfilePage({ id }: { id: string }) {
       isHoHeadRole ||
       isL7User ||
       isAdminOrSuperAdmin ||
-      (workflowLevelInfo && workflowLevelInfo.currentLevel >= 2)
-    )
+      (workflowLevelInfo && workflowLevelInfo.currentLevel >= 2)),
   );
 
   const DEVIATION_AUTHORITY_ROLES = [
-    { level: 2, role_name: "Checker", authority_title: "Verification & Due Diligence Authority", badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+    {
+      level: 2,
+      role_name: "Checker",
+      authority_title: "Verification & Due Diligence Authority",
+      badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    },
   ] as const;
 
   const canUserEditLevelRemark = (lvl: number): boolean => {
     if (isAdminOrSuperAdmin) return true;
-    if (lvl === 2 && (isCheckerRole || isCheckerLevel || isCheckerUserOrLevel)) return true;
+    if (lvl === 2 && (isCheckerRole || isCheckerLevel || isCheckerUserOrLevel))
+      return true;
     return false;
   };
 
@@ -3847,7 +3943,11 @@ export function DsaProfilePage({ id }: { id: string }) {
     );
   };
 
-  const getRemarkStateKey = (dev: any, lvl: number, fallbackIdx?: number): string => {
+  const getRemarkStateKey = (
+    dev: any,
+    lvl: number,
+    fallbackIdx?: number,
+  ): string => {
     const baseKey = getDeviationKey(dev, fallbackIdx);
     return `${baseKey}_L${lvl}`;
   };
@@ -3856,17 +3956,26 @@ export function DsaProfilePage({ id }: { id: string }) {
     if (!dev) return false;
     if (Array.isArray(dev.remarks_by_level)) {
       const rec = dev.remarks_by_level.find(
-        (r: any) => Number(r.level) === 2 && typeof r.remark === "string" && r.remark.trim().length > 0,
+        (r: any) =>
+          Number(r.level) === 2 &&
+          typeof r.remark === "string" &&
+          r.remark.trim().length > 0,
       );
       if (rec) return true;
     }
     if (typeof dev.remark === "string" && dev.remark.trim().length > 0) {
       return true;
     }
-    if (typeof dev.checker_remark === "string" && dev.checker_remark.trim().length > 0) {
+    if (
+      typeof dev.checker_remark === "string" &&
+      dev.checker_remark.trim().length > 0
+    ) {
       return true;
     }
-    if (typeof dev.checkerRemark === "string" && dev.checkerRemark.trim().length > 0) {
+    if (
+      typeof dev.checkerRemark === "string" &&
+      dev.checkerRemark.trim().length > 0
+    ) {
       return true;
     }
     return false;
@@ -3874,10 +3983,14 @@ export function DsaProfilePage({ id }: { id: string }) {
 
   const unremarkedDeviations = useMemo(() => {
     if (!deviationRules || deviationRules.length === 0) return [];
-    return deviationRules.filter((dev: any) => !hasCheckerRemarkForDeviation(dev));
+    return deviationRules.filter(
+      (dev: any) => !hasCheckerRemarkForDeviation(dev),
+    );
   }, [deviationRules, hasCheckerRemarkForDeviation]);
 
-  const hasUnremarkedDeviations = Boolean(isCheckerLevel && unremarkedDeviations.length > 0);
+  const hasUnremarkedDeviations = Boolean(
+    isCheckerLevel && unremarkedDeviations.length > 0,
+  );
 
   useEffect(() => {
     if (deviationRules?.length) {
@@ -3892,7 +4005,11 @@ export function DsaProfilePage({ id }: { id: string }) {
                 : null;
               if (saved?.remark !== undefined && saved?.remark !== null) {
                 next[stateKey] = saved.remark || "";
-              } else if (lvl === 2 && dev.remark && !Array.isArray(dev.remarks_by_level)) {
+              } else if (
+                lvl === 2 &&
+                dev.remark &&
+                !Array.isArray(dev.remarks_by_level)
+              ) {
                 next[stateKey] = dev.remark || "";
               } else {
                 next[stateKey] = "";
@@ -3905,7 +4022,11 @@ export function DsaProfilePage({ id }: { id: string }) {
     }
   }, [deviationRules]);
 
-  const handleSaveDeviationRemark = async (dev: any, lvl: number, fallbackIdx?: number) => {
+  const handleSaveDeviationRemark = async (
+    dev: any,
+    lvl: number,
+    fallbackIdx?: number,
+  ) => {
     const dsaId =
       dsa?.id ??
       (dsa as any)?.dsa_id ??
@@ -3929,10 +4050,15 @@ export function DsaProfilePage({ id }: { id: string }) {
     const stateKey = getRemarkStateKey(dev, lvl, fallbackIdx);
 
     if (!devId || !dsaId) {
-      console.warn("Cannot save deviation remark: missing deviation ID or DSA ID", { dev, dsa, dsaId, devId });
+      console.warn(
+        "Cannot save deviation remark: missing deviation ID or DSA ID",
+        { dev, dsa, dsaId, devId },
+      );
       setDeviationRemarkStatus((prev) => ({
         ...prev,
-        [stateKey]: { error: "Unable to identify deviation record. Please refresh report." },
+        [stateKey]: {
+          error: "Unable to identify deviation record. Please refresh report.",
+        },
       }));
       return;
     }
@@ -3940,7 +4066,10 @@ export function DsaProfilePage({ id }: { id: string }) {
     if (hasUnverifiedDdlReport) {
       setDeviationRemarkStatus((prev) => ({
         ...prev,
-        [stateKey]: { error: "Please verify the updated Due Diligence Report in the Documents tab before saving deviation remarks." },
+        [stateKey]: {
+          error:
+            "Please verify the updated Due Diligence Report in the Documents tab before saving deviation remarks.",
+        },
       }));
       return;
     }
@@ -3967,22 +4096,42 @@ export function DsaProfilePage({ id }: { id: string }) {
         level: lvl,
       });
 
-      if (res && (res.status === "success" || res.status_code === 200 || (res as any).status === true)) {
+      if (
+        res &&
+        (res.status === "success" ||
+          res.status_code === 200 ||
+          (res as any).status === true)
+      ) {
         if (!Array.isArray(dev.remarks_by_level)) {
           dev.remarks_by_level = [];
         }
-        const existingIdx = dev.remarks_by_level.findIndex((r: any) => Number(r.level) === lvl);
+        const existingIdx = dev.remarks_by_level.findIndex(
+          (r: any) => Number(r.level) === lvl,
+        );
         const savedData = res.data ?? {};
         const updatedItem = {
           level: lvl,
-          role_name: savedData.role_name ?? DEVIATION_AUTHORITY_ROLES.find((r) => r.level === lvl)?.role_name,
-          authority_title: savedData.authority_title ?? DEVIATION_AUTHORITY_ROLES.find((r) => r.level === lvl)?.authority_title,
+          role_name:
+            savedData.role_name ??
+            DEVIATION_AUTHORITY_ROLES.find((r) => r.level === lvl)?.role_name,
+          authority_title:
+            savedData.authority_title ??
+            DEVIATION_AUTHORITY_ROLES.find((r) => r.level === lvl)
+              ?.authority_title,
           remark: currentRemark,
-          user_name: savedData.user_name ?? (authUser as any)?.name ?? "Authority",
-          date: new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }),
+          user_name:
+            savedData.user_name ?? (authUser as any)?.name ?? "Authority",
+          date: new Date().toLocaleDateString("en-IN", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          }),
         };
         if (existingIdx >= 0) {
-          dev.remarks_by_level[existingIdx] = { ...dev.remarks_by_level[existingIdx], ...updatedItem };
+          dev.remarks_by_level[existingIdx] = {
+            ...dev.remarks_by_level[existingIdx],
+            ...updatedItem,
+          };
         } else {
           dev.remarks_by_level.push(updatedItem);
         }
@@ -4095,13 +4244,21 @@ export function DsaProfilePage({ id }: { id: string }) {
         }
       } else if (type === "gst") {
         const gstVal =
-          (dsa.gst ? String(dsa.gst).split(/[,;\s]+/)[0].trim() : "") ||
+          (dsa.gst
+            ? String(dsa.gst)
+                .split(/[,;\s]+/)[0]
+                .trim()
+            : "") ||
           dsa.gstin ||
           dsa.gst;
-        const res = await triggerCheckerVerification(dsa.id, "GST_BASIC_DETAILS", {
-          gstin: gstVal || undefined,
-          pan: dsa.pan,
-        });
+        const res = await triggerCheckerVerification(
+          dsa.id,
+          "GST_BASIC_DETAILS",
+          {
+            gstin: gstVal || undefined,
+            pan: dsa.pan,
+          },
+        );
         await loadKycHistory(dsa.id);
         await fetchDsaDetail(dsa.id);
         const isSuccess =
@@ -4168,11 +4325,15 @@ export function DsaProfilePage({ id }: { id: string }) {
           (dsa as any)?.udyam_no ||
           (dsa as any)?.udyam_registration_no ||
           (dsa as any)?.udyam_number ||
-          (dsa.business_license_no && /UDYAM-[A-Z]{2}-\d{2}-\d{7}/i.test(dsa.business_license_no) ? dsa.business_license_no : "");
+          (dsa.business_license_no &&
+          /UDYAM-[A-Z]{2}-\d{2}-\d{7}/i.test(dsa.business_license_no)
+            ? dsa.business_license_no
+            : "");
         if (!regNo) {
           toast({
             title: "Udyam Missing",
-            description: "No Udyam registration number available on profile to verify.",
+            description:
+              "No Udyam registration number available on profile to verify.",
             variant: "warning",
           });
           setVerifyingKyc((prev) => ({ ...prev, udyam: false }));
@@ -4201,9 +4362,11 @@ export function DsaProfilePage({ id }: { id: string }) {
         const isEntity =
           (dsa.dsa_type || "").toUpperCase() === "ENTITY" ||
           (dsa.entity_type || "").toUpperCase() === "ENTITY" ||
-          ((dsa.business_type || "").toUpperCase() !== "INDIVIDUAL" && (dsa.business_type || "").trim() !== "");
+          ((dsa.business_type || "").toUpperCase() !== "INDIVIDUAL" &&
+            (dsa.business_type || "").trim() !== "");
         const isProprietorship = isProprietorshipDsa(dsa);
-        const cibilCode = (isEntity && !isProprietorship) ? "CIBIL_COMMERCIAL" : "CIBIL_CONSUMER";
+        const cibilCode =
+          isEntity && !isProprietorship ? "CIBIL_COMMERCIAL" : "CIBIL_CONSUMER";
         const res = await triggerCheckerVerification(dsa.id, cibilCode, {
           pan: dsa.pan,
           entity_name: dsa.entity_name || dsa.name,
@@ -4226,7 +4389,13 @@ export function DsaProfilePage({ id }: { id: string }) {
           try {
             const reportRes: any = await adminApi.getCibilReport(dsa.id);
             const reportData = reportRes?.data ?? reportRes;
-            if (reportData && (reportData.success || reportData.generated || reportData.document || reportData.score)) {
+            if (
+              reportData &&
+              (reportData.success ||
+                reportData.generated ||
+                reportData.document ||
+                reportData.score)
+            ) {
               setCibilReportMeta(reportData);
             }
           } catch {
@@ -4297,7 +4466,9 @@ export function DsaProfilePage({ id }: { id: string }) {
       await triggerCheckerVerification(dsa.id, "GST_BASIC_DETAILS", {
         gstin: gstinToFetch.trim().toUpperCase(),
       });
-      setFetchedGstins((prev) => Array.from(new Set([...prev, gstinToFetch.trim().toUpperCase()])));
+      setFetchedGstins((prev) =>
+        Array.from(new Set([...prev, gstinToFetch.trim().toUpperCase()])),
+      );
       await loadKycHistory(dsa.id);
       await fetchDsaDetail(dsa.id);
       toast({
@@ -4541,8 +4712,6 @@ export function DsaProfilePage({ id }: { id: string }) {
    * CASE_RELEASED audit row.
    */
 
-
-
   useEffect(() => {
     if (!dsa?.id || isMakerUser || !isCheckerRole) {
       setCheckerDdNote("");
@@ -4653,8 +4822,13 @@ export function DsaProfilePage({ id }: { id: string }) {
         aml: prev.aml || isDoneInDsa("AML"),
       }));
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dsa?.id, dsa?.onboarding_status, dsa?.agreement_status, dsa?.operational_status]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    dsa?.id,
+    dsa?.onboarding_status,
+    dsa?.agreement_status,
+    dsa?.operational_status,
+  ]);
 
   // KYC statuses for GST, Bank BAV, Udyam, CIBIL, and AML in Checker review are strictly
   // derived from Checker execution in dsa_verifications (dsa.verifications) and session state,
@@ -4714,7 +4888,10 @@ export function DsaProfilePage({ id }: { id: string }) {
       });
       return;
     } catch (err: any) {
-      console.warn("PDF blob download failed, falling back to text report:", err);
+      console.warn(
+        "PDF blob download failed, falling back to text report:",
+        err,
+      );
       // Fallback to text report generation if PDF generation is not available
     }
 
@@ -4789,7 +4966,10 @@ export function DsaProfilePage({ id }: { id: string }) {
                 "",
               ].join("\n"),
             )
-        : ["  No policy deviations recorded. All parameters meet standard criteria.", ""]),
+        : [
+            "  No policy deviations recorded. All parameters meet standard criteria.",
+            "",
+          ]),
       "--------------------------------------------------------------------------------",
       "STATUTORY DUE DILIGENCE (DDL) VERIFICATIONS:",
       makerVerif
@@ -4901,9 +5081,11 @@ export function DsaProfilePage({ id }: { id: string }) {
   const [showAddItrSlot, setShowAddItrSlot] = useState<boolean>(false);
   const [extraItrYearNum, setExtraItrYearNum] = useState<number>(2);
   const [extraItrFy, setExtraItrFy] = useState<string>("2023-24");
-  const [isUploadingExtraItr, setIsUploadingExtraItr] = useState<boolean>(false);
+  const [isUploadingExtraItr, setIsUploadingExtraItr] =
+    useState<boolean>(false);
   const [loadingPreviewDocId, setLoadingPreviewDocId] = useState<any>(null);
-  const [loadingDdReportModal, setLoadingDdReportModal] = useState<boolean>(false);
+  const [loadingDdReportModal, setLoadingDdReportModal] =
+    useState<boolean>(false);
 
   // Real DSA Portal Users mapped via GET /api/v1/dsa/{id}/users (Phase 2)
   const [dsaPortalUsers, setDsaPortalUsers] = useState<any[]>([]);
@@ -4977,7 +5159,10 @@ export function DsaProfilePage({ id }: { id: string }) {
       .then((res: any) => {
         if (!active) return;
         const data = res?.data ?? res;
-        if (data && (data.success || data.generated || data.document || data.score)) {
+        if (
+          data &&
+          (data.success || data.generated || data.document || data.score)
+        ) {
           setCibilReportMeta(data);
         }
       })
@@ -4991,7 +5176,6 @@ export function DsaProfilePage({ id }: { id: string }) {
       active = false;
     };
   }, [dsa?.id, canL2ToL7ViewCibilReport, backendDocs]);
-
 
   const openDocPreview = async (doc: any) => {
     if (isDdReviewReportDocument(doc) && dsa?.id) {
@@ -5104,7 +5288,10 @@ export function DsaProfilePage({ id }: { id: string }) {
           try {
             await adminApi.getDdReviewReportPdf(dsa.id);
           } catch (pdfErr) {
-            console.warn("getDdReviewReportPdf error on DD report refresh:", pdfErr);
+            console.warn(
+              "getDdReviewReportPdf error on DD report refresh:",
+              pdfErr,
+            );
           }
         }
         const data = await fetchDeviationReport(dsa.id);
@@ -5139,7 +5326,9 @@ export function DsaProfilePage({ id }: { id: string }) {
 
   useEffect(() => {
     if (
-      (tab === "reports" || (tab === "overview" && appFormSubTab !== "ddl") || tab === "actions") &&
+      (tab === "reports" ||
+        (tab === "overview" && appFormSubTab !== "ddl") ||
+        tab === "actions") &&
       dsa?.id
     ) {
       setLoadingDeviationReport(true);
@@ -5159,24 +5348,41 @@ export function DsaProfilePage({ id }: { id: string }) {
   }, [tab, appFormSubTab, dsa?.id, fetchDeviationReport]);
 
   const isPanFailed = isKycTypeFailed("pan", ["PAN"]);
-  const isGstFailed = isKycTypeFailed("gst", ["GST_BASIC", "GST_BASIC_DETAILS", "GST"]);
+  const isGstFailed = isKycTypeFailed("gst", [
+    "GST_BASIC",
+    "GST_BASIC_DETAILS",
+    "GST",
+  ]);
   const isBankFailed = isKycTypeFailed("bank", ["BANK", "BAV"]);
   const isUdyamFailed = isKycTypeFailed("udyam", ["UDYAM", "MSME"]);
-  const isCibilFailed = isKycTypeFailed("cibil", ["CIBIL", "BUREAU", "TRANSUNION"]);
+  const isCibilFailed = isKycTypeFailed("cibil", [
+    "CIBIL",
+    "BUREAU",
+    "TRANSUNION",
+  ]);
   const isAmlFailed = isKycTypeFailed("aml", ["AML", "SANCTION", "COMPASS"]);
 
   const isPanChecked =
     !isPanFailed &&
     (Boolean(verifiedKyc.pan) ||
-      isKycTypeVerified("pan", ["PAN", "PAN_ENTITY", "PAN_ADVANCED_INDIVIDUAL"], true) ||
+      isKycTypeVerified(
+        "pan",
+        ["PAN", "PAN_ENTITY", "PAN_ADVANCED_INDIVIDUAL"],
+        true,
+      ) ||
       Boolean(dsa?.pan));
   const isGstChecked =
     !isGstFailed &&
     (Boolean(verifiedKyc.gst) ||
-      isKycTypeVerified("gst", ["GST_BASIC", "GST_BASIC_DETAILS", "GST"], false));
+      isKycTypeVerified(
+        "gst",
+        ["GST_BASIC", "GST_BASIC_DETAILS", "GST"],
+        false,
+      ));
   const isBankChecked =
     !isBankFailed &&
-    (Boolean(verifiedKyc.bank) || isKycTypeVerified("bank", ["BANK", "BAV"], false));
+    (Boolean(verifiedKyc.bank) ||
+      isKycTypeVerified("bank", ["BANK", "BAV"], false));
   const isUdyamChecked =
     !isUdyamFailed &&
     (Boolean(verifiedKyc.udyam) ||
@@ -5206,7 +5412,8 @@ export function DsaProfilePage({ id }: { id: string }) {
   const isUdyamRequired = Boolean(
     (dsa as any)?.udyam_no ||
     (dsa as any)?.udyam_registration_no ||
-    (dsa?.business_license_no && /UDYAM-[A-Z]{2}-\d{2}-\d{7}/i.test(dsa.business_license_no))
+    (dsa?.business_license_no &&
+      /UDYAM-[A-Z]{2}-\d{2}-\d{7}/i.test(dsa.business_license_no)),
   );
 
   const isAllKycVerified = Boolean(
@@ -5321,62 +5528,62 @@ export function DsaProfilePage({ id }: { id: string }) {
       );
   };
 
-/**
- * Resolve a stage's displayed remarks, honouring BYPASS first.
- *
- * 1. Bypassed stage (routed around)  -> the bypass wording.
- * 2. Otherwise the real recorded message.
- * 3. The generic default ONLY when this stage genuinely acted but recorded no
- *    remarks of its own.
- *
- * A level the case has NOT reached yet (or is currently sitting at) has no
- * actioned row, so it yields "" — never a fabricated "Recommended by <role>".
- * Previously the default was applied unconditionally, which made upcoming
- * stages claim they had reviewed the case.
- */
-const resolveStageRemarksOrBypass = (
-  level: number,
-  stageCode: string,
-  fallback: string,
-): string =>
-  resolveStageRemarksForDisplay({
-    approvals: dsa?.approvals,
-    level,
-    stageCode,
-    currentLevel: workflowLevelInfo?.currentLevel ?? null,
-    statusReason: dsa?.status_reason,
-    statusReasonAction: dsa?.status_reason_action,
-    defaultText: fallback,
-  });
-
-/**
- * Status for one stage in the Decisions panel, honouring bypass so a stage the
- * case routed past reads SKIPPED instead of a fabricated RECOMMENDED.
- */
-const resolveStageStatus = (
-  level: number,
-  stageCode: string,
-  approvalStatus: string | null | undefined,
-  reachedText: string,
-): string => {
-  if (
-    resolveStageBypassShared({
+  /**
+   * Resolve a stage's displayed remarks, honouring BYPASS first.
+   *
+   * 1. Bypassed stage (routed around)  -> the bypass wording.
+   * 2. Otherwise the real recorded message.
+   * 3. The generic default ONLY when this stage genuinely acted but recorded no
+   *    remarks of its own.
+   *
+   * A level the case has NOT reached yet (or is currently sitting at) has no
+   * actioned row, so it yields "" — never a fabricated "Recommended by <role>".
+   * Previously the default was applied unconditionally, which made upcoming
+   * stages claim they had reviewed the case.
+   */
+  const resolveStageRemarksOrBypass = (
+    level: number,
+    stageCode: string,
+    fallback: string,
+  ): string =>
+    resolveStageRemarksForDisplay({
       approvals: dsa?.approvals,
       level,
       stageCode,
       currentLevel: workflowLevelInfo?.currentLevel ?? null,
-    })
-  ) {
-    return "SKIPPED";
-  }
+      statusReason: dsa?.status_reason,
+      statusReasonAction: dsa?.status_reason_action,
+      defaultText: fallback,
+    });
 
-  if (approvalStatus) return String(approvalStatus).toUpperCase();
+  /**
+   * Status for one stage in the Decisions panel, honouring bypass so a stage the
+   * case routed past reads SKIPPED instead of a fabricated RECOMMENDED.
+   */
+  const resolveStageStatus = (
+    level: number,
+    stageCode: string,
+    approvalStatus: string | null | undefined,
+    reachedText: string,
+  ): string => {
+    if (
+      resolveStageBypassShared({
+        approvals: dsa?.approvals,
+        level,
+        stageCode,
+        currentLevel: workflowLevelInfo?.currentLevel ?? null,
+      })
+    ) {
+      return "SKIPPED";
+    }
 
-  const cur = workflowLevelInfo?.currentLevel ?? 1;
-  if (cur > level) return reachedText;
-  if (cur === level) return "ACTIVE";
-  return "PENDING";
-};
+    if (approvalStatus) return String(approvalStatus).toUpperCase();
+
+    const cur = workflowLevelInfo?.currentLevel ?? 1;
+    if (cur > level) return reachedText;
+    if (cur === level) return "ACTIVE";
+    return "PENDING";
+  };
 
   const l1Approval: any = pickLatestApproval(
     (a: any) =>
@@ -5401,7 +5608,10 @@ const resolveStageStatus = (
   // exclusion has to be explicit rather than relying on the OR below.
   const canViewAgreementsTab = Boolean(
     !isL7User &&
-      (isMakerUserOrLevel || isCheckerUserOrLevel || isMakerLevel || isCheckerLevel),
+    (isMakerUserOrLevel ||
+      isCheckerUserOrLevel ||
+      isMakerLevel ||
+      isCheckerLevel),
   );
 
   const canEditBasicDetails = Boolean(
@@ -5441,7 +5651,8 @@ const resolveStageStatus = (
   // - Returns "Pending" if newly uploaded, re-uploaded by Maker, or awaiting Checker verification
   const getEffectiveDocStatus = (doc: any): string => {
     if (!doc) return "Pending";
-    if (isApplicationFormDocument(doc) || isCibilReportDocument(doc)) return "Verified";
+    if (isApplicationFormDocument(doc) || isCibilReportDocument(doc))
+      return "Verified";
     if (manuallyFailedDocIds.has(doc.id)) return "Failed";
     if (manuallyVerifiedDocIds.has(doc.id) || checkerVerifiedDocIds.has(doc.id))
       return "Verified";
@@ -5497,16 +5708,26 @@ const resolveStageStatus = (
         );
       } else {
         const isItr = isItrDocument(doc);
-        let fy = doc.financial_year || (doc.remarks && /financial year:\s*([^|]+)/i.exec(doc.remarks)?.[1]?.trim());
+        let fy =
+          doc.financial_year ||
+          (doc.remarks &&
+            /financial year:\s*([^|]+)/i.exec(doc.remarks)?.[1]?.trim());
         if (!fy && isItr) {
-          fy = docType === "itr_year_1" ? availableFinancialYears[0] : docType === "itr_year_2" ? availableFinancialYears[1] : availableFinancialYears[0];
+          fy =
+            docType === "itr_year_1"
+              ? availableFinancialYears[0]
+              : docType === "itr_year_2"
+                ? availableFinancialYears[1]
+                : availableFinancialYears[0];
         }
         await uploadDsaDocument(dsa.id, {
           file,
           document_type: docType,
           owner_name: dsa.name,
           financial_year: fy,
-          remarks: fy ? `Financial Year: ${fy} | Re-uploaded by Maker (${currentUser?.name || "Maker"})` : `Re-uploaded by Maker (${currentUser?.name || "Maker"})`,
+          remarks: fy
+            ? `Financial Year: ${fy} | Re-uploaded by Maker (${currentUser?.name || "Maker"})`
+            : `Re-uploaded by Maker (${currentUser?.name || "Maker"})`,
         });
       }
 
@@ -5574,16 +5795,40 @@ const resolveStageStatus = (
 
       // Exclude documents already uploaded in backendDocs or dsa.documents
       const targetType = String(item.document_type || "").toLowerCase();
-      const docsToCheck = backendDocs.length > 0 ? backendDocs : (dsa?.documents || []);
+      const docsToCheck =
+        backendDocs.length > 0 ? backendDocs : dsa?.documents || [];
       const alreadyUploaded = docsToCheck.some((d: any) => {
         const dt = String(d.document_type || d.type || "").toLowerCase();
         if (dt === targetType) return true;
-        if (targetType.startsWith("itr_year_") && (dt === targetType || dt === "itr_returns" || dt === "itr")) return true;
-        if (targetType === "business_license" && (dt.startsWith("business_license") || dt.includes("shop_act") || dt.includes("udyam"))) return true;
-        if (targetType === "recent_photograph" && (dt.includes("photo") || dt.includes("photograph"))) return true;
-        if (targetType === "stakeholder_photograph" && (dt.includes("photo") || dt.includes("photograph"))) return true;
-        if (targetType === "pan_card" && (dt === "pan" || dt === "pan_card" || dt === "entity_pan_card")) return true;
-        if (targetType === "aadhaar_card" && dt.includes("aadhaar")) return true;
+        if (
+          targetType.startsWith("itr_year_") &&
+          (dt === targetType || dt === "itr_returns" || dt === "itr")
+        )
+          return true;
+        if (
+          targetType === "business_license" &&
+          (dt.startsWith("business_license") ||
+            dt.includes("shop_act") ||
+            dt.includes("udyam"))
+        )
+          return true;
+        if (
+          targetType === "recent_photograph" &&
+          (dt.includes("photo") || dt.includes("photograph"))
+        )
+          return true;
+        if (
+          targetType === "stakeholder_photograph" &&
+          (dt.includes("photo") || dt.includes("photograph"))
+        )
+          return true;
+        if (
+          targetType === "pan_card" &&
+          (dt === "pan" || dt === "pan_card" || dt === "entity_pan_card")
+        )
+          return true;
+        if (targetType === "aadhaar_card" && dt.includes("aadhaar"))
+          return true;
         return false;
       });
       if (alreadyUploaded) return false;
@@ -5592,9 +5837,9 @@ const resolveStageStatus = (
         return false;
       const hasExp = Boolean(
         (dsa?.experience_years && String(dsa.experience_years) !== "0") ||
-          (dsa?.applicant_prior_experience &&
-            !/fresher|no prior/i.test(String(dsa.applicant_prior_experience))) ||
-          dsa?.bank_or_institution_name,
+        (dsa?.applicant_prior_experience &&
+          !/fresher|no prior/i.test(String(dsa.applicant_prior_experience))) ||
+        dsa?.bank_or_institution_name,
       );
       if (item.document_type === "experience_certificate" && !hasExp)
         return false;
@@ -5622,8 +5867,7 @@ const resolveStageStatus = (
 
   const l5Approval: any = pickLatestApproval(
     (a: any) =>
-      Number(a.approval_level) === 5 ||
-      a.stage_code === "LEVEL_5_REGION_HEAD",
+      Number(a.approval_level) === 5 || a.stage_code === "LEVEL_5_REGION_HEAD",
   );
 
   const l6Approval: any = pickLatestApproval(
@@ -5646,11 +5890,11 @@ const resolveStageStatus = (
 
   const isL2Actioned = Boolean(
     l2Approval?.status === "RECOMMENDED" ||
-      l2Approval?.status === "SUBMITTED" ||
-      l2Approval?.status === "APPROVED" ||
-      l2Approval?.status === "REJECTED" ||
-      l2Approval?.status === "REVERTED" ||
-      (workflowLevelInfo?.currentLevel ?? 1) > 2,
+    l2Approval?.status === "SUBMITTED" ||
+    l2Approval?.status === "APPROVED" ||
+    l2Approval?.status === "REJECTED" ||
+    l2Approval?.status === "REVERTED" ||
+    (workflowLevelInfo?.currentLevel ?? 1) > 2,
   );
 
   const checkerRemarks = resolveStageRemarksOrBypass(
@@ -5691,21 +5935,19 @@ const resolveStageStatus = (
 
   const isL7AlreadyApproved = Boolean(
     dsa?.onboarding_status === "APPROVED" ||
-      dsa?.onboarding_status === "AGREEMENT_PENDING" ||
-      dsa?.onboarding_status === "AGREEMENT_COMPLETED" ||
-      dsa?.agreement_status === "SIGNED_UPLOADED" ||
-      dsa?.agreement_status === "SIGNED_VERIFIED" ||
-      dsa?.operational_status === "ACTIVE" ||
-      workflowLevelInfo?.isCompleted ||
-      (workflowLevelInfo?.currentLevel ?? 1) > 7,
+    dsa?.onboarding_status === "AGREEMENT_PENDING" ||
+    dsa?.onboarding_status === "AGREEMENT_COMPLETED" ||
+    dsa?.agreement_status === "SIGNED_UPLOADED" ||
+    dsa?.agreement_status === "SIGNED_VERIFIED" ||
+    dsa?.operational_status === "ACTIVE" ||
+    workflowLevelInfo?.isCompleted ||
+    (workflowLevelInfo?.currentLevel ?? 1) > 7,
   );
 
   const isL7AlreadyRejected = Boolean(
     dsa?.onboarding_status === "REJECTED" ||
-      (dsa as any)?.status === "REJECTED",
+    (dsa as any)?.status === "REJECTED",
   );
-
-
 
   const isIndividualDsa =
     (dsa.dsa_type || "").toUpperCase() === "INDIVIDUAL" ||
@@ -5753,7 +5995,8 @@ const resolveStageStatus = (
   const hasUdyam = Boolean(
     (dsa as any)?.udyam_no ||
     (dsa as any)?.udyam_registration_no ||
-    (dsa?.business_license_no && /UDYAM-[A-Z]{2}-\d{2}-\d{7}/i.test(dsa.business_license_no))
+    (dsa?.business_license_no &&
+      /UDYAM-[A-Z]{2}-\d{2}-\d{7}/i.test(dsa.business_license_no)),
   );
 
   const udyamCheckerVerif = hasUdyam
@@ -5772,53 +6015,54 @@ const resolveStageStatus = (
 
   const isProprietorship = isProprietorshipDsa(dsa);
 
-  const requiredCheckerVerifications = (isIndividualDsa || isProprietorship)
-    ? [
-        ...gstCheckerVerif,
-        ...udyamCheckerVerif,
-        {
-          code: "CIBIL_CONSUMER",
-          label: "Transunion CIBIL Consumer Hard Pull",
-          dsaType: isProprietorship ? "Proprietorship" : "Individual",
-          triggeredBy: "Checker",
-          ifFail: "Continue; remark in DD note",
-          ifAdverse: "Deviation if < 700; reject if < 550",
-          desc: isProprietorship
-            ? "Bureau hard credit pull for proprietor credit history and score"
-            : "Bureau hard credit pull for individual credit history and score",
-        },
-        {
-          code: "AML_COMPASS",
-          label: "AML & KYC — Compass API",
-          dsaType: "Both",
-          triggeredBy: "Checker",
-          ifFail: "Manual verify; remark in DD note",
-          ifAdverse: "Deviation if match â‰¥ 95%",
-          desc: "Screening against PEP, sanctions, and Cosmos Bank internal negative list",
-        },
-      ]
-    : [
-        ...gstCheckerVerif,
-        ...udyamCheckerVerif,
-        {
-          code: "CIBIL_COMMERCIAL",
-          label: "Transunion CIBIL Commercial (CMR Rank)",
-          dsaType: "Entity",
-          triggeredBy: "Checker",
-          ifFail: "Continue; remark in DD note",
-          ifAdverse: "Deviation if CMR > 5",
-          desc: "Commercial bureau track record assessing entity CMR rating (CMR 1–10)",
-        },
-        {
-          code: "AML_COMPASS",
-          label: "AML & KYC — Compass API",
-          dsaType: "Both",
-          triggeredBy: "Checker",
-          ifFail: "Manual verify; remark in DD note",
-          ifAdverse: "Deviation if match â‰¥ 95%",
-          desc: "Screens entity and promoters against negative databases and watchlists",
-        },
-      ];
+  const requiredCheckerVerifications =
+    isIndividualDsa || isProprietorship
+      ? [
+          ...gstCheckerVerif,
+          ...udyamCheckerVerif,
+          {
+            code: "CIBIL_CONSUMER",
+            label: "Transunion CIBIL Consumer Hard Pull",
+            dsaType: isProprietorship ? "Proprietorship" : "Individual",
+            triggeredBy: "Checker",
+            ifFail: "Continue; remark in DD note",
+            ifAdverse: "Deviation if < 700; reject if < 550",
+            desc: isProprietorship
+              ? "Bureau hard credit pull for proprietor credit history and score"
+              : "Bureau hard credit pull for individual credit history and score",
+          },
+          {
+            code: "AML_COMPASS",
+            label: "AML & KYC — Compass API",
+            dsaType: "Both",
+            triggeredBy: "Checker",
+            ifFail: "Manual verify; remark in DD note",
+            ifAdverse: "Deviation if match â‰¥ 95%",
+            desc: "Screening against PEP, sanctions, and Cosmos Bank internal negative list",
+          },
+        ]
+      : [
+          ...gstCheckerVerif,
+          ...udyamCheckerVerif,
+          {
+            code: "CIBIL_COMMERCIAL",
+            label: "Transunion CIBIL Commercial (CMR Rank)",
+            dsaType: "Entity",
+            triggeredBy: "Checker",
+            ifFail: "Continue; remark in DD note",
+            ifAdverse: "Deviation if CMR > 5",
+            desc: "Commercial bureau track record assessing entity CMR rating (CMR 1–10)",
+          },
+          {
+            code: "AML_COMPASS",
+            label: "AML & KYC — Compass API",
+            dsaType: "Both",
+            triggeredBy: "Checker",
+            ifFail: "Manual verify; remark in DD note",
+            ifAdverse: "Deviation if match â‰¥ 95%",
+            desc: "Screens entity and promoters against negative databases and watchlists",
+          },
+        ];
 
   const existingVerifications = (dsa.verifications || []) as any[];
 
@@ -5831,8 +6075,12 @@ const resolveStageStatus = (
       const st = (v.execution_status || v.status || "").toUpperCase();
       const matchesCode =
         vCode === codeUpper ||
-        (codeUpper === "GST" && (vCode === "GST_BASIC_DETAILS" || vCode === "GST_BASIC" || vCode.includes("GST"))) ||
-        (codeUpper === "UDYAM" && (vCode.includes("UDYAM") || vCode.includes("MSME")));
+        (codeUpper === "GST" &&
+          (vCode === "GST_BASIC_DETAILS" ||
+            vCode === "GST_BASIC" ||
+            vCode.includes("GST"))) ||
+        (codeUpper === "UDYAM" &&
+          (vCode.includes("UDYAM") || vCode.includes("MSME")));
       return (
         matchesCode &&
         (v.is_success !== undefined ||
@@ -5853,11 +6101,21 @@ const resolveStageStatus = (
       if (verifiedKyc.pan || isPanChecked) return true;
     }
     if (codeUpper === "CIBIL_CONSUMER" || codeUpper === "CIBIL_COMMERCIAL") {
-      if (checkerKycAttempted.cibil || verifiedKyc.cibil || failedKyc.cibil || isCibilChecked)
+      if (
+        checkerKycAttempted.cibil ||
+        verifiedKyc.cibil ||
+        failedKyc.cibil ||
+        isCibilChecked
+      )
         return true;
     }
     if (codeUpper === "AML_COMPASS") {
-      if (checkerKycAttempted.aml || verifiedKyc.aml || failedKyc.aml || isAmlChecked)
+      if (
+        checkerKycAttempted.aml ||
+        verifiedKyc.aml ||
+        failedKyc.aml ||
+        isAmlChecked
+      )
         return true;
     }
     if (codeUpper === "GST") {
@@ -6066,8 +6324,11 @@ const resolveStageStatus = (
   if (
     (cibilReportMeta?.document ||
       cibilReportMeta?.generated ||
-      (dsa?.cibil_score && String(dsa?.cibil_score).trim() !== "" && String(dsa?.cibil_score) !== "0") ||
-      (dsa?.cibil_status && String(dsa?.cibil_status).toUpperCase() === "SUCCESS") ||
+      (dsa?.cibil_score &&
+        String(dsa?.cibil_score).trim() !== "" &&
+        String(dsa?.cibil_score) !== "0") ||
+      (dsa?.cibil_status &&
+        String(dsa?.cibil_status).toUpperCase() === "SUCCESS") ||
       isCibilChecked ||
       verifiedKyc.cibil) &&
     !rawDocList.some((d: any) => isCibilReportDocument(d))
@@ -6077,14 +6338,23 @@ const resolveStageStatus = (
     ).replace(/\/api\/?$/, "");
     const docMeta = cibilReportMeta?.document;
     rawDocList.push({
-      id: docMeta?.id || (typeof dsa?.id === "number" ? dsa.id * 100000 + 888 : 888888),
+      id:
+        docMeta?.id ||
+        (typeof dsa?.id === "number" ? dsa.id * 100000 + 888 : 888888),
       document_type: "cibil_report",
       file_name: docMeta?.file_name || `cibil_report_${dsa?.id || ""}.pdf`,
-      file_path: docMeta?.file_path || `dsa_cibil_reports/${dsa?.id}/cibil_report_${dsa?.id}.pdf`,
-      file_url: docMeta?.file_url || `${apiBase}/api/v1/dsa/${dsa?.id}/cibil-report/pdf`,
+      file_path:
+        docMeta?.file_path ||
+        `dsa_cibil_reports/${dsa?.id}/cibil_report_${dsa?.id}.pdf`,
+      file_url:
+        docMeta?.file_url ||
+        `${apiBase}/api/v1/dsa/${dsa?.id}/cibil-report/pdf`,
       size: docMeta?.size || "PDF",
       status: "Verified",
-      uploaded_at: docMeta?.uploaded_at || (dsa as any)?.cibil_fetched_at || new Date().toISOString(),
+      uploaded_at:
+        docMeta?.uploaded_at ||
+        (dsa as any)?.cibil_fetched_at ||
+        new Date().toISOString(),
       remarks: "Bureau CIR Report Generated via TransUnion CIBIL Gateway",
     });
   }
@@ -6117,15 +6387,24 @@ const resolveStageStatus = (
     })
     .reduce((acc: any[], doc: any) => {
       const isVisit = isVisitReportDocument(doc);
-      const isItr = String(doc.document_type || "").toLowerCase().startsWith("itr");
-      const isOther = String(doc.document_type || "").toLowerCase() === "other_document";
+      const isItr = String(doc.document_type || "")
+        .toLowerCase()
+        .startsWith("itr");
+      const isOther =
+        String(doc.document_type || "").toLowerCase() === "other_document";
       const isMulti = isItr || isOther;
       const existingIndex = acc.findIndex((d) => {
         if (isVisit) return isVisitReportDocument(d);
         if (isMulti) {
           // Keep every year-wise ITR and multi-document distinct unless identical id or duplicate file
-          return (typeof d.id === "number" && typeof doc.id === "number" && d.id === doc.id)
-            || (d.document_type === doc.document_type && d.file_name === doc.file_name && d.financial_year === doc.financial_year);
+          return (
+            (typeof d.id === "number" &&
+              typeof doc.id === "number" &&
+              d.id === doc.id) ||
+            (d.document_type === doc.document_type &&
+              d.file_name === doc.file_name &&
+              d.financial_year === doc.financial_year)
+          );
         }
         return d.document_type === doc.document_type;
       });
@@ -6280,7 +6559,10 @@ const resolveStageStatus = (
         return "Due Diligence Report Required: Please generate and submit the Due Diligence & Deviations Report in the Reports tab.";
       }
     }
-    if (workflowLevelInfo.currentLevel >= 3 && workflowLevelInfo.currentLevel <= 7) {
+    if (
+      workflowLevelInfo.currentLevel >= 3 &&
+      workflowLevelInfo.currentLevel <= 7
+    ) {
       if (hasUnverifiedApplicantDocs) {
         return `Partner Documents Incomplete: ${applicantReviewDocs.length - applicantVerifiedDocsCount} document(s) still require verification before proceeding.`;
       }
@@ -6375,13 +6657,20 @@ const resolveStageStatus = (
     workflowLevelInfo.currentLevel >= 3 &&
     workflowLevelInfo.currentLevel <= 7 &&
     !isMakerUser &&
-    ((!isCheckerRole && !isHoOfficerRole && (isSubRegionRole || isDgmRole || isRegionHeadRole || isHoHeadRole || isL7User)) ||
+    ((!isCheckerRole &&
+      !isHoOfficerRole &&
+      (isSubRegionRole ||
+        isDgmRole ||
+        isRegionHeadRole ||
+        isHoHeadRole ||
+        isL7User)) ||
       isAdminOrSuperAdmin),
   );
 
   // -- Task 20C: RE-allocate ------------------------------------------------
   // Gated on the CURRENTLY PENDING level, exactly as the backend matrix does.
-  const currentStepLevel = Number(dsa?.current_approval_level) || workflowLevelInfo.currentLevel;
+  const currentStepLevel =
+    Number(dsa?.current_approval_level) || workflowLevelInfo.currentLevel;
   const showReAllocate = canReAllocate(currentStepLevel);
 
   // NOTE: this calls adminApi directly rather than the useDsa wrapper. The
@@ -6429,9 +6718,7 @@ const resolveStageStatus = (
       router.push("/dashboard");
     } catch (err: unknown) {
       setReAllocateError(
-        err instanceof Error
-          ? err.message
-          : "Failed to re-allocate this case.",
+        err instanceof Error ? err.message : "Failed to re-allocate this case.",
       );
     } finally {
       setAction20CBusy(false);
@@ -7012,13 +7299,9 @@ const resolveStageStatus = (
       Boolean(dsa?.entity_name);
 
     const basicInfo =
-      rep?.basic_information ||
-      (rep as any)?.basicInformation ||
-      {};
+      rep?.basic_information || (rep as any)?.basicInformation || {};
     const finDd =
-      rep?.financial_due_diligence ||
-      (rep as any)?.financialDueDiligence ||
-      {};
+      rep?.financial_due_diligence || (rep as any)?.financialDueDiligence || {};
     const bgRep =
       rep?.background_reputational_verification ||
       (rep as any)?.backgroundReputationalVerification ||
@@ -7036,9 +7319,7 @@ const resolveStageStatus = (
       (rep as any)?.recommendationApprovalHistory?.maker;
 
     const checkerRemarks =
-      rep?.checker_remarks ||
-      (rep as any)?.checkerRemarks ||
-      {};
+      rep?.checker_remarks || (rep as any)?.checkerRemarks || {};
 
     const l3Hist =
       rep?.recommendation_approval_history?.first_recommending_authority ||
@@ -7046,7 +7327,8 @@ const resolveStageStatus = (
 
     const l4Hist =
       rep?.recommendation_approval_history?.second_recommending_authority ||
-      (rep as any)?.recommendationApprovalHistory?.second_recommending_authority;
+      (rep as any)?.recommendationApprovalHistory
+        ?.second_recommending_authority;
 
     const l5Hist =
       rep?.recommendation_approval_history?.third_recommending_authority ||
@@ -7054,7 +7336,8 @@ const resolveStageStatus = (
 
     const l6Hist =
       rep?.recommendation_approval_history?.fourth_recommending_authority ||
-      (rep as any)?.recommendationApprovalHistory?.fourth_recommending_authority;
+      (rep as any)?.recommendationApprovalHistory
+        ?.fourth_recommending_authority;
 
     const l7Hist =
       rep?.recommendation_approval_history?.approving_authority ||
@@ -7091,15 +7374,15 @@ const resolveStageStatus = (
 
     const isAlreadyApproved = Boolean(
       dsa?.onboarding_status === "APPROVED" ||
-        dsa?.onboarding_status === "AGREEMENT_PENDING" ||
-        dsa?.onboarding_status === "AGREEMENT_COMPLETED" ||
-        dsa?.agreement_status === "SIGNED_UPLOADED" ||
-        dsa?.agreement_status === "SIGNED_VERIFIED" ||
-        dsa?.operational_status === "ACTIVE" ||
-        workflowLevelInfo.isCompleted ||
-        (Number(dsa?.current_approval_level) >= 7 &&
-          ((dsa as any)?.status === "APPROVED" ||
-            (dsa as any)?.action === "APPROVE")),
+      dsa?.onboarding_status === "AGREEMENT_PENDING" ||
+      dsa?.onboarding_status === "AGREEMENT_COMPLETED" ||
+      dsa?.agreement_status === "SIGNED_UPLOADED" ||
+      dsa?.agreement_status === "SIGNED_VERIFIED" ||
+      dsa?.operational_status === "ACTIVE" ||
+      workflowLevelInfo.isCompleted ||
+      (Number(dsa?.current_approval_level) >= 7 &&
+        ((dsa as any)?.status === "APPROVED" ||
+          (dsa as any)?.action === "APPROVE")),
     );
 
     const formatDt = (val?: string | null) => {
@@ -7113,13 +7396,14 @@ const resolveStageStatus = (
 
     const isL2Actioned = Boolean(
       (dsa as any)?.status === "RECOMMENDED" ||
-        dsa?.onboarding_status === "RECOMMENDED" ||
-        Number(dsa?.current_approval_level) > 2 ||
-        (dsa as any)?.is_l2_actioned,
+      dsa?.onboarding_status === "RECOMMENDED" ||
+      Number(dsa?.current_approval_level) > 2 ||
+      (dsa as any)?.is_l2_actioned,
     );
 
     const l1Approval = dsa?.approvals?.find(
-      (a: any) => Number(a.approval_level) === 1 || a.stage_code === "LEVEL_1_MAKER"
+      (a: any) =>
+        Number(a.approval_level) === 1 || a.stage_code === "LEVEL_1_MAKER",
     );
     const makerName =
       makerHist?.name ||
@@ -7132,7 +7416,7 @@ const resolveStageStatus = (
       (l1Approval?.actioned_by as any)?.role ||
       "Maker / Branch Staff";
     const makerDate = formatDt(
-      makerHist?.date || l1Approval?.actioned_at || dsa?.created_at
+      makerHist?.date || l1Approval?.actioned_at || dsa?.created_at,
     );
     const makerRemarksText =
       getCleanRemark(makerHist?.remarks) ||
@@ -7150,24 +7434,34 @@ const resolveStageStatus = (
 
     const hasGst = Boolean(
       (dsa as any)?.gst_applicable &&
-      ((dsa as any)?.gst || basicInfo?.gst || rep?.api_checks?.find((c: any) => c.verification_code === "GSTIN")?.is_success)
+      ((dsa as any)?.gst ||
+        basicInfo?.gst ||
+        rep?.api_checks?.find((c: any) => c.verification_code === "GSTIN")
+          ?.is_success),
     );
     const hasUdyam = Boolean(
-      (dsa as any)?.udyam_no || basicInfo?.udyam || (basicInfo?.business_license_type && /udyam/i.test(basicInfo.business_license_type))
+      (dsa as any)?.udyam_no ||
+      basicInfo?.udyam ||
+      (basicInfo?.business_license_type &&
+        /udyam/i.test(basicInfo.business_license_type)),
     );
     const hasShopAct = Boolean(
-      (dsa as any)?.shop_act_no || (basicInfo?.business_license_type && /shop/i.test(basicInfo.business_license_type))
+      (dsa as any)?.shop_act_no ||
+      (basicInfo?.business_license_type &&
+        /shop/i.test(basicInfo.business_license_type)),
     );
     const hasAadhaar = Boolean(
-      basicInfo.aadhaar || dsa?.aadhaar_no || dsa?.aadhaar
+      basicInfo.aadhaar || dsa?.aadhaar_no || dsa?.aadhaar,
     );
 
     const opCap =
-      rep?.operational_capability ||
-      (rep as any)?.operationalCapability ||
-      {};
-    const staffStrength = opCap.staff_strength || (dsa as any)?.staff_strength || "";
-    const infraAdequacy = opCap.infrastructure_adequacy || (dsa as any)?.infrastructure_adequacy || "";
+      rep?.operational_capability || (rep as any)?.operationalCapability || {};
+    const staffStrength =
+      opCap.staff_strength || (dsa as any)?.staff_strength || "";
+    const infraAdequacy =
+      opCap.infrastructure_adequacy ||
+      (dsa as any)?.infrastructure_adequacy ||
+      "";
     const hasOpCap = hasVal(staffStrength) || hasVal(infraAdequacy);
 
     const compDoc =
@@ -7176,15 +7470,18 @@ const resolveStageStatus = (
       {};
 
     const ovRep =
-      rep?.office_visit_report ||
-      (rep as any)?.officeVisitReport ||
-      {};
+      rep?.office_visit_report || (rep as any)?.officeVisitReport || {};
     const visitDate = ovRep.date_of_visit || "";
     const visitedBy = ovRep.visited_by || "";
     const obsInfra = ovRep.observation_infrastructure || "";
     const empInteract = ovRep.employee_interaction || "";
     const origVerif = ovRep.original_verified || "";
-    const hasOfficeVisit = hasVal(visitDate) || hasVal(visitedBy) || hasVal(obsInfra) || hasVal(empInteract) || hasVal(origVerif);
+    const hasOfficeVisit =
+      hasVal(visitDate) ||
+      hasVal(visitedBy) ||
+      hasVal(obsInfra) ||
+      hasVal(empInteract) ||
+      hasVal(origVerif);
 
     const checkerName =
       checkerRemarks?.name ||
@@ -7196,8 +7493,7 @@ const resolveStageStatus = (
       note?.submitted_by?.role ||
       (note as any)?.officer_designation ||
       "Sub-Region Staff";
-    const checkerDate =
-      formatDt(checkerRemarks?.date || note?.submitted_at);
+    const checkerDate = formatDt(checkerRemarks?.date || note?.submitted_at);
     const checkerObs =
       note?.observations ||
       savedCheckerDdNote?.observations ||
@@ -7213,7 +7509,9 @@ const resolveStageStatus = (
       "";
 
     const l3Approval = dsa?.approvals?.find(
-      (a: any) => Number(a.approval_level) === 3 || a.stage_code === "LEVEL_3_SUB_REGION_HEAD"
+      (a: any) =>
+        Number(a.approval_level) === 3 ||
+        a.stage_code === "LEVEL_3_SUB_REGION_HEAD",
     );
     const l3Name = l3Hist?.name || l3Approval?.actioned_by?.name || "";
     const l3Designation = l3Hist?.designation || "Sub-Region Head";
@@ -7223,18 +7521,26 @@ const resolveStageStatus = (
       (l3Approval?.remarks ? getCleanRemark(l3Approval.remarks) : "");
 
     const l4Approval = dsa?.approvals?.find(
-      (a: any) => Number(a.approval_level) === 4 || a.stage_code === "LEVEL_4_DGM"
+      (a: any) =>
+        Number(a.approval_level) === 4 || a.stage_code === "LEVEL_4_DGM",
     );
     const l4IsSkipped = l4Approval?.status === "SKIPPED";
-    const l4Name = l4IsSkipped ? "" : (l4Hist?.name || l4Approval?.actioned_by?.name || "");
+    const l4Name = l4IsSkipped
+      ? ""
+      : l4Hist?.name || l4Approval?.actioned_by?.name || "";
     const l4Designation = l4Hist?.designation || "DGM";
-    const l4Date = l4IsSkipped ? "" : formatDt(l4Hist?.date || l4Approval?.actioned_at);
+    const l4Date = l4IsSkipped
+      ? ""
+      : formatDt(l4Hist?.date || l4Approval?.actioned_at);
     const l4Remarks = l4IsSkipped
       ? "Not Applicable / DGM not posted for mapped branch (Step Skipped)."
-      : (getCleanRemark(l4Hist?.remarks) || (l4Approval?.remarks ? getCleanRemark(l4Approval.remarks) : ""));
+      : getCleanRemark(l4Hist?.remarks) ||
+        (l4Approval?.remarks ? getCleanRemark(l4Approval.remarks) : "");
 
     const l5Approval = dsa?.approvals?.find(
-      (a: any) => Number(a.approval_level) === 5 || a.stage_code === "LEVEL_5_REGION_HEAD"
+      (a: any) =>
+        Number(a.approval_level) === 5 ||
+        a.stage_code === "LEVEL_5_REGION_HEAD",
     );
     const l5Name = l5Hist?.name || l5Approval?.actioned_by?.name || "";
     const l5Designation = l5Hist?.designation || "Region Head";
@@ -7244,7 +7550,9 @@ const resolveStageStatus = (
       (l5Approval?.remarks ? getCleanRemark(l5Approval.remarks) : "");
 
     const l6Approval = dsa?.approvals?.find(
-      (a: any) => Number(a.approval_level) === 6 || a.stage_code === "LEVEL_6_HO_CREDIT_OFFICER"
+      (a: any) =>
+        Number(a.approval_level) === 6 ||
+        a.stage_code === "LEVEL_6_HO_CREDIT_OFFICER",
     );
     const l6Name = l6Hist?.name || l6Approval?.actioned_by?.name || "";
     const l6Designation = l6Hist?.designation || "HO Credit Officer";
@@ -7254,7 +7562,9 @@ const resolveStageStatus = (
       (l6Approval?.remarks ? getCleanRemark(l6Approval.remarks) : "");
 
     const l7Approval = dsa?.approvals?.find(
-      (a: any) => Number(a.approval_level) === 7 || a.stage_code === "LEVEL_7_HO_CREDIT_HEAD"
+      (a: any) =>
+        Number(a.approval_level) === 7 ||
+        a.stage_code === "LEVEL_7_HO_CREDIT_HEAD",
     );
     const l7Name = l7Hist?.name || l7Approval?.actioned_by?.name || "";
     const l7Designation = l7Hist?.designation || "HO Credit Head";
@@ -7264,7 +7574,9 @@ const resolveStageStatus = (
       (l7Approval?.remarks ? getCleanRemark(l7Approval.remarks) : "");
 
     const rawOfficialCode =
-      dsa?.dsa_code && typeof dsa.dsa_code === "object" ? dsa.dsa_code.code : dsa?.dsa_code;
+      dsa?.dsa_code && typeof dsa.dsa_code === "object"
+        ? dsa.dsa_code.code
+        : dsa?.dsa_code;
     const isTemp =
       !rawOfficialCode ||
       rawOfficialCode === dsa?.code ||
@@ -7309,351 +7621,641 @@ const resolveStageStatus = (
             <tbody>
               {/* Basic Information */}
               <tr className="bg-slate-100 font-bold">
-                <td colSpan={2} className="border border-slate-900 px-3 py-2 text-slate-900">
+                <td
+                  colSpan={2}
+                  className="border border-slate-900 px-3 py-2 text-slate-900"
+                >
                   Basic Information
                 </td>
               </tr>
               {isEntity ? (
                 <>
                   <tr>
-                    <td className="w-1/2 border border-slate-900 px-3 py-1.5 text-slate-800">Applicant Name</td>
-                    <td className="w-1/2 border border-slate-900 px-3 py-1.5 font-medium text-slate-900">{basicInfo.applicant_name || dsa?.entity_name || dsa?.name || "—"}</td>
+                    <td className="w-1/2 border border-slate-900 px-3 py-1.5 text-slate-800">
+                      Applicant Name
+                    </td>
+                    <td className="w-1/2 border border-slate-900 px-3 py-1.5 font-medium text-slate-900">
+                      {basicInfo.applicant_name ||
+                        dsa?.entity_name ||
+                        dsa?.name ||
+                        "—"}
+                    </td>
                   </tr>
                   <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Constitution</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.constitution || "—"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                      Constitution
+                    </td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                      {basicInfo.constitution || "—"}
+                    </td>
                   </tr>
                   <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Registered Office Full Address</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.registered_office_address || dsa?.address || "—"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                      Registered Office Full Address
+                    </td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                      {basicInfo.registered_office_address ||
+                        dsa?.address ||
+                        "—"}
+                    </td>
                   </tr>
                   {hasVal(basicInfo.ownership) && (
                     <tr>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Ownership</td>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.ownership}</td>
-                    </tr>
-                  )}
-                  {hasVal(basicInfo.branch_office_address || basicInfo.registered_office_address || dsa?.address) && (
-                    <tr>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Branch Office Address (if any)</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                        Ownership
+                      </td>
                       <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
-                        {basicInfo.branch_office_address && basicInfo.branch_office_address !== "Same as Registered Office Address"
-                          ? basicInfo.branch_office_address
-                          : (basicInfo.registered_office_address || dsa?.address)}
+                        {basicInfo.ownership}
                       </td>
                     </tr>
                   )}
-                  {hasVal(basicInfo.promoter_key_person || dsa?.contact_person) && (
+                  {hasVal(
+                    basicInfo.branch_office_address ||
+                      basicInfo.registered_office_address ||
+                      dsa?.address,
+                  ) && (
                     <tr>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Name of the promotor / Key Person (Proprietor/ Partner/ Directors)</td>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.promoter_key_person || dsa?.contact_person}</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                        Branch Office Address (if any)
+                      </td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                        {basicInfo.branch_office_address &&
+                        basicInfo.branch_office_address !==
+                          "Same as Registered Office Address"
+                          ? basicInfo.branch_office_address
+                          : basicInfo.registered_office_address || dsa?.address}
+                      </td>
+                    </tr>
+                  )}
+                  {hasVal(
+                    basicInfo.promoter_key_person || dsa?.contact_person,
+                  ) && (
+                    <tr>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                        Name of the promotor / Key Person (Proprietor/ Partner/
+                        Directors)
+                      </td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                        {basicInfo.promoter_key_person || dsa?.contact_person}
+                      </td>
                     </tr>
                   )}
                   <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Office Contact Number</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.office_contact_number || dsa?.mobile || "—"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                      Office Contact Number
+                    </td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                      {basicInfo.office_contact_number || dsa?.mobile || "—"}
+                    </td>
                   </tr>
                   <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Office Mail ID</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.office_email || dsa?.email || "—"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                      Office Mail ID
+                    </td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                      {basicInfo.office_email || dsa?.email || "—"}
+                    </td>
                   </tr>
                   {hasVal(basicInfo.date_of_establishment || dsa?.dob) && (
                     <tr>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Date of Establishment</td>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.date_of_establishment || dsa?.dob}</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                        Date of Establishment
+                      </td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                        {basicInfo.date_of_establishment || dsa?.dob}
+                      </td>
                     </tr>
                   )}
                   <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">PAN No.</td>
-                    <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">{basicInfo.pan || dsa?.pan || "—"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                      PAN No.
+                    </td>
+                    <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">
+                      {basicInfo.pan || dsa?.pan || "—"}
+                    </td>
                   </tr>
                   {hasVal(basicInfo.business_license_type) && (
                     <tr>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business License Type</td>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.business_license_type}</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                        Business License Type
+                      </td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                        {basicInfo.business_license_type}
+                      </td>
                     </tr>
                   )}
                   {hasVal(basicInfo.business_license_number) && (
                     <tr>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business License No.</td>
-                      <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">{basicInfo.business_license_number}</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                        Business License No.
+                      </td>
+                      <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">
+                        {basicInfo.business_license_number}
+                      </td>
                     </tr>
                   )}
                   <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Branches to Assign</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.branches_to_assign || dsaBranchName}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                      Branches to Assign
+                    </td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                      {basicInfo.branches_to_assign || dsaBranchName}
+                    </td>
                   </tr>
                   {hasVal(basicInfo.expected_monthly_business_commitment) &&
-                    String(basicInfo.expected_monthly_business_commitment).trim() !== "0" && (
-                    <tr>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Expected Monthly Business Commitment</td>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.expected_monthly_business_commitment}</td>
-                    </tr>
-                  )}
+                    String(
+                      basicInfo.expected_monthly_business_commitment,
+                    ).trim() !== "0" && (
+                      <tr>
+                        <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                          Expected Monthly Business Commitment
+                        </td>
+                        <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                          {basicInfo.expected_monthly_business_commitment}
+                        </td>
+                      </tr>
+                    )}
                 </>
               ) : (
                 <>
                   <tr>
-                    <td className="w-1/2 border border-slate-900 px-3 py-1.5 text-slate-800">Name of DSA</td>
-                    <td className="w-1/2 border border-slate-900 px-3 py-1.5 font-medium text-slate-900">{basicInfo.applicant_name || basicInfo.name_of_dsa || dsa?.name || "—"}</td>
+                    <td className="w-1/2 border border-slate-900 px-3 py-1.5 text-slate-800">
+                      Name of DSA
+                    </td>
+                    <td className="w-1/2 border border-slate-900 px-3 py-1.5 font-medium text-slate-900">
+                      {basicInfo.applicant_name ||
+                        basicInfo.name_of_dsa ||
+                        dsa?.name ||
+                        "—"}
+                    </td>
                   </tr>
                   <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Constitution</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.constitution || "—"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                      Constitution
+                    </td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                      {basicInfo.constitution || "—"}
+                    </td>
                   </tr>
                   {hasVal(basicInfo.date_of_birth || dsa?.dob) && (
                     <tr>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Date of Birth</td>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.date_of_birth || dsa?.dob}</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                        Date of Birth
+                      </td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                        {basicInfo.date_of_birth || dsa?.dob}
+                      </td>
                     </tr>
                   )}
                   <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Residence Address</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.residence_address || dsa?.address || "—"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                      Residence Address
+                    </td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                      {basicInfo.residence_address || dsa?.address || "—"}
+                    </td>
                   </tr>
-                  {hasVal(basicInfo.business_office_address || basicInfo.residence_address || dsa?.address) && (
+                  {hasVal(
+                    basicInfo.business_office_address ||
+                      basicInfo.residence_address ||
+                      dsa?.address,
+                  ) && (
                     <tr>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business / Office Address (if any)</td>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.business_office_address || basicInfo.residence_address || dsa?.address}</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                        Business / Office Address (if any)
+                      </td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                        {basicInfo.business_office_address ||
+                          basicInfo.residence_address ||
+                          dsa?.address}
+                      </td>
                     </tr>
                   )}
                   {hasVal(basicInfo.ownership) && (
                     <tr>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Ownership</td>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.ownership}</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                        Ownership
+                      </td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                        {basicInfo.ownership}
+                      </td>
                     </tr>
                   )}
                   <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Contact Number</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.contact_number || dsa?.mobile || "—"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                      Contact Number
+                    </td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                      {basicInfo.contact_number || dsa?.mobile || "—"}
+                    </td>
                   </tr>
                   <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Mail ID</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.email || dsa?.email || "—"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                      Mail ID
+                    </td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                      {basicInfo.email || dsa?.email || "—"}
+                    </td>
                   </tr>
                   <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">PAN No.</td>
-                    <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">{basicInfo.pan || dsa?.pan || "—"}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                      PAN No.
+                    </td>
+                    <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">
+                      {basicInfo.pan || dsa?.pan || "—"}
+                    </td>
                   </tr>
-                  {hasVal(basicInfo.aadhaar || dsa?.aadhaar_no || dsa?.aadhaar) && (
+                  {hasVal(
+                    basicInfo.aadhaar || dsa?.aadhaar_no || dsa?.aadhaar,
+                  ) && (
                     <tr>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Aadhar No.</td>
-                      <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">{basicInfo.aadhaar || dsa?.aadhaar_no || dsa?.aadhaar}</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                        Aadhar No.
+                      </td>
+                      <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">
+                        {basicInfo.aadhaar || dsa?.aadhaar_no || dsa?.aadhaar}
+                      </td>
                     </tr>
                   )}
                   {hasVal(basicInfo.business_license_type) && (
                     <tr>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business License Type</td>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.business_license_type}</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                        Business License Type
+                      </td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                        {basicInfo.business_license_type}
+                      </td>
                     </tr>
                   )}
                   {hasVal(basicInfo.business_license_number) && (
                     <tr>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business License No.</td>
-                      <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">{basicInfo.business_license_number}</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                        Business License No.
+                      </td>
+                      <td className="border border-slate-900 px-3 py-1.5 font-mono text-slate-900">
+                        {basicInfo.business_license_number}
+                      </td>
                     </tr>
                   )}
                   <tr>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Regions to Assign</td>
-                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.regions_to_assign || basicInfo.branches_to_assign || dsaBranchName}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                      Regions to Assign
+                    </td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                      {basicInfo.regions_to_assign ||
+                        basicInfo.branches_to_assign ||
+                        dsaBranchName}
+                    </td>
                   </tr>
                   {hasVal(basicInfo.expected_monthly_business_commitment) &&
-                    String(basicInfo.expected_monthly_business_commitment).trim() !== "0" && (
-                    <tr>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Expected Monthly Business Commitment (INR)</td>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{basicInfo.expected_monthly_business_commitment}</td>
-                    </tr>
-                  )}
+                    String(
+                      basicInfo.expected_monthly_business_commitment,
+                    ).trim() !== "0" && (
+                      <tr>
+                        <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                          Expected Monthly Business Commitment (INR)
+                        </td>
+                        <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                          {basicInfo.expected_monthly_business_commitment}
+                        </td>
+                      </tr>
+                    )}
                 </>
               )}
 
               {/* Financial Due Diligence */}
               <tr className="bg-slate-100 font-bold">
-                <td colSpan={2} className="border border-slate-900 px-3 py-2 text-slate-900">
+                <td
+                  colSpan={2}
+                  className="border border-slate-900 px-3 py-2 text-slate-900"
+                >
                   Financial Due Diligence
                 </td>
               </tr>
               <tr>
-                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Income Tax Returns Submitted</td>
-                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{finDd.itr_submitted || finDd.income_tax_returns_submitted || "No"}</td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                  Income Tax Returns Submitted
+                </td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                  {finDd.itr_submitted ||
+                    finDd.income_tax_returns_submitted ||
+                    "No"}
+                </td>
               </tr>
-              {hasVal(finDd.income_details_fy || finDd.last_financial_year || dsa?.last_financial_year) && (
+              {hasVal(
+                finDd.income_details_fy ||
+                  finDd.last_financial_year ||
+                  dsa?.last_financial_year,
+              ) && (
                 <tr>
-                  <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Income Details for F.Y.</td>
+                  <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                    Income Details for F.Y.
+                  </td>
                   <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{`F. Y. ${finDd.income_details_fy || finDd.last_financial_year || dsa?.last_financial_year}`}</td>
                 </tr>
               )}
               {hasVal(finDd.net_sales_revenue || dsa?.last_fy_net_sales) && (
                 <tr>
-                  <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Net Sales / Revenue as per latest F.Y.</td>
+                  <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                    Net Sales / Revenue as per latest F.Y.
+                  </td>
                   <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
                     {(() => {
-                      const raw = finDd.net_sales_revenue || dsa?.last_fy_net_sales || "";
-                      const clean = String(raw).replace(/[₹â‚¹]/g, "").replace(/^Rs\.?\s*/i, "").trim();
+                      const raw =
+                        finDd.net_sales_revenue || dsa?.last_fy_net_sales || "";
+                      const clean = String(raw)
+                        .replace(/[₹â‚¹]/g, "")
+                        .replace(/^Rs\.?\s*/i, "")
+                        .trim();
                       const num = Number(clean.replace(/,/g, ""));
-                      return !isNaN(num) && clean !== "" ? `Rs. ${num.toLocaleString("en-IN")}` : `Rs. ${clean}`;
+                      return !isNaN(num) && clean !== ""
+                        ? `Rs. ${num.toLocaleString("en-IN")}`
+                        : `Rs. ${clean}`;
                     })()}
                   </td>
                 </tr>
               )}
-              {hasVal(finDd.net_profit_after_tax || dsa?.last_fy_net_profit_after_tax) && (
+              {hasVal(
+                finDd.net_profit_after_tax || dsa?.last_fy_net_profit_after_tax,
+              ) && (
                 <tr>
-                  <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Net profit after Tax as per latest F.Y.</td>
+                  <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                    Net profit after Tax as per latest F.Y.
+                  </td>
                   <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
                     {(() => {
-                      const raw = finDd.net_profit_after_tax || dsa?.last_fy_net_profit_after_tax || "";
-                      const clean = String(raw).replace(/[₹â‚¹]/g, "").replace(/^Rs\.?\s*/i, "").trim();
+                      const raw =
+                        finDd.net_profit_after_tax ||
+                        dsa?.last_fy_net_profit_after_tax ||
+                        "";
+                      const clean = String(raw)
+                        .replace(/[₹â‚¹]/g, "")
+                        .replace(/^Rs\.?\s*/i, "")
+                        .trim();
                       const num = Number(clean.replace(/,/g, ""));
-                      return !isNaN(num) && clean !== "" ? `Rs. ${num.toLocaleString("en-IN")}` : `Rs. ${clean}`;
+                      return !isNaN(num) && clean !== ""
+                        ? `Rs. ${num.toLocaleString("en-IN")}`
+                        : `Rs. ${clean}`;
                     })()}
                   </td>
                 </tr>
               )}
               {hasVal(finDd.net_worth || (dsa as any)?.net_worth) && (
                 <tr>
-                  <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Net Worth (as per financials)</td>
+                  <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                    Net Worth (as per financials)
+                  </td>
                   <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
                     {(() => {
-                      const raw = finDd.net_worth || (dsa as any)?.net_worth || "";
-                      const clean = String(raw).replace(/[₹â‚¹]/g, "").replace(/^Rs\.?\s*/i, "").trim();
+                      const raw =
+                        finDd.net_worth || (dsa as any)?.net_worth || "";
+                      const clean = String(raw)
+                        .replace(/[₹â‚¹]/g, "")
+                        .replace(/^Rs\.?\s*/i, "")
+                        .trim();
                       const num = Number(clean.replace(/,/g, ""));
-                      return !isNaN(num) && clean !== "" ? `Rs. ${num.toLocaleString("en-IN")}` : `Rs. ${clean}`;
+                      return !isNaN(num) && clean !== ""
+                        ? `Rs. ${num.toLocaleString("en-IN")}`
+                        : `Rs. ${clean}`;
                     })()}
                   </td>
                 </tr>
               )}
               <tr>
-                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">CIBIL Score (CV Score)</td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                  CIBIL Score (CV Score)
+                </td>
                 <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
                   {isEntity
-                    ? (finDd.cibil_cmr && finDd.cibil_cmr !== "N/A" ? finDd.cibil_cmr : "<Attached Cibil Report at the end of this form.>")
-                    : (finDd.cibil_score && finDd.cibil_score !== "N/A" ? finDd.cibil_score : "—")}
+                    ? finDd.cibil_cmr && finDd.cibil_cmr !== "N/A"
+                      ? finDd.cibil_cmr
+                      : "<Attached Cibil Report at the end of this form.>"
+                    : finDd.cibil_score && finDd.cibil_score !== "N/A"
+                      ? finDd.cibil_score
+                      : "—"}
                 </td>
               </tr>
               <tr>
-                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Existing Banking relationship with our Bank</td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                  Existing Banking relationship with our Bank
+                </td>
                 <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
                   {(() => {
                     const bankName = String(dsa?.bank_name || "");
                     const ifsc = String(dsa?.ifsc || "");
-                    const rawRel = String(finDd.existing_banking_relationship || "").trim();
+                    const rawRel = String(
+                      finDd.existing_banking_relationship || "",
+                    ).trim();
                     const isCosmos =
                       /cosmos/i.test(bankName) ||
                       /^cosb/i.test(ifsc) ||
                       /cosmos/i.test(rawRel) ||
-                      (/^yes$/i.test(rawRel) && (!bankName || /cosmos/i.test(bankName)));
+                      (/^yes$/i.test(rawRel) &&
+                        (!bankName || /cosmos/i.test(bankName)));
                     return isCosmos ? "Yes" : "No";
                   })()}
                 </td>
               </tr>
 
               {/* Details of DSA Experience with other Banks / Institutions (Entity) */}
-              {isEntity && (() => {
-                const banksList: any[] = Array.isArray(finDd.other_banks_experience) && finDd.other_banks_experience.length > 0
-                  ? finDd.other_banks_experience
-                  : Array.isArray(dsa?.other_banks_experience) && dsa.other_banks_experience.length > 0
-                  ? dsa.other_banks_experience
-                  : (finDd.bank_or_institution_name || dsa?.bank_or_institution_name)
-                  ? [{
-                      bank_or_institution_name: finDd.bank_or_institution_name || dsa?.bank_or_institution_name,
-                      empanelment_since_year: finDd.empanelment_since_year || dsa?.empanelment_since_year,
-                      empanelled_loan_products: finDd.empanelled_loan_products || dsa?.empanelled_loan_products,
-                      products_mobilized_last_3_years: finDd.products_mobilized_last_3_years || dsa?.products_mobilized_last_3_years,
-                      avg_ticket_size_lakhs: finDd.avg_ticket_size_lakhs || dsa?.avg_ticket_size_lakhs,
-                      commission_rate_percent: finDd.commission_rate_percent || dsa?.commission_rate_percent,
-                      avg_disbursed_proposals_per_month: finDd.avg_disbursed_proposals_per_month || dsa?.avg_disbursed_proposals_per_month,
-                    }]
-                  : [];
+              {isEntity &&
+                (() => {
+                  const banksList: any[] =
+                    Array.isArray(finDd.other_banks_experience) &&
+                    finDd.other_banks_experience.length > 0
+                      ? finDd.other_banks_experience
+                      : Array.isArray(dsa?.other_banks_experience) &&
+                          dsa.other_banks_experience.length > 0
+                        ? dsa.other_banks_experience
+                        : finDd.bank_or_institution_name ||
+                            dsa?.bank_or_institution_name
+                          ? [
+                              {
+                                bank_or_institution_name:
+                                  finDd.bank_or_institution_name ||
+                                  dsa?.bank_or_institution_name,
+                                empanelment_since_year:
+                                  finDd.empanelment_since_year ||
+                                  dsa?.empanelment_since_year,
+                                empanelled_loan_products:
+                                  finDd.empanelled_loan_products ||
+                                  dsa?.empanelled_loan_products,
+                                products_mobilized_last_3_years:
+                                  finDd.products_mobilized_last_3_years ||
+                                  dsa?.products_mobilized_last_3_years,
+                                avg_ticket_size_lakhs:
+                                  finDd.avg_ticket_size_lakhs ||
+                                  dsa?.avg_ticket_size_lakhs,
+                                commission_rate_percent:
+                                  finDd.commission_rate_percent ||
+                                  dsa?.commission_rate_percent,
+                                avg_disbursed_proposals_per_month:
+                                  finDd.avg_disbursed_proposals_per_month ||
+                                  dsa?.avg_disbursed_proposals_per_month,
+                              },
+                            ]
+                          : [];
 
-                if (banksList.length === 0) return null;
+                  if (banksList.length === 0) return null;
 
-                return (
-                  <>
-                    <tr className="bg-slate-100 font-bold">
-                      <td colSpan={2} className="border border-slate-900 px-3 py-2 text-slate-900">
-                        Details of DSA Experience with other Banks / Institutions
-                      </td>
-                    </tr>
-                    {banksList.map((bExp, bIdx) => (
-                      <React.Fragment key={bIdx}>
-                        {banksList.length > 1 && (
-                          <tr className="bg-slate-50 font-semibold">
-                            <td colSpan={2} className="border border-slate-900 px-3 py-1.5 text-xs text-blue-900">
-                              Bank / Institution {bIdx + 1}: {bExp.bank_or_institution_name || "—"}
+                  return (
+                    <>
+                      <tr className="bg-slate-100 font-bold">
+                        <td
+                          colSpan={2}
+                          className="border border-slate-900 px-3 py-2 text-slate-900"
+                        >
+                          Details of DSA Experience with other Banks /
+                          Institutions
+                        </td>
+                      </tr>
+                      {banksList.map((bExp, bIdx) => (
+                        <React.Fragment key={bIdx}>
+                          {banksList.length > 1 && (
+                            <tr className="bg-slate-50 font-semibold">
+                              <td
+                                colSpan={2}
+                                className="border border-slate-900 px-3 py-1.5 text-xs text-blue-900"
+                              >
+                                Bank / Institution {bIdx + 1}:{" "}
+                                {bExp.bank_or_institution_name || "—"}
+                              </td>
+                            </tr>
+                          )}
+                          <tr>
+                            <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                              Name of the Bank / Financial Institution / Others
                             </td>
-                          </tr>
-                        )}
-                        <tr>
-                          <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Name of the Bank / Financial Institution / Others</td>
-                          <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.bank_or_institution_name || "—"}</td>
-                        </tr>
-                        {hasVal(bExp.empanelment_since_year) && (
-                          <tr>
-                            <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Empanelment since (Year)</td>
-                            <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.empanelment_since_year}</td>
-                          </tr>
-                        )}
-                        {hasVal(bExp.empanelled_loan_products) && (
-                          <tr>
-                            <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Empanelment for which Loan Products</td>
-                            <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.empanelled_loan_products}</td>
-                          </tr>
-                        )}
-                        {hasVal(bExp.products_mobilized_last_3_years) && (
-                          <tr>
-                            <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Type of Products mobilized during last 3 years</td>
-                            <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.products_mobilized_last_3_years}</td>
-                          </tr>
-                        )}
-                        {hasVal(bExp.avg_ticket_size_lakhs) && (
-                          <tr>
-                            <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Average ticket size (Rs.)</td>
                             <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
-                              {(() => {
-                                const clean = String(bExp.avg_ticket_size_lakhs).replace(/[₹â‚¹]/g, "").replace(/^Rs\.?\s*/i, "").replace(/lakh/i, "").trim();
-                                const num = Number(clean.replace(/,/g, ""));
-                                return !isNaN(num) && clean !== "" ? `Rs. ${num.toLocaleString("en-IN")}` : `Rs. ${clean}`;
-                              })()}
+                              {bExp.bank_or_institution_name || "—"}
                             </td>
                           </tr>
-                        )}
-                        {hasVal(bExp.commission_rate_percent) && (
-                          <tr>
-                            <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Commission rate (%)</td>
-                            <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{`${bExp.commission_rate_percent}%`}</td>
-                          </tr>
-                        )}
-                        {hasVal(bExp.avg_disbursed_proposals_per_month) && (
-                          <tr>
-                            <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Average No. of proposals disbursed per month (Nos.)</td>
-                            <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bExp.avg_disbursed_proposals_per_month}</td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    ))}
-                  </>
-                );
-              })()}
+                          {hasVal(bExp.empanelment_since_year) && (
+                            <tr>
+                              <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                                Empanelment since (Year)
+                              </td>
+                              <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                                {bExp.empanelment_since_year}
+                              </td>
+                            </tr>
+                          )}
+                          {hasVal(bExp.empanelled_loan_products) && (
+                            <tr>
+                              <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                                Empanelment for which Loan Products
+                              </td>
+                              <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                                {bExp.empanelled_loan_products}
+                              </td>
+                            </tr>
+                          )}
+                          {hasVal(bExp.products_mobilized_last_3_years) && (
+                            <tr>
+                              <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                                Type of Products mobilized during last 3 years
+                              </td>
+                              <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                                {bExp.products_mobilized_last_3_years}
+                              </td>
+                            </tr>
+                          )}
+                          {hasVal(bExp.avg_ticket_size_lakhs) && (
+                            <tr>
+                              <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                                Average ticket size (Rs.)
+                              </td>
+                              <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                                {(() => {
+                                  const clean = String(
+                                    bExp.avg_ticket_size_lakhs,
+                                  )
+                                    .replace(/[₹â‚¹]/g, "")
+                                    .replace(/^Rs\.?\s*/i, "")
+                                    .replace(/lakh/i, "")
+                                    .trim();
+                                  const num = Number(clean.replace(/,/g, ""));
+                                  return !isNaN(num) && clean !== ""
+                                    ? `Rs. ${num.toLocaleString("en-IN")}`
+                                    : `Rs. ${clean}`;
+                                })()}
+                              </td>
+                            </tr>
+                          )}
+                          {hasVal(bExp.commission_rate_percent) && (
+                            <tr>
+                              <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                                Commission rate (%)
+                              </td>
+                              <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{`${bExp.commission_rate_percent}%`}</td>
+                            </tr>
+                          )}
+                          {hasVal(bExp.avg_disbursed_proposals_per_month) && (
+                            <tr>
+                              <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                                Average No. of proposals disbursed per month
+                                (Nos.)
+                              </td>
+                              <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                                {bExp.avg_disbursed_proposals_per_month}
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </>
+                  );
+                })()}
 
               {/* Background and Reputational Verification */}
               <tr className="bg-slate-100 font-bold">
-                <td colSpan={2} className="border border-slate-900 px-3 py-2 text-slate-900">
+                <td
+                  colSpan={2}
+                  className="border border-slate-900 px-3 py-2 text-slate-900"
+                >
                   Background and Reputational Verification
                 </td>
               </tr>
               <tr>
-                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">KYC Documents verified</td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                  KYC Documents verified
+                </td>
                 <td className="border border-slate-900 px-3 py-1.5 text-slate-900 leading-relaxed">
-                  PAN<br />
-                  {hasGst && <>GST<br /></>}
-                  {hasUdyam && <>Udyam<br /></>}
-                  {hasShopAct && <>Shop Act<br /></>}
-                  {!isEntity && hasAadhaar && <>Aadhaar<br /></>}
+                  PAN
+                  <br />
+                  {hasGst && (
+                    <>
+                      GST
+                      <br />
+                    </>
+                  )}
+                  {hasUdyam && (
+                    <>
+                      Udyam
+                      <br />
+                    </>
+                  )}
+                  {hasShopAct && (
+                    <>
+                      Shop Act
+                      <br />
+                    </>
+                  )}
+                  {!isEntity && hasAadhaar && (
+                    <>
+                      Aadhaar
+                      <br />
+                    </>
+                  )}
                 </td>
               </tr>
               <tr>
-                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Business premises verification</td>
-                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{bgRep.business_premises_verification || "Yes"}</td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                  Business premises verification
+                </td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                  {bgRep.business_premises_verification || "Yes"}
+                </td>
               </tr>
               <tr>
                 <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
@@ -7662,9 +8264,14 @@ const resolveStageStatus = (
                     : "IBA Caution List / Negative List Checked (Through Compass Site) and Matching %"}
                 </td>
                 <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
-                  {bgRep.iba_caution_negative_list && String(bgRep.iba_caution_negative_list).toUpperCase().includes("CLEAR")
-                    ? (isEntity ? "No" : "No (0% Matching)")
-                    : (bgRep.compass_matching_percentage || "No")}
+                  {bgRep.iba_caution_negative_list &&
+                  String(bgRep.iba_caution_negative_list)
+                    .toUpperCase()
+                    .includes("CLEAR")
+                    ? isEntity
+                      ? "No"
+                      : "No (0% Matching)"
+                    : bgRep.compass_matching_percentage || "No"}
                 </td>
               </tr>
 
@@ -7672,20 +8279,31 @@ const resolveStageStatus = (
               {hasOpCap && (
                 <>
                   <tr className="bg-slate-100 font-bold">
-                    <td colSpan={2} className="border border-slate-900 px-3 py-2 text-slate-900">
+                    <td
+                      colSpan={2}
+                      className="border border-slate-900 px-3 py-2 text-slate-900"
+                    >
                       Operational Capability Assessment
                     </td>
                   </tr>
                   {hasVal(staffStrength) && (
                     <tr>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Staff Strength</td>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{staffStrength}</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                        Staff Strength
+                      </td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                        {staffStrength}
+                      </td>
                     </tr>
                   )}
                   {hasVal(infraAdequacy) && (
                     <tr>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Infrastructure adequacy</td>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{infraAdequacy}</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                        Infrastructure adequacy
+                      </td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                        {infraAdequacy}
+                      </td>
                     </tr>
                   )}
                 </>
@@ -7693,22 +8311,36 @@ const resolveStageStatus = (
 
               {/* Compliance and Documentation */}
               <tr className="bg-slate-100 font-bold">
-                <td colSpan={2} className="border border-slate-900 px-3 py-2 text-slate-900">
+                <td
+                  colSpan={2}
+                  className="border border-slate-900 px-3 py-2 text-slate-900"
+                >
                   Compliance and Documentation
                 </td>
               </tr>
               <tr>
-                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Application form submitted</td>
-                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{compDoc.application_form_submitted || "Yes"}</td>
-              </tr>
-              <tr>
-                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">All KYC documents submitted</td>
-                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{compDoc.all_kyc_documents_submitted || "Yes"}</td>
-              </tr>
-              <tr>
-                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">PAN / GST / Registration certificates verified</td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                  Application form submitted
+                </td>
                 <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
-                  {compDoc.statutory_certificates_verified || (hasGst ? "Yes" : "Yes (PAN, Udyam / Shop Act verified)")}
+                  {compDoc.application_form_submitted || "Yes"}
+                </td>
+              </tr>
+              <tr>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                  All KYC documents submitted
+                </td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                  {compDoc.all_kyc_documents_submitted || "Yes"}
+                </td>
+              </tr>
+              <tr>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                  PAN / GST / Registration certificates verified
+                </td>
+                <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                  {compDoc.statutory_certificates_verified ||
+                    (hasGst ? "Yes" : "Yes (PAN, Udyam / Shop Act verified)")}
                 </td>
               </tr>
 
@@ -7716,38 +8348,61 @@ const resolveStageStatus = (
               {hasOfficeVisit && (
                 <>
                   <tr className="bg-slate-100 font-bold">
-                    <td colSpan={2} className="border border-slate-900 px-3 py-2 text-slate-900">
+                    <td
+                      colSpan={2}
+                      className="border border-slate-900 px-3 py-2 text-slate-900"
+                    >
                       Office Visit Report
                     </td>
                   </tr>
                   {hasVal(visitDate) && (
                     <tr>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Date of Visit</td>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{visitDate}</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                        Date of Visit
+                      </td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                        {visitDate}
+                      </td>
                     </tr>
                   )}
                   {hasVal(visitedBy) && (
                     <tr>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Visited by AGM / Subregion Head</td>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{visitedBy}</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                        Visited by AGM / Subregion Head
+                      </td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                        {visitedBy}
+                      </td>
                     </tr>
                   )}
                   {hasVal(obsInfra) && (
                     <tr>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Observation on infrastructure</td>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{obsInfra}</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                        Observation on infrastructure
+                      </td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                        {obsInfra}
+                      </td>
                     </tr>
                   )}
                   {hasVal(empInteract) && (
                     <tr>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Employee interaction</td>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{empInteract}</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                        Employee interaction
+                      </td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                        {empInteract}
+                      </td>
                     </tr>
                   )}
                   {hasVal(origVerif) && (
                     <tr>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">Photo copies of documents are verified from original</td>
-                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">{origVerif}</td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-800">
+                        Photo copies of documents are verified from original
+                      </td>
+                      <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
+                        {origVerif}
+                      </td>
                     </tr>
                   )}
                 </>
@@ -7755,7 +8410,10 @@ const resolveStageStatus = (
 
               {/* Deviation Details */}
               <tr className="bg-slate-100 font-bold">
-                <td colSpan={2} className="border border-slate-900 px-3 py-2 text-slate-900">
+                <td
+                  colSpan={2}
+                  className="border border-slate-900 px-3 py-2 text-slate-900"
+                >
                   Deviation Details
                 </td>
               </tr>
@@ -7767,43 +8425,70 @@ const resolveStageStatus = (
                     </td>
                     <td className="border border-slate-900 px-3 py-1.5 text-slate-900">
                       <div>
-                        {dev.deviation_trigger || dev.remarks || "Deviation Flagged"} (
-                        <span className="font-bold text-amber-700">{dev.decision || "DEVIATION"}</span>)
+                        {dev.deviation_trigger ||
+                          dev.remarks ||
+                          "Deviation Flagged"}{" "}
+                        (
+                        <span className="font-bold text-amber-700">
+                          {dev.decision || "DEVIATION"}
+                        </span>
+                        )
                       </div>
                       <div className="mt-2 pt-1.5 space-y-1 text-xs">
-                        {DEVIATION_AUTHORITY_ROLES.map(({ level: lvl, role_name }) => {
-                          const remMatch = Array.isArray(dev.remarks_by_level)
-                            ? dev.remarks_by_level.find((r: any) => Number(r.level) === lvl)
-                            : (lvl === 2 && dev.remark ? { remark: dev.remark, user_name: "Checker / Verification Authority", date: "" } : null);
+                        {DEVIATION_AUTHORITY_ROLES.map(
+                          ({ level: lvl, role_name }) => {
+                            const remMatch = Array.isArray(dev.remarks_by_level)
+                              ? dev.remarks_by_level.find(
+                                  (r: any) => Number(r.level) === lvl,
+                                )
+                              : lvl === 2 && dev.remark
+                                ? {
+                                    remark: dev.remark,
+                                    user_name:
+                                      "Checker / Verification Authority",
+                                    date: "",
+                                  }
+                                : null;
 
-                          return (
-                            <div key={lvl} className="leading-relaxed">
-                              <strong>L{lvl} ({role_name}) Remark:</strong>{" "}
-                              {remMatch?.remark ? (
-                                <span>
-                                  {remMatch.remark}
-                                  {(remMatch.user_name || remMatch.date) && (
-                                    <span className="text-slate-500 text-[11px] ml-1.5">
-                                      ({remMatch.user_name || "Authority"}{remMatch.date ? ` · ${remMatch.date}` : ""})
-                                    </span>
-                                  )}
-                                </span>
-                              ) : (
-                                <span className="text-slate-400 italic text-[11px]">
-                                  Pending submission
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })}
+                            return (
+                              <div key={lvl} className="leading-relaxed">
+                                <strong>
+                                  L{lvl} ({role_name}) Remark:
+                                </strong>{" "}
+                                {remMatch?.remark ? (
+                                  <span>
+                                    {remMatch.remark}
+                                    {(remMatch.user_name || remMatch.date) && (
+                                      <span className="text-slate-500 text-[11px] ml-1.5">
+                                        ({remMatch.user_name || "Authority"}
+                                        {remMatch.date
+                                          ? ` · ${remMatch.date}`
+                                          : ""}
+                                        )
+                                      </span>
+                                    )}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 italic text-[11px]">
+                                    Pending submission
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          },
+                        )}
                       </div>
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td className="border border-slate-900 px-3 py-1.5 text-slate-600">Status</td>
-                  <td className="border border-slate-900 px-3 py-1.5 text-slate-600">Nil (No policy deviations recorded)</td>
+                  <td className="border border-slate-900 px-3 py-1.5 text-slate-600">
+                    Status
+                  </td>
+                  <td className="border border-slate-900 px-3 py-1.5 text-slate-600">
+                    Nil (No policy deviations recorded)
+                  </td>
                 </tr>
               )}
 
@@ -7811,9 +8496,15 @@ const resolveStageStatus = (
               <tr>
                 <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top">
                   <div className="font-bold">Maker Remarks</div>
-                  <div className="text-xs text-slate-700 mt-1"><strong>Name:</strong> {makerName}</div>
-                  <div className="text-xs text-slate-700"><strong>Designation:</strong> {makerDesignation}</div>
-                  <div className="text-xs text-slate-700"><strong>Date:</strong> {makerDate}</div>
+                  <div className="text-xs text-slate-700 mt-1">
+                    <strong>Name:</strong> {makerName}
+                  </div>
+                  <div className="text-xs text-slate-700">
+                    <strong>Designation:</strong> {makerDesignation}
+                  </div>
+                  <div className="text-xs text-slate-700">
+                    <strong>Date:</strong> {makerDate}
+                  </div>
                 </td>
                 <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap break-words [overflow-wrap:anywhere] break-all">
                   {makerRemarksText}
@@ -7823,13 +8514,21 @@ const resolveStageStatus = (
               <tr>
                 <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top">
                   <div className="font-bold">Checker Remarks</div>
-                  <div className="text-xs text-slate-700 mt-1"><strong>Name:</strong> {checkerName}</div>
-                  <div className="text-xs text-slate-700"><strong>Designation:</strong> {checkerDesignation}</div>
-                  <div className="text-xs text-slate-700"><strong>Date:</strong> {checkerDate}</div>
+                  <div className="text-xs text-slate-700 mt-1">
+                    <strong>Name:</strong> {checkerName}
+                  </div>
+                  <div className="text-xs text-slate-700">
+                    <strong>Designation:</strong> {checkerDesignation}
+                  </div>
+                  <div className="text-xs text-slate-700">
+                    <strong>Date:</strong> {checkerDate}
+                  </div>
                 </td>
                 <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap break-words [overflow-wrap:anywhere] break-all">
                   {checkerObs && <div>{checkerObs}</div>}
-                  {checkerRem && <div className={checkerObs ? "mt-1" : ""}>{checkerRem}</div>}
+                  {checkerRem && (
+                    <div className={checkerObs ? "mt-1" : ""}>{checkerRem}</div>
+                  )}
                   {checkerExRem && (
                     <div className="mt-1 text-xs text-amber-800">
                       <strong>Exception:</strong> {checkerExRem}
@@ -7840,10 +8539,18 @@ const resolveStageStatus = (
 
               <tr>
                 <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top">
-                  <div className="font-bold">1st Recommending Authority Remarks</div>
-                  <div className="text-xs text-slate-700 mt-1"><strong>Name:</strong> {l3Name}</div>
-                  <div className="text-xs text-slate-700"><strong>Designation:</strong> {l3Designation}</div>
-                  <div className="text-xs text-slate-700"><strong>Date:</strong> {l3Date}</div>
+                  <div className="font-bold">
+                    1st Recommending Authority Remarks
+                  </div>
+                  <div className="text-xs text-slate-700 mt-1">
+                    <strong>Name:</strong> {l3Name}
+                  </div>
+                  <div className="text-xs text-slate-700">
+                    <strong>Designation:</strong> {l3Designation}
+                  </div>
+                  <div className="text-xs text-slate-700">
+                    <strong>Date:</strong> {l3Date}
+                  </div>
                 </td>
                 <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap break-words [overflow-wrap:anywhere] break-all">
                   {l3Remarks}
@@ -7852,10 +8559,18 @@ const resolveStageStatus = (
 
               <tr>
                 <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top">
-                  <div className="font-bold">2nd Recommending Authority Remarks</div>
-                  <div className="text-xs text-slate-700 mt-1"><strong>Name:</strong> {l4Name}</div>
-                  <div className="text-xs text-slate-700"><strong>Designation:</strong> {l4Designation}</div>
-                  <div className="text-xs text-slate-700"><strong>Date:</strong> {l4Date}</div>
+                  <div className="font-bold">
+                    2nd Recommending Authority Remarks
+                  </div>
+                  <div className="text-xs text-slate-700 mt-1">
+                    <strong>Name:</strong> {l4Name}
+                  </div>
+                  <div className="text-xs text-slate-700">
+                    <strong>Designation:</strong> {l4Designation}
+                  </div>
+                  <div className="text-xs text-slate-700">
+                    <strong>Date:</strong> {l4Date}
+                  </div>
                 </td>
                 <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap break-words [overflow-wrap:anywhere] break-all">
                   {l4Remarks}
@@ -7864,10 +8579,18 @@ const resolveStageStatus = (
 
               <tr>
                 <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top">
-                  <div className="font-bold">3rd Recommending Authority Remarks</div>
-                  <div className="text-xs text-slate-700 mt-1"><strong>Name:</strong> {l5Name}</div>
-                  <div className="text-xs text-slate-700"><strong>Designation:</strong> {l5Designation}</div>
-                  <div className="text-xs text-slate-700"><strong>Date:</strong> {l5Date}</div>
+                  <div className="font-bold">
+                    3rd Recommending Authority Remarks
+                  </div>
+                  <div className="text-xs text-slate-700 mt-1">
+                    <strong>Name:</strong> {l5Name}
+                  </div>
+                  <div className="text-xs text-slate-700">
+                    <strong>Designation:</strong> {l5Designation}
+                  </div>
+                  <div className="text-xs text-slate-700">
+                    <strong>Date:</strong> {l5Date}
+                  </div>
                 </td>
                 <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap break-words [overflow-wrap:anywhere] break-all">
                   {l5Remarks}
@@ -7876,10 +8599,18 @@ const resolveStageStatus = (
 
               <tr>
                 <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top">
-                  <div className="font-bold">4th Recommending Authority Remarks</div>
-                  <div className="text-xs text-slate-700 mt-1"><strong>Name:</strong> {l6Name}</div>
-                  <div className="text-xs text-slate-700"><strong>Designation:</strong> {l6Designation}</div>
-                  <div className="text-xs text-slate-700"><strong>Date:</strong> {l6Date}</div>
+                  <div className="font-bold">
+                    4th Recommending Authority Remarks
+                  </div>
+                  <div className="text-xs text-slate-700 mt-1">
+                    <strong>Name:</strong> {l6Name}
+                  </div>
+                  <div className="text-xs text-slate-700">
+                    <strong>Designation:</strong> {l6Designation}
+                  </div>
+                  <div className="text-xs text-slate-700">
+                    <strong>Date:</strong> {l6Date}
+                  </div>
                 </td>
                 <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top whitespace-pre-wrap break-words [overflow-wrap:anywhere] break-all">
                   {l6Remarks}
@@ -7889,9 +8620,15 @@ const resolveStageStatus = (
               <tr>
                 <td className="border border-slate-900 px-3 py-2 text-slate-900 align-top">
                   <div className="font-bold">Approving Authority Remarks</div>
-                  <div className="text-xs text-slate-700 mt-1"><strong>Name:</strong> {l7Name}</div>
-                  <div className="text-xs text-slate-700"><strong>Designation:</strong> {l7Designation}</div>
-                  <div className="text-xs text-slate-700"><strong>Date:</strong> {l7Date}</div>
+                  <div className="text-xs text-slate-700 mt-1">
+                    <strong>Name:</strong> {l7Name}
+                  </div>
+                  <div className="text-xs text-slate-700">
+                    <strong>Designation:</strong> {l7Designation}
+                  </div>
+                  <div className="text-xs text-slate-700">
+                    <strong>Date:</strong> {l7Date}
+                  </div>
                   <div className="mt-3 font-bold text-slate-900">
                     DSA Code Allotted:
                   </div>
@@ -7900,9 +8637,13 @@ const resolveStageStatus = (
                   <div>{l7Remarks}</div>
                   <div className="mt-3">
                     {canShowOfficialCode ? (
-                      <span className="font-bold text-emerald-800 text-sm font-mono">{String(rawOfficialCode)}</span>
+                      <span className="font-bold text-emerald-800 text-sm font-mono">
+                        {String(rawOfficialCode)}
+                      </span>
                     ) : (
-                      <span className="italic text-slate-500 text-xs">Pending Final Approval (Level 7) &amp; Active Onboarding</span>
+                      <span className="italic text-slate-500 text-xs">
+                        Pending Final Approval (Level 7) &amp; Active Onboarding
+                      </span>
                     )}
                   </div>
                 </td>
@@ -7918,8 +8659,8 @@ const resolveStageStatus = (
               <div className="p-3 rounded-lg bg-emerald-100/80 border border-emerald-300 text-emerald-950 text-xs font-semibold flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-emerald-700 shrink-0" />
                 <span>
-                  Application has received final institutional
-                  sanction and is fully approved.
+                  Application has received final institutional sanction and is
+                  fully approved.
                 </span>
               </div>
             ) : null}
@@ -7987,24 +8728,18 @@ const resolveStageStatus = (
                 disabled={actionLoading || isAlreadyApproved}
                 onClick={async () => {
                   if (!approvalRemarks.trim()) {
-                    setApprovalRemarksError(
-                      "Please provide sanction remarks.",
-                    );
+                    setApprovalRemarksError("Please provide sanction remarks.");
                     return;
                   }
                   try {
-                    const updated = await updateWorkflowAction(
-                      dsa.id,
-                      {
-                        action: "APPROVE",
-                        remarks: approvalRemarks.trim(),
-                      },
-                    );
+                    const updated = await updateWorkflowAction(dsa.id, {
+                      action: "APPROVE",
+                      remarks: approvalRemarks.trim(),
+                    });
                     if (updated) {
                       // The engine already un-acquires the case on sanction.
                       toast({
-                        title:
-                          "Institutional Sanction Granted (Approved)",
+                        title: "Institutional Sanction Granted (Approved)",
                         description: `Application #${dsa.dsa_code || dsa.code || dsa.id} sanctioned. DSA Code allotted and Empanelment Letter generated.`,
                         variant: "success",
                       });
@@ -8012,8 +8747,7 @@ const resolveStageStatus = (
                     }
                   } catch (err: any) {
                     setApprovalRemarksError(
-                      err?.message ||
-                        "Failed to grant final sanction.",
+                      err?.message || "Failed to grant final sanction.",
                     );
                   }
                 }}
@@ -8105,9 +8839,7 @@ const resolveStageStatus = (
               >
                 <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
                 View Deviations{" "}
-                {deviationRules.length > 0
-                  ? `(${deviationRules.length})`
-                  : ""}
+                {deviationRules.length > 0 ? `(${deviationRules.length})` : ""}
               </Button>
             )}
             {hasCheckerGeneratedReport && (
@@ -8121,14 +8853,16 @@ const resolveStageStatus = (
                     loadingPreviewDocId === "dd_report" ||
                     Boolean(
                       loadingPreviewDocId &&
-                        loadingPreviewDocId ===
-                          (backendDocs.find(isDdReviewReportDocument) as any)?.id
+                      loadingPreviewDocId ===
+                        (backendDocs.find(isDdReviewReportDocument) as any)?.id,
                     )
                   }
                   onClick={async () => {
                     try {
                       setLoadingDdReportModal(true);
-                      const ddDoc = backendDocs.find(isDdReviewReportDocument) || {
+                      const ddDoc = backendDocs.find(
+                        isDdReviewReportDocument,
+                      ) || {
                         document_type: "DUE_DILIGENCE_REVIEW_REPORT",
                         file_name: `dsa_dd_review_report_${dsa?.id || ""}.pdf`,
                         owner_name: dsa?.name,
@@ -8145,8 +8879,8 @@ const resolveStageStatus = (
                   loadingPreviewDocId === "dd_report" ||
                   Boolean(
                     loadingPreviewDocId &&
-                      loadingPreviewDocId ===
-                        (backendDocs.find(isDdReviewReportDocument) as any)?.id
+                    loadingPreviewDocId ===
+                      (backendDocs.find(isDdReviewReportDocument) as any)?.id,
                   ) ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
                   ) : (
@@ -8243,9 +8977,19 @@ const resolveStageStatus = (
           </div>
         }
         title={
-          String(dsa.dsa_type || (dsa as any).entity_type || (dsa as any).business_type || "").toUpperCase() === "ENTITY"
-            ? ((dsa as any).entity_name || (dsa as any).company_name || (dsa.name !== dsa.applicant_title ? dsa.name : "") || dsa.contact_person || dsa.code || "DSA Partner")
-            : (dsa.name || dsa.contact_person || dsa.code || "DSA Partner")
+          String(
+            dsa.dsa_type ||
+              (dsa as any).entity_type ||
+              (dsa as any).business_type ||
+              "",
+          ).toUpperCase() === "ENTITY"
+            ? (dsa as any).entity_name ||
+              (dsa as any).company_name ||
+              (dsa.name !== dsa.applicant_title ? dsa.name : "") ||
+              dsa.contact_person ||
+              dsa.code ||
+              "DSA Partner"
+            : dsa.name || dsa.contact_person || dsa.code || "DSA Partner"
         }
       />
 
@@ -8284,20 +9028,43 @@ const resolveStageStatus = (
         <Tabs
           onChange={setTab}
           tabs={[
-            { label: "DSA Approval", value: "actions", dot: Boolean(getWorkflowBlockReason()) },
-            { label: "DSA Application Form", value: "overview", dot: !isMakerUser && (pendingCheckerVerifications.length > 0 || !hasCheckerDdNote || !hasCheckerGeneratedReport) },
-            { label: "Documents Checklist", value: "documents", dot: hasUnverifiedApplicantDocs || missingProfileDocuments.length > 0 },
+            {
+              label: "DSA Approval",
+              value: "actions",
+              dot: Boolean(getWorkflowBlockReason()),
+            },
+            {
+              label: "DSA Application Form",
+              value: "overview",
+              dot:
+                !isMakerUser &&
+                (pendingCheckerVerifications.length > 0 ||
+                  !hasCheckerDdNote ||
+                  !hasCheckerGeneratedReport),
+            },
+            {
+              label: "Documents Checklist",
+              value: "documents",
+              dot:
+                hasUnverifiedApplicantDocs ||
+                missingProfileDocuments.length > 0,
+            },
             ...(canViewAgreementsTab
-              ? [{
-                  label: "Agreements",
-                  value: "agreements",
-                  dot: (() => {
-                    const status = String(dsa?.agreement_status || "").toUpperCase();
-                    const isPendingMakerCheckerAction =
-                      status === "GENERATED" || status === "SIGNED_UPLOAD_PENDING";
-                    return isPendingMakerCheckerAction;
-                  })(),
-                }]
+              ? [
+                  {
+                    label: "Agreements",
+                    value: "agreements",
+                    dot: (() => {
+                      const status = String(
+                        dsa?.agreement_status || "",
+                      ).toUpperCase();
+                      const isPendingMakerCheckerAction =
+                        status === "GENERATED" ||
+                        status === "SIGNED_UPLOAD_PENDING";
+                      return isPendingMakerCheckerAction;
+                    })(),
+                  },
+                ]
               : []),
             { label: "Audit Trails", value: "case-activity" },
           ]}
@@ -8345,16 +9112,27 @@ const resolveStageStatus = (
                   <ShieldCheck
                     className={cn(
                       "h-3.5 w-3.5",
-                      appFormSubTab === "kyc"
-                        ? "text-white"
-                        : "text-slate-400",
+                      appFormSubTab === "kyc" ? "text-white" : "text-slate-400",
                     )}
                   />
                   <span>KYC</span>
                   {!isMakerUser && pendingCheckerVerifications.length > 0 ? (
-                    <span className="relative flex h-1.5 w-1.5 shrink-0" title="Pending statutory verifications">
-                      <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-60", appFormSubTab === "kyc" ? "bg-white" : "bg-sky-400")} />
-                      <span className={cn("relative inline-flex rounded-full h-1.5 w-1.5", appFormSubTab === "kyc" ? "bg-white" : "bg-[#0095da]")} />
+                    <span
+                      className="relative flex h-1.5 w-1.5 shrink-0"
+                      title="Pending statutory verifications"
+                    >
+                      <span
+                        className={cn(
+                          "animate-ping absolute inline-flex h-full w-full rounded-full opacity-60",
+                          appFormSubTab === "kyc" ? "bg-white" : "bg-sky-400",
+                        )}
+                      />
+                      <span
+                        className={cn(
+                          "relative inline-flex rounded-full h-1.5 w-1.5",
+                          appFormSubTab === "kyc" ? "bg-white" : "bg-[#0095da]",
+                        )}
+                      />
                     </span>
                   ) : null}
                   <span
@@ -8392,10 +9170,26 @@ const resolveStageStatus = (
                       )}
                     />
                     <span>Due Diligence Report</span>
-                    {!isMakerUser && (!hasCheckerDdNote || !hasCheckerGeneratedReport) ? (
-                      <span className="relative flex h-1.5 w-1.5 shrink-0" title="Due diligence note or report pending">
-                        <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-60", appFormSubTab === "ddl" ? "bg-white" : "bg-sky-400")} />
-                        <span className={cn("relative inline-flex rounded-full h-1.5 w-1.5", appFormSubTab === "ddl" ? "bg-white" : "bg-[#0095da]")} />
+                    {!isMakerUser &&
+                    (!hasCheckerDdNote || !hasCheckerGeneratedReport) ? (
+                      <span
+                        className="relative flex h-1.5 w-1.5 shrink-0"
+                        title="Due diligence note or report pending"
+                      >
+                        <span
+                          className={cn(
+                            "animate-ping absolute inline-flex h-full w-full rounded-full opacity-60",
+                            appFormSubTab === "ddl" ? "bg-white" : "bg-sky-400",
+                          )}
+                        />
+                        <span
+                          className={cn(
+                            "relative inline-flex rounded-full h-1.5 w-1.5",
+                            appFormSubTab === "ddl"
+                              ? "bg-white"
+                              : "bg-[#0095da]",
+                          )}
+                        />
                       </span>
                     ) : null}
                   </button>
@@ -8469,16 +9263,30 @@ const resolveStageStatus = (
                               }[] = [];
                               if (dsa.pan && !isPanChecked) {
                                 const isEntity =
-                                  (dsa.dsa_type || "").toUpperCase() === "ENTITY" ||
-                                  (dsa.entity_type || "").toUpperCase() === "ENTITY" ||
-                                  ((dsa.business_type || "").toUpperCase() !== "INDIVIDUAL" && (dsa.business_type || "").trim() !== "");
-                                const panCode = isEntity ? "PAN_ENTITY" : "PAN_ADVANCED_INDIVIDUAL";
+                                  (dsa.dsa_type || "").toUpperCase() ===
+                                    "ENTITY" ||
+                                  (dsa.entity_type || "").toUpperCase() ===
+                                    "ENTITY" ||
+                                  ((dsa.business_type || "").toUpperCase() !==
+                                    "INDIVIDUAL" &&
+                                    (dsa.business_type || "").trim() !== "");
+                                const panCode = isEntity
+                                  ? "PAN_ENTITY"
+                                  : "PAN_ADVANCED_INDIVIDUAL";
                                 tasks.push({
                                   key: "pan",
-                                  promise: triggerCheckerVerification(dsa.id, panCode, { pan: dsa.pan }),
+                                  promise: triggerCheckerVerification(
+                                    dsa.id,
+                                    panCode,
+                                    { pan: dsa.pan },
+                                  ),
                                 });
                               }
-                              if (dsa.gst_applicable && dsa.gst && !isGstChecked) {
+                              if (
+                                dsa.gst_applicable &&
+                                dsa.gst &&
+                                !isGstChecked
+                              ) {
                                 tasks.push({
                                   key: "gst",
                                   promise: triggerCheckerVerification(
@@ -8488,7 +9296,11 @@ const resolveStageStatus = (
                                   ),
                                 });
                               }
-                              if (dsa.account_number && dsa.ifsc && !isBankChecked) {
+                              if (
+                                dsa.account_number &&
+                                dsa.ifsc &&
+                                !isBankChecked
+                              ) {
                                 tasks.push({
                                   key: "bank",
                                   promise: (async () => {
@@ -8514,7 +9326,12 @@ const resolveStageStatus = (
                               const regNo =
                                 (dsa as any)?.udyam_no ||
                                 (dsa as any)?.udyam_registration_no ||
-                                (dsa.business_license_no && /UDYAM-[A-Z]{2}-\d{2}-\d{7}/i.test(dsa.business_license_no) ? dsa.business_license_no : "");
+                                (dsa.business_license_no &&
+                                /UDYAM-[A-Z]{2}-\d{2}-\d{7}/i.test(
+                                  dsa.business_license_no,
+                                )
+                                  ? dsa.business_license_no
+                                  : "");
                               if (regNo && !isUdyamChecked) {
                                 tasks.push({
                                   key: "udyam",
@@ -8532,13 +9349,19 @@ const resolveStageStatus = (
                                   isCheckerRole)
                               ) {
                                 const isEntity =
-                                  (dsa.dsa_type || "").toUpperCase() === "ENTITY" ||
-                                  (dsa.entity_type || "").toUpperCase() === "ENTITY" ||
-                                  ((dsa.business_type || "").toUpperCase() !== "INDIVIDUAL" && (dsa.business_type || "").trim() !== "");
-                                const isProprietorship = isProprietorshipDsa(dsa);
-                                const cibilCode = (isEntity && !isProprietorship)
-                                  ? "CIBIL_COMMERCIAL"
-                                  : "CIBIL_CONSUMER";
+                                  (dsa.dsa_type || "").toUpperCase() ===
+                                    "ENTITY" ||
+                                  (dsa.entity_type || "").toUpperCase() ===
+                                    "ENTITY" ||
+                                  ((dsa.business_type || "").toUpperCase() !==
+                                    "INDIVIDUAL" &&
+                                    (dsa.business_type || "").trim() !== "");
+                                const isProprietorship =
+                                  isProprietorshipDsa(dsa);
+                                const cibilCode =
+                                  isEntity && !isProprietorship
+                                    ? "CIBIL_COMMERCIAL"
+                                    : "CIBIL_CONSUMER";
                                 if (!isCibilChecked) {
                                   tasks.push({
                                     key: "cibil",
@@ -8547,7 +9370,8 @@ const resolveStageStatus = (
                                       cibilCode,
                                       {
                                         pan: dsa.pan,
-                                        entity_name: dsa.entity_name || dsa.name,
+                                        entity_name:
+                                          dsa.entity_name || dsa.name,
                                       },
                                     ),
                                   });
@@ -8565,8 +9389,11 @@ const resolveStageStatus = (
                               }
 
                               if (tasks.length === 0) return;
-                              const runningVerifs: { [key: string]: boolean } = {};
-                              tasks.forEach((t) => { runningVerifs[t.key] = true; });
+                              const runningVerifs: { [key: string]: boolean } =
+                                {};
+                              tasks.forEach((t) => {
+                                runningVerifs[t.key] = true;
+                              });
                               setVerifyingKyc(runningVerifs);
 
                               const results = await Promise.allSettled(
@@ -8674,17 +9501,24 @@ const resolveStageStatus = (
                     ) => {
                       const matchesType = (t: string) => {
                         const upper = t.toUpperCase();
-                        if (!allowedTypes) return upper.includes(code.toUpperCase());
-                        return allowedTypes.some((a) => upper === a.toUpperCase());
+                        if (!allowedTypes)
+                          return upper.includes(code.toUpperCase());
+                        return allowedTypes.some(
+                          (a) => upper === a.toUpperCase(),
+                        );
                       };
                       const fromDsa = ((dsa as any)?.verifications || []).find(
                         (v: any) => {
-                          const vc = String(v.verification_code || "").toUpperCase();
+                          const vc = String(
+                            v.verification_code || "",
+                          ).toUpperCase();
                           // dsa_verifications codes are exact registry codes (GST, UDYAM,
                           // PAN_ADVANCED_INDIVIDUAL, ...); match whole tokens only.
                           return allowedTypes
                             ? allowedTypes.some(
-                                (a) => vc === a.toUpperCase() || vc.includes(a.toUpperCase()),
+                                (a) =>
+                                  vc === a.toUpperCase() ||
+                                  vc.includes(a.toUpperCase()),
                               )
                             : vc.includes(code.toUpperCase());
                         },
@@ -8711,25 +9545,38 @@ const resolveStageStatus = (
                     const isEntityDsa =
                       (dsa.dsa_type || "").toUpperCase() === "ENTITY" ||
                       (dsa.entity_type || "").toUpperCase() === "ENTITY" ||
-                      ((dsa.business_type || "").toUpperCase() !== "INDIVIDUAL" && (dsa.business_type || "").trim() !== "");
+                      ((dsa.business_type || "").toUpperCase() !==
+                        "INDIVIDUAL" &&
+                        (dsa.business_type || "").trim() !== "");
                     const panVerif = isEntityDsa
-                      ? (getVerif("PAN_ENTITY", true, ["PAN_ENTITY", "pan-entity"]) ?? getVerif("PAN", true))
-                      : (getVerif("PAN_ADVANCED_INDIVIDUAL", true, ["PAN_ADVANCED_INDIVIDUAL", "PAN_ADVANCE", "pan-advance"]) ?? getVerif("PAN", true));
+                      ? (getVerif("PAN_ENTITY", true, [
+                          "PAN_ENTITY",
+                          "pan-entity",
+                        ]) ?? getVerif("PAN", true))
+                      : (getVerif("PAN_ADVANCED_INDIVIDUAL", true, [
+                          "PAN_ADVANCED_INDIVIDUAL",
+                          "PAN_ADVANCE",
+                          "pan-advance",
+                        ]) ?? getVerif("PAN", true));
                     // Checker GST verification is strictly from dsa_verifications
                     const panToGstVerif =
-                      getVerif("PAN_TO_GSTIN", false) || getVerif("pan_to_gstin", false);
+                      getVerif("PAN_TO_GSTIN", false) ||
+                      getVerif("pan_to_gstin", false);
                     const gstBasicVerif =
-                      getVerif("GST_BASIC_DETAILS", false) || getVerif("GST_BASIC", false);
+                      getVerif("GST_BASIC_DETAILS", false) ||
+                      getVerif("GST_BASIC", false);
                     const gstVerif =
                       gstBasicVerif ??
                       getVerif("GST", false, ["GST_BASIC"]) ??
                       getVerif("GSTIN", false, ["GST_BASIC"]);
-                    const bankVerif = getVerif("BANK", false) || getVerif("BAV", false);
+                    const bankVerif =
+                      getVerif("BANK", false) || getVerif("BAV", false);
                     const udyamVerif = getVerif("UDYAM", false);
                     const cibilVerif = getVerif("CIBIL", false);
                     const amlVerif = getVerif("AML", false);
 
-                    const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Zz][0-9A-Z]{1}$/;
+                    const GSTIN_REGEX =
+                      /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[Zz][0-9A-Z]{1}$/;
                     const extractAllGstins = (obj: any): string[] => {
                       const gsts = new Set<string>();
                       if (!obj) return [];
@@ -8801,14 +9648,23 @@ const resolveStageStatus = (
                     );
                     const allVers = (dsa as any)?.verifications || [];
                     allVers.forEach((v: any) => {
-                      const code = String(v.verification_code || "").toUpperCase();
-                      if (code === "GST_BASIC_DETAILS" || code === "GST_BASIC") {
+                      const code = String(
+                        v.verification_code || "",
+                      ).toUpperCase();
+                      if (
+                        code === "GST_BASIC_DETAILS" ||
+                        code === "GST_BASIC"
+                      ) {
                         const g =
                           v.normalized_data?.gstin ||
-                          v.response_payload?.data?.gstinDetailedInformartion?.gstin ||
+                          v.response_payload?.data?.gstinDetailedInformartion
+                            ?.gstin ||
                           v.response_payload?.data?.gstin ||
                           v.request_payload?.gstin;
-                        if (g && GSTIN_REGEX.test(String(g).trim().toUpperCase())) {
+                        if (
+                          g &&
+                          GSTIN_REGEX.test(String(g).trim().toUpperCase())
+                        ) {
                           fetchedGstinSet.add(String(g).trim().toUpperCase());
                         }
                       }
@@ -8828,7 +9684,13 @@ const resolveStageStatus = (
                               PAN Verification
                             </span>
                             <StatusBadge
-                              status={isPanFailed ? "Failed" : isPanChecked ? "Verified" : "Pending"}
+                              status={
+                                isPanFailed
+                                  ? "Failed"
+                                  : isPanChecked
+                                    ? "Verified"
+                                    : "Pending"
+                              }
                             />
                           </div>
                           <div>
@@ -8846,25 +9708,29 @@ const resolveStageStatus = (
                                 : isPanFailed
                                   ? "Verification Failed · Please Retry"
                                   : isPanChecked
-                                    ? (isCheckerRole ? "Checked via NSDL / Income Tax Dept" : "Verified via NSDL / Income Tax Dept")
+                                    ? isCheckerRole
+                                      ? "Checked via NSDL / Income Tax Dept"
+                                      : "Verified via NSDL / Income Tax Dept"
                                     : "NSDL / Income Tax Dept"}
                             </span>
                             <div className="flex items-center gap-1.5">
-                              {canViewPanKycData && Boolean(dsa.pan || isPanChecked) && !isPanFailed && (
-                                <Button
-                                  size="sm"
-                                  type="button"
-                                  variant="outline"
-                                  onClick={() => {
-                                    setViewKycDataCachedVerif(panVerif);
-                                    setViewKycDataModalType("pan");
-                                  }}
-                                  className="text-xs px-2.5 py-1 h-auto font-medium text-slate-700 hover:text-blue-700 hover:bg-blue-50 border-slate-300 flex items-center gap-1 shadow-2xs"
-                                >
-                                  <Eye className="h-3.5 w-3.5" />
-                                  View Data
-                                </Button>
-                              )}
+                              {canViewPanKycData &&
+                                Boolean(dsa.pan || isPanChecked) &&
+                                !isPanFailed && (
+                                  <Button
+                                    size="sm"
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setViewKycDataCachedVerif(panVerif);
+                                      setViewKycDataModalType("pan");
+                                    }}
+                                    className="text-xs px-2.5 py-1 h-auto font-medium text-slate-700 hover:text-blue-700 hover:bg-blue-50 border-slate-300 flex items-center gap-1 shadow-2xs"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" />
+                                    View Data
+                                  </Button>
+                                )}
                               {canVerifyPanKyc && !isPanChecked && (
                                 <Button
                                   size="sm"
@@ -8956,45 +9822,54 @@ const resolveStageStatus = (
                                 : "GSTN Master Database · No Record Found"}
                             </span>
                             <div className="flex items-center gap-1.5">
-                              {canViewGstKycData && Boolean(resolvedGstNumber) && !isGstFailed && (
-                                <Button
-                                  size="sm"
-                                  type="button"
-                                  variant="outline"
-                                  onClick={() => {
-                                    const activeGstVerif = gstBasicVerif ?? gstVerif ?? panToGstVerif;
-                                    setViewKycDataCachedVerif(activeGstVerif);
-                                    setViewKycDataModalType("gst");
-                                  }}
-                                  className="text-xs px-2.5 py-1 h-auto font-medium text-slate-700 hover:text-blue-700 hover:bg-blue-50 border-slate-300 flex items-center gap-1 shadow-2xs"
-                                >
-                                  <Eye className="h-3.5 w-3.5" />
-                                  View Data
-                                </Button>
-                              )}
-                              {canCheckerVerifyKyc && !isGstChecked && Boolean(resolvedGstNumber || dsa.gst_applicable) && (
-                                <Button
-                                  size="sm"
-                                  type="button"
-                                  disabled={verifyingKyc.gst}
-                                  onClick={() =>
-                                    handleVerifyKyc("gst", "GSTIN")
-                                  }
-                                  className="text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
-                                >
-                                  {verifyingKyc.gst ? (
-                                    <>
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                      Checking...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <ShieldCheck className="h-3 w-3" />
-                                      Check GSTIN
-                                    </>
-                                  )}
-                                </Button>
-                              )}
+                              {canViewGstKycData &&
+                                Boolean(resolvedGstNumber) &&
+                                !isGstFailed && (
+                                  <Button
+                                    size="sm"
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                      const activeGstVerif =
+                                        gstBasicVerif ??
+                                        gstVerif ??
+                                        panToGstVerif;
+                                      setViewKycDataCachedVerif(activeGstVerif);
+                                      setViewKycDataModalType("gst");
+                                    }}
+                                    className="text-xs px-2.5 py-1 h-auto font-medium text-slate-700 hover:text-blue-700 hover:bg-blue-50 border-slate-300 flex items-center gap-1 shadow-2xs"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" />
+                                    View Data
+                                  </Button>
+                                )}
+                              {canCheckerVerifyKyc &&
+                                !isGstChecked &&
+                                Boolean(
+                                  resolvedGstNumber || dsa.gst_applicable,
+                                ) && (
+                                  <Button
+                                    size="sm"
+                                    type="button"
+                                    disabled={verifyingKyc.gst}
+                                    onClick={() =>
+                                      handleVerifyKyc("gst", "GSTIN")
+                                    }
+                                    className="text-xs px-3 py-1 h-auto font-semibold flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
+                                  >
+                                    {verifyingKyc.gst ? (
+                                      <>
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                        Checking...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <ShieldCheck className="h-3 w-3" />
+                                        Check GSTIN
+                                      </>
+                                    )}
+                                  </Button>
+                                )}
                             </div>
                           </div>
                         </div>
@@ -9006,7 +9881,13 @@ const resolveStageStatus = (
                               Bank Account (BAV)
                             </span>
                             <StatusBadge
-                              status={isBankFailed ? "Failed" : isBankChecked ? "Verified" : "Pending"}
+                              status={
+                                isBankFailed
+                                  ? "Failed"
+                                  : isBankChecked
+                                    ? "Verified"
+                                    : "Pending"
+                              }
                             />
                           </div>
                           <div>
@@ -9014,7 +9895,9 @@ const resolveStageStatus = (
                               {dsa.bank_name || ""}
                             </p>
                             <p className="text-xs font-mono text-slate-600 mt-0.5">
-                              {dsa.account_number ? `A/C: ${dsa.account_number}` : ""}
+                              {dsa.account_number
+                                ? `A/C: ${dsa.account_number}`
+                                : ""}
                               {dsa.account_number && dsa.ifsc ? " · " : ""}
                               {dsa.ifsc ? `IFSC: ${dsa.ifsc}` : ""}
                             </p>
@@ -9026,7 +9909,9 @@ const resolveStageStatus = (
                                 : isBankFailed
                                   ? "Verification Failed · Please Retry"
                                   : isBankChecked
-                                    ? (isCheckerRole ? "Bank Account Checked (BAV)" : "Bank Account Verification (BAV)")
+                                    ? isCheckerRole
+                                      ? "Bank Account Checked (BAV)"
+                                      : "Bank Account Verification (BAV)"
                                     : isMakerUser
                                       ? "Pending Checker Verification"
                                       : "Bank Account Verification (BAV)"}
@@ -9083,12 +9968,23 @@ const resolveStageStatus = (
                           const resolvedUdyamNo =
                             (dsa as any)?.udyam_no ||
                             (dsa as any)?.udyam_registration_no ||
-                            (dsa.business_license_no && /UDYAM-[A-Z]{2}-\d{2}-\d{7}/i.test(dsa.business_license_no) ? dsa.business_license_no : null);
+                            (dsa.business_license_no &&
+                            /UDYAM-[A-Z]{2}-\d{2}-\d{7}/i.test(
+                              dsa.business_license_no,
+                            )
+                              ? dsa.business_license_no
+                              : null);
                           const hasUdyam = Boolean(resolvedUdyamNo);
 
                           const resolvedShopActNo =
                             (dsa as any)?.shop_act_no ||
-                            (!hasUdyam && dsa.business_license_no && !/UDYAM-[A-Z]{2}-\d{2}-\d{7}/i.test(dsa.business_license_no) ? dsa.business_license_no : null);
+                            (!hasUdyam &&
+                            dsa.business_license_no &&
+                            !/UDYAM-[A-Z]{2}-\d{2}-\d{7}/i.test(
+                              dsa.business_license_no,
+                            )
+                              ? dsa.business_license_no
+                              : null);
                           const hasShopAct = Boolean(resolvedShopActNo);
 
                           if (hasUdyam) {
@@ -9099,7 +9995,13 @@ const resolveStageStatus = (
                                     Udyam Registration
                                   </span>
                                   <StatusBadge
-                                    status={isUdyamFailed ? "Failed" : isUdyamChecked ? "Verified" : "Pending"}
+                                    status={
+                                      isUdyamFailed
+                                        ? "Failed"
+                                        : isUdyamChecked
+                                          ? "Verified"
+                                          : "Pending"
+                                    }
                                   />
                                 </div>
                                 <div>
@@ -9108,7 +10010,8 @@ const resolveStageStatus = (
                                   </p>
                                   {(dsa.constitution || dsa.business_type) && (
                                     <p className="text-xs text-slate-600 mt-0.5">
-                                      Category: {dsa.constitution || dsa.business_type}
+                                      Category:{" "}
+                                      {dsa.constitution || dsa.business_type}
                                     </p>
                                   )}
                                 </div>
@@ -9234,7 +10137,13 @@ const resolveStageStatus = (
                               CIBIL Bureau Assessment
                             </span>
                             <StatusBadge
-                              status={isCibilFailed ? "Failed" : isCibilChecked ? "Verified" : "Pending"}
+                              status={
+                                isCibilFailed
+                                  ? "Failed"
+                                  : isCibilChecked
+                                    ? "Verified"
+                                    : "Pending"
+                              }
                             />
                           </div>
                           <div>
@@ -9313,7 +10222,13 @@ const resolveStageStatus = (
                               AML / Sanctions Screening
                             </span>
                             <StatusBadge
-                              status={isAmlFailed ? "Failed" : isAmlChecked ? "Verified" : "Pending"}
+                              status={
+                                isAmlFailed
+                                  ? "Failed"
+                                  : isAmlChecked
+                                    ? "Verified"
+                                    : "Pending"
+                              }
                             />
                           </div>
                           <div>
@@ -9403,183 +10318,204 @@ const resolveStageStatus = (
               )}
 
               {/* Sub-Tab 3: Due Diligence Review Report */}
-              {appFormSubTab === "ddl" && (!isMakerUser || hasCheckerGeneratedReport) && (
-                <div className="space-y-4">
-                  {(canCheckerSubmitReport ||
-                    isCheckerRole ||
-                    isCheckerLevel ||
-                    isMakerUser ||
-                    workflowLevelInfo.currentLevel >= 2) && (
-                    <div className="space-y-4">
-                      {/* DD Note Modal for Checker */}
-                      {isCheckerRole && !isMakerUser && (
-                        <Modal
-                          open={isDdNoteModalOpen}
-                          onClose={() => setIsDdNoteModalOpen(false)}
-                          title="Checker Due Diligence Note *"
-                          width="max-w-xl"
-                        >
-                          <div className="space-y-4">
-                            <textarea
-                              rows={5}
-                              className="w-full rounded-md border border-slate-200 bg-white p-3 text-xs text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 font-sans leading-relaxed"
-                              value={checkerDdNote}
-                              onChange={(e) => setCheckerDdNote(e.target.value)}
-                              placeholder="Enter your due diligence observations here..."
-                              autoFocus
-                            />
-                            <div className="flex justify-end items-center gap-2 pt-1">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setIsDdNoteModalOpen(false)}
-                                className="h-8 text-xs"
-                              >
-                                Cancel
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                disabled={
-                                  submittingCheckerReport ||
-                                  (!checkerDdNote.trim() && !hasCheckerDdNote)
+              {appFormSubTab === "ddl" &&
+                (!isMakerUser || hasCheckerGeneratedReport) && (
+                  <div className="space-y-4">
+                    {(canCheckerSubmitReport ||
+                      isCheckerRole ||
+                      isCheckerLevel ||
+                      isMakerUser ||
+                      workflowLevelInfo.currentLevel >= 2) && (
+                      <div className="space-y-4">
+                        {/* DD Note Modal for Checker */}
+                        {isCheckerRole && !isMakerUser && (
+                          <Modal
+                            open={isDdNoteModalOpen}
+                            onClose={() => setIsDdNoteModalOpen(false)}
+                            title="Checker Due Diligence Note *"
+                            width="max-w-xl"
+                          >
+                            <div className="space-y-4">
+                              <textarea
+                                rows={5}
+                                className="w-full rounded-md border border-slate-200 bg-white p-3 text-xs text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 font-sans leading-relaxed"
+                                value={checkerDdNote}
+                                onChange={(e) =>
+                                  setCheckerDdNote(e.target.value)
                                 }
-                                onClick={() => {
-                                  handleSubmitCheckerDdReport();
-                                  setIsDdNoteModalOpen(false);
-                                }}
-                                className="h-8 text-xs px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5"
-                              >
-                                <Check className="h-3.5 w-3.5" />
-                                {submittingCheckerReport
-                                  ? "Submitting..."
-                                  : "Submit DD Note"}
-                              </Button>
+                                placeholder="Enter your due diligence observations here..."
+                                autoFocus
+                              />
+                              <div className="flex justify-end items-center gap-2 pt-1">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setIsDdNoteModalOpen(false)}
+                                  className="h-8 text-xs"
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  disabled={
+                                    submittingCheckerReport ||
+                                    (!checkerDdNote.trim() && !hasCheckerDdNote)
+                                  }
+                                  onClick={() => {
+                                    handleSubmitCheckerDdReport();
+                                    setIsDdNoteModalOpen(false);
+                                  }}
+                                  className="h-8 text-xs px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5"
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                  {submittingCheckerReport
+                                    ? "Submitting..."
+                                    : "Submit DD Note"}
+                                </Button>
+                              </div>
                             </div>
-                          </div>
-                        </Modal>
-                      )}
+                          </Modal>
+                        )}
 
-                      {/* Due Diligence Review Report Card */}
-                      <div className="rounded-xl border border-slate-200 bg-white shadow-2xs">
-                        {/* Header */}
-                        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-slate-150">
-                          <div className="flex items-center gap-2">
-                            <ShieldCheck className="h-4 w-4 text-blue-600 shrink-0" />
-                            <h3 className="text-sm font-bold text-slate-900">Due Diligence Review Report</h3>
-                            <span
-                              className={cn(
-                                "text-[10px] font-bold px-2 py-0.5 rounded border",
-                                hasCheckerGeneratedReport
-                                  ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                                  : "bg-amber-100 text-amber-800 border-amber-300",
-                              )}
-                            >
-                              {hasCheckerGeneratedReport
-                                ? "Generated"
-                                : isCheckerRole
-                                  ? "Pending Generation"
-                                  : "Pending Checker"}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {hasCheckerGeneratedReport && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  type="button"
-                                  onClick={() => refreshDdReviewReport()}
-                                  disabled={loadingDeviationReport}
-                                  className="text-xs font-semibold bg-white text-slate-700 border-slate-300 hover:bg-slate-50 flex items-center gap-1.5 h-8"
-                                >
-                                  <RotateCcw
-                                    className={cn(
-                                      "h-3.5 w-3.5 text-slate-600",
-                                      loadingDeviationReport && "animate-spin",
-                                    )}
-                                  />
-                                  Refresh
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  type="button"
-                                  onClick={handleDownloadDeviationReport}
-                                  className="text-xs font-semibold bg-white text-slate-700 border-slate-300 hover:bg-slate-50 flex items-center gap-1.5 h-8"
-                                >
-                                  <Download className="h-3.5 w-3.5 text-blue-600" />
-                                  Download PDF
-                                </Button>
-                              </>
-                            )}
-                            {isCheckerRole && !isMakerUser && (
-                              <Button
-                                size="sm"
-                                type="button"
-                                onClick={() => {
-                                  const obs =
-                                    savedCheckerDdNote?.observations ||
-                                    dsa?.latest_due_diligence_note?.observations ||
-                                    deviationReportData?.dd_note?.observations ||
-                                    "";
-                                  if (!checkerDdNote && obs) setCheckerDdNote(obs);
-                                  setIsDdNoteModalOpen(true);
-                                }}
+                        {/* Due Diligence Review Report Card */}
+                        <div className="rounded-xl border border-slate-200 bg-white shadow-2xs">
+                          {/* Header */}
+                          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-slate-150">
+                            <div className="flex items-center gap-2">
+                              <ShieldCheck className="h-4 w-4 text-blue-600 shrink-0" />
+                              <h3 className="text-sm font-bold text-slate-900">
+                                Due Diligence Review Report
+                              </h3>
+                              <span
                                 className={cn(
-                                  "h-8 text-xs font-bold flex items-center gap-1.5",
-                                  hasCheckerDdNote
-                                    ? "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50"
-                                    : "bg-blue-600 hover:bg-blue-700 text-white",
+                                  "text-[10px] font-bold px-2 py-0.5 rounded border",
+                                  hasCheckerGeneratedReport
+                                    ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                    : "bg-amber-100 text-amber-800 border-amber-300",
                                 )}
                               >
-                                <Pencil className="h-3 w-3" />
-                                DD Note <span className="text-red-500 font-bold">*</span>
-                              </Button>
-                            )}
+                                {hasCheckerGeneratedReport
+                                  ? "Generated"
+                                  : isCheckerRole
+                                    ? "Pending Generation"
+                                    : "Pending Checker"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {hasCheckerGeneratedReport && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    type="button"
+                                    onClick={() => refreshDdReviewReport()}
+                                    disabled={loadingDeviationReport}
+                                    className="text-xs font-semibold bg-white text-slate-700 border-slate-300 hover:bg-slate-50 flex items-center gap-1.5 h-8"
+                                  >
+                                    <RotateCcw
+                                      className={cn(
+                                        "h-3.5 w-3.5 text-slate-600",
+                                        loadingDeviationReport &&
+                                          "animate-spin",
+                                      )}
+                                    />
+                                    Refresh
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    type="button"
+                                    onClick={handleDownloadDeviationReport}
+                                    className="text-xs font-semibold bg-white text-slate-700 border-slate-300 hover:bg-slate-50 flex items-center gap-1.5 h-8"
+                                  >
+                                    <Download className="h-3.5 w-3.5 text-blue-600" />
+                                    Download PDF
+                                  </Button>
+                                </>
+                              )}
+                              {isCheckerRole && !isMakerUser && (
+                                <Button
+                                  size="sm"
+                                  type="button"
+                                  onClick={() => {
+                                    const obs =
+                                      savedCheckerDdNote?.observations ||
+                                      dsa?.latest_due_diligence_note
+                                        ?.observations ||
+                                      deviationReportData?.dd_note
+                                        ?.observations ||
+                                      "";
+                                    if (!checkerDdNote && obs)
+                                      setCheckerDdNote(obs);
+                                    setIsDdNoteModalOpen(true);
+                                  }}
+                                  className={cn(
+                                    "h-8 text-xs font-bold flex items-center gap-1.5",
+                                    hasCheckerDdNote
+                                      ? "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50"
+                                      : "bg-blue-600 hover:bg-blue-700 text-white",
+                                  )}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                  DD Note{" "}
+                                  <span className="text-red-500 font-bold">
+                                    *
+                                  </span>
+                                </Button>
+                              )}
+                            </div>
                           </div>
-                        </div>
 
-                        {/* Report Content Body */}
-                        {loadingDeviationReport && !deviationReportData ? (
-                          <div className="flex items-center justify-center py-10">
-                            <Loader2 className="h-5 w-5 animate-spin text-blue-600 mr-2" />
-                            <span className="text-xs text-slate-600 font-medium">
-                              Fetching due diligence report...
-                            </span>
-                          </div>
-                        ) : !hasCheckerGeneratedReport && isMakerUser ? (
-                          <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4 text-xs text-amber-800">
-                            Due Diligence report will become viewable once
-                            Checker generates and submits the report.
-                          </div>
-                        ) : (
-                          <div className="p-4 min-h-[780px] h-[780px]">
-                            <DocumentViewerBody
-                              previewDoc={
-                                backendDocs.find(isDdReviewReportDocument) || {
-                                  document_type: "DUE_DILIGENCE_REVIEW_REPORT",
-                                  file_name: `dsa_dd_review_report_${dsa?.id || ""}.pdf`,
-                                  owner_name: dsa?.name,
-                                  status: hasCheckerGeneratedReport ? "Checked" : "Uploaded",
+                          {/* Report Content Body */}
+                          {loadingDeviationReport && !deviationReportData ? (
+                            <div className="flex items-center justify-center py-10">
+                              <Loader2 className="h-5 w-5 animate-spin text-blue-600 mr-2" />
+                              <span className="text-xs text-slate-600 font-medium">
+                                Fetching due diligence report...
+                              </span>
+                            </div>
+                          ) : !hasCheckerGeneratedReport && isMakerUser ? (
+                            <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4 text-xs text-amber-800">
+                              Due Diligence report will become viewable once
+                              Checker generates and submits the report.
+                            </div>
+                          ) : (
+                            <div className="p-4 min-h-[780px] h-[780px]">
+                              <DocumentViewerBody
+                                previewDoc={
+                                  backendDocs.find(
+                                    isDdReviewReportDocument,
+                                  ) || {
+                                    document_type:
+                                      "DUE_DILIGENCE_REVIEW_REPORT",
+                                    file_name: `dsa_dd_review_report_${dsa?.id || ""}.pdf`,
+                                    owner_name: dsa?.name,
+                                    status: hasCheckerGeneratedReport
+                                      ? "Checked"
+                                      : "Uploaded",
+                                  }
                                 }
-                              }
-                              dsaId={dsa?.id}
-                              isBankUser={isBankUser}
-                              effectiveStatus={hasCheckerGeneratedReport ? "Checked" : "Uploaded"}
-                              canVerifyDoc={false}
-                              showFooterClose={false}
-                              showMetaToolbar={false}
-                              onClose={() => {}}
-                            />
-                          </div>
-                        )}
+                                dsaId={dsa?.id}
+                                isBankUser={isBankUser}
+                                effectiveStatus={
+                                  hasCheckerGeneratedReport
+                                    ? "Checked"
+                                    : "Uploaded"
+                                }
+                                canVerifyDoc={false}
+                                showFooterClose={false}
+                                showMetaToolbar={false}
+                                onClose={() => {}}
+                              />
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              )}
+                    )}
+                  </div>
+                )}
             </div>
           ) : null}
           {tab === "documents"
@@ -9684,7 +10620,10 @@ const resolveStageStatus = (
                               />
                               <span>{cat.label}</span>
                               {hasPending ? (
-                                <span className="relative flex h-1.5 w-1.5 shrink-0" title="Pending items in this section">
+                                <span
+                                  className="relative flex h-1.5 w-1.5 shrink-0"
+                                  title="Pending items in this section"
+                                >
                                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-60" />
                                   <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#0095da]" />
                                 </span>
@@ -9719,65 +10658,73 @@ const resolveStageStatus = (
 
                       {canApproveDocs && hasUnverifiedApplicantDocs && (
                         <div className="flex flex-col items-start sm:items-end gap-1">
-                        <Button
-                          size="sm"
-                          type="button"
-                          disabled={!isVisitReportUploaded}
-                          title={!isVisitReportUploaded ? "Upload the Physical Visit Report before bulk verify" : undefined}
-                          onClick={async () => {
-                            const toVerify = applicantReviewDocs.filter(
-                              (d: any) =>
-                                getEffectiveDocStatus(d) !== "Verified",
-                            );
-                            await Promise.all(
-                              toVerify.map(async (doc: any) => {
-                                if (typeof doc.id === "number") {
-                                  try {
-                                    await updateDsaDocumentStatus(dsa.id, {
-                                      document_id: doc.id,
-                                      status: "Verified",
-                                      remarks: `Bulk verified by ${currentUser?.name || "Reviewer"}`,
-                                    });
-                                  } catch (err) {}
-                                }
-                              }),
-                            );
-                            const verifiedIds = toVerify.map((d: any) => d.id);
-                            setManuallyVerifiedDocIds(
-                              (prev) => new Set([...prev, ...verifiedIds]),
-                            );
-                            setCheckerVerifiedDocIds(
-                              (prev) => new Set([...prev, ...verifiedIds]),
-                            );
-                            setManuallyFailedDocIds((prev) => {
-                              const next = new Set(prev);
-                              verifiedIds.forEach((id: any) => next.delete(id));
-                              return next;
-                            });
-                            await fetchBackendDocuments(true);
-                            await fetchDsaDetail(dsa.id);
-                            toast({
-                              title: "All Partner Documents Verified",
-                              description: `All ${applicantReviewDocs.length} partner documents have been verified.`,
-                              variant: "success",
-                            });
-                          }}
-                          className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center gap-1.5 h-auto py-1.5 px-3 shadow-sm self-start sm:self-auto"
-                        >
-                          <Check className="h-3.5 w-3.5" />
-                          Verify All Documents ({applicantReviewDocs.length})
-                        </Button>
-                        {!isVisitReportUploaded && (
-                          <span className="text-[11px] font-medium text-amber-700">
-                            Upload the Physical Visit Report to enable bulk verify.
-                          </span>
-                        )}
+                          <Button
+                            size="sm"
+                            type="button"
+                            disabled={!isVisitReportUploaded}
+                            title={
+                              !isVisitReportUploaded
+                                ? "Upload the Physical Visit Report before bulk verify"
+                                : undefined
+                            }
+                            onClick={async () => {
+                              const toVerify = applicantReviewDocs.filter(
+                                (d: any) =>
+                                  getEffectiveDocStatus(d) !== "Verified",
+                              );
+                              await Promise.all(
+                                toVerify.map(async (doc: any) => {
+                                  if (typeof doc.id === "number") {
+                                    try {
+                                      await updateDsaDocumentStatus(dsa.id, {
+                                        document_id: doc.id,
+                                        status: "Verified",
+                                        remarks: `Bulk verified by ${currentUser?.name || "Reviewer"}`,
+                                      });
+                                    } catch (err) {}
+                                  }
+                                }),
+                              );
+                              const verifiedIds = toVerify.map(
+                                (d: any) => d.id,
+                              );
+                              setManuallyVerifiedDocIds(
+                                (prev) => new Set([...prev, ...verifiedIds]),
+                              );
+                              setCheckerVerifiedDocIds(
+                                (prev) => new Set([...prev, ...verifiedIds]),
+                              );
+                              setManuallyFailedDocIds((prev) => {
+                                const next = new Set(prev);
+                                verifiedIds.forEach((id: any) =>
+                                  next.delete(id),
+                                );
+                                return next;
+                              });
+                              await fetchBackendDocuments(true);
+                              await fetchDsaDetail(dsa.id);
+                              toast({
+                                title: "All Partner Documents Verified",
+                                description: `All ${applicantReviewDocs.length} partner documents have been verified.`,
+                                variant: "success",
+                              });
+                            }}
+                            className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center gap-1.5 h-auto py-1.5 px-3 shadow-sm self-start sm:self-auto"
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                            Verify All Documents ({applicantReviewDocs.length})
+                          </Button>
+                          {!isVisitReportUploaded && (
+                            <span className="text-[11px] font-medium text-amber-700">
+                              Upload the Physical Visit Report to enable bulk
+                              verify.
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
 
-
-{/* Uploaded Documents Grid */}
+                    {/* Uploaded Documents Grid */}
                     <div className="grid gap-4 lg:grid-cols-2">
                       {categoryUploadedDocs.map((doc) => {
                         const effectiveStatus = getEffectiveDocStatus(doc);
@@ -9795,7 +10742,12 @@ const resolveStageStatus = (
                         const docType = doc.document_type || doc.type;
                         const isCurrentlyReuploading =
                           reuploadingDocType === docType;
-                        const docFy = doc.financial_year || (doc.remarks && /financial year:\s*([^|]+)/i.exec(doc.remarks)?.[1]?.trim());
+                        const docFy =
+                          doc.financial_year ||
+                          (doc.remarks &&
+                            /financial year:\s*([^|]+)/i
+                              .exec(doc.remarks)?.[1]
+                              ?.trim());
 
                         return (
                           <div
@@ -9807,7 +10759,10 @@ const resolveStageStatus = (
                                 <div>
                                   <div className="flex items-center gap-2">
                                     <p className="font-semibold text-slate-950">
-                                      {formatDocumentType(doc.document_type, doc)}
+                                      {formatDocumentType(
+                                        doc.document_type,
+                                        doc,
+                                      )}
                                     </p>
                                     {isItrDocument(doc) && docFy && (
                                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
@@ -9832,6 +10787,7 @@ const resolveStageStatus = (
                                     !isViewOnlyDoc &&
                                     !isDdReport &&
                                     typeof doc.id === "number" && (
+
                                       <button
                                         type="button"
                                         title="Delete this document"
@@ -9867,7 +10823,7 @@ const resolveStageStatus = (
                                     !isDocViewed ? (
                                       <span className="text-[11px] font-medium text-amber-600 flex items-center gap-1.5">
                                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                                        View document to verify
+                                        View document
                                       </span>
                                     ) : (
                                       <span className="text-[11px] font-medium text-emerald-600 flex items-center gap-1">
@@ -9953,15 +10909,6 @@ const resolveStageStatus = (
                                   canVerifyCurrentDoc ? (
                                     <Button
                                       onClick={async () => {
-                                        if (!isDocViewed) {
-                                          toast({
-                                            title: "Document Not Viewed",
-                                            description:
-                                              "Please view the uploaded document in the viewer before verifying.",
-                                            variant: "warning",
-                                          });
-                                          return;
-                                        }
                                         if (typeof doc.id === "number") {
                                           try {
                                             await updateDsaDocumentStatus(
@@ -9993,14 +10940,11 @@ const resolveStageStatus = (
                                           variant: "success",
                                         });
                                       }}
-                                      disabled={!isDocViewed}
                                       size="sm"
                                       type="button"
                                       className={cn(
                                         "font-semibold text-xs px-2.5 py-0.5 h-auto transition-all",
-                                        isDocViewed
-                                          ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-                                          : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-60",
+                                           "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
                                       )}
                                       title={
                                         !isDocViewed
@@ -10040,7 +10984,9 @@ const resolveStageStatus = (
                                 Additional Financial Year ITRs (Optional)
                               </p>
                               <p className="text-[11px] text-slate-500 mt-0.5">
-                                1st Year ITR is mandatory. You can optionally upload 2nd, 3rd, 4th, or 5th Year ITR with computation.
+                                1st Year ITR is mandatory. You can optionally
+                                upload 2nd, 3rd, 4th, or 5th Year ITR with
+                                computation.
                               </p>
                             </div>
                             <Button
@@ -10050,14 +10996,25 @@ const resolveStageStatus = (
                               onClick={() => {
                                 const uploadedItrYears = allDisplayDocs
                                   .filter((d: any) => {
-                                    const t = String(d.document_type || "").toLowerCase();
+                                    const t = String(
+                                      d.document_type || "",
+                                    ).toLowerCase();
                                     return t.startsWith("itr_year_");
                                   })
                                   .map((d: any) => {
-                                    const yr = parseInt(String(d.document_type).replace(/[^0-9]/g, ""), 10);
+                                    const yr = parseInt(
+                                      String(d.document_type).replace(
+                                        /[^0-9]/g,
+                                        "",
+                                      ),
+                                      10,
+                                    );
                                     return isNaN(yr) ? 1 : yr;
                                   });
-                                const nextYear = uploadedItrYears.length > 0 ? Math.max(...uploadedItrYears) + 1 : 2;
+                                const nextYear =
+                                  uploadedItrYears.length > 0
+                                    ? Math.max(...uploadedItrYears) + 1
+                                    : 2;
                                 setExtraItrYearNum(nextYear > 5 ? 2 : nextYear);
                                 setShowAddItrSlot(true);
                               }}
@@ -10073,7 +11030,8 @@ const resolveStageStatus = (
                               <div className="flex items-center gap-2">
                                 <FileText className="h-4 w-4 text-blue-600" />
                                 <span className="text-sm font-bold text-slate-900">
-                                  Upload Year-wise ITR with Computation (Optional)
+                                  Upload Year-wise ITR with Computation
+                                  (Optional)
                                 </span>
                               </div>
                               <button
@@ -10092,14 +11050,18 @@ const resolveStageStatus = (
                                 </label>
                                 <select
                                   value={extraItrYearNum}
-                                  onChange={(e) => setExtraItrYearNum(Number(e.target.value))}
+                                  onChange={(e) =>
+                                    setExtraItrYearNum(Number(e.target.value))
+                                  }
                                   className="w-full text-xs font-semibold px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
                                 >
                                   {[2, 3, 4, 5].map((yr) => {
-                                    const suffix = yr === 2 ? "nd" : yr === 3 ? "rd" : "th";
+                                    const suffix =
+                                      yr === 2 ? "nd" : yr === 3 ? "rd" : "th";
                                     return (
                                       <option key={yr} value={yr}>
-                                        {yr}{suffix} Year ITR with computation
+                                        {yr}
+                                        {suffix} Year ITR with computation
                                       </option>
                                     );
                                   })}
@@ -10111,10 +11073,18 @@ const resolveStageStatus = (
                                 </label>
                                 <select
                                   value={extraItrFy}
-                                  onChange={(e) => setExtraItrFy(e.target.value)}
+                                  onChange={(e) =>
+                                    setExtraItrFy(e.target.value)
+                                  }
                                   className="w-full text-xs font-semibold px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
                                 >
-                                  {["2024-25", "2023-24", "2022-23", "2021-22", "2020-21"].map((fy) => (
+                                  {[
+                                    "2024-25",
+                                    "2023-24",
+                                    "2022-23",
+                                    "2021-22",
+                                    "2020-21",
+                                  ].map((fy) => (
                                     <option key={fy} value={fy}>
                                       FY {fy}
                                     </option>
@@ -10135,7 +11105,8 @@ const resolveStageStatus = (
                                     if (file.size > 10 * 1024 * 1024) {
                                       toast({
                                         title: "File too large",
-                                        description: "Maximum allowed file size is 10MB.",
+                                        description:
+                                          "Maximum allowed file size is 10MB.",
                                         variant: "warning",
                                       });
                                       return;
@@ -10153,7 +11124,9 @@ const resolveStageStatus = (
                                       await fetchBackendDocuments(true);
                                       adminApi
                                         .getDsaDocumentChecklist(dsa.id)
-                                        .then((res: any) => setDocChecklist(res?.data ?? res))
+                                        .then((res: any) =>
+                                          setDocChecklist(res?.data ?? res),
+                                        )
                                         .catch(() => {});
                                       toast({
                                         title: "ITR Document Uploaded",
@@ -10164,7 +11137,9 @@ const resolveStageStatus = (
                                     } catch (err: any) {
                                       toast({
                                         title: "Upload Failed",
-                                        description: err?.message || "Failed to upload ITR document.",
+                                        description:
+                                          err?.message ||
+                                          "Failed to upload ITR document.",
                                         variant: "warning",
                                       });
                                     } finally {
@@ -10176,7 +11151,9 @@ const resolveStageStatus = (
                                   htmlFor={`upload-extra-itr-${dsa.id}`}
                                   className={cn(
                                     "w-full inline-flex h-8 cursor-pointer items-center justify-center gap-2 rounded-md bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700 transition",
-                                    isUploadingExtraItr ? "opacity-60 cursor-not-allowed" : ""
+                                    isUploadingExtraItr
+                                      ? "opacity-60 cursor-not-allowed"
+                                      : "",
                                   )}
                                 >
                                   {isUploadingExtraItr ? (
@@ -10270,7 +11247,8 @@ const resolveStageStatus = (
                                           return;
                                         }
                                         if (isPhotographDocument(document)) {
-                                          const isAllowed = /\.(png|jpe?g)$/i.test(file.name);
+                                          const isAllowed =
+                                            /\.(png|jpe?g)$/i.test(file.name);
                                           if (!isAllowed) {
                                             toast({
                                               title: "Invalid file format",
@@ -10364,9 +11342,7 @@ const resolveStageStatus = (
               })()
             : null}
 
-          {tab === "case-activity" ? (
-            <DsaCaseActivityTab dsaId={id} />
-          ) : null}
+          {tab === "case-activity" ? <DsaCaseActivityTab dsaId={id} /> : null}
 
           {tab === "agreements"
             ? (() => {
@@ -10502,24 +11478,24 @@ const resolveStageStatus = (
                             )}
                             {signedAgreementDoc.file_url &&
                               canManageAgreementFiles && (
-                              <div className="pt-2 border-t border-slate-200/60 flex items-center justify-start">
-                                <Button
-                                  size="sm"
-                                  type="button"
-                                  variant="outline"
-                                  onClick={() =>
-                                    window.open(
-                                      signedAgreementDoc.file_url,
-                                      "_blank",
-                                    )
-                                  }
-                                  className="text-xs h-7 gap-1.5 text-blue-700 border-blue-200 hover:bg-blue-50"
-                                >
-                                  <ExternalLink className="h-3 w-3" />
-                                  View Uploaded Document
-                                </Button>
-                              </div>
-                            )}
+                                <div className="pt-2 border-t border-slate-200/60 flex items-center justify-start">
+                                  <Button
+                                    size="sm"
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() =>
+                                      window.open(
+                                        signedAgreementDoc.file_url,
+                                        "_blank",
+                                      )
+                                    }
+                                    className="text-xs h-7 gap-1.5 text-blue-700 border-blue-200 hover:bg-blue-50"
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                    View Uploaded Document
+                                  </Button>
+                                </div>
+                              )}
                           </div>
                         ) : !isDigitalAccepted ? (
                           <div className="p-4 bg-amber-50/80 rounded-xl border border-amber-200 text-center space-y-1.5">
@@ -10614,7 +11590,9 @@ const resolveStageStatus = (
                               }}
                               className={cn(
                                 "h-9 text-xs font-semibold flex items-center gap-1.5",
-                                !isL7Approved || !isDigitalAccepted || downloadingAgreement
+                                !isL7Approved ||
+                                  !isDigitalAccepted ||
+                                  downloadingAgreement
                                   ? "opacity-50 cursor-not-allowed bg-slate-100 text-slate-400 border-slate-200"
                                   : "text-slate-700 hover:bg-slate-100 border-slate-300",
                               )}
@@ -10674,12 +11652,16 @@ const resolveStageStatus = (
                                 <label
                                   className={cn(
                                     "inline-flex h-9 items-center justify-center gap-1.5 rounded-md px-3.5 text-xs font-semibold transition",
-                                    !isL7Approved || !isDigitalAccepted || actionLoading
+                                    !isL7Approved ||
+                                      !isDigitalAccepted ||
+                                      actionLoading
                                       ? "opacity-50 cursor-not-allowed bg-slate-100 text-slate-400 border border-slate-200"
                                       : "bg-emerald-600 text-white hover:bg-emerald-700 border border-emerald-600 cursor-pointer shadow-sm",
                                   )}
                                   htmlFor={
-                                    isL7Approved && isDigitalAccepted && !actionLoading
+                                    isL7Approved &&
+                                    isDigitalAccepted &&
+                                    !actionLoading
                                       ? "internalSignedAgreementUpload"
                                       : undefined
                                   }
@@ -10698,7 +11680,6 @@ const resolveStageStatus = (
                                 </label>
                               </div>
                             )}
-
 
                             {/* Approve Signed Agreement — Branch Checker only */}
                             {canDecideSignedAgreement &&
@@ -10747,7 +11728,6 @@ const resolveStageStatus = (
                               )}
                           </div>
                         )}
-
                       </CardContent>
                     </Card>
                   </div>
@@ -11338,319 +12318,322 @@ const resolveStageStatus = (
             <div className="space-y-6">
               {/* Comprehensive Review Remarks & Authority Notes by Role */}
               <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4 min-w-0 overflow-hidden">
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-700 shadow-2xs">
-                        <ClipboardList className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-bold uppercase tracking-wider text-slate-900">
-                          DSA Approval Process &amp; Remarks
-                        </h4>
-                      </div>
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-700 shadow-2xs">
+                      <ClipboardList className="h-5 w-5" />
                     </div>
-                  </div>
-
-                  <div className="space-y-3 min-w-0">
-                    {[
-                      {
-                        level: 1,
-                        roleBadge: "Maker",
-                        name: "Maker Intake & Verification",
-                        role: "Branch Maker",
-                        status: resolveStageStatus(
-                          1,
-                          "LEVEL_1_MAKER",
-                          l1Approval?.status,
-                          "SUBMITTED",
-                        ),
-                        remarks: makerRemarks,
-                        actionedAt: l1Approval?.actioned_at,
-                      },
-                      {
-                        level: 2,
-                        roleBadge: "Checker",
-                        name: "Checker Due Diligence",
-                        role: "Branch / Sub-Region Checker",
-                        status: resolveStageStatus(
-                          2,
-                          "LEVEL_2_CHECKER",
-                          l2Approval?.status,
-                          "SUBMITTED",
-                        ),
-                        remarks: checkerRemarks,
-                        actionedAt: l2Approval?.actioned_at,
-                      },
-                      {
-                        level: 3,
-                        roleBadge: "Sub-Region Head",
-                        name: "Sub-Region Head Review",
-                        role: "Sub-Region Head",
-                        status: resolveStageStatus(
-                          3,
-                          "LEVEL_3_SUB_REGION_HEAD",
-                          l3Approval?.status,
-                          "RECOMMENDED",
-                        ),
-                        remarks: l3Remarks,
-                        actionedAt: l3Approval?.actioned_at,
-                      },
-                      {
-                        level: 4,
-                        roleBadge: "DGM",
-                        name: "DGM Recommendation",
-                        role: "DGM (Conditional)",
-                        status: resolveStageStatus(
-                          4,
-                          "LEVEL_4_DGM",
-                          l4Approval?.status,
-                          "RECOMMENDED",
-                        ),
-                        remarks: l4Remarks,
-                        actionedAt: l4Approval?.actioned_at,
-                      },
-                      {
-                        level: 5,
-                        roleBadge: "Region Head",
-                        name: "Region Head Review",
-                        role: "Region Head",
-                        status: resolveStageStatus(
-                          5,
-                          "LEVEL_5_REGION_HEAD",
-                          l5Approval?.status,
-                          "RECOMMENDED",
-                        ),
-                        remarks: l5Remarks,
-                        actionedAt: l5Approval?.actioned_at,
-                      },
-                      {
-                        level: 6,
-                        roleBadge: "Credit Officer",
-                        name: "HO Credit Appraisal",
-                        role: "HO Credit Officer",
-                        status: resolveStageStatus(
-                          6,
-                          "LEVEL_6_HO_CREDIT_OFFICER",
-                          l6Approval?.status,
-                          "RECOMMENDED",
-                        ),
-                        remarks: l6Remarks,
-                        actionedAt: l6Approval?.actioned_at,
-                      },
-                      {
-                        level: 7,
-                        roleBadge: "Credit Head",
-                        name: "HO Credit Head Final Sanction",
-                        role: "HO Credit Head",
-                        status: resolveStageStatus(
-                          7,
-                          "LEVEL_7_HO_CREDIT_HEAD",
-                          l7Approval?.status,
-                          workflowLevelInfo.isCompleted ? "APPROVED" : "RECOMMENDED",
-                        ),
-                        remarks: l7Remarks,
-                        actionedAt: l7Approval?.actioned_at,
-                      },
-                    ].map((step) => {
-                      const isDone =
-                        step.status === "RECOMMENDED" ||
-                        step.status === "SUBMITTED" ||
-                        step.status === "APPROVED";
-                      const isBypassed = step.status === "SKIPPED";
-                      const isActive = step.status === "ACTIVE";
-                      const isRejected = step.status === "REJECTED";
-                      const isQuery = step.status === "QUERY" || step.status === "QUERY_RAISED";
-                      const isReturned =
-                        step.status === "REVERTED" ||
-                        step.status === "REALLOCATED" ||
-                        step.status === "FORWARDED";
-
-                      return (
-                        <div
-                          key={step.level}
-                          className={cn(
-                            "rounded-xl border p-4 transition-all shadow-2xs space-y-2.5 min-w-0 overflow-hidden",
-                            isDone
-                              ? "border-emerald-300/90 bg-emerald-50/30"
-                              : isBypassed
-                                ? "border-slate-200 bg-slate-50/70 opacity-80"
-                                : isActive
-                                  ? "border-blue-300 bg-blue-50/50 ring-2 ring-blue-400/20 shadow-xs"
-                                  : isRejected
-                                    ? "border-rose-300 bg-rose-50/40 ring-1 ring-rose-200/50"
-                                    : "border-slate-200 bg-slate-50/20",
-                          )}
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-2.5">
-                              <span
-                                className={cn(
-                                  "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider",
-                                  isDone
-                                    ? "bg-emerald-700 text-white"
-                                    : isBypassed
-                                      ? "bg-slate-500 text-white"
-                                      : isActive
-                                        ? "bg-blue-600 text-white"
-                                        : isRejected
-                                          ? "bg-rose-700 text-white"
-                                          : "bg-slate-200 text-slate-700",
-                                )}
-                              >
-                                {step.roleBadge}
-                              </span>
-                              <span className="text-sm font-bold text-slate-900">
-                                {step.name}
-                              </span>
-                              <span className="text-xs text-slate-500 font-normal">
-                                ({step.role})
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {step.actionedAt && (
-                                <span className="text-xs text-slate-500 font-medium">
-                                  {formatDate(step.actionedAt)}
-                                </span>
-                              )}
-                              <span
-                                className={cn(
-                                  "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold border",
-                                  isDone
-                                    ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                                    : isBypassed
-                                      ? "bg-slate-100 text-slate-600 border-slate-300"
-                                      : isActive
-                                        ? "bg-blue-100 text-blue-800 border-blue-300"
-                                        : isQuery || isReturned
-                                          ? "bg-amber-100 text-amber-800 border-amber-300"
-                                          : isRejected
-                                            ? "bg-rose-100 text-rose-800 border-rose-300"
-                                            : "bg-slate-100 text-slate-500 border-slate-200",
-                                )}
-                              >
-                                {isDone
-                                  ? step.level === 7
-                                    ? "Sanctioned & Approved"
-                                    : step.level === 1 || step.level === 2
-                                      ? "Submitted"
-                                      : "Recommended"
-                                  : isBypassed
-                                    ? "Bypassed (No DGM)"
-                                    : isActive
-                                      ? "Active Review Queue"
-                                      : isQuery
-                                        ? "Query Raised"
-                                        : isReturned
-                                          ? step.status === "REVERTED"
-                                              ? "Reverted"
-                                              : step.status === "REALLOCATED"
-                                                ? "Reallocated"
-                                                : "Forwarded"
-                                          : isRejected
-                                            ? "Rejected"
-                                            : "Pending Review"}
-                              </span>
-                            </div>
-                          </div>
-
-                          {!isCalledBackStep(step.status) && step.remarks ? (
-                            <p className="text-sm font-bold text-slate-900 whitespace-pre-wrap leading-relaxed py-0.5 break-words [overflow-wrap:anywhere] break-all max-w-full">
-                              &ldquo;{step.remarks}&rdquo;
-                            </p>
-                          ) : (
-                            <p className="text-xs text-slate-400 italic py-0.5">
-                              {isActive
-                                ? "Currently under review. Enter remarks and action decision below."
-                                : isBypassed
-                                  ? "Bypassed per operational workflow rules."
-                                  : "Awaiting progression from prior review stages."}
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })}
+                    <div>
+                      <h4 className="text-sm font-bold uppercase tracking-wider text-slate-900">
+                        DSA Approval Process &amp; Remarks
+                      </h4>
+                    </div>
                   </div>
                 </div>
 
-                {/* Decision Buttons: Rendered when user has approval authority */}
-                {workflowLevelInfo.canUserApprove &&
-                  !workflowLevelInfo.isCompleted &&
-                  dsa?.onboarding_status !== "APPROVED" &&
-                  !workflowLevelInfo.isRejected && (
-                    <div className="mt-5 flex flex-wrap items-center gap-3 pt-4 border-t border-slate-200">
-                            <Button
-                              disabled={actionLoading}
-                              onClick={() => {
-                                const blockReason = getWorkflowBlockReason();
-                                if (blockReason) {
-                                  toast({
-                                    title: "Verification Incomplete",
-                                    description: blockReason,
-                                    variant: "warning",
-                                  });
-                                  return;
-                                }
-                                setApprovingDsa(dsa);
-                              }}
-                              size="sm"
-                              className="font-bold text-xs py-2 px-4 h-auto shadow-sm flex items-center gap-1.5 transition-all bg-emerald-600 hover:bg-emerald-700 text-white"
-                              title={workflowLevelInfo.actionLabel}
+                <div className="space-y-3 min-w-0">
+                  {[
+                    {
+                      level: 1,
+                      roleBadge: "Maker",
+                      name: "Maker Intake & Verification",
+                      role: "Branch Maker",
+                      status: resolveStageStatus(
+                        1,
+                        "LEVEL_1_MAKER",
+                        l1Approval?.status,
+                        "SUBMITTED",
+                      ),
+                      remarks: makerRemarks,
+                      actionedAt: l1Approval?.actioned_at,
+                    },
+                    {
+                      level: 2,
+                      roleBadge: "Checker",
+                      name: "Checker Due Diligence",
+                      role: "Branch / Sub-Region Checker",
+                      status: resolveStageStatus(
+                        2,
+                        "LEVEL_2_CHECKER",
+                        l2Approval?.status,
+                        "SUBMITTED",
+                      ),
+                      remarks: checkerRemarks,
+                      actionedAt: l2Approval?.actioned_at,
+                    },
+                    {
+                      level: 3,
+                      roleBadge: "Sub-Region Head",
+                      name: "Sub-Region Head Review",
+                      role: "Sub-Region Head",
+                      status: resolveStageStatus(
+                        3,
+                        "LEVEL_3_SUB_REGION_HEAD",
+                        l3Approval?.status,
+                        "RECOMMENDED",
+                      ),
+                      remarks: l3Remarks,
+                      actionedAt: l3Approval?.actioned_at,
+                    },
+                    {
+                      level: 4,
+                      roleBadge: "DGM",
+                      name: "DGM Recommendation",
+                      role: "DGM (Conditional)",
+                      status: resolveStageStatus(
+                        4,
+                        "LEVEL_4_DGM",
+                        l4Approval?.status,
+                        "RECOMMENDED",
+                      ),
+                      remarks: l4Remarks,
+                      actionedAt: l4Approval?.actioned_at,
+                    },
+                    {
+                      level: 5,
+                      roleBadge: "Region Head",
+                      name: "Region Head Review",
+                      role: "Region Head",
+                      status: resolveStageStatus(
+                        5,
+                        "LEVEL_5_REGION_HEAD",
+                        l5Approval?.status,
+                        "RECOMMENDED",
+                      ),
+                      remarks: l5Remarks,
+                      actionedAt: l5Approval?.actioned_at,
+                    },
+                    {
+                      level: 6,
+                      roleBadge: "Credit Officer",
+                      name: "HO Credit Appraisal",
+                      role: "HO Credit Officer",
+                      status: resolveStageStatus(
+                        6,
+                        "LEVEL_6_HO_CREDIT_OFFICER",
+                        l6Approval?.status,
+                        "RECOMMENDED",
+                      ),
+                      remarks: l6Remarks,
+                      actionedAt: l6Approval?.actioned_at,
+                    },
+                    {
+                      level: 7,
+                      roleBadge: "Credit Head",
+                      name: "HO Credit Head Final Sanction",
+                      role: "HO Credit Head",
+                      status: resolveStageStatus(
+                        7,
+                        "LEVEL_7_HO_CREDIT_HEAD",
+                        l7Approval?.status,
+                        workflowLevelInfo.isCompleted
+                          ? "APPROVED"
+                          : "RECOMMENDED",
+                      ),
+                      remarks: l7Remarks,
+                      actionedAt: l7Approval?.actioned_at,
+                    },
+                  ].map((step) => {
+                    const isDone =
+                      step.status === "RECOMMENDED" ||
+                      step.status === "SUBMITTED" ||
+                      step.status === "APPROVED";
+                    const isBypassed = step.status === "SKIPPED";
+                    const isActive = step.status === "ACTIVE";
+                    const isRejected = step.status === "REJECTED";
+                    const isQuery =
+                      step.status === "QUERY" || step.status === "QUERY_RAISED";
+                    const isReturned =
+                      step.status === "REVERTED" ||
+                      step.status === "REALLOCATED" ||
+                      step.status === "FORWARDED";
+
+                    return (
+                      <div
+                        key={step.level}
+                        className={cn(
+                          "rounded-xl border p-4 transition-all shadow-2xs space-y-2.5 min-w-0 overflow-hidden",
+                          isDone
+                            ? "border-emerald-300/90 bg-emerald-50/30"
+                            : isBypassed
+                              ? "border-slate-200 bg-slate-50/70 opacity-80"
+                              : isActive
+                                ? "border-blue-300 bg-blue-50/50 ring-2 ring-blue-400/20 shadow-xs"
+                                : isRejected
+                                  ? "border-rose-300 bg-rose-50/40 ring-1 ring-rose-200/50"
+                                  : "border-slate-200 bg-slate-50/20",
+                        )}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5">
+                            <span
+                              className={cn(
+                                "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider",
+                                isDone
+                                  ? "bg-emerald-700 text-white"
+                                  : isBypassed
+                                    ? "bg-slate-500 text-white"
+                                    : isActive
+                                      ? "bg-blue-600 text-white"
+                                      : isRejected
+                                        ? "bg-rose-700 text-white"
+                                        : "bg-slate-200 text-slate-700",
+                              )}
                             >
-                              <Check className="h-4 w-4" />
-                              {workflowLevelInfo.actionLabel}
-                            </Button>
-                            {showReAllocate && (
-                              <Button
-                                onClick={openReAllocate}
-                                size="sm"
-                                variant="secondary"
-                                title="Hand this case to another authority at Level 3, 4 or 5"
-                                className="bg-violet-50 text-violet-800 hover:bg-violet-100 border border-violet-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5"
-                              >
-                                <Users className="h-4 w-4 text-violet-600" />
-                                Re-allocate
-                              </Button>
-                            )}
-                            {canRevert && (
-                              <Button
-                                onClick={() => setRevertingDsa(dsa)}
-                                size="sm"
-                                variant="secondary"
-                                className="bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5"
-                              >
-                                <Undo2 className="h-4 w-4 text-amber-600" />
-                                {currentRevertTarget?.label}
-                              </Button>
-                            )}
-                            {workflowLevelInfo.currentLevel === 2 && (
-                              <Button
-                                onClick={() => setQueryingDsa(dsa)}
-                                size="sm"
-                                variant="secondary"
-                                className="bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5"
-                              >
-                                <HelpCircle className="h-4 w-4 text-amber-600" />
-                                Raise Query to Maker
-                              </Button>
-                            )}
-                            {workflowLevelInfo.currentLevel >= 2 && (
-                              <Button
-                                onClick={() => {
-                                  setRejectingDsa(dsa);
-                                  setRejectionReason("");
-                                  setRejectionStep("input");
-                                  setRejectionError("");
-                                }}
-                                size="sm"
-                                variant="secondary"
-                                className="bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5"
-                              >
-                                <X className="h-4 w-4 text-rose-600" />
-                                Reject Application
-                              </Button>
-                            )}
+                              {step.roleBadge}
+                            </span>
+                            <span className="text-sm font-bold text-slate-900">
+                              {step.name}
+                            </span>
+                            <span className="text-xs text-slate-500 font-normal">
+                              ({step.role})
+                            </span>
                           </div>
-                  )}
+                          <div className="flex items-center gap-2">
+                            {step.actionedAt && (
+                              <span className="text-xs text-slate-500 font-medium">
+                                {formatDate(step.actionedAt)}
+                              </span>
+                            )}
+                            <span
+                              className={cn(
+                                "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold border",
+                                isDone
+                                  ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                  : isBypassed
+                                    ? "bg-slate-100 text-slate-600 border-slate-300"
+                                    : isActive
+                                      ? "bg-blue-100 text-blue-800 border-blue-300"
+                                      : isQuery || isReturned
+                                        ? "bg-amber-100 text-amber-800 border-amber-300"
+                                        : isRejected
+                                          ? "bg-rose-100 text-rose-800 border-rose-300"
+                                          : "bg-slate-100 text-slate-500 border-slate-200",
+                              )}
+                            >
+                              {isDone
+                                ? step.level === 7
+                                  ? "Sanctioned & Approved"
+                                  : step.level === 1 || step.level === 2
+                                    ? "Submitted"
+                                    : "Recommended"
+                                : isBypassed
+                                  ? "Bypassed (No DGM)"
+                                  : isActive
+                                    ? "Active Review Queue"
+                                    : isQuery
+                                      ? "Query Raised"
+                                      : isReturned
+                                        ? step.status === "REVERTED"
+                                          ? "Reverted"
+                                          : step.status === "REALLOCATED"
+                                            ? "Reallocated"
+                                            : "Forwarded"
+                                        : isRejected
+                                          ? "Rejected"
+                                          : "Pending Review"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {!isCalledBackStep(step.status) && step.remarks ? (
+                          <p className="text-sm font-bold text-slate-900 whitespace-pre-wrap leading-relaxed py-0.5 break-words [overflow-wrap:anywhere] break-all max-w-full">
+                            &ldquo;{step.remarks}&rdquo;
+                          </p>
+                        ) : (
+                          <p className="text-xs text-slate-400 italic py-0.5">
+                            {isActive
+                              ? "Currently under review. Enter remarks and action decision below."
+                              : isBypassed
+                                ? "Bypassed per operational workflow rules."
+                                : "Awaiting progression from prior review stages."}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Decision Buttons: Rendered when user has approval authority */}
+              {workflowLevelInfo.canUserApprove &&
+                !workflowLevelInfo.isCompleted &&
+                dsa?.onboarding_status !== "APPROVED" &&
+                !workflowLevelInfo.isRejected && (
+                  <div className="mt-5 flex flex-wrap items-center gap-3 pt-4 border-t border-slate-200">
+                    <Button
+                      disabled={actionLoading}
+                      onClick={() => {
+                        const blockReason = getWorkflowBlockReason();
+                        if (blockReason) {
+                          toast({
+                            title: "Verification Incomplete",
+                            description: blockReason,
+                            variant: "warning",
+                          });
+                          return;
+                        }
+                        setApprovingDsa(dsa);
+                      }}
+                      size="sm"
+                      className="font-bold text-xs py-2 px-4 h-auto shadow-sm flex items-center gap-1.5 transition-all bg-emerald-600 hover:bg-emerald-700 text-white"
+                      title={workflowLevelInfo.actionLabel}
+                    >
+                      <Check className="h-4 w-4" />
+                      {workflowLevelInfo.actionLabel}
+                    </Button>
+                    {showReAllocate && (
+                      <Button
+                        onClick={openReAllocate}
+                        size="sm"
+                        variant="secondary"
+                        title="Hand this case to another authority at Level 3, 4 or 5"
+                        className="bg-violet-50 text-violet-800 hover:bg-violet-100 border border-violet-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5"
+                      >
+                        <Users className="h-4 w-4 text-violet-600" />
+                        Re-allocate
+                      </Button>
+                    )}
+                    {canRevert && (
+                      <Button
+                        onClick={() => setRevertingDsa(dsa)}
+                        size="sm"
+                        variant="secondary"
+                        className="bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5"
+                      >
+                        <Undo2 className="h-4 w-4 text-amber-600" />
+                        {currentRevertTarget?.label}
+                      </Button>
+                    )}
+                    {workflowLevelInfo.currentLevel === 2 && (
+                      <Button
+                        onClick={() => setQueryingDsa(dsa)}
+                        size="sm"
+                        variant="secondary"
+                        className="bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5"
+                      >
+                        <HelpCircle className="h-4 w-4 text-amber-600" />
+                        Raise Query to Maker
+                      </Button>
+                    )}
+                    {workflowLevelInfo.currentLevel >= 2 && (
+                      <Button
+                        onClick={() => {
+                          setRejectingDsa(dsa);
+                          setRejectionReason("");
+                          setRejectionStep("input");
+                          setRejectionError("");
+                        }}
+                        size="sm"
+                        variant="secondary"
+                        className="bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5"
+                      >
+                        <X className="h-4 w-4 text-rose-600" />
+                        Reject Application
+                      </Button>
+                    )}
+                  </div>
+                )}
             </div>
           ) : null}
         </CardContent>
@@ -11698,7 +12681,10 @@ const resolveStageStatus = (
         {approvingDsa ? (
           <div className="space-y-4">
             <Field>
-              <Label htmlFor="approvalRemarks" className="flex items-center justify-between">
+              <Label
+                htmlFor="approvalRemarks"
+                className="flex items-center justify-between"
+              >
                 <span>
                   {workflowLevelInfo.currentLevel === 7
                     ? "Sanction Remarks"
@@ -11788,7 +12774,8 @@ const resolveStageStatus = (
                     if (hasUnverifiedDdlReport) {
                       toast({
                         title: "Due Diligence Report Verification Required",
-                        description: "Please view and verify the updated Due Diligence Review Report in the Documents tab before proceeding.",
+                        description:
+                          "Please view and verify the updated Due Diligence Review Report in the Documents tab before proceeding.",
                         variant: "warning",
                       });
                       setApprovalRemarksError(
@@ -12008,19 +12995,14 @@ const resolveStageStatus = (
             ? "Confirm Application Rejection (Double Validation)"
             : "Reject DSA Application"
         }
-        description={
-          rejectionStep === "confirm"
-            ? ``
-            : ``
-        }
+        description={rejectionStep === "confirm" ? `` : ``}
         width="max-w-lg"
       >
         {rejectionStep === "input" ? (
           <div className="space-y-4">
             <Field>
               <Label htmlFor="profileRejectionReason">
-                Rejection reason{" "}
-                <span className="text-rose-600">*</span>
+                Rejection reason <span className="text-rose-600">*</span>
               </Label>
               <textarea
                 id="profileRejectionReason"
@@ -12928,11 +13910,7 @@ const resolveStageStatus = (
             ? `Revert Application to ${currentRevertTarget.targetRole}`
             : "Revert Application"
         }
-        description={
-          currentRevertTarget
-            ? ``
-            : ""
-        }
+        description={currentRevertTarget ? `` : ""}
         width="max-w-lg"
       >
         <div className="space-y-4">
@@ -13058,7 +14036,9 @@ const resolveStageStatus = (
               rows={4}
               value={reAllocateReason}
             />
-            <p className="text-[11px] text-slate-500">Maximum 2000 characters.</p>
+            <p className="text-[11px] text-slate-500">
+              Maximum 2000 characters.
+            </p>
           </div>
 
           {reAllocateError ? (
@@ -13069,11 +14049,18 @@ const resolveStageStatus = (
           ) : null}
 
           <div className="flex justify-end gap-2 pt-1">
-            <Button onClick={closeDecisionModals} size="sm" type="button" variant="secondary">
+            <Button
+              onClick={closeDecisionModals}
+              size="sm"
+              type="button"
+              variant="secondary"
+            >
               Cancel
             </Button>
             <Button
-              disabled={action20CBusy || eligibleLoading || eligibleUsers.length === 0}
+              disabled={
+                action20CBusy || eligibleLoading || eligibleUsers.length === 0
+              }
               onClick={submitReAllocate}
               size="sm"
               type="button"
@@ -13108,11 +14095,7 @@ const resolveStageStatus = (
             ? "Approve Signed Agreement & Activate DSA Partner"
             : "Reject Scanned Signed Agreement Copy"
         }
-        description={
-          verifyingAgreementAction === "APPROVE"
-            ? ""
-            : ""
-        }
+        description={verifyingAgreementAction === "APPROVE" ? "" : ""}
         width="max-w-lg"
       >
         <div className="space-y-4">
@@ -13278,7 +14261,9 @@ const resolveStageStatus = (
                         Due Diligence Report Verification Required
                       </p>
                       <p className="text-[11px] text-red-800 mt-0.5 leading-relaxed">
-                        The Due Diligence Review Report in the Documents tab has been updated and must be verified before saving deviation remarks or proceeding with this workflow.
+                        The Due Diligence Review Report in the Documents tab has
+                        been updated and must be verified before saving
+                        deviation remarks or proceeding with this workflow.
                       </p>
                     </div>
                   </div>
@@ -13289,10 +14274,14 @@ const resolveStageStatus = (
                     <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
                     <div>
                       <p className="font-bold text-amber-900">
-                        Checker Deviation Remarks Required ({unremarkedDeviations.length} pending)
+                        Checker Deviation Remarks Required (
+                        {unremarkedDeviations.length} pending)
                       </p>
                       <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
-                        Per workflow validation, you must record and save remarks on all flagged deviations before submitting your Due Diligence Report or recommending this application to Sub-Region Head.
+                        Per workflow validation, you must record and save
+                        remarks on all flagged deviations before submitting your
+                        Due Diligence Report or recommending this application to
+                        Sub-Region Head.
                       </p>
                     </div>
                   </div>
@@ -13323,148 +14312,214 @@ const resolveStageStatus = (
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200">
-                          {DEVIATION_AUTHORITY_ROLES.map(({ level: lvl, role_name, authority_title, badgeClass }, roleIdx) => {
-                            const stateKey = getRemarkStateKey(dev, lvl, idx);
-                            const remarkVal = deviationRemarksState[stateKey] ?? "";
-                            const isSaving = savingDeviationId === stateKey;
-                            const status = deviationRemarkStatus[stateKey];
-                            const canEditThisLevel = canUserEditLevelRemark(lvl);
+                          {DEVIATION_AUTHORITY_ROLES.map(
+                            (
+                              {
+                                level: lvl,
+                                role_name,
+                                authority_title,
+                                badgeClass,
+                              },
+                              roleIdx,
+                            ) => {
+                              const stateKey = getRemarkStateKey(dev, lvl, idx);
+                              const remarkVal =
+                                deviationRemarksState[stateKey] ?? "";
+                              const isSaving = savingDeviationId === stateKey;
+                              const status = deviationRemarkStatus[stateKey];
+                              const canEditThisLevel =
+                                canUserEditLevelRemark(lvl);
 
-                            const savedRecord = Array.isArray(dev.remarks_by_level)
-                              ? dev.remarks_by_level.find((r: any) => Number(r.level) === lvl)
-                              : (lvl === 2 && dev.remark ? { remark: dev.remark, user_name: "Checker / Verification Authority", date: "" } : null);
+                              const savedRecord = Array.isArray(
+                                dev.remarks_by_level,
+                              )
+                                ? dev.remarks_by_level.find(
+                                    (r: any) => Number(r.level) === lvl,
+                                  )
+                                : lvl === 2 && dev.remark
+                                  ? {
+                                      remark: dev.remark,
+                                      user_name:
+                                        "Checker / Verification Authority",
+                                      date: "",
+                                    }
+                                  : null;
 
-                            return (
-                              <tr key={lvl} className="align-top hover:bg-slate-50/50">
-                                {roleIdx === 0 && (
-                                  <>
-                                    <td
-                                      rowSpan={DEVIATION_AUTHORITY_ROLES.length}
-                                      className="p-3 border-r border-slate-300 bg-white align-top"
+                              return (
+                                <tr
+                                  key={lvl}
+                                  className="align-top hover:bg-slate-50/50"
+                                >
+                                  {roleIdx === 0 && (
+                                    <>
+                                      <td
+                                        rowSpan={
+                                          DEVIATION_AUTHORITY_ROLES.length
+                                        }
+                                        className="p-3 border-r border-slate-300 bg-white align-top"
+                                      >
+                                        <div className="font-bold text-slate-900 text-xs sm:text-sm">
+                                          {dev.parameter ||
+                                            dev.rule_name ||
+                                            dev.rule_code ||
+                                            "Deviation Parameter"}
+                                        </div>
+                                        <div className="mt-1.5">
+                                          <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold border border-amber-300 bg-amber-100 text-amber-800 uppercase">
+                                            {dev.decision || "DEVIATION"}
+                                          </span>
+                                          {isCheckerLevel &&
+                                            !hasCheckerRemarkForDeviation(
+                                              dev,
+                                            ) && (
+                                              <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-600 text-white uppercase ml-1">
+                                                Remark Required
+                                              </span>
+                                            )}
+                                        </div>
+                                        {dev.deviation_trigger ||
+                                        dev.remarks ? (
+                                          <div className="text-[11px] text-slate-500 font-normal mt-2 leading-relaxed">
+                                            <span className="font-semibold text-slate-700">
+                                              Trigger:
+                                            </span>{" "}
+                                            {dev.deviation_trigger ||
+                                              dev.remarks}
+                                          </div>
+                                        ) : null}
+                                      </td>
+                                      <td
+                                        rowSpan={
+                                          DEVIATION_AUTHORITY_ROLES.length
+                                        }
+                                        className="p-3 border-r border-slate-300 bg-white align-top text-slate-700"
+                                      >
+                                        <div className="leading-relaxed">
+                                          {dev.policy ||
+                                            dev.expected_value ||
+                                            "Standard Criteria"}
+                                        </div>
+                                        {dev.actual_value !== undefined &&
+                                        dev.actual_value !== null ? (
+                                          <div className="mt-2 text-slate-600 font-normal">
+                                            <span className="font-semibold text-slate-700">
+                                              Actual Value:
+                                            </span>{" "}
+                                            <span className="font-mono font-bold text-slate-900">
+                                              {String(dev.actual_value)}
+                                            </span>
+                                          </div>
+                                        ) : null}
+                                      </td>
+                                    </>
+                                  )}
+                                  <td className="p-3 border-r border-slate-300 bg-slate-50/40">
+                                    <span
+                                      className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border ${badgeClass}`}
                                     >
-                                      <div className="font-bold text-slate-900 text-xs sm:text-sm">
-                                        {dev.parameter || dev.rule_name || dev.rule_code || "Deviation Parameter"}
+                                      L{lvl} &bull; {role_name}
+                                    </span>
+                                    <div className="text-[11px] text-slate-500 mt-1">
+                                      {authority_title}
+                                    </div>
+                                    {savedRecord?.user_name && (
+                                      <div className="text-[11px] text-slate-700 mt-1.5 font-medium">
+                                        <div>{savedRecord.user_name}</div>
+                                        {savedRecord.date && (
+                                          <div className="text-[10px] text-slate-400 font-normal">
+                                            {savedRecord.date}
+                                          </div>
+                                        )}
                                       </div>
-                                      <div className="mt-1.5">
-                                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold border border-amber-300 bg-amber-100 text-amber-800 uppercase">
-                                          {dev.decision || "DEVIATION"}
-                                        </span>
-                                        {isCheckerLevel && !hasCheckerRemarkForDeviation(dev) && (
-                                          <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-600 text-white uppercase ml-1">
-                                            Remark Required
+                                    )}
+                                  </td>
+                                  <td className="p-3">
+                                    {canEditThisLevel ? (
+                                      <div className="space-y-1.5">
+                                        <textarea
+                                          value={remarkVal}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setDeviationRemarksState(
+                                              (prev) => ({
+                                                ...prev,
+                                                [stateKey]: val,
+                                              }),
+                                            );
+                                          }}
+                                          disabled={isSaving}
+                                          rows={2}
+                                          maxLength={2000}
+                                          placeholder={`Enter L${lvl} deviation justification & remarks...`}
+                                          className="w-full text-xs p-2 border border-slate-300 rounded focus:ring-1 focus:ring-amber-500 focus:border-amber-500 bg-white"
+                                        />
+                                        <div className="flex items-center justify-between">
+                                          <span
+                                            className={`text-[10px] ${remarkVal.length > 2000 ? "text-red-600 font-bold" : "text-slate-400"}`}
+                                          >
+                                            {remarkVal.length}/2000 characters
+                                          </span>
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            disabled={
+                                              isSaving ||
+                                              remarkVal.length > 2000
+                                            }
+                                            onClick={async () => {
+                                              await handleSaveDeviationRemark(
+                                                dev,
+                                                lvl,
+                                                idx,
+                                              );
+                                              await refreshDdReviewReport(true);
+                                              if (dsa?.id) {
+                                                fetchBackendDocuments(
+                                                  true,
+                                                ).catch(() => {});
+                                              }
+                                            }}
+                                            className="h-6 px-3 text-[11px] bg-amber-600 hover:bg-amber-700 text-white font-medium"
+                                          >
+                                            {isSaving ? (
+                                              <>
+                                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                                Saving...
+                                              </>
+                                            ) : status?.success ? (
+                                              <>
+                                                <Check className="h-3 w-3 mr-1 text-emerald-300" />
+                                                Saved
+                                              </>
+                                            ) : (
+                                              "Save Remark"
+                                            )}
+                                          </Button>
+                                        </div>
+                                        {status?.error && (
+                                          <p className="text-[11px] text-red-600 font-medium">
+                                            {status.error}
+                                          </p>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="text-slate-800 whitespace-pre-wrap leading-relaxed py-1 text-xs">
+                                        {savedRecord?.remark ? (
+                                          <span className="font-normal text-slate-800">
+                                            {savedRecord.remark}
+                                          </span>
+                                        ) : (
+                                          <span className="text-slate-400 italic text-[11px]">
+                                            No remark submitted yet
                                           </span>
                                         )}
                                       </div>
-                                      {dev.deviation_trigger || dev.remarks ? (
-                                        <div className="text-[11px] text-slate-500 font-normal mt-2 leading-relaxed">
-                                          <span className="font-semibold text-slate-700">Trigger:</span>{" "}
-                                          {dev.deviation_trigger || dev.remarks}
-                                        </div>
-                                      ) : null}
-                                    </td>
-                                    <td
-                                      rowSpan={DEVIATION_AUTHORITY_ROLES.length}
-                                      className="p-3 border-r border-slate-300 bg-white align-top text-slate-700"
-                                    >
-                                      <div className="leading-relaxed">
-                                        {dev.policy || dev.expected_value || "Standard Criteria"}
-                                      </div>
-                                      {dev.actual_value !== undefined && dev.actual_value !== null ? (
-                                        <div className="mt-2 text-slate-600 font-normal">
-                                          <span className="font-semibold text-slate-700">Actual Value:</span>{" "}
-                                          <span className="font-mono font-bold text-slate-900">
-                                            {String(dev.actual_value)}
-                                          </span>
-                                        </div>
-                                      ) : null}
-                                    </td>
-                                  </>
-                                )}
-                                <td className="p-3 border-r border-slate-300 bg-slate-50/40">
-                                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border ${badgeClass}`}>
-                                    L{lvl} &bull; {role_name}
-                                  </span>
-                                  <div className="text-[11px] text-slate-500 mt-1">
-                                    {authority_title}
-                                  </div>
-                                  {savedRecord?.user_name && (
-                                    <div className="text-[11px] text-slate-700 mt-1.5 font-medium">
-                                      <div>{savedRecord.user_name}</div>
-                                      {savedRecord.date && (
-                                        <div className="text-[10px] text-slate-400 font-normal">
-                                          {savedRecord.date}
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="p-3">
-                                  {canEditThisLevel ? (
-                                    <div className="space-y-1.5">
-                                      <textarea
-                                        value={remarkVal}
-                                        onChange={(e) => {
-                                          const val = e.target.value;
-                                          setDeviationRemarksState((prev) => ({
-                                            ...prev,
-                                            [stateKey]: val,
-                                          }));
-                                        }}
-                                        disabled={isSaving}
-                                        rows={2}
-                                        maxLength={2000}
-                                        placeholder={`Enter L${lvl} deviation justification & remarks...`}
-                                        className="w-full text-xs p-2 border border-slate-300 rounded focus:ring-1 focus:ring-amber-500 focus:border-amber-500 bg-white"
-                                      />
-                                      <div className="flex items-center justify-between">
-                                        <span className={`text-[10px] ${remarkVal.length > 2000 ? "text-red-600 font-bold" : "text-slate-400"}`}>
-                                          {remarkVal.length}/2000 characters
-                                        </span>
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          disabled={isSaving || remarkVal.length > 2000}
-                                          onClick={async () => {
-                                            await handleSaveDeviationRemark(dev, lvl, idx);
-                                            await refreshDdReviewReport(true);
-                                            if (dsa?.id) {
-                                              fetchBackendDocuments(true).catch(() => {});
-                                            }
-                                          }}
-                                          className="h-6 px-3 text-[11px] bg-amber-600 hover:bg-amber-700 text-white font-medium"
-                                        >
-                                          {isSaving ? (
-                                            <>
-                                              <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                              Saving...
-                                            </>
-                                          ) : status?.success ? (
-                                            <>
-                                              <Check className="h-3 w-3 mr-1 text-emerald-300" />
-                                              Saved
-                                            </>
-                                          ) : (
-                                            "Save Remark"
-                                          )}
-                                        </Button>
-                                      </div>
-                                      {status?.error && (
-                                        <p className="text-[11px] text-red-600 font-medium">{status.error}</p>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <div className="text-slate-800 whitespace-pre-wrap leading-relaxed py-1 text-xs">
-                                      {savedRecord?.remark ? (
-                                        <span className="font-normal text-slate-800">{savedRecord.remark}</span>
-                                      ) : (
-                                        <span className="text-slate-400 italic text-[11px]">No remark submitted yet</span>
-                                      )}
-                                    </div>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            },
+                          )}
                         </tbody>
                       </table>
                     </div>
