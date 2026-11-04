@@ -10,6 +10,12 @@ const basePath = process.env.NEXT_PUBLIC_BASE_PATH?.trim() || "";
 
 const nextConfig: NextConfig = {
   ...(basePath ? { basePath } : {}),
+  turbopack: {
+    resolveAlias: {
+      "victory-vendor/d3-shape": "d3-shape",
+      "victory-vendor/d3-scale": "d3-scale",
+    },
+  },
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
