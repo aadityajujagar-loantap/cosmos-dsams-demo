@@ -599,7 +599,7 @@ export function Tabs({
   value,
   onChange,
 }: {
-  tabs: { label: string; value: string; dot?: boolean }[];
+  tabs: { label: string; value: string; dot?: boolean; dataTour?: string }[];
   value: string;
   onChange: (value: string) => void;
 }) {
@@ -612,6 +612,7 @@ export function Tabs({
             value === tab.value && "bg-white text-slate-950 shadow-sm",
           )}
           key={tab.value}
+          data-tour={tab.dataTour || ('tab-' + tab.value)}
           onClick={() => onChange(tab.value)}
           type="button"
         >

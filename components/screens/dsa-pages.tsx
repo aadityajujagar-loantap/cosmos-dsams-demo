@@ -55,6 +55,7 @@ import React, {
 } from "react";
 import { useRouter } from "next/navigation";
 import { adminApi } from "@/apis/admin";
+import { TourButton, TourOverlay, TourRole } from "@/components/tour";
 
 import { BarChartCard, KpiCard, TrendCard } from "@/components/charts";
 import {
@@ -3369,6 +3370,8 @@ export function DsaProfilePage({ id }: { id: string }) {
   const router = useRouter();
   const [tab, setTab] = useState("actions");
   const [docSubTab, setDocSubTab] = useState<DocumentSubTab>("kyc");
+  const [isTourOpen, setIsTourOpen] = useState(false);
+  const [tourRole, setTourRole] = useState<TourRole>("maker");
   const [appFormSubTab, setAppFormSubTab] = useState<
     "applicant" | "kyc" | "ddl"
   >("applicant");
@@ -3851,6 +3854,32 @@ export function DsaProfilePage({ id }: { id: string }) {
       effectiveTicket.startsWith("mkr") ||
       effectiveEmail.includes("maker")),
   );
+
+  // Sync tour role with current user authority and listen for custom start event
+  useEffect(() => {
+    const defaultRole: TourRole = isMakerUser ? "maker" : isCheckerRole ? "checker" : "approver";
+    setTourRole(defaultRole);
+
+    const handleStartTour = () => {
+      setTourRole(defaultRole);
+      setIsTourOpen(true);
+    };
+
+    window.addEventListener("cos-start-tour", handleStartTour);
+
+    if (typeof window !== "undefined" && sessionStorage.getItem("cos_tour_pending_start") === "true") {
+      sessionStorage.removeItem("cos_tour_pending_start");
+      const t = setTimeout(() => {
+        setIsTourOpen(true);
+      }, 500);
+      return () => {
+        clearTimeout(t);
+        window.removeEventListener("cos-start-tour", handleStartTour);
+      };
+    }
+
+    return () => window.removeEventListener("cos-start-tour", handleStartTour);
+  }, [isMakerUser, isCheckerRole]);
   const isSubRegionRole =
     roleStr === "Sub-Region Head" ||
     roleStr === "Sub Region Head" ||
@@ -8811,13 +8840,15 @@ export function DsaProfilePage({ id }: { id: string }) {
 
   return (
     <div>
-      <DsaWorkflowChevronBar
+      <div data-tour="workflow-chevron-bar">
+        <DsaWorkflowChevronBar
         dsa={dsa}
         workflowLevelInfo={workflowLevelInfo}
         onSelectStage={(_lvl) => {
           setTab("actions");
         }}
       />
+      </div>
 
       <Link
         className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-blue-700"
@@ -8829,20 +8860,28 @@ export function DsaProfilePage({ id }: { id: string }) {
       <PageHeader
         action={
           <div className="flex items-center gap-2">
-            {(!isMakerUser || isL2Actioned) && (
+            {/* <TourButton
+              defaultRole={isMakerUser ? "maker" : isCheckerRole ? "checker" : "approver"}
+              onStartTour={(role) => {
+                setTourRole(role);
+                setIsTourOpen(true);
+              }}
+            /> */}
+            {(!isMakerUser || isL2Actioned || isTourOpen) && (
               <Button
+                data-tour="btn-view-deviations"
                 size="sm"
                 type="button"
                 variant="outline"
                 onClick={() => setViewingDeviationsModal(true)}
-                className="h-8 text-xs font-semibold px-3 flex items-center gap-1.5 border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 shadow-2xs"
+                className="h-8 text-xs font-semibold px-3 flex items-center gap-1.5 border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 shadow-2xs cursor-pointer"
               >
                 <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
                 View Deviations{" "}
                 {deviationRules.length > 0 ? `(${deviationRules.length})` : ""}
               </Button>
             )}
-            {hasCheckerGeneratedReport && (
+            {(hasCheckerGeneratedReport || !isMakerUser || isTourOpen) && (
               <>
                 <Button
                   size="sm"
@@ -8873,6 +8912,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                       setLoadingDdReportModal(false);
                     }
                   }}
+                  data-tour="btn-dd-report"
                   className="h-8 text-xs font-semibold px-3 flex items-center gap-1.5 border-blue-300 bg-blue-50 text-blue-900 hover:bg-blue-100 shadow-2xs"
                 >
                   {loadingDdReportModal ||
@@ -9079,6 +9119,7 @@ export function DsaProfilePage({ id }: { id: string }) {
               {/* Sub-Category Toggle Navigation for DSA Application Form */}
               <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 rounded-lg border border-slate-200">
                 <button
+                  data-tour="checker-applicant-subtab"
                   type="button"
                   onClick={() => setAppFormSubTab("applicant")}
                   className={cn(
@@ -9100,6 +9141,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                 </button>
 
                 <button
+                  data-tour="checker-kyc-subtab"
                   type="button"
                   onClick={() => setAppFormSubTab("kyc")}
                   className={cn(
@@ -9149,6 +9191,7 @@ export function DsaProfilePage({ id }: { id: string }) {
 
                 {(!isMakerUser || hasCheckerGeneratedReport) && (
                   <button
+                    data-tour="checker-ddl-subtab"
                     type="button"
                     onClick={() => {
                       setAppFormSubTab("ddl");
@@ -9239,7 +9282,7 @@ export function DsaProfilePage({ id }: { id: string }) {
 
               {/* Sub-Tab 2: Regulatory & Statutory KYC Verification */}
               {appFormSubTab === "kyc" && (
-                <div className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-5 sm:p-6 space-y-4 shadow-2xs">
+                <div data-tour="checker-kyc-6-blocks" className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-5 sm:p-6 space-y-4 shadow-2xs">
                   <div className="flex items-center justify-between pb-3 border-b border-slate-200/80">
                     <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800">
                       KYC Verification
@@ -10333,26 +10376,82 @@ export function DsaProfilePage({ id }: { id: string }) {
                             open={isDdNoteModalOpen}
                             onClose={() => setIsDdNoteModalOpen(false)}
                             title="Checker Due Diligence Note *"
-                            width="max-w-xl"
+                            description={`Statutory due diligence record & verification notes for ${dsa.name}`}
+                            width="max-w-3xl"
                           >
                             <div className="space-y-4">
-                              <textarea
-                                rows={5}
-                                className="w-full rounded-md border border-slate-200 bg-white p-3 text-xs text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 font-sans leading-relaxed"
-                                value={checkerDdNote}
-                                onChange={(e) =>
-                                  setCheckerDdNote(e.target.value)
-                                }
-                                placeholder="Enter your due diligence observations here..."
-                                autoFocus
-                              />
-                              <div className="flex justify-end items-center gap-2 pt-1">
+                              <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3.5 space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <ShieldCheck className="h-4 w-4 text-blue-600" />
+                                    <span className="text-xs font-bold text-blue-900">
+                                      Due Diligence Verification Checklist
+                                    </span>
+                                  </div>
+                                  <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-blue-100 text-blue-800">
+                                    #{getEffectiveDsaCode(dsa)}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-slate-600 leading-relaxed">
+                                  Record your independent findings regarding partner entity legitimacy, physical office premises, original KYC documents sighting, reference checks, and financial standing.
+                                </p>
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                  <Label htmlFor="checkerDdNoteArea" className="text-xs font-bold text-slate-700">
+                                    Observations &amp; Findings <span className="text-rose-500">*</span>
+                                  </Label>
+                                  <span className="text-[10px] text-slate-400 font-mono">
+                                    {checkerDdNote.length} characters
+                                  </span>
+                                </div>
+                                <textarea
+                                  id="checkerDdNoteArea"
+                                  rows={6}
+                                  className="w-full rounded-lg border border-slate-200 bg-white p-3.5 text-xs text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-sans leading-relaxed transition shadow-2xs"
+                                  value={checkerDdNote}
+                                  onChange={(e) =>
+                                    setCheckerDdNote(e.target.value)
+                                  }
+                                  placeholder="Enter comprehensive verification remarks (e.g. Physical premises visited and active, original documents cross-verified, satisfactory track record)..."
+                                  autoFocus
+                                />
+                                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mr-1">
+                                    Quick Notes:
+                                  </span>
+                                  {[
+                                    "Physical office premises visited and found active",
+                                    "Original KYC documents sighted and matched",
+                                    "Clean market track record and references verified",
+                                    "No adverse regulatory or credit flags detected",
+                                  ].map((snippet) => (
+                                    <button
+                                      key={snippet}
+                                      type="button"
+                                      onClick={() => {
+                                        setCheckerDdNote((prev) =>
+                                          prev.trim()
+                                            ? `${prev.trim()}\n• ${snippet}`
+                                            : `• ${snippet}`
+                                        );
+                                      }}
+                                      className="text-[11px] px-2 py-0.5 rounded-md border border-slate-200 bg-slate-50 text-slate-600 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition cursor-pointer"
+                                    >
+                                      + {snippet}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <div className="flex justify-end items-center gap-2 pt-3 border-t border-slate-100">
                                 <Button
                                   type="button"
                                   size="sm"
                                   variant="outline"
                                   onClick={() => setIsDdNoteModalOpen(false)}
-                                  className="h-8 text-xs"
+                                  className="h-9 px-4 text-xs font-semibold cursor-pointer"
                                 >
                                   Cancel
                                 </Button>
@@ -10367,12 +10466,12 @@ export function DsaProfilePage({ id }: { id: string }) {
                                     handleSubmitCheckerDdReport();
                                     setIsDdNoteModalOpen(false);
                                   }}
-                                  className="h-8 text-xs px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5"
+                                  className="h-9 text-xs px-5 font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-sm transition cursor-pointer"
                                 >
                                   <Check className="h-3.5 w-3.5" />
                                   {submittingCheckerReport
                                     ? "Submitting..."
-                                    : "Submit DD Note"}
+                                    : "Submit Due Diligence Note"}
                                 </Button>
                               </div>
                             </div>
@@ -10437,6 +10536,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                               )}
                               {isCheckerRole && !isMakerUser && (
                                 <Button
+                                  data-tour="checker-dd-note-btn"
                                   size="sm"
                                   type="button"
                                   onClick={() => {
@@ -10571,7 +10671,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                       : "Other Documents";
 
                 return (
-                  <div className="space-y-4">
+                  <div data-tour="maker-documents-section" className="space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                       {/* Sub-Category Toggle Navigation */}
                       <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-100/90 rounded-lg border border-slate-200/80">
@@ -10659,6 +10759,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                       {canApproveDocs && hasUnverifiedApplicantDocs && (
                         <div className="flex flex-col items-start sm:items-end gap-1">
                           <Button
+                            data-tour="maker-mass-verify-btn"
                             size="sm"
                             type="button"
                             disabled={!isVisitReportUploaded}
@@ -12317,7 +12418,7 @@ export function DsaProfilePage({ id }: { id: string }) {
           {tab === "actions" ? (
             <div className="space-y-6">
               {/* Comprehensive Review Remarks & Authority Notes by Role */}
-              <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4 min-w-0 overflow-hidden">
+              <div data-tour="workflow-review-section" className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4 min-w-0 overflow-hidden">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-200">
                   <div className="flex items-center gap-3">
                     <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-700 shadow-2xs">
@@ -12555,82 +12656,179 @@ export function DsaProfilePage({ id }: { id: string }) {
                 </div>
               </div>
 
-              {/* Decision Buttons: Rendered when user has approval authority */}
-              {workflowLevelInfo.canUserApprove &&
+              {/* Decision Buttons: Rendered per role authority and tour visibility */}
+              {(workflowLevelInfo.canUserApprove ||
+                isTourOpen ||
+                isMakerUser ||
+                isCheckerRole ||
+                (!isMakerUser && !isCheckerRole)) &&
                 !workflowLevelInfo.isCompleted &&
                 dsa?.onboarding_status !== "APPROVED" &&
                 !workflowLevelInfo.isRejected && (
                   <div className="mt-5 flex flex-wrap items-center gap-3 pt-4 border-t border-slate-200">
-                    <Button
-                      disabled={actionLoading}
-                      onClick={() => {
-                        const blockReason = getWorkflowBlockReason();
-                        if (blockReason) {
-                          toast({
-                            title: "Verification Incomplete",
-                            description: blockReason,
-                            variant: "warning",
-                          });
-                          return;
-                        }
-                        setApprovingDsa(dsa);
-                      }}
-                      size="sm"
-                      className="font-bold text-xs py-2 px-4 h-auto shadow-sm flex items-center gap-1.5 transition-all bg-emerald-600 hover:bg-emerald-700 text-white"
-                      title={workflowLevelInfo.actionLabel}
-                    >
-                      <Check className="h-4 w-4" />
-                      {workflowLevelInfo.actionLabel}
-                    </Button>
-                    {showReAllocate && (
-                      <Button
-                        onClick={openReAllocate}
-                        size="sm"
-                        variant="secondary"
-                        title="Hand this case to another authority at Level 3, 4 or 5"
-                        className="bg-violet-50 text-violet-800 hover:bg-violet-100 border border-violet-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5"
-                      >
-                        <Users className="h-4 w-4 text-violet-600" />
-                        Re-allocate
-                      </Button>
+                    {/* Role 1: Maker Actions */}
+                    {isMakerUser && (
+                      <>
+                        <Button
+                          data-tour="workflow-approve-btn"
+                          disabled={actionLoading}
+                          onClick={() => {
+                            const blockReason = getWorkflowBlockReason();
+                            if (blockReason) {
+                              toast({
+                                title: "Verification Incomplete",
+                                description: blockReason,
+                                variant: "warning",
+                              });
+                              return;
+                            }
+                            setApprovingDsa(dsa);
+                          }}
+                          size="sm"
+                          className="font-bold text-xs py-2 px-4 h-auto shadow-sm flex items-center gap-1.5 transition-all bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+                          title="Submit to Checker"
+                        >
+                          <Check className="h-4 w-4" />
+                          Submit to Checker
+                        </Button>
+                        <Button
+                          data-tour="workflow-query-back-btn"
+                          disabled={actionLoading}
+                          onClick={() => {
+                            setApprovingDsa(dsa);
+                          }}
+                          size="sm"
+                          variant="secondary"
+                          className="bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5 cursor-pointer"
+                          title="Submit Query Response back to Checker"
+                        >
+                          <Send className="h-4 w-4 text-amber-600" />
+                          Query Back to Checker
+                        </Button>
+                      </>
                     )}
-                    {canRevert && (
-                      <Button
-                        onClick={() => setRevertingDsa(dsa)}
-                        size="sm"
-                        variant="secondary"
-                        className="bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5"
-                      >
-                        <Undo2 className="h-4 w-4 text-amber-600" />
-                        {currentRevertTarget?.label}
-                      </Button>
+
+                    {/* Role 2: Checker Actions */}
+                    {isCheckerRole && !isMakerUser && (
+                      <>
+                        <Button
+                          data-tour="workflow-approve-btn"
+                          disabled={actionLoading}
+                          onClick={() => {
+                            const blockReason = getWorkflowBlockReason();
+                            if (blockReason) {
+                              toast({
+                                title: "Verification Incomplete",
+                                description: blockReason,
+                                variant: "warning",
+                              });
+                              return;
+                            }
+                            setApprovingDsa(dsa);
+                          }}
+                          size="sm"
+                          className="font-bold text-xs py-2 px-4 h-auto shadow-sm flex items-center gap-1.5 transition-all bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+                          title="Submit to Sub-Region Head"
+                        >
+                          <Check className="h-4 w-4" />
+                          Submit to Sub-Region Head
+                        </Button>
+                        <Button
+                          data-tour="workflow-raise-query-btn"
+                          onClick={() => setQueryingDsa(dsa)}
+                          size="sm"
+                          variant="secondary"
+                          className="bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <HelpCircle className="h-4 w-4 text-amber-600" />
+                          Raise Query to Maker
+                        </Button>
+                        <Button
+                          data-tour="workflow-reject-btn"
+                          onClick={() => {
+                            setRejectingDsa(dsa);
+                            setRejectionReason("");
+                            setRejectionStep("input");
+                            setRejectionError("");
+                          }}
+                          size="sm"
+                          variant="secondary"
+                          className="bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <X className="h-4 w-4 text-rose-600" />
+                          Reject Application
+                        </Button>
+                      </>
                     )}
-                    {workflowLevelInfo.currentLevel === 2 && (
-                      <Button
-                        onClick={() => setQueryingDsa(dsa)}
-                        size="sm"
-                        variant="secondary"
-                        className="bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5"
-                      >
-                        <HelpCircle className="h-4 w-4 text-amber-600" />
-                        Raise Query to Maker
-                      </Button>
-                    )}
-                    {workflowLevelInfo.currentLevel >= 2 && (
-                      <Button
-                        onClick={() => {
-                          setRejectingDsa(dsa);
-                          setRejectionReason("");
-                          setRejectionStep("input");
-                          setRejectionError("");
-                        }}
-                        size="sm"
-                        variant="secondary"
-                        className="bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5"
-                      >
-                        <X className="h-4 w-4 text-rose-600" />
-                        Reject Application
-                      </Button>
+
+                    {/* Role 3: Approver Actions (L3 - L7) */}
+                    {!isMakerUser && !isCheckerRole && (
+                      <>
+                        <Button
+                          data-tour="workflow-approve-btn"
+                          disabled={actionLoading}
+                          onClick={() => {
+                            const blockReason = getWorkflowBlockReason();
+                            if (blockReason) {
+                              toast({
+                                title: "Verification Incomplete",
+                                description: blockReason,
+                                variant: "warning",
+                              });
+                              return;
+                            }
+                            setApprovingDsa(dsa);
+                          }}
+                          size="sm"
+                          className="font-bold text-xs py-2 px-4 h-auto shadow-sm flex items-center gap-1.5 transition-all bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+                          title={
+                            workflowLevelInfo.currentLevel === 7
+                              ? "Sanction & Approve"
+                              : workflowLevelInfo.actionLabel || "Recommend Application"
+                          }
+                        >
+                          <Check className="h-4 w-4" />
+                          {workflowLevelInfo.currentLevel === 7
+                            ? "Sanction & Approve"
+                            : workflowLevelInfo.actionLabel || "Recommend Application"}
+                        </Button>
+                        <Button
+                          data-tour="workflow-reallocate-btn"
+                          onClick={openReAllocate}
+                          size="sm"
+                          variant="secondary"
+                          title="Hand this case to another authority at Level 3, 4 or 5"
+                          className="bg-violet-50 text-violet-800 hover:bg-violet-100 border border-violet-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Users className="h-4 w-4 text-violet-600" />
+                          Re-allocate
+                        </Button>
+                        <Button
+                          data-tour="workflow-revert-btn"
+                          onClick={() => setRevertingDsa(dsa)}
+                          size="sm"
+                          variant="secondary"
+                          className="bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Undo2 className="h-4 w-4 text-amber-600" />
+                          {currentRevertTarget?.label || "Revert Application"}
+                        </Button>
+                        <Button
+                          data-tour="workflow-reject-btn"
+                          onClick={() => {
+                            setRejectingDsa(dsa);
+                            setRejectionReason("");
+                            setRejectionStep("input");
+                            setRejectionError("");
+                          }}
+                          size="sm"
+                          variant="secondary"
+                          className="bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <X className="h-4 w-4 text-rose-600" />
+                          Reject Application
+                        </Button>
+                      </>
                     )}
                   </div>
                 )}
@@ -12672,18 +12870,46 @@ export function DsaProfilePage({ id }: { id: string }) {
         title={
           approvingDsa
             ? workflowLevelInfo.currentLevel === 7
-              ? "Final Approval— HO Credit Head"
+              ? "Final Approval & Sanction — HO Credit Head"
               : `Approve DSA Application`
             : ""
         }
-        width="max-w-lg"
+        description={
+          approvingDsa
+            ? `Official sign-off & workflow escalation for #${approvingDsa.code || approvingDsa.id} - ${approvingDsa.name}`
+            : ""
+        }
+        width="max-w-2xl"
       >
         {approvingDsa ? (
           <div className="space-y-4">
+            {/* Case Overview Banner */}
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <span className="text-xs font-bold text-emerald-950">
+                    {approvingDsa.name}
+                  </span>
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold">
+                    #{approvingDsa.code || approvingDsa.id}
+                  </span>
+                </div>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-white border border-emerald-200 text-emerald-700">
+                  {workflowLevelInfo.levelName}
+                </span>
+              </div>
+              <p className="text-[11px] text-emerald-800 leading-relaxed">
+                {workflowLevelInfo.currentLevel === 7
+                  ? "Final Sanction Authority approval. Once approved, this application is granted final sanction and moves to agreement execution."
+                  : `Approving and recommending this application forward along the workflow hierarchy to the next sanction authority.`}
+              </p>
+            </div>
+
             <Field>
               <Label
                 htmlFor="approvalRemarks"
-                className="flex items-center justify-between"
+                className="flex items-center justify-between text-xs font-bold text-slate-700"
               >
                 <span>
                   {workflowLevelInfo.currentLevel === 7
@@ -12699,7 +12925,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                 id="approvalRemarks"
                 rows={3}
                 maxLength={256}
-                className="w-full rounded-md border border-slate-200 p-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="w-full rounded-lg border border-slate-200 p-3 text-xs text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 font-sans leading-relaxed transition shadow-2xs"
                 value={approvalRemarks}
                 onChange={(event) => {
                   setApprovalRemarks(event.target.value.slice(0, 256));
@@ -12716,18 +12942,42 @@ export function DsaProfilePage({ id }: { id: string }) {
                   {approvalRemarksError}
                 </p>
               ) : null}
+
+              <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
+                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mr-1">
+                  Quick Remarks:
+                </span>
+                {[
+                  "Recommended based on satisfactory due diligence",
+                  "All KYC & statutory criteria verified",
+                  "Approved as per credit delegation matrix",
+                ].map((chip) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() => {
+                      setApprovalRemarks(chip.slice(0, 256));
+                      setApprovalRemarksError("");
+                    }}
+                    className="text-[11px] px-2 py-0.5 rounded-md border border-slate-200 bg-slate-50 text-slate-600 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition cursor-pointer"
+                  >
+                    + {chip}
+                  </button>
+                ))}
+              </div>
             </Field>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
               <Button
                 variant="secondary"
                 type="button"
                 onClick={closeDecisionModals}
+                className="h-9 px-4 text-xs font-semibold cursor-pointer"
               >
                 Cancel
               </Button>
               <Button
-                className="font-semibold transition-all bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="h-9 px-5 font-bold transition-all bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-sm cursor-pointer"
                 type="button"
                 disabled={actionLoading}
                 onClick={async () => {
@@ -12919,40 +13169,91 @@ export function DsaProfilePage({ id }: { id: string }) {
       </Modal>
 
       <Modal
-        description=""
+        description={
+          queryingDsa
+            ? `Specify clarifications or pending documents required from Level 1 Branch Maker for #${queryingDsa.code || queryingDsa.id}`
+            : ""
+        }
         onClose={closeDecisionModals}
         open={Boolean(queryingDsa)}
         title="Raise Query"
-        width="max-w-lg"
+        width="max-w-2xl"
       >
         <div className="space-y-4">
+          <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+              <span className="text-xs font-bold text-amber-900">
+                Application Reversion Notice
+              </span>
+            </div>
+            <p className="text-[11px] text-amber-800 leading-relaxed">
+              Submitting this query will immediately return the application to the <strong>Level 1 (Branch Maker)</strong> queue. The Maker will address discrepancies and re-verify before resubmitting.
+            </p>
+          </div>
+
           <Field>
-            <Label htmlFor="queryReason">Query details *</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="queryReason" className="text-xs font-bold text-slate-700">
+                Query Details <span className="text-rose-500">*</span>
+              </Label>
+              <span className="text-[10px] text-slate-400 font-mono">
+                {queryReason.length} characters
+              </span>
+            </div>
             <textarea
               id="queryReason"
-              rows={3}
-              className="w-full rounded-md border border-slate-200 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              rows={4}
+              className="w-full rounded-lg border border-slate-200 p-3 text-xs text-slate-900 placeholder:text-slate-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 font-sans leading-relaxed transition shadow-2xs"
               value={queryReason}
               onChange={(event) => {
                 setQueryReason(event.target.value);
                 setQueryError("");
               }}
-              placeholder="Enter query details (e.g. Bank statement signature missing, GST registration certificate unclear)"
+              placeholder="Enter detailed query reason (e.g. Bank statement signature missing, GST registration certificate unclear, branch visit report not signed)..."
             />
             {queryError ? (
-              <p className="text-xs font-medium text-rose-600">{queryError}</p>
+              <p className="text-xs font-medium text-rose-600 mt-1">{queryError}</p>
             ) : null}
+
+            <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
+              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mr-1">
+                Common Queries:
+              </span>
+              {[
+                "Bank statement signature / seal missing",
+                "GST certificate address does not match application",
+                "Physical branch visit report not signed by inspector",
+                "PAN card or incorporation proof copy unclear",
+              ].map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => {
+                    setQueryReason((prev) =>
+                      prev.trim() ? `${prev.trim()}\n• ${q}` : `• ${q}`
+                    );
+                    setQueryError("");
+                  }}
+                  className="text-[11px] px-2 py-0.5 rounded-md border border-slate-200 bg-slate-50 text-slate-600 hover:bg-amber-50 hover:border-amber-200 hover:text-amber-800 transition cursor-pointer"
+                >
+                  + {q}
+                </button>
+              ))}
+            </div>
           </Field>
-          <div className="flex justify-end gap-2 pt-2">
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
             <Button
               variant="secondary"
               type="button"
               onClick={closeDecisionModals}
+              className="h-9 px-4 text-xs font-semibold cursor-pointer"
             >
               Cancel
             </Button>
             <Button
-              className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
+              className="h-9 px-5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition cursor-pointer"
               type="button"
               disabled={actionLoading}
               onClick={async () => {
@@ -12995,27 +13296,68 @@ export function DsaProfilePage({ id }: { id: string }) {
             ? "Confirm Application Rejection (Double Validation)"
             : "Reject DSA Application"
         }
-        description={rejectionStep === "confirm" ? `` : ``}
-        width="max-w-lg"
+        description={
+          rejectingDsa
+            ? `Adverse lifecycle action for #${rejectingDsa.code || rejectingDsa.id} - ${rejectingDsa.name}`
+            : ""
+        }
+        width="max-w-2xl"
       >
         {rejectionStep === "input" ? (
           <div className="space-y-4">
+            <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-3.5 space-y-1.5">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0" />
+                <span className="text-xs font-bold text-rose-900">
+                  Adverse Action Notice
+                </span>
+              </div>
+              <p className="text-[11px] text-rose-800 leading-relaxed">
+                Rejection will terminate progression and move the application directly into the Maker Rejected Bucket. Specific justification is required for regulatory audit trails.
+              </p>
+            </div>
+
             <Field>
-              <Label htmlFor="profileRejectionReason">
-                Rejection reason <span className="text-rose-600">*</span>
+              <Label htmlFor="profileRejectionReason" className="text-xs font-bold text-slate-700">
+                Rejection Reason &amp; Grounds <span className="text-rose-600">*</span>
               </Label>
               <textarea
                 id="profileRejectionReason"
-                rows={3}
-                className="w-full rounded-md border border-slate-200 p-2.5 text-sm focus:border-rose-500 focus:outline-none focus:ring-1 focus:ring-rose-500 placeholder:text-slate-400"
+                rows={4}
+                className="w-full rounded-lg border border-slate-200 p-3 text-xs text-slate-900 focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-500/20 placeholder:text-slate-400 font-sans leading-relaxed transition shadow-2xs"
                 value={rejectionReason}
                 onChange={(event) => {
                   setRejectionReason(event.target.value);
                   setRejectionError("");
                 }}
-                placeholder="Enter specific mandatory justification (e.g. KYC document discrepancy, adverse track record, field verification failed)"
+                placeholder="Enter specific mandatory justification (e.g. KYC document discrepancy, adverse track record, field verification failed)..."
                 maxLength={2000}
               />
+              <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
+                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mr-1">
+                  Common Grounds:
+                </span>
+                {[
+                  "Adverse market background / negative track record",
+                  "Document authenticity discrepancy detected",
+                  "Physical premise inspection unsatisfactory",
+                  "Entity ineligible under statutory policy",
+                ].map((ground) => (
+                  <button
+                    key={ground}
+                    type="button"
+                    onClick={() => {
+                      setRejectionReason((prev) =>
+                        prev.trim() ? `${prev.trim()}\n• ${ground}` : `• ${ground}`
+                      );
+                      setRejectionError("");
+                    }}
+                    className="text-[11px] px-2 py-0.5 rounded-md border border-slate-200 bg-slate-50 text-slate-600 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-800 transition cursor-pointer"
+                  >
+                    + {ground}
+                  </button>
+                ))}
+              </div>
               <div className="flex justify-between items-center mt-1">
                 {rejectionError ? (
                   <p className="text-xs font-medium text-rose-600">
@@ -13809,7 +14151,7 @@ export function DsaProfilePage({ id }: { id: string }) {
         open={viewingDdNoteModal}
         title="Checker Due Diligence (DD) Review Note"
         description={`DSA #${getEffectiveDsaCode(dsa)} · ${dsa.name} · Submitted by Checker`}
-        width="max-w-2xl"
+        width="max-w-3xl"
       >
         <div className="space-y-4">
           {(() => {
@@ -13910,8 +14252,8 @@ export function DsaProfilePage({ id }: { id: string }) {
             ? `Revert Application to ${currentRevertTarget.targetRole}`
             : "Revert Application"
         }
-        description={currentRevertTarget ? `` : ""}
-        width="max-w-lg"
+        description={currentRevertTarget ? `Send case back to ${currentRevertTarget.targetRole} for review adjustment` : ""}
+        width="max-w-2xl"
       >
         <div className="space-y-4">
           <Field>
@@ -14173,7 +14515,7 @@ export function DsaProfilePage({ id }: { id: string }) {
         title="Policy Evaluation &amp; Deviation Details"
         width="max-w-6xl"
       >
-        <div className="space-y-5 max-h-[75vh] overflow-y-auto pr-1">
+        <div data-tour="deviations-modal-content" className="space-y-5 max-h-[75vh] overflow-y-auto pr-1">
           {deviationRules.length > 0 ? (
             <>
               {/* Top: Standard Policy Evaluation & Deviations Table */}
@@ -14572,6 +14914,24 @@ export function DsaProfilePage({ id }: { id: string }) {
           onClose={() => setViewingDdReportModal(false)}
         />
       </Modal>
+      <TourOverlay
+        isOpen={isTourOpen}
+        activeRole={tourRole}
+        onClose={() => {
+          setIsTourOpen(false);
+          setViewingDeviationsModal(false);
+        }}
+        onNavigateTab={(t) => setTab(t)}
+        onNavigateAppFormSubTab={(st) => setAppFormSubTab(st)}
+        onNavigateDocSubTab={(dst) => setDocSubTab(dst)}
+        onOpenModal={(modal) => {
+          if (modal === "deviations") {
+            setViewingDeviationsModal(true);
+          } else {
+            setViewingDeviationsModal(false);
+          }
+        }}
+      />
     </div>
   );
 }
