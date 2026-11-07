@@ -448,8 +448,15 @@ export const adminApi = {
     sort_order?: string;
     /** Task 22 — role-scoped work bucket. */
     bucket?: DsaWorkBucket;
+    /** Branch-scope filter — Maker/Checker only; serialized as branch_ids[]=1&branch_ids[]=2 */
+    branch_ids?: number[];
   }): Promise<BackendResponse<DsaListResponse>> => {
-    return request<BackendResponse<DsaListResponse>>(`/v1/dsa${compactParams(params)}`, {
+    const { branch_ids, ...rest } = params ?? {};
+    const base = compactParams(rest);
+    const qs = branch_ids && branch_ids.length > 0
+      ? (base ? base + "&" : "?") + branch_ids.map((id) => `branch_ids[]=${id}`).join("&")
+      : base;
+    return request<BackendResponse<DsaListResponse>>(`/v1/dsa${qs}`, {
       method: "GET",
     });
   },

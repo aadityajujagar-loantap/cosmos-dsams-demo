@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { adminApi } from "@/apis/admin";
 import { authService } from "@/services/authService";
-import { getUserBranchScope, isDsaInBranchScope, type UserBranchScope } from "@/lib/branch-scope";
+import { getUserBranchScope, type UserBranchScope } from "@/lib/branch-scope";
 import type {
   Dsa,
   DsaDocument,
@@ -272,7 +272,7 @@ export function useDsa() {
       city?: string;
       state?: string;
       business_type?: string;
-      /** Task 22 — role-scoped work bucket, filtered server-side. */
+      /** Task 22 â€” role-scoped work bucket, filtered server-side. */
       bucket?: DsaWorkBucket;
       per_page?: number;
       page?: number;
@@ -286,42 +286,23 @@ export function useDsa() {
         const scope = await getUserBranchScope(demoUser);
         setUserBranchScope(scope);
 
-        const fetchQuery = scope.isBranchRestricted
-          ? { ...params, per_page: 200 }
+        const fetchQuery = scope.isBranchRestricted && scope.branchIds.length > 0
+          ? { ...params, branch_ids: scope.branchIds }
           : params;
 
         const response = await adminApi.getDsas(fetchQuery);
         setDsaListError("");
 
-        let items = (response.data.items || []).map(normalizeDsaData);
-        if (scope.isBranchRestricted) {
-          items = items.filter((item: any) => isDsaInBranchScope(item, scope));
-          const total = items.length;
-          const perPage = params?.per_page ?? 20;
-          const currentPage = params?.page ?? 1;
-          const totalPages = Math.max(1, Math.ceil(total / perPage));
-          const pagedItems = items.slice((currentPage - 1) * perPage, currentPage * perPage);
-
-          setDsas(pagedItems);
-          setPagination({
-            total,
-            count: pagedItems.length,
-            perPage,
-            currentPage,
-            totalPages,
-          });
-          return pagedItems;
-        } else {
-          setDsas(items);
-          setPagination({
-            total: response.data.pagination.total,
-            count: response.data.pagination.count,
-            perPage: response.data.pagination.per_page,
-            currentPage: response.data.pagination.current_page,
-            totalPages: response.data.pagination.total_pages,
-          });
-          return items;
-        }
+        const items = (response.data.items || []).map(normalizeDsaData);
+        setDsas(items);
+        setPagination({
+          total: response.data.pagination.total,
+          count: response.data.pagination.count,
+          perPage: response.data.pagination.per_page,
+          currentPage: response.data.pagination.current_page,
+          totalPages: response.data.pagination.total_pages,
+        });
+        return items;
       } catch (error: unknown) {
         if (error && typeof error === "object" && "status" in error && (error as { status?: unknown }).status === 401) {
           return [];
@@ -993,7 +974,7 @@ export function useDsa() {
     [toast]
   );
 
-  // ── Task 22: Case Assignment, User-Level Locking & Activity History ────────
+  // â”€â”€ Task 22: Case Assignment, User-Level Locking & Activity History â”€â”€â”€â”€â”€â”€â”€â”€
 
   const fetchApprovalHistory = useCallback(
     async (idOrCode: number | string): Promise<DsaActivityHistory | null> => {
@@ -1051,7 +1032,7 @@ export function useDsa() {
     [toast]
   );
 
-  // ── Task 20C: CALL_BACK & RE-allocate candidate picker ─────────────────────
+  // â”€â”€ Task 20C: CALL_BACK & RE-allocate candidate picker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Deliberately surfaces the backend's own validation message (e.g. "Only
   // Levels L3, L4, and L5 are allowed") instead of swallowing it, so the UI can
   // explain why the list is unavailable instead of showing an empty picker.
@@ -1115,7 +1096,7 @@ export function useDsa() {
     [toast]
   );
 
-  // ── Location Dropdowns ───────────────────────────────────────────────────
+  // â”€â”€ Location Dropdowns â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const fetchStatesDropdown = useCallback(async () => {
     try {
