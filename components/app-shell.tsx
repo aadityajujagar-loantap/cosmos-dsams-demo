@@ -224,14 +224,31 @@ function inferStoredNotificationHref(notification: Notification, store: MockStor
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+
+  const isDsaCasePage = useMemo(() => {
+    if (!pathname) return false;
+    const segments = pathname.split("/").filter(Boolean);
+    if (segments[0] === "dsa" && segments.length >= 2) {
+      const sub = segments[1];
+      const nonCaseSubpaths = [
+        "active",
+        "management",
+        "onboarding",
+        "product-setting",
+        "digital-acceptance",
+        "email-action",
+        "self-onboarding",
+        "upload-signed-agreement",
+        "verify-email",
+      ];
+      return !nonCaseSubpaths.includes(sub);
+    }
+    return false;
+  }, [pathname]);
+
   const handleStartWalkthrough = () => {
-    if (pathname.includes("/dsa/")) {
+    if (isDsaCasePage) {
       window.dispatchEvent(new CustomEvent("cos-start-tour"));
-    } else {
-      if (typeof window !== "undefined") {
-        sessionStorage.setItem("cos_tour_pending_start", "true");
-      }
-      router.push("/dsa/3");
     }
   };
 
@@ -885,33 +902,35 @@ export function AppShell({ children }: { children: ReactNode }) {
         {renderNavigation(isCollapsed)}
         {/* Collapse Option at bottom left */}
         <div className={cn("border-t border-slate-200 shrink-0", isCollapsed ? "p-2 flex flex-col items-center" : "p-2.5")}>
-          {/* Walkthrough Button above Collapse */}
-          <button
-            type="button"
-            onClick={handleStartWalkthrough}
-            aria-label="Start Guided Walkthrough"
-            title="Start Guided Walkthrough"
-            className={cn(
-              "group mb-2 flex items-center rounded-lg border border-blue-200/90 bg-blue-50/80 text-blue-700 transition hover:bg-blue-100 hover:text-blue-900 shadow-2xs",
-              isCollapsed
-                ? "h-10 w-10 justify-center"
-                : "w-full justify-between gap-2 px-3 py-2 text-xs font-semibold",
-            )}
-          >
-            {isCollapsed ? (
-              <Sparkles className="h-4 w-4 text-blue-600 animate-pulse group-hover:scale-110 transition-transform" />
-            ) : (
-              <>
-                <span className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-blue-600 animate-pulse group-hover:scale-110 transition-transform" />
-                  <span>Walkthrough</span>
-                </span>
-                <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-600 text-white px-1.5 py-0.5 rounded shadow-2xs">
-                  Tour
-                </span>
-              </>
-            )}
-          </button>
+          {/* Walkthrough Button above Collapse (only shown when viewing a DSA case profile) */}
+          {isDsaCasePage && (
+            <button
+              type="button"
+              onClick={handleStartWalkthrough}
+              aria-label="Start Guided Walkthrough"
+              title="Start Guided Walkthrough"
+              className={cn(
+                "group mb-2 flex items-center rounded-lg border border-blue-200/90 bg-blue-50/80 text-blue-700 transition hover:bg-blue-100 hover:text-blue-900 shadow-2xs",
+                isCollapsed
+                  ? "h-10 w-10 justify-center"
+                  : "w-full justify-between gap-2 px-3 py-2 text-xs font-semibold",
+              )}
+            >
+              {isCollapsed ? (
+                <Sparkles className="h-4 w-4 text-blue-600 animate-pulse group-hover:scale-110 transition-transform" />
+              ) : (
+                <>
+                  <span className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-blue-600 animate-pulse group-hover:scale-110 transition-transform" />
+                    <span>Walkthrough</span>
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-600 text-white px-1.5 py-0.5 rounded shadow-2xs">
+                    Tour
+                  </span>
+                </>
+              )}
+            </button>
+          )}
           <button
             type="button"
             onClick={toggleCollapse}
