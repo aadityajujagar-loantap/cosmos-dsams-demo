@@ -4693,6 +4693,7 @@ export function DsaProfilePage({ id }: { id: string }) {
     // Never claim a case that is not at this user's stage — that is the
     // loophole where a stray click would auto-acquire someone else's case.
     if (!dsa || !caseAccess.allowed) return;
+    if (String(dsa.onboarding_status || "").toUpperCase() === "REJECTED") return;
     autoAcquireRef.current = String(id);
     void adminApi
       .acquireCase(id)
@@ -12870,42 +12871,14 @@ export function DsaProfilePage({ id }: { id: string }) {
         title={
           approvingDsa
             ? workflowLevelInfo.currentLevel === 7
-              ? "Final Approval & Sanction — HO Credit Head"
+              ? "Final Approval— HO Credit Head"
               : `Approve DSA Application`
             : ""
         }
-        description={
-          approvingDsa
-            ? `Official sign-off & workflow escalation for #${approvingDsa.code || approvingDsa.id} - ${approvingDsa.name}`
-            : ""
-        }
-        width="max-w-2xl"
+        width="max-w-lg"
       >
         {approvingDsa ? (
           <div className="space-y-4">
-            {/* Case Overview Banner */}
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5 space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <span className="text-xs font-bold text-emerald-950">
-                    {approvingDsa.name}
-                  </span>
-                  <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold">
-                    #{approvingDsa.code || approvingDsa.id}
-                  </span>
-                </div>
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-white border border-emerald-200 text-emerald-700">
-                  {workflowLevelInfo.levelName}
-                </span>
-              </div>
-              <p className="text-[11px] text-emerald-800 leading-relaxed">
-                {workflowLevelInfo.currentLevel === 7
-                  ? "Final Sanction Authority approval. Once approved, this application is granted final sanction and moves to agreement execution."
-                  : `Approving and recommending this application forward along the workflow hierarchy to the next sanction authority.`}
-              </p>
-            </div>
-
             <Field>
               <Label
                 htmlFor="approvalRemarks"
@@ -12942,29 +12915,6 @@ export function DsaProfilePage({ id }: { id: string }) {
                   {approvalRemarksError}
                 </p>
               ) : null}
-
-              <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
-                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mr-1">
-                  Quick Remarks:
-                </span>
-                {[
-                  "Recommended based on satisfactory due diligence",
-                  "All KYC & statutory criteria verified",
-                  "Approved as per credit delegation matrix",
-                ].map((chip) => (
-                  <button
-                    key={chip}
-                    type="button"
-                    onClick={() => {
-                      setApprovalRemarks(chip.slice(0, 256));
-                      setApprovalRemarksError("");
-                    }}
-                    className="text-[11px] px-2 py-0.5 rounded-md border border-slate-200 bg-slate-50 text-slate-600 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition cursor-pointer"
-                  >
-                    + {chip}
-                  </button>
-                ))}
-              </div>
             </Field>
 
             <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">

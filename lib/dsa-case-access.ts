@@ -96,8 +96,9 @@ export function describeCaseLock(
  * Decides whether `role` may open and act on this DSA.
  *
  * - Admin / Super Admin: always allowed.
- * - Rejected cases: blocked for every role, including Admin. They remain
- *   listed in the All and Rejected buckets as a record but cannot be opened.
+ * - Rejected cases: view-only allowed for Checker (Level 2); blocked for
+ *   every other role (including Admin). They remain listed in the All and
+ *   Rejected buckets as a record.
  * - Approved / closed cases: only the chain role that owns the terminal state
  *   may still open it, so post-approval agreement work stays with
  *   Maker/Checker; everyone else is blocked.
@@ -116,20 +117,22 @@ export function resolveCaseAccess(
 
   const status = String(dsa.onboarding_status || "").toUpperCase();
 
-  // Rejected is a hard dead-end: nobody can open the case, regardless of
-  // role, level, or who currently holds the lock. It remains listed in the
-  // All and Rejected buckets as a record only. Evaluated before the
-  // privileged bypass below so Admin/Super Admin are blocked as well.
-  if (status === "REJECTED") {
-    return { allowed: false, reason: "rejected", level: null };
-  }
-
   // Fail closed: without a *recognised* role we cannot prove the case is
   // yours, so withhold the detail view rather than guessing. Admin /
   // Super Admin are explicitly recognised and keep blanket visibility.
   const normalizedRole = normalizeRole(role);
   const isPrivileged = normalizedRole === "ADMIN" || normalizedRole === "SUPERADMIN";
   const level = resolveUserLevel(role);
+
+  // Rejected cases are read-only for Checker (Level 2) so they can inspect
+  // auto-rejected / rejected cases; all other roles remain blocked.
+  if (status === "REJECTED") {
+    if (level === 2) {
+      return { allowed: true, reason: "allowed", level };
+    }
+    return { allowed: false, reason: "rejected", level: null };
+  }
+
   if (level === null && !isPrivileged) {
     return { allowed: false, reason: "not_my_stage", level: null };
   }
@@ -193,7 +196,7 @@ if (process.env.DSA_CASE_ACCESS_CHECK) {
     ["L3 allowed at L3", true, resolveCaseAccess(mk({ current_approval_level: 3 }), "AGM")],
     ["L7 allowed at L7", true, resolveCaseAccess(mk({ current_approval_level: 7 }), "HO Credit Head")],
     ["Rejected -> Maker blocked", false, resolveCaseAccess(mk({ onboarding_status: "REJECTED" }), "Maker")],
-    ["Rejected -> Checker blocked", false, resolveCaseAccess(mk({ onboarding_status: "REJECTED" }), "Checker")],
+    ["Rejected -> Checker allowed (view)", true, resolveCaseAccess(mk({ onboarding_status: "REJECTED" }), "Checker")],
     ["Rejected -> L7 blocked", false, resolveCaseAccess(mk({ onboarding_status: "REJECTED" }), "HO Credit Head")],
     ["Rejected -> Admin blocked", false, resolveCaseAccess(mk({ onboarding_status: "REJECTED" }), "Super Admin")],
     ["Rejected+locked -> Maker blocked", false, resolveCaseAccess(mk({ onboarding_status: "REJECTED", operational_status: "ACTIVE" }), "Maker")],
