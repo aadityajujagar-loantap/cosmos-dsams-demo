@@ -36,6 +36,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { adminApi } from "@/apis/admin";
+import { authService } from "@/services/authService";
 import { useMockStore } from "@/lib/store";
 import { useToast } from "@/components/ui/toast";
 import { Button, Card, CardContent, DatePicker, Input, Label, Select } from "@/components/ui/primitives";
@@ -706,7 +707,12 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
             if (curr && list.some((b: any) => String(b.id ?? b.branch_id) === String(curr))) {
               return curr;
             }
-            return String(list[0].id ?? list[0].branch_id ?? "");
+            const userBranchCode = (authService.getUser()?.branch_code || authService.getUser()?.branch_codes?.[0] || "").trim().toUpperCase();
+            const assignedBranch = userBranchCode
+              ? list.find((b: any) => String(b.branch_code || "").trim().toUpperCase() === userBranchCode)
+              : null;
+            const preferred = assignedBranch || list[0];
+            return String(preferred.id ?? preferred.branch_id ?? "");
           });
         }
       })

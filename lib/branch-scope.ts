@@ -59,7 +59,22 @@ export function getUserBranchScopeSync(
 
   const isBranchRestricted = !isSuperAdmin && (isMaker || isChecker);
 
-  if (!isBranchRestricted) {
+  const codeSet = new Set<string>();
+  const primaryCode = (user?.branch_code || currentUser?.code || "").trim().toUpperCase();
+  if (primaryCode) {
+    codeSet.add(primaryCode);
+  }
+  if (Array.isArray(user?.branch_codes)) {
+    for (const c of user.branch_codes) {
+      const normalized = String(c || "").trim().toUpperCase();
+      if (normalized) codeSet.add(normalized);
+    }
+  }
+
+  const branchCodes = Array.from(codeSet);
+  const isRestrictedRole = isBranchRestricted || (!isSuperAdmin && branchCodes.length > 0);
+
+  if (!isRestrictedRole) {
     return {
       isBranchRestricted: false,
       branchCodes: [],
@@ -67,14 +82,6 @@ export function getUserBranchScopeSync(
       branchNames: [],
     };
   }
-
-  const codeSet = new Set<string>();
-  const primaryCode = (user?.branch_code || currentUser?.code || "").trim().toUpperCase();
-  if (primaryCode) {
-    codeSet.add(primaryCode);
-  }
-
-  const branchCodes = Array.from(codeSet);
   const branchIds: number[] = [];
   const branchNames: string[] = [];
   let primaryBranchName: string | undefined = undefined;
