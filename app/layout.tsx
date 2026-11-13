@@ -26,6 +26,7 @@ const geistMono = localFont({
 export const metadata: Metadata = {
   title: "Cosmos DSAMS Console",
   description: "Enterprise frontend prototype for Direct Selling Agent management",
+  referrer: "no-referrer",
 };
 
 export default function RootLayout({
@@ -39,6 +40,9 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
+      <head>
+        <meta name="referrer" content="no-referrer" />
+      </head>
       <body className="min-h-full" suppressHydrationWarning>
         <AppProviders>{children}</AppProviders>
       </body>

@@ -105,7 +105,7 @@ import {
 } from "@/lib/dsa-workflow-actions";
 import type { DsaEligibleUser } from "@/types/dsa";
 import { BusinessType, Dsa, DsaStatus, Product, User } from "@/lib/types";
-import { DsaBasicDetailsTab } from "./dsa-basic-details-tab";
+import { DsaBasicDetailsTab, getSubRegionHeadName } from "./dsa-basic-details-tab";
 import { DsaCaseActivityTab } from "./dsa-case-activity-tab";
 import { DsaKycDataModal, KycDataType } from "./dsa-kyc-data-modal";
 import type { BranchOption, DsaWorkBucket } from "@/types/dsa";
@@ -685,7 +685,7 @@ export function getDocDisplayStatus(
   return s;
 }
 
-export type DocumentSubTab = "kyc" | "exp" | "other";
+export type DocumentSubTab = "all" | "kyc" | "exp" | "other";
 
 export function getDocumentCategory(docOrType?: any): DocumentSubTab {
   if (!docOrType) return "other";
@@ -698,7 +698,7 @@ export function getDocumentCategory(docOrType?: any): DocumentSubTab {
   }
   const s = text.toLowerCase().replace(/[\s_-]+/g, "_");
 
-  // 1. KYC: business licence udyam, business shop act, photo, aadhaar, pan
+  // 1. KYC: business licence udyam, business shop act, photo, aadhaar, pan, bank account / cheque
   const isKyc =
     /(^|_)pan(_|$)/.test(s) ||
     s.includes("pancard") ||
@@ -711,7 +711,11 @@ export function getDocumentCategory(docOrType?: any): DocumentSubTab {
     s.includes("business_license") ||
     s.includes("business_licence") ||
     s.includes("cibil") ||
-    s.includes("msme");
+    s.includes("msme") ||
+    /(^|_)bank(_|$)/.test(s) ||
+    s.includes("cheque") ||
+    s.includes("passbook") ||
+    s.includes("bav");
 
   if (isKyc) return "kyc";
 
@@ -3369,7 +3373,7 @@ export function DsaProfilePage({ id }: { id: string }) {
   const { toast } = useToast();
   const router = useRouter();
   const [tab, setTab] = useState("actions");
-  const [docSubTab, setDocSubTab] = useState<DocumentSubTab>("kyc");
+  const [docSubTab, setDocSubTab] = useState<DocumentSubTab>("all");
   const [isTourOpen, setIsTourOpen] = useState(false);
   const [tourRole, setTourRole] = useState<TourRole>("maker");
   const [appFormSubTab, setAppFormSubTab] = useState<
@@ -3925,10 +3929,12 @@ export function DsaProfilePage({ id }: { id: string }) {
     rawAuthRolesNorm.includes("SUPERADMIN"),
   );
 
-  const canL2ToL7ViewCibilReport = Boolean(
-    !isMakerUser &&
+  const canViewCibilReport = Boolean(
     currentUser?.role !== "DSA Partner" &&
-    (isCheckerRole ||
+    currentUser?.role !== "Customer" &&
+    (isMakerUser ||
+      isMakerLevel ||
+      isCheckerRole ||
       isCheckerLevel ||
       isSubRegionRole ||
       isDgmRole ||
@@ -3937,7 +3943,7 @@ export function DsaProfilePage({ id }: { id: string }) {
       isHoHeadRole ||
       isL7User ||
       isAdminOrSuperAdmin ||
-      (workflowLevelInfo && workflowLevelInfo.currentLevel >= 2)),
+      (workflowLevelInfo && workflowLevelInfo.currentLevel >= 1)),
   );
 
   const DEVIATION_AUTHORITY_ROLES = [
@@ -5181,7 +5187,7 @@ export function DsaProfilePage({ id }: { id: string }) {
     }
   }, [dsa?.id, fetchBackendDocuments]);
   useEffect(() => {
-    if (!dsa?.id || !canL2ToL7ViewCibilReport) return;
+    if (!dsa?.id || !canViewCibilReport) return;
     let active = true;
     setLoadingCibilReport(true);
     adminApi
@@ -5205,7 +5211,7 @@ export function DsaProfilePage({ id }: { id: string }) {
     return () => {
       active = false;
     };
-  }, [dsa?.id, canL2ToL7ViewCibilReport, backendDocs]);
+  }, [dsa?.id, canViewCibilReport, backendDocs]);
 
   const openDocPreview = async (doc: any) => {
     if (isDdReviewReportDocument(doc) && dsa?.id) {
@@ -5314,15 +5320,13 @@ export function DsaProfilePage({ id }: { id: string }) {
       isRefreshingDdReportRef.current = true;
       if (showLoading) setLoadingDeviationReport(true);
       try {
-        if (!isMakerUser) {
-          try {
-            await adminApi.getDdReviewReportPdf(dsa.id);
-          } catch (pdfErr) {
-            console.warn(
-              "getDdReviewReportPdf error on DD report refresh:",
-              pdfErr,
-            );
-          }
+        try {
+          await adminApi.getDdReviewReportPdf(dsa.id);
+        } catch (pdfErr) {
+          console.warn(
+            "getDdReviewReportPdf error on DD report refresh:",
+            pdfErr,
+          );
         }
         const data = await fetchDeviationReport(dsa.id);
         if (data) {
@@ -6389,6 +6393,25 @@ export function DsaProfilePage({ id }: { id: string }) {
     });
   }
 
+  if (
+    dsa?.id &&
+    !rawDocList.some((d: any) => isApplicationFormDocument(d))
+  ) {
+    const apiBase = (
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
+    ).replace(/\/api\/?$/, "");
+    rawDocList.push({
+      id: typeof dsa?.id === "number" ? dsa.id * 100000 + 777 : 777777,
+      document_type: "APPLICATION_FORM",
+      file_name: `dsa_application_form_${dsa.id}.pdf`,
+      file_path: `dsa_application_forms/${dsa.id}/application_form.pdf`,
+      file_url: `${apiBase}/api/v1/dsa/${dsa.id}/documents/APPLICATION_FORM/file`,
+      status: "Verified",
+      uploaded_at: dsa.created_at || new Date().toISOString(),
+      remarks: "System Generated DSA Application Form",
+    });
+  }
+
   const hasCheckerGeneratedReport = Boolean(
     rawDocList.some(
       (d: any) =>
@@ -6405,6 +6428,27 @@ export function DsaProfilePage({ id }: { id: string }) {
     Boolean(deviationReportData?.metadata?.pdf_generated),
   );
 
+  if (
+    hasCheckerGeneratedReport &&
+    dsa?.id &&
+    !rawDocList.some((d: any) => isDdReviewReportDocument(d))
+  ) {
+    const apiBase = (
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
+    ).replace(/\/api\/?$/, "");
+    rawDocList.push({
+      id: typeof dsa?.id === "number" ? dsa.id * 100000 + 666 : 666666,
+      document_type: "DUE_DILIGENCE_REVIEW_REPORT",
+      file_name: `dsa_dd_review_report_${dsa.id}.pdf`,
+      file_path: `dsa_dd_review_reports/${dsa.id}/dd_review_report_${dsa.id}.pdf`,
+      file_url: `${apiBase}/api/v1/dsa/${dsa.id}/dd-review-report/pdf`,
+      status: "Checked",
+      uploaded_at:
+        dsa?.latest_due_diligence_note?.submitted_at || new Date().toISOString(),
+      remarks: "Checker Due Diligence Review Report",
+    });
+  }
+
   const allDisplayDocs: any[] = rawDocList
     .filter((doc) => {
       const dt = String(doc.document_type || "").toUpperCase();
@@ -6417,26 +6461,45 @@ export function DsaProfilePage({ id }: { id: string }) {
     })
     .reduce((acc: any[], doc: any) => {
       const isVisit = isVisitReportDocument(doc);
+      const isAppForm = isApplicationFormDocument(doc);
+      const isDd = isDdReviewReportDocument(doc);
+      const isCibil = isCibilReportDocument(doc);
+      const isSingleSlot = isVisit || isAppForm || isDd || isCibil;
       const isItr = String(doc.document_type || "")
         .toLowerCase()
         .startsWith("itr");
       const isOther =
         String(doc.document_type || "").toLowerCase() === "other_document";
       const isMulti = isItr || isOther;
+
       const existingIndex = acc.findIndex((d) => {
-        if (isVisit) return isVisitReportDocument(d);
+        if (
+          typeof d.id === "number" &&
+          typeof doc.id === "number" &&
+          d.id === doc.id
+        ) {
+          return true;
+        }
+        if (isSingleSlot) {
+          if (isVisit) return isVisitReportDocument(d);
+          if (isAppForm) return isApplicationFormDocument(d);
+          if (isDd) return isDdReviewReportDocument(d);
+          if (isCibil) return isCibilReportDocument(d);
+        }
         if (isMulti) {
-          // Keep every year-wise ITR and multi-document distinct unless identical id or duplicate file
           return (
-            (typeof d.id === "number" &&
-              typeof doc.id === "number" &&
-              d.id === doc.id) ||
-            (d.document_type === doc.document_type &&
-              d.file_name === doc.file_name &&
-              d.financial_year === doc.financial_year)
+            d.document_type === doc.document_type &&
+            d.file_name === doc.file_name &&
+            d.financial_year === doc.financial_year
           );
         }
-        return d.document_type === doc.document_type;
+        if (d.document_type === doc.document_type) {
+          if (doc.owner_name && d.owner_name && doc.owner_name !== d.owner_name) {
+            return false;
+          }
+          return true;
+        }
+        return false;
       });
       if (existingIndex >= 0) {
         acc[existingIndex] = doc;
@@ -7502,7 +7565,10 @@ export function DsaProfilePage({ id }: { id: string }) {
     const ovRep =
       rep?.office_visit_report || (rep as any)?.officeVisitReport || {};
     const visitDate = ovRep.date_of_visit || "";
-    const visitedBy = ovRep.visited_by || "";
+    const visitedBy =
+      ovRep.visited_by && isNaN(Number(ovRep.visited_by))
+        ? ovRep.visited_by
+        : getSubRegionHeadName(dsa);
     const obsInfra = ovRep.observation_infrastructure || "";
     const empInteract = ovRep.employee_interaction || "";
     const origVerif = ovRep.original_verified || "";
@@ -8082,7 +8148,10 @@ export function DsaProfilePage({ id }: { id: string }) {
                       /cosmos/i.test(rawRel) ||
                       (/^yes$/i.test(rawRel) &&
                         (!bankName || /cosmos/i.test(bankName)));
-                    return isCosmos ? "Yes" : "No";
+                    const accNum =
+                      dsa?.account_number || finDd?.account_number || "";
+                    if (!isCosmos) return "No";
+                    return accNum ? `Yes (A/C No: ${accNum})` : "Yes";
                   })()}
                 </td>
               </tr>
@@ -8882,7 +8951,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                 {deviationRules.length > 0 ? `(${deviationRules.length})` : ""}
               </Button>
             )}
-            {(hasCheckerGeneratedReport || !isMakerUser || isTourOpen) && (
+            {(hasCheckerGeneratedReport || isBankUser || isTourOpen) && (
               <>
                 <Button
                   size="sm"
@@ -10377,82 +10446,24 @@ export function DsaProfilePage({ id }: { id: string }) {
                             open={isDdNoteModalOpen}
                             onClose={() => setIsDdNoteModalOpen(false)}
                             title="Checker Due Diligence Note *"
-                            description={`Statutory due diligence record & verification notes for ${dsa.name}`}
-                            width="max-w-3xl"
+                            width="max-w-xl"
                           >
                             <div className="space-y-4">
-                              <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3.5 space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <ShieldCheck className="h-4 w-4 text-blue-600" />
-                                    <span className="text-xs font-bold text-blue-900">
-                                      Due Diligence Verification Checklist
-                                    </span>
-                                  </div>
-                                  <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-blue-100 text-blue-800">
-                                    #{getEffectiveDsaCode(dsa)}
-                                  </span>
-                                </div>
-                                <p className="text-[11px] text-slate-600 leading-relaxed">
-                                  Record your independent findings regarding partner entity legitimacy, physical office premises, original KYC documents sighting, reference checks, and financial standing.
-                                </p>
-                              </div>
-
-                              <div className="space-y-1.5">
-                                <div className="flex items-center justify-between">
-                                  <Label htmlFor="checkerDdNoteArea" className="text-xs font-bold text-slate-700">
-                                    Observations &amp; Findings <span className="text-rose-500">*</span>
-                                  </Label>
-                                  <span className="text-[10px] text-slate-400 font-mono">
-                                    {checkerDdNote.length} characters
-                                  </span>
-                                </div>
-                                <textarea
-                                  id="checkerDdNoteArea"
-                                  rows={6}
-                                  className="w-full rounded-lg border border-slate-200 bg-white p-3.5 text-xs text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-sans leading-relaxed transition shadow-2xs"
-                                  value={checkerDdNote}
-                                  onChange={(e) =>
-                                    setCheckerDdNote(e.target.value)
-                                  }
-                                  placeholder="Enter comprehensive verification remarks (e.g. Physical premises visited and active, original documents cross-verified, satisfactory track record)..."
-                                  autoFocus
-                                />
-                                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mr-1">
-                                    Quick Notes:
-                                  </span>
-                                  {[
-                                    "Physical office premises visited and found active",
-                                    "Original KYC documents sighted and matched",
-                                    "Clean market track record and references verified",
-                                    "No adverse regulatory or credit flags detected",
-                                  ].map((snippet) => (
-                                    <button
-                                      key={snippet}
-                                      type="button"
-                                      onClick={() => {
-                                        setCheckerDdNote((prev) =>
-                                          prev.trim()
-                                            ? `${prev.trim()}\n• ${snippet}`
-                                            : `• ${snippet}`
-                                        );
-                                      }}
-                                      className="text-[11px] px-2 py-0.5 rounded-md border border-slate-200 bg-slate-50 text-slate-600 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition cursor-pointer"
-                                    >
-                                      + {snippet}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-
-                              <div className="flex justify-end items-center gap-2 pt-3 border-t border-slate-100">
+                              <textarea
+                                rows={5}
+                                className="w-full rounded-md border border-slate-200 bg-white p-3 text-xs text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 font-sans leading-relaxed"
+                                value={checkerDdNote}
+                                onChange={(e) => setCheckerDdNote(e.target.value)}
+                                placeholder="Enter your due diligence observations here..."
+                                autoFocus
+                              />
+                              <div className="flex justify-end items-center gap-2 pt-1">
                                 <Button
                                   type="button"
                                   size="sm"
                                   variant="outline"
                                   onClick={() => setIsDdNoteModalOpen(false)}
-                                  className="h-9 px-4 text-xs font-semibold cursor-pointer"
+                                  className="h-8 text-xs cursor-pointer"
                                 >
                                   Cancel
                                 </Button>
@@ -10467,7 +10478,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                                     handleSubmitCheckerDdReport();
                                     setIsDdNoteModalOpen(false);
                                   }}
-                                  className="h-9 text-xs px-5 font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                                  className="h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-sm transition cursor-pointer"
                                 >
                                   <Check className="h-3.5 w-3.5" />
                                   {submittingCheckerReport
@@ -10626,6 +10637,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                   label: string;
                   icon: any;
                 }> = [
+                  { id: "all", label: "All Documents", icon: ClipboardList },
                   { id: "kyc", label: "KYC Documents", icon: ShieldCheck },
                   { id: "exp", label: "Experience Certificates", icon: Award },
                   { id: "other", label: "Other Documents", icon: FileText },
@@ -10633,19 +10645,22 @@ export function DsaProfilePage({ id }: { id: string }) {
 
                 const categoryUploadedDocs = allDisplayDocs.filter(
                   (d) =>
-                    getDocumentCategory(d) === docSubTab &&
-                    (!isCibilReportDocument(d) || canL2ToL7ViewCibilReport),
+                    (docSubTab === "all" || getDocumentCategory(d) === docSubTab) &&
+                    (!isCibilReportDocument(d) || canViewCibilReport),
                 );
                 const categoryMissingDocs = missingProfileDocuments.filter(
                   (d) =>
-                    getDocumentCategory(d) === docSubTab &&
+                    (docSubTab === "all" || getDocumentCategory(d) === docSubTab) &&
                     !isCibilReportDocument(d),
                 );
 
+                const allUploadedCount = allDisplayDocs.filter(
+                  (d) => !isCibilReportDocument(d) || canViewCibilReport,
+                ).length;
                 const kycUploadedCount = allDisplayDocs.filter(
                   (d) =>
                     getDocumentCategory(d) === "kyc" &&
-                    (!isCibilReportDocument(d) || canL2ToL7ViewCibilReport),
+                    (!isCibilReportDocument(d) || canViewCibilReport),
                 ).length;
                 const expUploadedCount = allDisplayDocs.filter(
                   (d) => getDocumentCategory(d) === "exp",
@@ -10654,6 +10669,9 @@ export function DsaProfilePage({ id }: { id: string }) {
                   (d) => getDocumentCategory(d) === "other",
                 ).length;
 
+                const allMissingCount = missingProfileDocuments.filter(
+                  (d) => !isCibilReportDocument(d),
+                ).length;
                 const kycMissingCount = missingProfileDocuments.filter(
                   (d) => getDocumentCategory(d) === "kyc",
                 ).length;
@@ -10665,11 +10683,13 @@ export function DsaProfilePage({ id }: { id: string }) {
                 ).length;
 
                 const currentCategoryLabel =
-                  docSubTab === "kyc"
-                    ? "KYC Documents"
-                    : docSubTab === "exp"
-                      ? "Experience Certificates"
-                      : "Other Documents";
+                  docSubTab === "all"
+                    ? "Documents"
+                    : docSubTab === "kyc"
+                      ? "KYC Documents"
+                      : docSubTab === "exp"
+                        ? "Experience Certificates"
+                        : "Other Documents";
 
                 return (
                   <div data-tour="maker-documents-section" className="space-y-4">
@@ -10680,20 +10700,24 @@ export function DsaProfilePage({ id }: { id: string }) {
                           const isActive = docSubTab === cat.id;
                           const Icon = cat.icon;
                           const uploadedCount =
-                            cat.id === "kyc"
-                              ? kycUploadedCount
-                              : cat.id === "exp"
-                                ? expUploadedCount
-                                : otherUploadedCount;
+                            cat.id === "all"
+                              ? allUploadedCount
+                              : cat.id === "kyc"
+                                ? kycUploadedCount
+                                : cat.id === "exp"
+                                  ? expUploadedCount
+                                  : otherUploadedCount;
                           const missingCount =
-                            cat.id === "kyc"
-                              ? kycMissingCount
-                              : cat.id === "exp"
-                                ? expMissingCount
-                                : otherMissingCount;
+                            cat.id === "all"
+                              ? allMissingCount
+                              : cat.id === "kyc"
+                                ? kycMissingCount
+                                : cat.id === "exp"
+                                  ? expMissingCount
+                                  : otherMissingCount;
                           const unverifiedCount = allDisplayDocs.filter(
                             (d: any) =>
-                              getDocumentCategory(d) === cat.id &&
+                              (cat.id === "all" || getDocumentCategory(d) === cat.id) &&
                               getEffectiveDocStatus(d) !== "Verified",
                           ).length;
                           const hasPending =
@@ -11066,18 +11090,20 @@ export function DsaProfilePage({ id }: { id: string }) {
                       {categoryUploadedDocs.length === 0 ? (
                         <div className="col-span-full py-8 text-center rounded-lg border border-dashed border-slate-200 bg-slate-50/50">
                           <p className="text-sm font-medium text-slate-500">
-                            {docSubTab === "kyc"
-                              ? "No KYC documents uploaded for this partner."
-                              : docSubTab === "exp"
-                                ? "No experience certificates or financial documents uploaded for this partner."
-                                : "No other documents uploaded for this partner."}
+                            {docSubTab === "all"
+                              ? "No documents uploaded for this partner."
+                              : docSubTab === "kyc"
+                                ? "No KYC documents uploaded for this partner."
+                                : docSubTab === "exp"
+                                  ? "No experience certificates or financial documents uploaded for this partner."
+                                  : "No other documents uploaded for this partner."}
                           </p>
                         </div>
                       ) : null}
                     </div>
 
-                    {/* Upload Additional Year-wise ITR (Maker only, Experience/Financials subtab) */}
-                    {docSubTab === "exp" && canMakerReuploadDocs && (
+                    {/* Upload Additional Year-wise ITR (Maker only, Experience/Financials or All subtab) */}
+                    {(docSubTab === "exp" || docSubTab === "all") && canMakerReuploadDocs && (
                       <div className="pt-2">
                         {!showAddItrSlot ? (
                           <div className="flex items-center justify-between p-3 rounded-lg border border-dashed border-blue-200 bg-blue-50/40">
@@ -11464,7 +11490,10 @@ export function DsaProfilePage({ id }: { id: string }) {
 
                 const isDigitalAccepted =
                   String(dsa?.digital_acceptance_status || "").toUpperCase() ===
-                  "ACCEPTED";
+                    "ACCEPTED" ||
+                  String(dsa?.submission_mode || "").toUpperCase() ===
+                    "BRANCH_USER" ||
+                  String(dsa?.submission_mode || "").toUpperCase() !== "SELF";
 
                 const signedAgreementDoc = (dsa?.documents || []).find(
                   (doc: any) => {
@@ -11585,12 +11614,15 @@ export function DsaProfilePage({ id }: { id: string }) {
                                     size="sm"
                                     type="button"
                                     variant="outline"
-                                    onClick={() =>
-                                      window.open(
-                                        signedAgreementDoc.file_url,
-                                        "_blank",
-                                      )
-                                    }
+                                    onClick={() => {
+                                      const viewUrl = getDocumentUrl(
+                                        signedAgreementDoc,
+                                        dsa?.id,
+                                      );
+                                      if (viewUrl) {
+                                        window.open(viewUrl, "_blank");
+                                      }
+                                    }}
                                     className="text-xs h-7 gap-1.5 text-blue-700 border-blue-200 hover:bg-blue-50"
                                   >
                                     <ExternalLink className="h-3 w-3" />
@@ -11652,15 +11684,13 @@ export function DsaProfilePage({ id }: { id: string }) {
                                 }
                                 try {
                                   setDownloadingAgreement(true);
-                                  if (generatedAgreementDoc?.file_url) {
-                                    window.open(
-                                      generatedAgreementDoc.file_url,
-                                      "_blank",
-                                    );
-                                    return;
+                                  let res: any = null;
+                                  try {
+                                    res = await downloadAgreement(dsa.id);
+                                  } catch {
+                                    // fallback to generation
                                   }
-                                  let res = await downloadAgreement(dsa.id);
-                                  if (!res?.file_url) {
+                                  if (!res?.file_url && !res?.document_id) {
                                     try {
                                       await generateAgreement(dsa.id);
                                       res = await downloadAgreement(dsa.id);
@@ -11668,16 +11698,36 @@ export function DsaProfilePage({ id }: { id: string }) {
                                       // fallback
                                     }
                                   }
-                                  if (res?.file_url) {
-                                    window.open(res.file_url, "_blank");
-                                  } else {
-                                    toast({
-                                      title: "Document not ready",
-                                      description:
-                                        "Official agreement has not been generated yet.",
-                                      variant: "warning",
-                                    });
-                                  }
+
+                                  const apiBase = (
+                                    process.env.NEXT_PUBLIC_API_URL ||
+                                    "http://localhost:8000/api"
+                                  ).replace(/\/api\/?$/, "");
+
+                                  const targetDoc =
+                                    generatedAgreementDoc ||
+                                    (res
+                                      ? {
+                                          id: res.document_id,
+                                          file_path: res.file_path,
+                                          file_url: res.file_url,
+                                        }
+                                      : null);
+                                  const targetUrl = targetDoc
+                                    ? getDocumentUrl(targetDoc, dsa.id)
+                                    : `${apiBase}/api/v1/dsa/${dsa.id}/agreements/download?download=1`;
+                                  const downloadUrl = `${targetUrl}${targetUrl.includes("?") ? "&" : "?"}download=1`;
+
+                                  const link = document.createElement("a");
+                                  link.href = downloadUrl;
+                                  link.setAttribute(
+                                    "download",
+                                    `agreement_${dsa.dsa_code || dsa.code || dsa.id}.pdf`,
+                                  );
+                                  link.target = "_blank";
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
                                 } catch (err: any) {
                                   toast({
                                     title: "Download failed",
@@ -12692,20 +12742,6 @@ export function DsaProfilePage({ id }: { id: string }) {
                           <Check className="h-4 w-4" />
                           Submit to Checker
                         </Button>
-                        <Button
-                          data-tour="workflow-query-back-btn"
-                          disabled={actionLoading}
-                          onClick={() => {
-                            setApprovingDsa(dsa);
-                          }}
-                          size="sm"
-                          variant="secondary"
-                          className="bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 font-bold text-xs py-2 px-4 h-auto flex items-center gap-1.5 cursor-pointer"
-                          title="Submit Query Response back to Checker"
-                        >
-                          <Send className="h-4 w-4 text-amber-600" />
-                          Query Back to Checker
-                        </Button>
                       </>
                     )}
 
@@ -13119,91 +13155,40 @@ export function DsaProfilePage({ id }: { id: string }) {
       </Modal>
 
       <Modal
-        description={
-          queryingDsa
-            ? `Specify clarifications or pending documents required from Level 1 Branch Maker for #${queryingDsa.code || queryingDsa.id}`
-            : ""
-        }
+        description=""
         onClose={closeDecisionModals}
         open={Boolean(queryingDsa)}
         title="Raise Query"
-        width="max-w-2xl"
+        width="max-w-lg"
       >
         <div className="space-y-4">
-          <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5 space-y-1.5">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
-              <span className="text-xs font-bold text-amber-900">
-                Application Reversion Notice
-              </span>
-            </div>
-            <p className="text-[11px] text-amber-800 leading-relaxed">
-              Submitting this query will immediately return the application to the <strong>Level 1 (Branch Maker)</strong> queue. The Maker will address discrepancies and re-verify before resubmitting.
-            </p>
-          </div>
-
           <Field>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="queryReason" className="text-xs font-bold text-slate-700">
-                Query Details <span className="text-rose-500">*</span>
-              </Label>
-              <span className="text-[10px] text-slate-400 font-mono">
-                {queryReason.length} characters
-              </span>
-            </div>
+            <Label htmlFor="queryReason">Query details *</Label>
             <textarea
               id="queryReason"
-              rows={4}
-              className="w-full rounded-lg border border-slate-200 p-3 text-xs text-slate-900 placeholder:text-slate-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 font-sans leading-relaxed transition shadow-2xs"
+              rows={3}
+              className="w-full rounded-md border border-slate-200 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               value={queryReason}
               onChange={(event) => {
                 setQueryReason(event.target.value);
                 setQueryError("");
               }}
-              placeholder="Enter detailed query reason (e.g. Bank statement signature missing, GST registration certificate unclear, branch visit report not signed)..."
+              placeholder="Enter query details (e.g. Bank statement signature missing, GST registration certificate unclear)"
             />
             {queryError ? (
-              <p className="text-xs font-medium text-rose-600 mt-1">{queryError}</p>
+              <p className="text-xs font-medium text-rose-600">{queryError}</p>
             ) : null}
-
-            <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
-              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mr-1">
-                Common Queries:
-              </span>
-              {[
-                "Bank statement signature / seal missing",
-                "GST certificate address does not match application",
-                "Physical branch visit report not signed by inspector",
-                "PAN card or incorporation proof copy unclear",
-              ].map((q) => (
-                <button
-                  key={q}
-                  type="button"
-                  onClick={() => {
-                    setQueryReason((prev) =>
-                      prev.trim() ? `${prev.trim()}\n• ${q}` : `• ${q}`
-                    );
-                    setQueryError("");
-                  }}
-                  className="text-[11px] px-2 py-0.5 rounded-md border border-slate-200 bg-slate-50 text-slate-600 hover:bg-amber-50 hover:border-amber-200 hover:text-amber-800 transition cursor-pointer"
-                >
-                  + {q}
-                </button>
-              ))}
-            </div>
           </Field>
-
-          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+          <div className="flex justify-end gap-2 pt-2">
             <Button
               variant="secondary"
               type="button"
               onClick={closeDecisionModals}
-              className="h-9 px-4 text-xs font-semibold cursor-pointer"
             >
               Cancel
             </Button>
             <Button
-              className="h-9 px-5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+              className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
               type="button"
               disabled={actionLoading}
               onClick={async () => {
@@ -13239,6 +13224,7 @@ export function DsaProfilePage({ id }: { id: string }) {
       </Modal>
 
       <Modal
+        description=""
         onClose={closeDecisionModals}
         open={Boolean(rejectingDsa)}
         title={
@@ -13246,69 +13232,27 @@ export function DsaProfilePage({ id }: { id: string }) {
             ? "Confirm Application Rejection (Double Validation)"
             : "Reject DSA Application"
         }
-        description={
-          rejectingDsa
-            ? `Adverse lifecycle action for #${rejectingDsa.code || rejectingDsa.id} - ${rejectingDsa.name}`
-            : ""
-        }
-        width="max-w-2xl"
+        width="max-w-lg"
       >
         {rejectionStep === "input" ? (
           <div className="space-y-4">
-            <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-3.5 space-y-1.5">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0" />
-                <span className="text-xs font-bold text-rose-900">
-                  Adverse Action Notice
-                </span>
-              </div>
-              <p className="text-[11px] text-rose-800 leading-relaxed">
-                Rejection will terminate progression and move the application directly into the Maker Rejected Bucket. Specific justification is required for regulatory audit trails.
-              </p>
-            </div>
-
             <Field>
-              <Label htmlFor="profileRejectionReason" className="text-xs font-bold text-slate-700">
-                Rejection Reason &amp; Grounds <span className="text-rose-600">*</span>
+              <Label htmlFor="profileRejectionReason">
+                Rejection reason <span className="text-rose-600">*</span>
               </Label>
               <textarea
                 id="profileRejectionReason"
-                rows={4}
-                className="w-full rounded-lg border border-slate-200 p-3 text-xs text-slate-900 focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-500/20 placeholder:text-slate-400 font-sans leading-relaxed transition shadow-2xs"
+                rows={3}
+                className="w-full rounded-md border border-slate-200 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 value={rejectionReason}
                 onChange={(event) => {
                   setRejectionReason(event.target.value);
                   setRejectionError("");
                 }}
-                placeholder="Enter specific mandatory justification (e.g. KYC document discrepancy, adverse track record, field verification failed)..."
+                placeholder="Enter rejection reason"
                 maxLength={2000}
               />
-              <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
-                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mr-1">
-                  Common Grounds:
-                </span>
-                {[
-                  "Adverse market background / negative track record",
-                  "Document authenticity discrepancy detected",
-                  "Physical premise inspection unsatisfactory",
-                  "Entity ineligible under statutory policy",
-                ].map((ground) => (
-                  <button
-                    key={ground}
-                    type="button"
-                    onClick={() => {
-                      setRejectionReason((prev) =>
-                        prev.trim() ? `${prev.trim()}\n• ${ground}` : `• ${ground}`
-                      );
-                      setRejectionError("");
-                    }}
-                    className="text-[11px] px-2 py-0.5 rounded-md border border-slate-200 bg-slate-50 text-slate-600 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-800 transition cursor-pointer"
-                  >
-                    + {ground}
-                  </button>
-                ))}
-              </div>
-              <div className="flex justify-between items-center mt-1">
+              <div className="flex justify-between items-center">
                 {rejectionError ? (
                   <p className="text-xs font-medium text-rose-600">
                     {rejectionError}
@@ -13316,13 +13260,13 @@ export function DsaProfilePage({ id }: { id: string }) {
                 ) : (
                   <span />
                 )}
-                <span className="text-[10px] text-slate-400 font-mono">
+                <span className="text-xs text-slate-400">
                   {rejectionReason.trim().length}/2000
                 </span>
               </div>
             </Field>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <div className="flex justify-end gap-2 pt-2">
               <Button
                 variant="secondary"
                 type="button"
@@ -14202,8 +14146,8 @@ export function DsaProfilePage({ id }: { id: string }) {
             ? `Revert Application to ${currentRevertTarget.targetRole}`
             : "Revert Application"
         }
-        description={currentRevertTarget ? `Send case back to ${currentRevertTarget.targetRole} for review adjustment` : ""}
-        width="max-w-2xl"
+        description=""
+        width="max-w-lg"
       >
         <div className="space-y-4">
           <Field>
@@ -14214,7 +14158,7 @@ export function DsaProfilePage({ id }: { id: string }) {
             <textarea
               id="revertRemarks"
               rows={3}
-              className="w-full rounded-md border border-slate-200 p-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+              className="w-full rounded-md border border-slate-200 p-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               value={revertReason}
               onChange={(e) => {
                 setRevertReason(e.target.value);
@@ -14229,7 +14173,7 @@ export function DsaProfilePage({ id }: { id: string }) {
             ) : null}
           </Field>
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+          <div className="flex justify-end gap-2 pt-2">
             <Button
               variant="secondary"
               type="button"

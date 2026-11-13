@@ -1120,7 +1120,7 @@ export const adminApi = {
 
   // ── DSA Documents ───────────────────────────────────────────────────────────
   getDsaDocuments: async (idOrCode: number | string): Promise<BackendResponse<DsaDocument[]>> => {
-    return request<BackendResponse<DsaDocument[]>>(`/v1/dsa/${idOrCode}/documents`, {
+    return request<BackendResponse<DsaDocument[]>>(`/v1/dsa/${idOrCode}/documents?per_page=100`, {
       method: "GET",
     });
   },

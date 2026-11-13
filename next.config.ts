@@ -24,6 +24,19 @@ const nextConfig: NextConfig = {
       "victory-vendor/d3-scale": "d3-scale",
     },
   },
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "Referrer-Policy",
+            value: "no-referrer",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;
