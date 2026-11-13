@@ -374,6 +374,86 @@ interface DsaBasicDetailsTabProps {
   isVisitReportUploaded?: boolean;
 }
 
+export function getSubRegionHeadName(dsa: any): string {
+  // 1. If l3Hist has name from review report
+  const l3HistName =
+    dsa?.recommendation_approval_history?.first_recommending_authority?.name ||
+    dsa?.recommendationApprovalHistory?.first_recommending_authority?.name;
+  if (l3HistName && typeof l3HistName === "string" && l3HistName.trim()) {
+    return l3HistName.trim();
+  }
+
+  // 2. If L3 approval has actioned_by / assigned_user / user object with name
+  const l3Approval = dsa?.approvals?.find(
+    (a: any) =>
+      Number(a.approval_level) === 3 ||
+      a.stage_code === "LEVEL_3_SUB_REGION_HEAD"
+  );
+  const l3ActionedByName =
+    typeof l3Approval?.actioned_by === "object"
+      ? l3Approval.actioned_by?.name
+      : typeof l3Approval?.assigned_user === "object"
+        ? l3Approval.assigned_user?.name
+        : typeof l3Approval?.user === "object"
+          ? l3Approval.user?.name
+          : null;
+  if (l3ActionedByName && typeof l3ActionedByName === "string" && l3ActionedByName.trim()) {
+    return l3ActionedByName.trim();
+  }
+
+  // 3. If visitConductedBy user object exists on DSA
+  const visitUser = dsa?.visit_conducted_by_user || dsa?.visitConductedBy;
+  if (visitUser?.name && typeof visitUser.name === "string" && visitUser.name.trim()) {
+    return visitUser.name.trim();
+  }
+
+  // 4. If visit_conducted_by is already a non-numeric string name (e.g. not a user id)
+  if (
+    dsa?.visit_conducted_by &&
+    typeof dsa.visit_conducted_by === "string" &&
+    isNaN(Number(dsa.visit_conducted_by.trim())) &&
+    dsa.visit_conducted_by.trim().length > 1
+  ) {
+    return dsa.visit_conducted_by.trim();
+  }
+
+  // 5. Derive from branch / sub-region of that particular branch
+  const branchName = String(dsa?.branch?.branch_name || dsa?.branch_name || "").toLowerCase();
+  const branchCode = String(dsa?.branch?.branch_code || dsa?.branch_code || "").toUpperCase();
+  const subRegionCode = String(dsa?.branch?.sub_region_code || dsa?.subregion_id || "").toUpperCase();
+
+  if (
+    branchCode === "BR002" ||
+    branchCode.includes("027") ||
+    subRegionCode === "SR002" ||
+    branchName.includes("pune") ||
+    branchName.includes("deccan")
+  ) {
+    return "Sub-Region Head (Pune Metro)";
+  }
+
+  if (
+    branchCode === "BR001" ||
+    subRegionCode === "SR001" ||
+    branchName.includes("mumbai") ||
+    branchName.includes("fort")
+  ) {
+    return "Sub-Region Head (Mumbai Metro)";
+  }
+
+  if (
+    branchCode === "BR003" ||
+    subRegionCode === "SR003" ||
+    branchName.includes("delhi") ||
+    branchName.includes("connaught")
+  ) {
+    return "Sub-Region Head (Delhi Metro)";
+  }
+
+  const cleanBranch = dsa?.branch?.branch_name || dsa?.branch_name;
+  return cleanBranch ? `Sub-Region Head (${cleanBranch})` : "Sub-Region Head";
+}
+
 export function DsaBasicDetailsTab({
   dsa,
   canEdit,
@@ -1245,7 +1325,7 @@ export function DsaBasicDetailsTab({
                 </div>
 
                 <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
-                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Legal Constitution</Label>
+                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Constitution</Label>
                   <Select
                     value={normalizeConstitution(formData.constitution || dsa?.constitution || dsa?.business_type || "")}
                     onChange={(e) => {
@@ -1336,19 +1416,11 @@ export function DsaBasicDetailsTab({
               }
             />
             <DetailItem
-              label="Legal Constitution"
+              label="Constitution"
               value={
                 isEntity
                   ? getConstitutionLabel(dsa.constitution || dsa.business_type)
                   : "Individual"
-              }
-            />
-            <DetailItem
-              label="Business Type / Category"
-              value={
-                isEntity
-                  ? (dsa.business_type || "—")
-                  : (dsa.constitution || "—")
               }
             />
             <DetailItem
@@ -1948,10 +2020,6 @@ export function DsaBasicDetailsTab({
                 dsa.subregion_id ||
                 "—"
               }
-            />
-            <DetailItem
-              label="Branch Sourcing Officer"
-              value={dsa.manager || "—"}
             />
           </DetailGrid>
         )}
@@ -3025,7 +3093,7 @@ export function DsaBasicDetailsTab({
           <DetailGrid>
             <DetailItem
               label="Inspecting Officer"
-              value={dsa.visit_conducted_by || "Branch Maker"}
+              value={getSubRegionHeadName(dsa)}
             />
             <DetailItem
               label="Visit Execution Date"

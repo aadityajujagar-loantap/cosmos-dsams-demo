@@ -647,7 +647,7 @@ export function DsaDetailEditModal({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="constitution">Legal Constitution</Label>
+                <Label htmlFor="constitution">Constitution</Label>
                 <Select
                   id="constitution"
                   value={normalizeConstitution(formData.constitution || dsa?.constitution || dsa?.business_type || "")}
@@ -672,14 +672,6 @@ export function DsaDetailEditModal({
                       <option value={formData.constitution}>{formData.constitution}</option>
                     )}
                 </Select>
-              </div>
-              <div>
-                <Label htmlFor="business_type">Business Type / Category</Label>
-                <Input
-                  id="business_type"
-                  value={formData.business_type || ""}
-                  onChange={(e) => handleChange("business_type", e.target.value)}
-                />
               </div>
             </div>
 
@@ -881,14 +873,6 @@ export function DsaDetailEditModal({
                   </option>
                 ))}
               </Select>
-            </div>
-            <div>
-              <Label htmlFor="manager">Branch Sourcing Officer / Manager</Label>
-              <Input
-                id="manager"
-                value={formData.manager || ""}
-                onChange={(e) => handleChange("manager", e.target.value)}
-              />
             </div>
           </div>
         )}
