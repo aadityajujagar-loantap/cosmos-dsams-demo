@@ -11490,7 +11490,10 @@ export function DsaProfilePage({ id }: { id: string }) {
 
                 const isDigitalAccepted =
                   String(dsa?.digital_acceptance_status || "").toUpperCase() ===
-                  "ACCEPTED";
+                    "ACCEPTED" ||
+                  String(dsa?.submission_mode || "").toUpperCase() ===
+                    "BRANCH_USER" ||
+                  String(dsa?.submission_mode || "").toUpperCase() !== "SELF";
 
                 const signedAgreementDoc = (dsa?.documents || []).find(
                   (doc: any) => {
@@ -11611,12 +11614,15 @@ export function DsaProfilePage({ id }: { id: string }) {
                                     size="sm"
                                     type="button"
                                     variant="outline"
-                                    onClick={() =>
-                                      window.open(
-                                        signedAgreementDoc.file_url,
-                                        "_blank",
-                                      )
-                                    }
+                                    onClick={() => {
+                                      const viewUrl = getDocumentUrl(
+                                        signedAgreementDoc,
+                                        dsa?.id,
+                                      );
+                                      if (viewUrl) {
+                                        window.open(viewUrl, "_blank");
+                                      }
+                                    }}
                                     className="text-xs h-7 gap-1.5 text-blue-700 border-blue-200 hover:bg-blue-50"
                                   >
                                     <ExternalLink className="h-3 w-3" />
@@ -11678,15 +11684,13 @@ export function DsaProfilePage({ id }: { id: string }) {
                                 }
                                 try {
                                   setDownloadingAgreement(true);
-                                  if (generatedAgreementDoc?.file_url) {
-                                    window.open(
-                                      generatedAgreementDoc.file_url,
-                                      "_blank",
-                                    );
-                                    return;
+                                  let res: any = null;
+                                  try {
+                                    res = await downloadAgreement(dsa.id);
+                                  } catch {
+                                    // fallback to generation
                                   }
-                                  let res = await downloadAgreement(dsa.id);
-                                  if (!res?.file_url) {
+                                  if (!res?.file_url && !res?.document_id) {
                                     try {
                                       await generateAgreement(dsa.id);
                                       res = await downloadAgreement(dsa.id);
@@ -11694,16 +11698,36 @@ export function DsaProfilePage({ id }: { id: string }) {
                                       // fallback
                                     }
                                   }
-                                  if (res?.file_url) {
-                                    window.open(res.file_url, "_blank");
-                                  } else {
-                                    toast({
-                                      title: "Document not ready",
-                                      description:
-                                        "Official agreement has not been generated yet.",
-                                      variant: "warning",
-                                    });
-                                  }
+
+                                  const apiBase = (
+                                    process.env.NEXT_PUBLIC_API_URL ||
+                                    "http://localhost:8000/api"
+                                  ).replace(/\/api\/?$/, "");
+
+                                  const targetDoc =
+                                    generatedAgreementDoc ||
+                                    (res
+                                      ? {
+                                          id: res.document_id,
+                                          file_path: res.file_path,
+                                          file_url: res.file_url,
+                                        }
+                                      : null);
+                                  const targetUrl = targetDoc
+                                    ? getDocumentUrl(targetDoc, dsa.id)
+                                    : `${apiBase}/api/v1/dsa/${dsa.id}/agreements/download?download=1`;
+                                  const downloadUrl = `${targetUrl}${targetUrl.includes("?") ? "&" : "?"}download=1`;
+
+                                  const link = document.createElement("a");
+                                  link.href = downloadUrl;
+                                  link.setAttribute(
+                                    "download",
+                                    `agreement_${dsa.dsa_code || dsa.code || dsa.id}.pdf`,
+                                  );
+                                  link.target = "_blank";
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
                                 } catch (err: any) {
                                   toast({
                                     title: "Download failed",
