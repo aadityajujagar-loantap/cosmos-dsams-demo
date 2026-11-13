@@ -123,11 +123,33 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
     }
   };
 
-  const getStorageUrl = (url: string | null | undefined) => {
-    if (!url) return "#";
-    if (url.startsWith("http://") || url.startsWith("https://")) return url;
-    const backendBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    return `${backendBase.replace(/\/api\/?$/, "")}${url.startsWith("/") ? "" : "/"}${url}`;
+  /**
+   * Route empanelment letter downloads through the backend streaming endpoint
+   * to avoid exposing the internal dsaapi-uat.cosmos.bank.in domain to browsers.
+   * When letter_document_id is available, use the authenticated streaming route.
+   * Falls back to proxying the storage path through the correct API host.
+   */
+  const getLetterUrl = (
+    fileUrl: string | null | undefined,
+    dsaId?: number | null,
+    documentId?: number | null
+  ) => {
+    if (!fileUrl) return "#";
+    const apiBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").replace(/\/api\/?$/, "");
+    // Prefer streaming endpoint when document ID is known
+    if (dsaId && documentId) {
+      return `${apiBase}/api/v1/dsa/${dsaId}/documents/${documentId}/file`;
+    }
+    // For full URLs from storage accessor, extract path and reroute through correct API host
+    if (fileUrl.startsWith("http://") || fileUrl.startsWith("https://")) {
+      try {
+        const parsed = new URL(fileUrl);
+        return `${apiBase}${parsed.pathname}`;
+      } catch {
+        return fileUrl;
+      }
+    }
+    return `${apiBase}/storage/${fileUrl.replace(/^\/+/, "")}`;
   };
 
   return (
@@ -198,7 +220,7 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
                   This link may have expired (72h validity) or has already been used. Please contact your Cosmos Bank branch officer for a fresh link.
                 </p>
                 <div className="pt-2">
-                  <Link href="/auth/login">
+                  <Link href="/">
                     <Button variant="outline" className="text-xs border-slate-700 hover:bg-slate-800 text-slate-200">
                       Go to Cosmos DSAMS Login
                     </Button>
@@ -249,7 +271,7 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
                 {preview?.letter_file_url && (
                   <div className="pt-1">
                     <a
-                      href={getStorageUrl(preview.letter_file_url)}
+                      href={getLetterUrl(preview.letter_file_url, preview.dsa_id, preview.letter_document_id)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-2 text-xs font-medium text-indigo-400 hover:text-indigo-300 underline underline-offset-4"
@@ -260,7 +282,7 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
                 )}
 
                 <div className="pt-2">
-                  <Link href="/auth/login">
+                  <Link href="/">
                     <Button className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-6 py-2.5 font-medium shadow-lg shadow-emerald-900/40">
                       Proceed to Partner Login <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
                     </Button>
@@ -337,7 +359,7 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
                   </div>
                   {preview.letter_file_url && (
                     <a
-                      href={getStorageUrl(preview.letter_file_url)}
+                      href={getLetterUrl(preview.letter_file_url, preview.dsa_id, preview.letter_document_id)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/30 text-xs font-medium transition-colors"
