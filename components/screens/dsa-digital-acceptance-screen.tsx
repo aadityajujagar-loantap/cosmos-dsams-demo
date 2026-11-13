@@ -155,48 +155,50 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 flex flex-col justify-between text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
       {/* Top Header */}
-      <header className="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <div className="relative shrink-0 rounded-lg overflow-hidden bg-white/95 px-2.5 py-1.5 border border-white/10 shadow-inner">
+      <header className="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md px-3.5 py-3 sm:px-6 sm:py-3.5 flex items-center justify-between sticky top-0 z-50 gap-2">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="relative shrink-0 rounded-lg overflow-hidden bg-white/95 px-2 py-1 sm:px-2.5 sm:py-1.5 border border-white/10 shadow-inner">
             <Image
               src={withBasePath("/logo-dsasm-cosmos.png")}
               alt="Cosmos Bank Logo"
               width={708}
               height={118}
-              className="h-6 w-auto"
+              className="h-5 sm:h-6 w-auto object-contain"
               priority
               unoptimized
             />
           </div>
-          <div>
-            <h1 className="text-sm font-semibold tracking-tight text-white flex items-center gap-1.5">
-              COSMOS CO-OP. BANK LTD.
-              <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+          <div className="min-w-0">
+            <h1 className="text-xs sm:text-sm font-semibold tracking-tight text-white flex items-center gap-1 sm:gap-1.5 truncate">
+              <span className="text-[9px] sm:text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
                 DSA Portal
               </span>
             </h1>
-            <p className="text-[11px] text-slate-400">Direct Selling Agent Empanelment & Activation</p>
+            <p className="text-[10px] sm:text-[11px] text-slate-400 hidden xs:block truncate">Direct Selling Agent Empanelment & Activation</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-800/60 px-3 py-1.5 rounded-full border border-slate-700/50">
+        <div className="hidden md:flex items-center gap-2 text-xs text-slate-400 bg-slate-800/60 px-3 py-1.5 rounded-full border border-slate-700/50 shrink-0">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
           <span>256-Bit Encrypted Digital Verification</span>
+        </div>
+        <div className="flex md:hidden items-center text-emerald-400 p-1.5 rounded-full bg-slate-800/60 border border-slate-700/50 shrink-0" title="256-Bit Encrypted Digital Verification">
+          <ShieldCheck className="w-4 h-4" />
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex items-center justify-center p-4 md:p-8">
+      <main className="flex-1 flex items-center justify-center p-3.5 sm:p-6 md:p-8">
         <div className="w-full max-w-2xl">
           {/* State: Loading */}
           {state === "loading" && (
             <Card className="bg-slate-900/80 border-slate-800 shadow-2xl backdrop-blur-xl">
-              <CardContent className="p-12 text-center space-y-4">
+              <CardContent className="p-8 sm:p-12 text-center space-y-4">
                 <div className="relative inline-flex items-center justify-center">
-                  <div className="w-16 h-16 rounded-full border-4 border-indigo-500/20 border-t-indigo-500 animate-spin" />
-                  <Loader2 className="w-6 h-6 text-indigo-400 absolute animate-pulse" />
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full border-4 border-indigo-500/20 border-t-indigo-500 animate-spin" />
+                  <Loader2 className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-400 absolute animate-pulse" />
                 </div>
-                <h2 className="text-base font-medium text-white">Validating Empanelment Acceptance Link...</h2>
-                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                <h2 className="text-sm sm:text-base font-medium text-white">Validating Empanelment Acceptance Link...</h2>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
                   Retrieving your approved empanelment letter and authorization records from Cosmos Bank secure servers.
                 </p>
               </CardContent>
@@ -206,22 +208,22 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
           {/* State: Error */}
           {state === "error" && (
             <Card className="bg-slate-900/80 border-red-900/40 shadow-2xl backdrop-blur-xl">
-              <CardContent className="p-8 md:p-10 text-center space-y-5">
-                <div className="w-14 h-14 mx-auto rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
-                  <AlertCircle className="w-7 h-7 text-red-400" />
+              <CardContent className="p-5 sm:p-8 md:p-10 text-center space-y-4 sm:space-y-5">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                  <AlertCircle className="w-6 h-6 sm:w-7 sm:h-7 text-red-400" />
                 </div>
                 <div className="space-y-2">
-                  <h2 className="text-lg font-semibold text-white">Unable to Process Acceptance</h2>
-                  <p className="text-xs text-red-300/90 max-w-md mx-auto leading-relaxed bg-red-950/40 p-3 rounded-lg border border-red-900/30">
+                  <h2 className="text-base sm:text-lg font-semibold text-white">Unable to Process Acceptance</h2>
+                  <p className="text-xs text-red-300/90 max-w-md mx-auto leading-relaxed bg-red-950/40 p-3 rounded-lg border border-red-900/30 break-words">
                     {errorMessage}
                   </p>
                 </div>
-                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
                   This link may have expired (72h validity) or has already been used. Please contact your Cosmos Bank branch officer for a fresh link.
                 </p>
                 <div className="pt-2">
                   <Link href="/">
-                    <Button variant="outline" className="text-xs border-slate-700 hover:bg-slate-800 text-slate-200">
+                    <Button variant="outline" className="w-full sm:w-auto text-xs border-slate-700 hover:bg-slate-800 text-slate-200">
                       Go to Cosmos DSAMS Login
                     </Button>
                   </Link>
@@ -233,15 +235,15 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
           {/* State: Success */}
           {state === "success" && (
             <Card className="bg-slate-900/80 border-emerald-800/40 shadow-2xl backdrop-blur-xl">
-              <CardContent className="p-8 md:p-10 text-center space-y-6">
-                <div className="w-16 h-16 mx-auto rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center animate-bounce">
-                  <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+              <CardContent className="p-5 sm:p-8 md:p-10 text-center space-y-5 sm:space-y-6">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 mx-auto rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center animate-bounce">
+                  <CheckCircle2 className="w-7 h-7 sm:w-8 sm:h-8 text-emerald-400" />
                 </div>
                 <div className="space-y-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-950/60 px-2.5 py-1 rounded-full border border-emerald-800/50 inline-block">
+                  <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-950/60 px-2.5 py-1 rounded-full border border-emerald-800/50 inline-block">
                     Empanelment Confirmed
                   </span>
-                  <h2 className="text-xl font-bold text-white tracking-tight">
+                  <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
                     Digital Acceptance Recorded Successfully!
                   </h2>
                   <p className="text-xs text-slate-300 max-w-md mx-auto leading-relaxed">
@@ -249,10 +251,10 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
                   </p>
                 </div>
 
-                <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4 max-w-md mx-auto text-left space-y-2.5">
-                  <div className="flex items-center justify-between text-xs pb-2 border-b border-slate-700/40">
-                    <span className="text-slate-400">Allotted DSA Code:</span>
-                    <span className="font-mono font-bold text-amber-300 bg-amber-950/40 px-2 py-0.5 rounded border border-amber-800/40">
+                <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3.5 sm:p-4 max-w-md mx-auto text-left space-y-2.5">
+                  <div className="flex items-center justify-between text-xs pb-2 border-b border-slate-700/40 gap-2">
+                    <span className="text-slate-400 shrink-0">Allotted DSA Code:</span>
+                    <span className="font-mono font-bold text-amber-300 bg-amber-950/40 px-2 py-0.5 rounded border border-amber-800/40 break-all text-right">
                       {successData?.dsa_code || preview?.dsa_code || "Generated"}
                     </span>
                   </div>
@@ -266,6 +268,12 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
                     <span className="text-slate-400">Next Step:</span>
                     <span className="text-slate-300">Agreement Execution & Portal Login</span>
                   </div>
+                  {(successData?.agreement_generated || successData?.agreement_email_sent) && (
+                    <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-700/40">
+                      <span className="text-slate-400">DSA Agreement:</span>
+                      <span className="text-emerald-400 font-medium">Generated &amp; Dispatched via Email</span>
+                    </div>
+                  )}
                 </div>
 
                 {preview?.letter_file_url && (
@@ -283,7 +291,7 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
 
                 <div className="pt-2">
                   <Link href="/">
-                    <Button className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-6 py-2.5 font-medium shadow-lg shadow-emerald-900/40">
+                    <Button className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-6 py-2.5 font-medium shadow-lg shadow-emerald-900/40">
                       Proceed to Partner Login <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
                     </Button>
                   </Link>
@@ -295,66 +303,66 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
           {/* State: Ready or Submitting */}
           {(state === "ready" || state === "submitting") && preview && (
             <Card className="bg-slate-900/85 border-slate-800 shadow-2xl backdrop-blur-xl">
-              <CardContent className="p-6 md:p-8 space-y-6">
+              <CardContent className="p-4 sm:p-6 md:p-8 space-y-5 sm:space-y-6">
                 {/* Header Badge & Title */}
-                <div className="space-y-2 border-b border-slate-800 pb-5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300 bg-indigo-950/60 px-2.5 py-0.5 rounded-full border border-indigo-800/40 flex items-center gap-1.5">
+                <div className="space-y-2 border-b border-slate-800 pb-4 sm:pb-5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300 bg-indigo-950/60 px-2.5 py-0.5 rounded-full border border-indigo-800/40 inline-flex items-center gap-1.5 shrink-0">
                       <Award className="w-3 h-3 text-amber-400" /> Formal Empanelment Acceptance
                     </span>
                     {preview.expires_at && (
-                      <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                      <span className="text-[11px] text-slate-400 inline-flex items-center gap-1 shrink-0">
                         <Clock className="w-3 h-3 text-amber-400" />
                         Expires: {formatDate(preview.expires_at)}
                       </span>
                     )}
                   </div>
-                  <h2 className="text-xl font-bold text-white tracking-tight">
+                  <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
                     DSA Empanelment Letter Acceptance
                   </h2>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-400 leading-relaxed">
                     Please review the empanelment details and your formal empanelment letter below to record your digital acceptance.
                   </p>
                 </div>
 
                 {/* Details Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-800/40 p-4 rounded-xl border border-slate-800/80 text-xs">
-                  <div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-800/40 p-3.5 sm:p-4 rounded-xl border border-slate-800/80 text-xs">
+                  <div className="min-w-0">
                     <span className="text-[10px] text-slate-400 uppercase tracking-wider block">DSA Applicant / Entity</span>
-                    <span className="font-semibold text-white mt-0.5 block">{preview.applicant_name}</span>
+                    <span className="font-semibold text-white mt-0.5 block break-words">{preview.applicant_name}</span>
                     {preview.company_name && preview.company_name !== preview.applicant_name && (
-                      <span className="text-[11px] text-slate-400">{preview.company_name}</span>
+                      <span className="text-[11px] text-slate-400 block break-words">{preview.company_name}</span>
                     )}
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Allotted DSA Code</span>
-                    <span className="font-mono font-bold text-amber-300 mt-0.5 block">{preview.dsa_code}</span>
+                    <span className="font-mono font-bold text-amber-300 mt-0.5 block break-all">{preview.dsa_code}</span>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Assigned Branch</span>
-                    <span className="text-slate-200 mt-0.5 flex items-center gap-1">
-                      <Building2 className="w-3 h-3 text-slate-400" />
-                      {preview.branch_name || preview.branch_code} ({preview.branch_code})
+                    <span className="text-slate-200 mt-0.5 flex items-center gap-1 min-w-0">
+                      <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span className="truncate">{preview.branch_name || preview.branch_code} ({preview.branch_code})</span>
                     </span>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Contact Details</span>
-                    <span className="text-slate-300 mt-0.5 block truncate">{preview.email}</span>
-                    <span className="text-slate-400 text-[11px]">{preview.mobile_no}</span>
+                    <span className="text-slate-300 mt-0.5 block break-all">{preview.email}</span>
+                    <span className="text-slate-400 text-[11px] block">{preview.mobile_no}</span>
                   </div>
                 </div>
 
                 {/* Empanelment Letter Card */}
-                <div className="bg-indigo-950/30 border border-indigo-800/40 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
+                <div className="bg-indigo-950/30 border border-indigo-800/40 rounded-xl p-3.5 sm:p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-10 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center shrink-0">
                       <FileCheck className="w-5 h-5 text-indigo-400" />
                     </div>
-                    <div>
-                      <h4 className="text-xs font-semibold text-white">
+                    <div className="min-w-0 flex-1">
+                      <h4 className="text-xs font-semibold text-white truncate" title={preview.letter_file_name || "DSA_Empanelment_Letter.pdf"}>
                         {preview.letter_file_name || "DSA_Empanelment_Letter.pdf"}
                       </h4>
-                      <p className="text-[11px] text-slate-400">Formal Sanction & Empanelment Terms Letter</p>
+                      <p className="text-[11px] text-slate-400 truncate">Formal Sanction & Empanelment Terms Letter</p>
                     </div>
                   </div>
                   {preview.letter_file_url && (
@@ -362,7 +370,7 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
                       href={getLetterUrl(preview.letter_file_url, preview.dsa_id, preview.letter_document_id)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/30 text-xs font-medium transition-colors"
+                      className="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/30 text-xs font-medium transition-colors shrink-0 w-full sm:w-auto"
                     >
                       <Download className="w-3.5 h-3.5" /> View / Download <ExternalLink className="w-3 h-3 ml-0.5 opacity-60" />
                     </a>
@@ -371,7 +379,7 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
 
                 {/* Error Banner if any */}
                 {errorMessage && (
-                  <div className="bg-red-950/40 border border-red-900/50 p-3 rounded-lg flex items-start gap-2.5 text-xs text-red-300">
+                  <div className="bg-red-950/40 border border-red-900/50 p-3 rounded-lg flex items-start gap-2.5 text-xs text-red-300 break-words">
                     <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
                     <span>{errorMessage}</span>
                   </div>
@@ -379,7 +387,7 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
 
                 {/* Declaration & Acceptance Checkbox */}
                 <div className="space-y-4 pt-1">
-                  <label className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-800/50 border border-slate-700/60 cursor-pointer hover:bg-slate-800/80 transition-colors select-none">
+                  <label className="flex items-start gap-3 p-3 sm:p-3.5 rounded-xl bg-slate-800/50 border border-slate-700/60 cursor-pointer hover:bg-slate-800/80 transition-colors select-none">
                     <input
                       type="checkbox"
                       checked={acknowledged}
@@ -387,8 +395,8 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
                       disabled={state === "submitting"}
                       className="mt-0.5 rounded border-slate-600 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-slate-900 h-4 w-4 shrink-0"
                     />
-                    <div className="text-xs text-slate-300 space-y-1">
-                      <span className="font-semibold text-white block">Declaration & Acceptance of Terms</span>
+                    <div className="text-xs text-slate-300 space-y-1 min-w-0">
+                      <span className="font-semibold text-white block text-xs sm:text-sm">Declaration & Acceptance of Terms</span>
                       <p className="text-[11px] text-slate-400 leading-relaxed">
                         I hereby acknowledge and agree to the terms and conditions set forth in the DSA Empanelment Letter issued by Cosmos Co-Operative Bank Ltd. I confirm adherence to the code of conduct, compliance policies, and regulatory obligations applicable to Direct Selling Agents.
                       </p>
@@ -399,7 +407,7 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
                   <Button
                     onClick={handleAccept}
                     disabled={!acknowledged || state === "submitting"}
-                    className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-medium py-3 rounded-xl shadow-lg shadow-emerald-950/50 transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-medium py-3 rounded-xl shadow-lg shadow-emerald-950/50 transition-all flex items-center justify-center gap-2 text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {state === "submitting" ? (
                       <>
@@ -419,7 +427,7 @@ export function DsaDigitalAcceptanceScreen({ token }: DsaDigitalAcceptanceScreen
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-800/80 bg-slate-950/60 px-6 py-4 text-center text-[11px] text-slate-500">
+      <footer className="border-t border-slate-800/80 bg-slate-950/60 px-4 sm:px-6 py-3.5 sm:py-4 text-center text-[10px] sm:text-[11px] text-slate-500 leading-relaxed">
         &copy; {new Date().getFullYear()} Cosmos Co-operative Bank Ltd. All rights reserved. | DSAMS Digital Onboarding
       </footer>
     </div>
