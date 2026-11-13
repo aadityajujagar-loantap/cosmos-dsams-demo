@@ -1245,7 +1245,7 @@ export function DsaBasicDetailsTab({
                 </div>
 
                 <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
-                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Legal Constitution</Label>
+                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Constitution</Label>
                   <Select
                     value={normalizeConstitution(formData.constitution || dsa?.constitution || dsa?.business_type || "")}
                     onChange={(e) => {
@@ -1336,7 +1336,7 @@ export function DsaBasicDetailsTab({
               }
             />
             <DetailItem
-              label="Legal Constitution"
+              label="Constitution"
               value={
                 isEntity
                   ? getConstitutionLabel(dsa.constitution || dsa.business_type)

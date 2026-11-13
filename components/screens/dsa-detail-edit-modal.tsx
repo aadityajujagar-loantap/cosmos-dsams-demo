@@ -647,7 +647,7 @@ export function DsaDetailEditModal({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="constitution">Legal Constitution</Label>
+                <Label htmlFor="constitution">Constitution</Label>
                 <Select
                   id="constitution"
                   value={normalizeConstitution(formData.constitution || dsa?.constitution || dsa?.business_type || "")}
