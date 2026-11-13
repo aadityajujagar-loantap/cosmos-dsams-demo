@@ -136,15 +136,15 @@ function rowToForm(row: AdminUserRow, branches: BranchOption[], subRegions: SubR
   };
 }
 
-function compactUserPayload(form: UserFormState, includePassword: boolean, isChecker: boolean): UserPayload {
-  const branchCodes = isChecker ? form.branch_codes : (form.branch_code ? [form.branch_code] : []);
-  const primaryBranch = isChecker
+function compactUserPayload(form: UserFormState, includePassword: boolean, isMultiBranchRole: boolean): UserPayload {
+  const branchCodes = isMultiBranchRole ? form.branch_codes : (form.branch_code ? [form.branch_code] : []);
+  const primaryBranch = isMultiBranchRole
     ? (form.branch_codes[0] || form.branch_code || undefined)
     : (form.branch_code.trim() || undefined);
 
   return {
     branch_code: primaryBranch,
-    branch_codes: isChecker ? branchCodes : undefined,
+    branch_codes: isMultiBranchRole ? branchCodes : undefined,
     subregion_id: form.sub_region_code.trim() || undefined,
     email: form.email.trim(),
     name: form.name.trim(),
@@ -293,7 +293,7 @@ export function UsersPage() {
 
   async function handleSubRegionChange(newSubRegionCode: string) {
     let subRegionBranches: BranchOption[] = [];
-    const isChecker = /checker/i.test(selectedRole);
+    const isMultiBranchRole = /checker|maker/i.test(selectedRole);
 
     if (newSubRegionCode) {
       const srCode = newSubRegionCode.trim().toUpperCase();
@@ -315,7 +315,7 @@ export function UsersPage() {
       } catch {}
     }
 
-    const defaultBranchCodes = isChecker && newSubRegionCode
+    const defaultBranchCodes = isMultiBranchRole && newSubRegionCode
       ? subRegionBranches.map((b) => b.branch_code).filter(Boolean)
       : [];
 
@@ -370,13 +370,13 @@ export function UsersPage() {
   async function saveUser() {
     setSaving(true);
     try {
-      const isChecker = /checker/i.test(selectedRole);
+      const isMultiBranchRole = /checker|maker/i.test(selectedRole);
       const targetRoles = selectedRole ? [selectedRole] : [];
 
       if (editing) {
         const response = await adminApi.updateUser(
           editing.userId,
-          compactUserPayload(form, Boolean(form.password), isChecker),
+          compactUserPayload(form, Boolean(form.password), isMultiBranchRole),
         );
 
         if (isMakerResponse(response)) {
@@ -400,7 +400,7 @@ export function UsersPage() {
 
         toast({ title: "User saved", description: `${form.name} was updated.`, variant: "success" });
       } else {
-        const response = await adminApi.createUser(compactUserPayload(form, Boolean(form.password), isChecker));
+        const response = await adminApi.createUser(compactUserPayload(form, Boolean(form.password), isMultiBranchRole));
 
         if (isMakerResponse(response)) {
           toast({
@@ -712,11 +712,11 @@ export function UsersPage() {
               </Select>
             </Field>
 
-            {/* Branch Selection: Multi-select for Checker, Single select otherwise */}
-            {/checker/i.test(selectedRole) ? (
+            {/* Branch Selection: Multi-select for Checker & Maker, Single select otherwise */}
+            {/checker|maker/i.test(selectedRole) ? (
               <Field className="sm:col-span-2">
                 <div className="flex items-center justify-between mb-1">
-                  <Label>Assigned Branches (Multiple selection for Checker)</Label>
+                  <Label>Assigned Branches (Multiple selection for {/checker/i.test(selectedRole) ? "Checker" : "Maker"})</Label>
                   {form.sub_region_code && (
                     <div className="flex items-center gap-2">
                       <button
