@@ -106,6 +106,7 @@ export interface UserPayload {
   password?: string;
   branch_role_id?: string;
   branch_code?: string;
+  branch_codes?: string[];
   subregion_id?: string;
   zone_code?: string;
 }

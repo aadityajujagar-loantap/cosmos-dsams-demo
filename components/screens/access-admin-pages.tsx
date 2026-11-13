@@ -35,6 +35,7 @@ import type { BranchOption, RegionOption, SubRegionOption } from "@/types/dsa";
 
 interface AdminUserRow {
   branchCode: string;
+  branchCodes: string[];
   subregionId: string;
   email: string;
   id: string;
@@ -49,6 +50,7 @@ interface AdminUserRow {
 
 interface UserFormState {
   branch_code: string;
+  branch_codes: string[];
   sub_region_code: string;
   region_code: string;
   email: string;
@@ -62,6 +64,7 @@ interface UserFormState {
 function emptyUserForm(): UserFormState {
   return {
     branch_code: "",
+    branch_codes: [],
     sub_region_code: "",
     region_code: "",
     email: "",
@@ -74,8 +77,14 @@ function emptyUserForm(): UserFormState {
 }
 
 function userToRow(user: User): AdminUserRow {
+  const mappedCodes = Array.isArray(user.branch_mappings)
+    ? user.branch_mappings.map((m) => m.branch_code).filter(Boolean)
+    : (user.branch_codes ?? []);
+  const allCodes = Array.from(new Set([user.branch_code, ...mappedCodes].filter(Boolean))) as string[];
+
   return {
     branchCode: user.branch_code ?? "",
+    branchCodes: allCodes,
     subregionId: user.subregion_id ?? "",
     email: user.email,
     id: String(user.id),
@@ -115,6 +124,7 @@ function rowToForm(row: AdminUserRow, branches: BranchOption[], subRegions: SubR
 
   return {
     branch_code,
+    branch_codes: row.branchCodes?.length ? row.branchCodes : (branch_code ? [branch_code] : []),
     sub_region_code,
     region_code,
     email: row.email,
@@ -126,9 +136,15 @@ function rowToForm(row: AdminUserRow, branches: BranchOption[], subRegions: SubR
   };
 }
 
-function compactUserPayload(form: UserFormState, includePassword: boolean): UserPayload {
+function compactUserPayload(form: UserFormState, includePassword: boolean, isChecker: boolean): UserPayload {
+  const branchCodes = isChecker ? form.branch_codes : (form.branch_code ? [form.branch_code] : []);
+  const primaryBranch = isChecker
+    ? (form.branch_codes[0] || form.branch_code || undefined)
+    : (form.branch_code.trim() || undefined);
+
   return {
-    branch_code: form.branch_code.trim() || undefined,
+    branch_code: primaryBranch,
+    branch_codes: isChecker ? branchCodes : undefined,
     subregion_id: form.sub_region_code.trim() || undefined,
     email: form.email.trim(),
     name: form.name.trim(),
@@ -255,6 +271,7 @@ export function UsersPage() {
       region_code: newRegionCode,
       sub_region_code: "",
       branch_code: "",
+      branch_codes: [],
     }));
 
     if (newRegionCode) {
@@ -275,18 +292,21 @@ export function UsersPage() {
   }
 
   async function handleSubRegionChange(newSubRegionCode: string) {
-    setForm((current) => ({
-      ...current,
-      sub_region_code: newSubRegionCode,
-      branch_code: "",
-    }));
+    let subRegionBranches: BranchOption[] = [];
+    const isChecker = /checker/i.test(selectedRole);
 
     if (newSubRegionCode) {
+      const srCode = newSubRegionCode.trim().toUpperCase();
+      subRegionBranches = branches.filter(
+        (b) => (b.sub_region_code || "").trim().toUpperCase() === srCode
+      );
+
       try {
         const res = await adminApi.getBranchesDropdown({ sub_region_code: newSubRegionCode });
         if (res && Array.isArray((res as any).data) && (res as any).data.length > 0) {
+          const fresh = (res as any).data as BranchOption[];
+          subRegionBranches = fresh;
           setBranches((prev) => {
-            const fresh = (res as any).data as BranchOption[];
             const map = new Map(prev.map((b) => [b.branch_code, b]));
             fresh.forEach((b) => map.set(b.branch_code, b));
             return Array.from(map.values());
@@ -294,6 +314,17 @@ export function UsersPage() {
         }
       } catch {}
     }
+
+    const defaultBranchCodes = isChecker && newSubRegionCode
+      ? subRegionBranches.map((b) => b.branch_code).filter(Boolean)
+      : [];
+
+    setForm((current) => ({
+      ...current,
+      sub_region_code: newSubRegionCode,
+      branch_code: defaultBranchCodes[0] || "",
+      branch_codes: defaultBranchCodes,
+    }));
   }
 
   function handleBranchChange(newBranchCode: string) {
@@ -339,12 +370,13 @@ export function UsersPage() {
   async function saveUser() {
     setSaving(true);
     try {
+      const isChecker = /checker/i.test(selectedRole);
       const targetRoles = selectedRole ? [selectedRole] : [];
 
       if (editing) {
         const response = await adminApi.updateUser(
           editing.userId,
-          compactUserPayload(form, Boolean(form.password)),
+          compactUserPayload(form, Boolean(form.password), isChecker),
         );
 
         if (isMakerResponse(response)) {
@@ -368,7 +400,7 @@ export function UsersPage() {
 
         toast({ title: "User saved", description: `${form.name} was updated.`, variant: "success" });
       } else {
-        const response = await adminApi.createUser(compactUserPayload(form, Boolean(form.password)));
+        const response = await adminApi.createUser(compactUserPayload(form, Boolean(form.password), isChecker));
 
         if (isMakerResponse(response)) {
           toast({
@@ -477,7 +509,23 @@ export function UsersPage() {
       header: "Roles",
       key: "roles",
     },
-    { cell: (item) => item.branchCode || "-", header: "Branch", key: "branchCode" },
+    {
+      cell: (item) => {
+        if (item.branchCodes && item.branchCodes.length > 1) {
+          return (
+            <div className="flex flex-wrap items-center gap-1">
+              <Badge tone="slate">{item.branchCodes[0]}</Badge>
+              <span className="text-xs font-semibold text-sky-600 bg-sky-50 px-1.5 py-0.5 rounded">
+                +{item.branchCodes.length - 1} more
+              </span>
+            </div>
+          );
+        }
+        return item.branchCode || "-";
+      },
+      header: "Branch",
+      key: "branchCode",
+    },
     { cell: (item) => <StatusBadge status={item.status} />, header: "Status", key: "status" },
   ];
 
@@ -591,6 +639,40 @@ export function UsersPage() {
               <Label>Ticket number</Label>
               <Input onChange={(event) => updateForm("ticket_no", event.target.value)} value={form.ticket_no} />
             </Field>
+
+            <Field className="sm:col-span-2">
+              <Label>Role</Label>
+              <Select
+                onChange={(event) => setSelectedRole(event.target.value)}
+                value={selectedRole}
+              >
+                <option value="">Select Role (Single selection)</option>
+                {roleOptions.map((role) => (
+                  <option key={role.id} value={role.name}>
+                    {formatRoleDisplay(role)}
+                  </option>
+                ))}
+                {selectedRole && !roleOptions.some((r) => r.name === selectedRole) && (
+                  <option value={selectedRole}>{selectedRole} (Current)</option>
+                )}
+              </Select>
+            </Field>
+
+            {selectedRole && (
+              <div className="sm:col-span-2 rounded-lg border border-slate-200/80 bg-slate-50/70 p-3 text-xs text-slate-600">
+                <span className="font-semibold text-slate-900">Role Scope: </span>
+                {/maker|checker|branch/i.test(selectedRole) ? (
+                  <span>Branch User — Please ensure an assigned Branch is selected.</span>
+                ) : /sub_region|sub-region/i.test(selectedRole) ? (
+                  <span>Sub-Region Authority — Scope covers all branches in selected Sub-Region.</span>
+                ) : /region|dgm/i.test(selectedRole) ? (
+                  <span>Regional Authority — Scope covers all sub-regions and branches in selected Region.</span>
+                ) : (
+                  <span>Head Office / Administrative — Global scope across all regions and branches.</span>
+                )}
+              </div>
+            )}
+
             <Field className="sm:col-span-1">
               <Label>Region</Label>
               <Select
@@ -630,26 +712,144 @@ export function UsersPage() {
               </Select>
             </Field>
 
-            <Field className="sm:col-span-1">
-              <Label>Branch</Label>
-              <Select
-                disabled={!form.sub_region_code}
-                onChange={(event) => handleBranchChange(event.target.value)}
-                value={form.branch_code}
-              >
-                <option value="">
-                  {form.sub_region_code ? "Select Branch (or None)" : "Select Sub-Region first"}
-                </option>
-                {availableBranches.map((b) => (
-                  <option key={b.branch_code} value={b.branch_code}>
-                    {b.branch_name ? `${b.branch_name} (${b.branch_code})` : b.branch_code}
-                  </option>
-                ))}
-                {form.branch_code && !availableBranches.some((b) => b.branch_code === form.branch_code) && (
-                  <option value={form.branch_code}>{form.branch_code} (Current)</option>
+            {/* Branch Selection: Multi-select for Checker, Single select otherwise */}
+            {/checker/i.test(selectedRole) ? (
+              <Field className="sm:col-span-2">
+                <div className="flex items-center justify-between mb-1">
+                  <Label>Assigned Branches (Multiple selection for Checker)</Label>
+                  {form.sub_region_code && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="text-xs text-sky-600 hover:text-sky-700 underline font-medium"
+                        onClick={() => {
+                          const allCodes = availableBranches.map((b) => b.branch_code).filter(Boolean);
+                          setForm((prev) => ({
+                            ...prev,
+                            branch_codes: allCodes,
+                            branch_code: allCodes[0] || "",
+                          }));
+                        }}
+                      >
+                        Select all
+                      </button>
+                      <span className="text-slate-300">|</span>
+                      <button
+                        type="button"
+                        className="text-xs text-slate-500 hover:text-slate-700 underline"
+                        onClick={() => {
+                          setForm((prev) => ({
+                            ...prev,
+                            branch_codes: [],
+                            branch_code: "",
+                          }));
+                        }}
+                      >
+                        Clear
+                      </button>
+                      <span className="text-xs text-slate-500 font-medium ml-1">
+                        ({form.branch_codes.length} selected)
+                      </span>
+                    </div>
+                  )}
+                </div>
+                {!form.region_code ? (
+                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-4 text-center">
+                    <p className="text-xs text-slate-500">Please select a Region and Sub-Region first to view and assign branches.</p>
+                  </div>
+                ) : !form.sub_region_code ? (
+                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-4 text-center">
+                    <p className="text-xs text-slate-500">Please select a Sub-Region to view and assign branches.</p>
+                  </div>
+                ) : (
+                  <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2.5 space-y-1.5">
+                    {availableBranches.length === 0 ? (
+                      <p className="text-xs text-slate-400 py-2 text-center">No branches found under this Sub-Region.</p>
+                    ) : (
+                      availableBranches.map((b) => {
+                        const isChecked = form.branch_codes.includes(b.branch_code);
+                        return (
+                          <label
+                            key={b.branch_code}
+                            className="flex items-center gap-2.5 px-2 py-1.5 rounded hover:bg-slate-50 cursor-pointer text-xs text-slate-800"
+                          >
+                            <input
+                              type="checkbox"
+                              className="rounded border-slate-300 text-sky-600 focus:ring-sky-500 h-4 w-4"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setForm((prev) => {
+                                  const next = checked
+                                    ? [...prev.branch_codes, b.branch_code]
+                                    : prev.branch_codes.filter((c) => c !== b.branch_code);
+                                  return {
+                                    ...prev,
+                                    branch_codes: next,
+                                    branch_code: next[0] || "",
+                                  };
+                                });
+                              }}
+                            />
+                            <span className="font-mono font-medium text-slate-900">{b.branch_code}</span>
+                            <span className="text-slate-500 truncate">{b.branch_name || "—"}</span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
                 )}
-              </Select>
-            </Field>
+                {form.branch_codes.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {form.branch_codes.map((code) => (
+                      <span
+                        key={code}
+                        className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700 font-mono"
+                      >
+                        {code}
+                        <button
+                          type="button"
+                          className="text-slate-400 hover:text-slate-600 ml-0.5"
+                          onClick={() => {
+                            setForm((prev) => {
+                              const next = prev.branch_codes.filter((c) => c !== code);
+                              return {
+                                ...prev,
+                                branch_codes: next,
+                                branch_code: next[0] || "",
+                              };
+                            });
+                          }}
+                        >
+                          &times;
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </Field>
+            ) : (
+              <Field className="sm:col-span-1">
+                <Label>Branch</Label>
+                <Select
+                  disabled={!form.sub_region_code}
+                  onChange={(event) => handleBranchChange(event.target.value)}
+                  value={form.branch_code}
+                >
+                  <option value="">
+                    {form.sub_region_code ? "Select Branch (or None)" : "Select Sub-Region first"}
+                  </option>
+                  {availableBranches.map((b) => (
+                    <option key={b.branch_code} value={b.branch_code}>
+                      {b.branch_name ? `${b.branch_name} (${b.branch_code})` : b.branch_code}
+                    </option>
+                  ))}
+                  {form.branch_code && !availableBranches.some((b) => b.branch_code === form.branch_code) && (
+                    <option value={form.branch_code}>{form.branch_code} (Current)</option>
+                  )}
+                </Select>
+              </Field>
+            )}
 
             <Field className="sm:col-span-1">
               <Label>Status</Label>
@@ -658,39 +858,6 @@ export function UsersPage() {
                 <option value="deactivated">Deactivated</option>
               </Select>
             </Field>
-
-            <Field className="sm:col-span-2">
-              <Label>Role</Label>
-              <Select
-                onChange={(event) => setSelectedRole(event.target.value)}
-                value={selectedRole}
-              >
-                <option value="">Select Role (Single selection)</option>
-                {roleOptions.map((role) => (
-                  <option key={role.id} value={role.name}>
-                    {formatRoleDisplay(role)}
-                  </option>
-                ))}
-                {selectedRole && !roleOptions.some((r) => r.name === selectedRole) && (
-                  <option value={selectedRole}>{selectedRole} (Current)</option>
-                )}
-              </Select>
-            </Field>
-
-            {selectedRole && (
-              <div className="sm:col-span-2 rounded-lg border border-slate-200/80 bg-slate-50/70 p-3 text-xs text-slate-600">
-                <span className="font-semibold text-slate-900">Role Scope: </span>
-                {/maker|checker|branch/i.test(selectedRole) ? (
-                  <span>Branch User — Please ensure an assigned Branch is selected.</span>
-                ) : /sub_region|sub-region/i.test(selectedRole) ? (
-                  <span>Sub-Region Authority — Scope covers all branches in selected Sub-Region.</span>
-                ) : /region|dgm/i.test(selectedRole) ? (
-                  <span>Regional Authority — Scope covers all sub-regions and branches in selected Region.</span>
-                ) : (
-                  <span>Head Office / Administrative — Global scope across all regions and branches.</span>
-                )}
-              </div>
-            )}
 
             <Field className="sm:col-span-2">
               <Label>{editing ? "New password" : "Password"}</Label>

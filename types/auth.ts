@@ -20,6 +20,7 @@ export interface User {
   branch_role_id?: string | null;
   branch_code?: string | null;
   branch_codes?: string[];
+  branch_mappings?: UserBranchMapping[];
   subregion_id?: string | null;
   zone_code?: string | null;
   deactivated_at?: string | null;
