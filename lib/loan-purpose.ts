@@ -25,6 +25,37 @@ function getItemKey(item: any): string {
   return (item.meta_key || item.key || '').trim().toUpperCase();
 }
 
+const FALLBACK_LOAN_PURPOSES: Record<string, string[]> = {
+  HOME_LOAN_NEW: ["Purchase of Residential Property"],
+  HOME_LOAN_RESALE: ["Purchase of Residential Property"],
+  HOME_LOAN_CONSTRUCTION: ["Construction of Residential Property"],
+  HOME_LOAN_TAKEOVER: ["Takeover of Existing Home Loan"],
+  COSMO_TOPUP: ["Home Civil Repairs / Renovation", "Home Appliances/ Furniture / Interior Decoration"],
+  MORTGAGE: [
+    "Consumption for Education Purpose",
+    "Home repairs",
+    "Home Appliances/Furniture",
+    "Medical Expenses of Family Members",
+    "Repayment of Debts",
+    "Expansion of Business",
+    "Others"
+  ],
+  EDUCATION: ["Higher Education in India/Abroad"],
+  PERSONAL: [
+    "Repayment of Personal Debts",
+    "Family Function/Ceremony",
+    "Medical Expenses of Family Members",
+    "Other Consumption Purpose",
+    "Home repairs",
+    "Consumption for Education Purpose"
+  ],
+  NEW_CAR: ["To purchase New Car for Personal Use"],
+  TWO_WHEELER: ["To purchase New Two Wheeler for Personal Use"],
+  RESALE_CAR: ["To purchase Resale Car for Personal Use"],
+  COMMERCIAL_VEHICLE: ["To purchase New Commercial Vehicle for Passenger and Goods Transport"],
+  CONSUMER_DURABLE: ["Purchase of Solar Equipments"]
+};
+
 /**
  * Dynamically filter Loan Purpose values fetched directly from backend API
  * (/api/master-values/dropdown?call_type=loan_purpose).
@@ -41,17 +72,15 @@ export function getLoanPurposeOptionsFromApi(
   // Normalize API purposes list
   const validApiItems = Array.isArray(apiPurposes) ? apiPurposes.filter(Boolean) : [];
 
-  if (validApiItems.length === 0) {
-    return [];
-  }
-
   const matchedPrefixes: string[] = [];
 
-  if (combined.includes('resale') && combined.includes('home')) {
+  if ((combined.includes('new') || combined.includes('purchase')) && (combined.includes('home') || combined.includes('housing'))) {
+    matchedPrefixes.push('HOME_LOAN_NEW', 'HOME_LOAN');
+  } else if (combined.includes('resale') && (combined.includes('home') || combined.includes('housing'))) {
     matchedPrefixes.push('HOME_LOAN_RESALE', 'HOME_LOAN');
-  } else if (combined.includes('construction') && combined.includes('home')) {
+  } else if (combined.includes('construction') && (combined.includes('home') || combined.includes('housing'))) {
     matchedPrefixes.push('HOME_LOAN_CONSTRUCTION', 'HOME_LOAN');
-  } else if (combined.includes('takeover') && combined.includes('home')) {
+  } else if (combined.includes('takeover') && (combined.includes('home') || combined.includes('housing'))) {
     matchedPrefixes.push('HOME_LOAN_TAKEOVER', 'HOME_LOAN');
   } else if (combined.includes('home') || combined.includes('housing')) {
     matchedPrefixes.push('HOME_LOAN_NEW', 'HOME_LOAN_RESALE', 'HOME_LOAN_CONSTRUCTION', 'HOME_LOAN_TAKEOVER', 'HOME_LOAN', 'COSMO_TOPUP');
@@ -85,6 +114,24 @@ export function getLoanPurposeOptionsFromApi(
     combined.includes('furniture')
   ) {
     matchedPrefixes.push('MORTGAGE', 'PERSONAL');
+  }
+
+  if (validApiItems.length === 0) {
+    if (matchedPrefixes.length > 0) {
+      const fallbackList: string[] = [];
+      matchedPrefixes.forEach((p) => {
+        if (FALLBACK_LOAN_PURPOSES[p]) fallbackList.push(...FALLBACK_LOAN_PURPOSES[p]);
+      });
+      if (fallbackList.length > 0) {
+        return Array.from(new Set(fallbackList));
+      }
+    }
+    return [
+      "Purchase of Residential Property",
+      "Construction of Residential Property",
+      "Takeover of Existing Home Loan",
+      "Home Civil Repairs / Renovation"
+    ];
   }
 
   // 1. Try prefix-matching against API purposes if available

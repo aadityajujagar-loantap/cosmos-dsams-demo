@@ -724,6 +724,20 @@ const setFilters = (newFilters: {
     }
   }, [isCreateModalOpen, isEditModalOpen, isDisburseModalOpen, isShareModalOpen]);
 
+  // Ensure loan_purpose is loaded if empty when Create or Edit modal is opened
+  useEffect(() => {
+    if ((isCreateModalOpen || isEditModalOpen) && loanPurposes.length === 0) {
+      getMasterValues({ group: "loan_purpose" })
+        .then((res) => {
+          const items = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+          if (items.length > 0) {
+            setLoanPurposes(items);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isCreateModalOpen, isEditModalOpen, loanPurposes.length]);
+
   // Load leads data on pagination, filter, or tab change
   useEffect(() => {
     loadLeadDataOnly(currentPage, perPage);
@@ -793,10 +807,18 @@ const setFilters = (newFilters: {
 
   const handleProductChange = async (productId: number) => {
     const pid = productId ? Number(productId) : undefined;
-    setCreateForm((prev) => ({ ...prev, loan_product_id: pid, loan_type_id: undefined }));
+    setCreateForm((prev) => ({ ...prev, loan_product_id: pid, loan_type_id: undefined, loan_purpose: "" }));
     if (!pid) {
       setLoanTypes([]);
       return;
+    }
+    if (loanPurposes.length === 0) {
+      getMasterValues({ group: "loan_purpose" })
+        .then((res) => {
+          const items = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+          if (items.length > 0) setLoanPurposes(items);
+        })
+        .catch(() => {});
     }
     try {
       const res = await fetchLoanTypesByProduct(pid);
