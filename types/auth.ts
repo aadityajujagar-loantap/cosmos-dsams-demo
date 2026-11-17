@@ -21,6 +21,8 @@ export interface User {
   branch_code?: string | null;
   subregion_id?: string | null;
   zone_code?: string | null;
+  must_change_password?: boolean;
+  password_changed_at?: string | null;
   deactivated_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -34,6 +36,7 @@ export interface RolesPermissionsData {
 export interface AuthSession {
   token: string;
   user: User;
+  must_change_password?: boolean;
   dsa?: {
     id?: number | null;
     code?: string | null;
@@ -82,6 +85,7 @@ export interface SessionUser {
   ticket_no?: string;
   branchId?: number;
   branchName?: string;
+  must_change_password?: boolean;
 }
 
 export type DemoSessionUser = SessionUser;

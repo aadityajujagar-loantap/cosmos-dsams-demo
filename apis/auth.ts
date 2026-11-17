@@ -74,6 +74,7 @@ export const authApi = {
     token?: string;
     reference_id?: string;
     mobile_hint?: string;
+    must_change_password?: boolean;
     user: {
       id: number;
       name: string;
@@ -81,6 +82,7 @@ export const authApi = {
       phone?: string;
       ticket_no?: string;
       is_active: boolean;
+      must_change_password?: boolean;
       created_at: string;
       updated_at: string;
     };
@@ -94,6 +96,26 @@ export const authApi = {
     };
   }> => {
     return request<any>("/auth/dsa-login", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * Change user password (1st login force change or dashboard reset).
+   * POST /api/auth/change-password
+   */
+  changePassword: (payload: {
+    current_password: string;
+    new_password: string;
+    new_password_confirmation: string;
+  }): Promise<{
+    status: string;
+    message: string;
+    must_change_password: boolean;
+    user?: User;
+  }> => {
+    return request<any>("/auth/change-password", {
       method: "POST",
       body: JSON.stringify(payload),
     });

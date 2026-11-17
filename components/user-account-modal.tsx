@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Building2,
+  KeyRound,
   LogOut,
   Mail,
   Phone,
@@ -12,6 +13,7 @@ import {
 import { authApi } from "@/apis/auth";
 import { Button, Modal } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
+import { ChangePasswordModal } from "@/components/change-password-modal";
 import { authService } from "@/services/authService";
 import type { Role, User } from "@/types/auth";
 
@@ -54,6 +56,7 @@ export function UserAccountModal({
   const [loading, setLoading] = useState(false);
   const [backendUser, setBackendUser] = useState<User | null>(null);
   const [backendRoles, setBackendRoles] = useState<Role[]>([]);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -199,27 +202,45 @@ export function UserAccountModal({
           </div>
 
           {/* Actions Footer */}
-          <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
+          <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
             <Button
               type="button"
               variant="outline"
               onClick={onClose}
-              className="h-9 px-4 text-xs font-medium text-slate-600 rounded-lg hover:bg-slate-100 transition"
+              className="h-9 px-3.5 text-xs font-medium text-slate-600 rounded-lg hover:bg-slate-100 transition"
             >
               Close
             </Button>
-            <Button
-              type="button"
-              onClick={onSignOut}
-              variant="danger"
-              className="h-9 gap-2 px-4 text-xs font-semibold rounded-lg shadow-2xs hover:shadow-xs transition"
-            >
-              <LogOut className="h-4 w-4" />
-              Sign Out
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setChangePasswordOpen(true)}
+                className="h-9 gap-1.5 px-3 text-xs font-medium text-slate-700 rounded-lg hover:bg-slate-100 transition"
+              >
+                <KeyRound className="h-3.5 w-3.5 text-slate-500" />
+                Change Password
+              </Button>
+              <Button
+                type="button"
+                onClick={onSignOut}
+                variant="danger"
+                className="h-9 gap-1.5 px-3.5 text-xs font-semibold rounded-lg shadow-2xs hover:shadow-xs transition"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Sign Out
+              </Button>
+            </div>
           </div>
         </div>
       )}
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        open={changePasswordOpen}
+        isForced={false}
+        onClose={() => setChangePasswordOpen(false)}
+      />
     </Modal>
   );
 }

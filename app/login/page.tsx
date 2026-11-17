@@ -198,6 +198,9 @@ export default function LoginPage() {
           user: response.user as AuthSession["user"],
           roles,
           dsa: response.dsa,
+          must_change_password: Boolean(
+            response.must_change_password ?? response.user?.must_change_password
+          ),
         };
 
         if (!(await startAllowedSession(session))) return;

@@ -152,6 +152,7 @@ function sessionUserFromAuthSession(session: AuthSession): DemoSessionUser {
     mobile: session.user.phone ?? "",
     name: session.user.name,
     role: sessionRoleFromBackendRoles(roleNames, session.user),
+    must_change_password: Boolean(session.user.must_change_password ?? session.must_change_password),
   };
 }
 
@@ -171,6 +172,7 @@ function sessionUserFromStoredAuth(): DemoSessionUser | null {
     mobile: user.phone ?? "",
     name: user.name,
     role: sessionRoleFromBackendRoles(authService.getRoles(), user),
+    must_change_password: Boolean(user.must_change_password),
   };
 }
 

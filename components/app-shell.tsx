@@ -29,6 +29,7 @@ import { ReactNode, useEffect, useMemo, useState, useSyncExternalStore } from "r
 import { Button, Modal } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { UserAccountModal } from "@/components/user-account-modal";
+import { ChangePasswordModal } from "@/components/change-password-modal";
 import { useMockStore } from "@/lib/store";
 import { withBasePath } from "@/lib/base-path";
 import type { MockStore, Notification } from "@/lib/types";
@@ -1151,6 +1152,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           router.push("/login");
         }}
         open={profileOpen}
+      />
+      {/* Forced Password Change on 1st Login */}
+      <ChangePasswordModal
+        open={Boolean(currentUser?.must_change_password)}
+        isForced={true}
       />
     </div>
   );
