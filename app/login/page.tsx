@@ -193,14 +193,18 @@ export default function LoginPage() {
           return;
         }
 
+        const mustChange = Boolean(
+          response.must_change_password ?? response.user?.must_change_password
+        );
         const session: AuthSession = {
           token: response.token,
-          user: response.user as AuthSession["user"],
+          user: {
+            ...response.user,
+            must_change_password: mustChange,
+          } as AuthSession["user"],
           roles,
           dsa: response.dsa,
-          must_change_password: Boolean(
-            response.must_change_password ?? response.user?.must_change_password
-          ),
+          must_change_password: mustChange,
         };
 
         if (!(await startAllowedSession(session))) return;

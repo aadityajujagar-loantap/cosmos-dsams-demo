@@ -666,6 +666,22 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   if (!mounted || !currentUser) return null;
 
+  // Mandatory first-attempt password change: completely blocks dashboard access until changed
+  if (currentUser.must_change_password) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md">
+        <ChangePasswordModal
+          open={true}
+          isForced={true}
+          onSignOut={() => {
+            logout();
+            router.push("/login");
+          }}
+        />
+      </div>
+    );
+  }
+
   function renderNavigation(collapsed: boolean) {
     if (collapsed) {
       return (
@@ -1152,11 +1168,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           router.push("/login");
         }}
         open={profileOpen}
-      />
-      {/* Forced Password Change on 1st Login */}
-      <ChangePasswordModal
-        open={Boolean(currentUser?.must_change_password)}
-        isForced={true}
       />
     </div>
   );

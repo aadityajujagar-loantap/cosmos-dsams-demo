@@ -295,15 +295,18 @@ function migrateOnHoldDsaStatuses(store: MockStore): MockStore {
   };
 }
 
-export function sessionUserFromDsa(dsa: {
-  id: string | number;
-  code?: string;
-  name: string;
-  mobile?: string;
-  email: string;
-  login_username?: string;
-  loginUsername?: string;
-}): DemoSessionUser {
+export function sessionUserFromDsa(
+  dsa: {
+    id: string | number;
+    code?: string;
+    name: string;
+    mobile?: string;
+    email: string;
+    login_username?: string;
+    loginUsername?: string;
+  },
+  must_change_password?: boolean
+): DemoSessionUser {
   return {
     code: dsa.code,
     email: dsa.login_username || dsa.loginUsername || dsa.email,
@@ -311,6 +314,7 @@ export function sessionUserFromDsa(dsa: {
     mobile: dsa.mobile || "",
     name: dsa.name,
     role: "DSA Partner",
+    must_change_password,
   };
 }
 
@@ -1704,7 +1708,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
           (row.email && row.email.toLowerCase() === currentUser.email.toLowerCase())
       );
       if (dsa) {
-        const updated = sessionUserFromDsa(dsa);
+        const updated = sessionUserFromDsa(dsa, currentUser.must_change_password);
         if (JSON.stringify(currentUser) !== JSON.stringify(updated)) {
           setCurrentUser(updated);
           localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updated));

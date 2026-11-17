@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  LogOut,
   X,
 } from "lucide-react";
 import { authApi } from "@/apis/auth";
@@ -24,6 +25,7 @@ interface ChangePasswordModalProps {
   isForced?: boolean;
   onClose?: () => void;
   onSuccess?: () => void;
+  onSignOut?: () => void;
 }
 
 export function ChangePasswordModal({
@@ -31,6 +33,7 @@ export function ChangePasswordModal({
   isForced = false,
   onClose,
   onSuccess,
+  onSignOut,
 }: ChangePasswordModalProps) {
   const { toast } = useToast();
   const { currentUser, setCurrentUser } = useMockStore();
@@ -426,8 +429,19 @@ export function ChangePasswordModal({
           </div>
 
           {/* Actions Footer */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-            {!isForced && onClose ? (
+          <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-100">
+            {isForced && onSignOut ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onSignOut}
+                disabled={loading}
+                className="h-9 gap-1.5 px-3.5 text-xs font-medium text-rose-700 border-rose-200 hover:bg-rose-50 rounded-lg transition"
+              >
+                <LogOut className="h-3.5 w-3.5 text-rose-600" />
+                Sign Out
+              </Button>
+            ) : !isForced && onClose ? (
               <Button
                 type="button"
                 variant="outline"
@@ -437,14 +451,14 @@ export function ChangePasswordModal({
               >
                 Cancel
               </Button>
-            ) : null}
+            ) : <div />}
             <Button
               type="submit"
               disabled={loading || !currentPassword || !allCriteriaMet}
               className={cn(
                 "h-9 px-5 text-xs font-semibold rounded-lg shadow-sm transition",
                 isForced
-                  ? "bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto"
+                  ? "bg-blue-600 hover:bg-blue-700 text-white"
                   : "bg-blue-600 hover:bg-blue-700 text-white"
               )}
             >
