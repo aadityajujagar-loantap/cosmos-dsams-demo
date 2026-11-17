@@ -16,6 +16,15 @@ import {
   Eye,
   X,
   ClipboardCheck,
+  Activity,
+  Terminal,
+  Server,
+  Search,
+  Calendar,
+  Copy,
+  Check,
+  RotateCcw,
+  AlertTriangle,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -42,7 +51,8 @@ import {
 import { FieldConfig, RecordForm } from "@/components/ui/record-form";
 import { useMockStore } from "@/lib/store";
 import { useActivityLogs } from "@/hooks/useActivityLogs";
-import type { ActivityLog } from "@/types/activityLog";
+import { useLaravelLogs } from "@/hooks/useLaravelLogs";
+import type { ActivityLog, LaravelLogEntry } from "@/types/activityLog";
 import {
   AuditLog,
   Commission,
@@ -1706,270 +1716,1021 @@ export function RolesPage() {
 }
 
 export function AuditLogsPage() {
+  const [activeTab, setActiveTab] = useState<"api" | "laravel">("api");
+
+  // ── API & Activity Logs state ───────────────────────────────────────────────
   const {
-    logs,
-    selectedLog,
-    pagination,
-    loading,
-    detailLoading,
-    fetchLogs,
-    fetchLogDetail,
-    setSelectedLog,
+    logs: apiLogs,
+    groups: apiGroups,
+    selectedLog: selectedApiLog,
+    pagination: apiPagination,
+    loading: apiLoading,
+    detailLoading: apiDetailLoading,
+    fetchLogs: fetchApiLogs,
+    fetchGroups: fetchApiGroups,
+    fetchLogDetail: fetchApiLogDetail,
+    setSelectedLog: setSelectedApiLog,
   } = useActivityLogs();
 
-  const [actionFilter, setActionFilter] = useState("");
-  const [groupFilter, setGroupFilter] = useState("");
-  const [page, setPage] = useState(1);
+  const [apiSearch, setApiSearch] = useState("");
+  const [apiAction, setApiAction] = useState("");
+  const [apiGroup, setApiGroup] = useState("");
+  const [apiStatusCode, setApiStatusCode] = useState("");
+  const [apiDateFrom, setApiDateFrom] = useState("");
+  const [apiDateTo, setApiDateTo] = useState("");
+  const [apiPage, setApiPage] = useState(1);
+  const [copiedSnapshot, setCopiedSnapshot] = useState<string | null>(null);
 
-  const requestParams = useMemo(
+  // ── Laravel System Logs state ───────────────────────────────────────────────
+  const {
+    logs: laravelLogs,
+    availableDates: laravelAvailableDates,
+    availableLevels: laravelAvailableLevels,
+    selectedLog: selectedLaravelLog,
+    pagination: laravelPagination,
+    loading: laravelLoading,
+    fetchLaravelLogs,
+    setSelectedLog: setSelectedLaravelLog,
+  } = useLaravelLogs();
+
+  const [laravelSearch, setLaravelSearch] = useState("");
+  const [laravelDate, setLaravelDate] = useState("");
+  const [laravelLevel, setLaravelLevel] = useState("");
+  const [laravelPage, setLaravelPage] = useState(1);
+  const [copiedTrace, setCopiedTrace] = useState(false);
+
+  // Initial load
+  useEffect(() => {
+    fetchApiGroups();
+  }, [fetchApiGroups]);
+
+  // API logs query params
+  const apiRequestParams = useMemo(
     () => ({
-      action: actionFilter || undefined,
-      group: groupFilter.trim() || undefined,
-      page,
-      per_page: 10,
+      search: apiSearch.trim() || undefined,
+      action: apiAction || undefined,
+      group: apiGroup.trim() || undefined,
+      status_code: apiStatusCode ? Number(apiStatusCode) : undefined,
+      date_from: apiDateFrom || undefined,
+      date_to: apiDateTo || undefined,
+      page: apiPage,
+      per_page: 15,
     }),
-    [actionFilter, groupFilter, page]
+    [apiSearch, apiAction, apiGroup, apiStatusCode, apiDateFrom, apiDateTo, apiPage]
   );
 
   useEffect(() => {
-    fetchLogs(requestParams);
-  }, [fetchLogs, requestParams]);
+    if (activeTab === "api") {
+      fetchApiLogs(apiRequestParams);
+    }
+  }, [fetchApiLogs, apiRequestParams, activeTab]);
+
+  // Laravel logs query params
+  const laravelRequestParams = useMemo(
+    () => ({
+      search: laravelSearch.trim() || undefined,
+      date: laravelDate || undefined,
+      level: laravelLevel || undefined,
+      page: laravelPage,
+      per_page: 25,
+    }),
+    [laravelSearch, laravelDate, laravelLevel, laravelPage]
+  );
 
   useEffect(() => {
-    setSelectedLog(null);
-  }, [actionFilter, groupFilter, setSelectedLog]);
+    if (activeTab === "laravel") {
+      fetchLaravelLogs(laravelRequestParams);
+    }
+  }, [fetchLaravelLogs, laravelRequestParams, activeTab]);
 
   const handleRefresh = () => {
-    fetchLogs(requestParams);
+    if (activeTab === "api") {
+      fetchApiLogs(apiRequestParams);
+    } else {
+      fetchLaravelLogs(laravelRequestParams);
+    }
   };
 
-  const openLog = (log: ActivityLog) => {
-    setSelectedLog(log);
-    fetchLogDetail(log.id);
+  const resetApiFilters = () => {
+    setApiSearch("");
+    setApiAction("");
+    setApiGroup("");
+    setApiStatusCode("");
+    setApiDateFrom("");
+    setApiDateTo("");
+    setApiPage(1);
+  };
+
+  const resetLaravelFilters = () => {
+    setLaravelSearch("");
+    setLaravelDate("");
+    setLaravelLevel("");
+    setLaravelPage(1);
+  };
+
+  const openApiLog = (log: ActivityLog) => {
+    setSelectedApiLog(log);
+    fetchApiLogDetail(log.id);
+  };
+
+  const copyToClipboard = (text: string, type: string) => {
+    navigator.clipboard.writeText(text);
+    if (type === "trace") {
+      setCopiedTrace(true);
+      setTimeout(() => setCopiedTrace(false), 2000);
+    } else {
+      setCopiedSnapshot(type);
+      setTimeout(() => setCopiedSnapshot(null), 2000);
+    }
   };
 
   return (
     <div className="space-y-6">
+      {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <PageHeader
-          description="Searchable enterprise audit trail for changes to partners, workflows, rules, payouts, and access."
+          description="Enterprise audit trail and application diagnostic logs with date-wise filtering and deep payload inspection."
           eyebrow="Administration"
-          title="Audit Logs"
+          title="System & Audit Logs"
         />
-        <Button disabled={loading} onClick={handleRefresh} type="button" variant="outline">
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
-      </div>
-
-      <div className="flex flex-wrap items-end gap-3 border-b border-slate-200 pb-3">
-        <div className="ml-auto grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-[180px_180px]">
-          <Input
-            aria-label="Filter by module"
-            onChange={(event) => {
-              setGroupFilter(event.target.value);
-              setPage(1);
-            }}
-            placeholder="Filter by Module"
-            value={groupFilter}
-          />
-          <Select
-            aria-label="Filter by action"
-            onChange={(event) => {
-              setActionFilter(event.target.value);
-              setPage(1);
-            }}
-            value={actionFilter}
+        <div className="flex items-center gap-2">
+          <Button
+            disabled={activeTab === "api" ? apiLoading : laravelLoading}
+            onClick={handleRefresh}
+            type="button"
+            variant="outline"
+            className="h-9 px-3 text-xs"
           >
-            <option value="">All actions</option>
-            <option value="viewed">Viewed</option>
-            <option value="created">Created</option>
-            <option value="updated">Updated</option>
-            <option value="deleted">Deleted</option>
-            <option value="failed">Failed</option>
-            <option value="maker_submitted">Maker Submitted</option>
-          </Select>
+            <RefreshCw
+              className={`h-3.5 w-3.5 mr-1.5 ${
+                (activeTab === "api" ? apiLoading : laravelLoading) ? "animate-spin" : ""
+              }`}
+            />
+            Refresh
+          </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_400px]">
-        <Card className="lg:min-h-[500px]">
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="flex items-center justify-center py-20">
-                <span className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" />
+      {/* Tabs Navigation */}
+      <div className="flex border-b border-slate-200">
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab("api");
+            setSelectedLaravelLog(null);
+          }}
+          className={`flex items-center gap-2 border-b-2 px-5 py-2.5 text-xs font-semibold transition ${
+            activeTab === "api"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <Activity className="h-4 w-4" />
+          <span>API & Activity Logs</span>
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+            {apiPagination.total}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab("laravel");
+            setSelectedApiLog(null);
+          }}
+          className={`flex items-center gap-2 border-b-2 px-5 py-2.5 text-xs font-semibold transition ${
+            activeTab === "laravel"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <Terminal className="h-4 w-4" />
+          <span>Laravel System Logs</span>
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+            {laravelPagination.total}
+          </span>
+        </button>
+      </div>
+
+      {/* ── TAB 1: API & ACTIVITY LOGS ────────────────────────────────────────── */}
+      {activeTab === "api" && (
+        <div className="space-y-4">
+          {/* Filters Bar */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-3">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6">
+              {/* Search */}
+              <div className="lg:col-span-2">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Search Logs
+                </label>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                  <Input
+                    className="h-8 pl-8 text-xs"
+                    onChange={(e) => {
+                      setApiSearch(e.target.value);
+                      setApiPage(1);
+                    }}
+                    placeholder="Search URL, route, IP, actor..."
+                    value={apiSearch}
+                  />
+                </div>
               </div>
-            ) : logs.length === 0 ? (
-              <div className="px-6 py-12">
-                <EmptyState
-                  description="Change filters or refresh to load backend activity logs."
-                  title="No audit logs found"
+
+              {/* Date From */}
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Date From
+                </label>
+                <input
+                  type="date"
+                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:border-blue-500 focus:outline-none"
+                  value={apiDateFrom}
+                  onChange={(e) => {
+                    setApiDateFrom(e.target.value);
+                    setApiPage(1);
+                  }}
                 />
               </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500">
-                      <th className="p-4">Actor</th>
-                      <th className="p-4">Action</th>
-                      <th className="p-4">Module</th>
-                      <th className="p-4">IP Address</th>
-                      <th className="p-4">Status</th>
-                      <th className="p-4">Time</th>
-                      <th className="p-4 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {logs.map((log) => (
-                      <tr
-                        className={`cursor-pointer transition hover:bg-slate-50 ${
-                          selectedLog?.id === log.id ? "bg-blue-50/50 hover:bg-blue-50" : ""
-                        }`}
-                        key={log.id}
-                        onClick={() => openLog(log)}
-                      >
-                        <td className="p-4">
-                          <div>
-                            <p className="font-semibold text-slate-950">{log.user?.name || "System"}</p>
-                            <p className="text-[10px] text-slate-500">{log.user?.email || ""}</p>
-                          </div>
-                        </td>
-                        <td className="p-4 capitalize">
-                          <span className="font-medium">{(log.action || "").replace(/_/g, " ")}</span>
-                        </td>
-                        <td className="p-4 capitalize text-slate-700">
-                          {(log.group || "").replace(/_/g, " ")}
-                        </td>
-                        <td className="p-4 font-mono text-xs text-slate-500">
-                          {log.ip_address}
-                        </td>
-                        <td className="p-4">
-                          <Badge tone={log.status_code >= 400 ? "rose" : log.status_code >= 300 ? "amber" : "green"}>
-                            {log.status_code}
-                          </Badge>
-                        </td>
-                        <td className="p-4 text-slate-500">
-                          {formatDate(log.created_at)}
-                        </td>
-                        <td className="p-4 text-right" onClick={(event) => event.stopPropagation()}>
-                          <Button aria-label="View log details" onClick={() => openLog(log)} size="sm" type="button" variant="ghost">
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+
+              {/* Date To */}
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Date To
+                </label>
+                <input
+                  type="date"
+                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:border-blue-500 focus:outline-none"
+                  value={apiDateTo}
+                  onChange={(e) => {
+                    setApiDateTo(e.target.value);
+                    setApiPage(1);
+                  }}
+                />
               </div>
-            )}
-          </CardContent>
-          <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
-            <span>
-              Page {pagination.page} of {pagination.lastPage} · {pagination.total} total
-            </span>
-            <div className="flex gap-2">
-              <Button disabled={loading || page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))} size="sm" type="button" variant="outline">
-                Previous
-              </Button>
-              <Button disabled={loading || page >= pagination.lastPage} onClick={() => setPage((current) => current + 1)} size="sm" type="button" variant="outline">
-                Next
-              </Button>
+
+              {/* Module/Group Filter */}
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Module
+                </label>
+                <Select
+                  className="h-8 text-xs"
+                  onChange={(e) => {
+                    setApiGroup(e.target.value);
+                    setApiPage(1);
+                  }}
+                  value={apiGroup}
+                >
+                  <option value="">All Modules</option>
+                  {apiGroups.map((grp) => (
+                    <option key={grp} value={grp}>
+                      {grp.replace(/_/g, " ")}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              {/* Action Filter */}
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Action
+                </label>
+                <Select
+                  className="h-8 text-xs"
+                  onChange={(e) => {
+                    setApiAction(e.target.value);
+                    setApiPage(1);
+                  }}
+                  value={apiAction}
+                >
+                  <option value="">All Actions</option>
+                  <option value="viewed">Viewed</option>
+                  <option value="created">Created</option>
+                  <option value="updated">Updated</option>
+                  <option value="deleted">Deleted</option>
+                  <option value="failed">Failed</option>
+                  <option value="maker_submitted">Maker Submitted</option>
+                </Select>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-1 border-t border-slate-200/60">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-500">
+                  Showing {apiLogs.length} of {apiPagination.total} activity records
+                </span>
+                {apiStatusCode && (
+                  <span className="inline-flex items-center gap-1 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">
+                    Status: {apiStatusCode}
+                  </span>
+                )}
+              </div>
+              {(apiSearch || apiAction || apiGroup || apiStatusCode || apiDateFrom || apiDateTo) && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={resetApiFilters}
+                  className="h-7 gap-1 text-[11px] text-slate-600 hover:text-slate-900"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  Reset Filters
+                </Button>
+              )}
             </div>
           </div>
-        </Card>
 
-        {selectedLog ? (
-          <Card className="sticky top-6">
-            <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-900">Log Details</h3>
-                <p className="mt-0.5 text-xs text-slate-500">Log ID: {selectedLog.id}</p>
+          {/* Table & Detail Layout */}
+          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_420px]">
+            <Card className="lg:min-h-[520px]">
+              <CardContent className="p-0">
+                {apiLoading ? (
+                  <div className="flex flex-col items-center justify-center py-24 text-slate-400">
+                    <span className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent mb-2" />
+                    <p className="text-xs">Loading activity logs...</p>
+                  </div>
+                ) : apiLogs.length === 0 ? (
+                  <div className="px-6 py-16">
+                    <EmptyState
+                      description="No activity logs match your filter criteria. Try clearing dates or search filters."
+                      title="No audit logs found"
+                    />
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-100 bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                          <th className="p-3.5">Actor</th>
+                          <th className="p-3.5">Action</th>
+                          <th className="p-3.5">Module</th>
+                          <th className="p-3.5">Endpoint / Route</th>
+                          <th className="p-3.5">Status</th>
+                          <th className="p-3.5">Timestamp</th>
+                          <th className="p-3.5 text-right">Inspect</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {apiLogs.map((log) => (
+                          <tr
+                            key={log.id}
+                            onClick={() => openApiLog(log)}
+                            className={`cursor-pointer transition hover:bg-slate-50/80 ${
+                              selectedApiLog?.id === log.id ? "bg-blue-50/60 hover:bg-blue-50" : ""
+                            }`}
+                          >
+                            <td className="p-3.5">
+                              <div>
+                                <p className="font-semibold text-slate-900 truncate max-w-[140px]">
+                                  {log.user?.name || "System Actor"}
+                                </p>
+                                <p className="text-[10px] text-slate-400 truncate max-w-[140px]">
+                                  {log.user?.email || log.ip_address}
+                                </p>
+                              </div>
+                            </td>
+                            <td className="p-3.5">
+                              <span
+                                className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold capitalize ${
+                                  log.action === "failed"
+                                    ? "bg-rose-100 text-rose-700"
+                                    : log.action === "created"
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : log.action === "updated"
+                                    ? "bg-blue-100 text-blue-700"
+                                    : log.action === "deleted"
+                                    ? "bg-amber-100 text-amber-700"
+                                    : "bg-slate-100 text-slate-700"
+                                }`}
+                              >
+                                {(log.action || "").replace(/_/g, " ")}
+                              </span>
+                            </td>
+                            <td className="p-3.5 font-medium text-slate-700 capitalize">
+                              {(log.group || "-").replace(/_/g, " ")}
+                            </td>
+                            <td className="p-3.5">
+                              <div className="max-w-[200px]">
+                                <span className="font-mono text-[10px] font-semibold text-slate-700 block truncate">
+                                  <span className="font-bold text-slate-500 mr-1">
+                                    {log.request_method}
+                                  </span>
+                                  {log.request_url}
+                                </span>
+                                {log.route_name && (
+                                  <span className="text-[9px] text-slate-400 block truncate">
+                                    {log.route_name}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-3.5">
+                              <Badge
+                                tone={
+                                  log.status_code >= 400
+                                    ? "rose"
+                                    : log.status_code >= 300
+                                    ? "amber"
+                                    : "green"
+                                }
+                              >
+                                {log.status_code || 200}
+                              </Badge>
+                            </td>
+                            <td className="p-3.5 text-slate-500 whitespace-nowrap">
+                              {formatDate(log.created_at)}
+                            </td>
+                            <td
+                              className="p-3.5 text-right"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Button
+                                aria-label="View log details"
+                                onClick={() => openApiLog(log)}
+                                size="sm"
+                                type="button"
+                                variant="ghost"
+                                className="h-7 w-7 p-0"
+                              >
+                                <Eye className="h-3.5 w-3.5 text-slate-400 hover:text-slate-700" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+
+              {/* Pagination */}
+              <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
+                <span>
+                  Page {apiPagination.page} of {apiPagination.lastPage} · {apiPagination.total} total
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    disabled={apiLoading || apiPage <= 1}
+                    onClick={() => setApiPage((p) => Math.max(1, p - 1))}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    disabled={apiLoading || apiPage >= apiPagination.lastPage}
+                    onClick={() => setApiPage((p) => p + 1)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    Next
+                  </Button>
+                </div>
               </div>
-              <Button aria-label="Close details" onClick={() => setSelectedLog(null)} size="icon" type="button" variant="ghost">
-                <X className="h-4 w-4" />
-              </Button>
-            </CardHeader>
-            <CardContent className="max-h-[650px] space-y-4 overflow-y-auto p-4 text-xs">
-              {detailLoading ? (
-                <div className="flex items-center gap-2 rounded-md border border-blue-100 bg-blue-50 p-3 text-blue-700">
-                  <span className="h-4 w-4 animate-spin rounded-full border-b-2 border-blue-600" />
-                  Loading log detail
-                </div>
-              ) : null}
+            </Card>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Module</span>
-                  <span className="mt-0.5 block text-sm font-semibold text-slate-900 capitalize">{(selectedLog.group || "").replace(/_/g, " ")}</span>
-                </div>
-                <div>
-                  <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Action</span>
-                  <span className="mt-0.5 block text-sm font-semibold text-slate-900 capitalize">{(selectedLog.action || "").replace(/_/g, " ")}</span>
-                </div>
-                <div>
-                  <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Actor</span>
-                  <span className="mt-0.5 block text-sm font-semibold text-slate-900">{selectedLog.user?.name || "System"}</span>
-                  <span className="block text-slate-500">{selectedLog.user?.email || ""}</span>
-                </div>
-                <div>
-                  <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Status Code</span>
-                  <span className="mt-1 block">
-                    <Badge tone={selectedLog.status_code >= 400 ? "rose" : selectedLog.status_code >= 300 ? "amber" : "green"}>
-                      {selectedLog.status_code}
-                    </Badge>
-                  </span>
-                </div>
-              </div>
+            {/* API Log Detail Drawer */}
+            {selectedApiLog ? (
+              <Card className="sticky top-6">
+                <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 pb-3">
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                      Activity Detail
+                    </h3>
+                    <p className="mt-0.5 font-mono text-[11px] text-slate-400">
+                      ID: #{selectedApiLog.id} · {formatDate(selectedApiLog.created_at)}
+                    </p>
+                  </div>
+                  <Button
+                    aria-label="Close details"
+                    onClick={() => setSelectedApiLog(null)}
+                    size="icon"
+                    type="button"
+                    variant="ghost"
+                    className="h-7 w-7"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </CardHeader>
+                <CardContent className="max-h-[640px] space-y-3.5 overflow-y-auto p-4 text-xs">
+                  {apiDetailLoading ? (
+                    <div className="flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 p-2.5 text-xs text-blue-700">
+                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                      Loading detailed payload...
+                    </div>
+                  ) : null}
 
-              <div className="space-y-1 rounded-md border border-slate-100 bg-slate-50 p-3 text-slate-800">
-                <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Request Information</span>
-                <div className="mt-1.5 space-y-1 font-mono text-[10px]">
-                  <p><span className="font-bold text-slate-600">Method:</span> {selectedLog.request_method}</p>
-                  <p className="break-all"><span className="font-bold text-slate-600">URL:</span> {selectedLog.request_url}</p>
-                  <p><span className="font-bold text-slate-600">Route Name:</span> {selectedLog.route_name || "-"}</p>
-                  <p><span className="font-bold text-slate-600">IP:</span> {selectedLog.ip_address}</p>
-                  <p className="break-all"><span className="font-bold text-slate-600">User Agent:</span> {selectedLog.user_agent || "-"}</p>
-                </div>
-              </div>
+                  {/* Summary Grid */}
+                  <div className="grid grid-cols-2 gap-2.5 rounded-lg border border-slate-200/80 bg-slate-50/50 p-3">
+                    <div>
+                      <span className="block text-[10px] font-bold uppercase text-slate-400">Module</span>
+                      <span className="font-semibold text-slate-900 capitalize">
+                        {(selectedApiLog.group || "-").replace(/_/g, " ")}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] font-bold uppercase text-slate-400">Action</span>
+                      <span className="font-semibold text-slate-900 capitalize">
+                        {(selectedApiLog.action || "-").replace(/_/g, " ")}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] font-bold uppercase text-slate-400">Actor</span>
+                      <span className="font-semibold text-slate-900 block truncate">
+                        {selectedApiLog.user?.name || "System"}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block truncate">
+                        {selectedApiLog.user?.email || ""}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] font-bold uppercase text-slate-400">Status</span>
+                      <div className="mt-0.5">
+                        <Badge
+                          tone={
+                            selectedApiLog.status_code >= 400
+                              ? "rose"
+                              : selectedApiLog.status_code >= 300
+                              ? "amber"
+                              : "green"
+                          }
+                        >
+                          {selectedApiLog.status_code || 200}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
 
-              {selectedLog.old_data || selectedLog.new_data ? (
-                <div className="space-y-3">
-                  <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Data Snapshots</span>
-                  {selectedLog.old_data && (
-                    <div className="space-y-1">
-                      <span className="block text-[9px] font-bold uppercase text-slate-500">Before Change</span>
-                      <pre className="max-h-44 overflow-x-auto rounded-md border border-slate-100 bg-slate-50 p-2 text-[10px] font-mono text-slate-800">
-                        {JSON.stringify(selectedLog.old_data, null, 2)}
-                      </pre>
+                  {/* Request Information */}
+                  <div className="rounded-lg border border-slate-200/80 bg-slate-50 p-3 text-slate-800 space-y-1">
+                    <span className="block text-[10px] font-bold uppercase text-slate-500 mb-1.5">
+                      Request Information
+                    </span>
+                    <div className="space-y-1 font-mono text-[11px]">
+                      <p>
+                        <span className="font-bold text-slate-500">Method:</span>{" "}
+                        <span className="font-bold text-slate-900">{selectedApiLog.request_method}</span>
+                      </p>
+                      <p className="break-all">
+                        <span className="font-bold text-slate-500">URL:</span> {selectedApiLog.request_url}
+                      </p>
+                      <p>
+                        <span className="font-bold text-slate-500">Route Name:</span>{" "}
+                        {selectedApiLog.route_name || "—"}
+                      </p>
+                      <p>
+                        <span className="font-bold text-slate-500">IP:</span> {selectedApiLog.ip_address}
+                      </p>
+                      <p className="break-all text-[10px] text-slate-600">
+                        <span className="font-bold text-slate-500">User Agent:</span>{" "}
+                        {selectedApiLog.user_agent || "—"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Data Snapshots */}
+                  {selectedApiLog.old_data || selectedApiLog.new_data ? (
+                    <div className="space-y-3">
+                      <span className="block text-[10px] font-bold uppercase text-slate-500">
+                        Payload Changes
+                      </span>
+                      {selectedApiLog.old_data && (
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold uppercase text-slate-500">
+                              Before Change (Old)
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                copyToClipboard(
+                                  JSON.stringify(selectedApiLog.old_data, null, 2),
+                                  "old"
+                                )
+                              }
+                              className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                            >
+                              {copiedSnapshot === "old" ? (
+                                <Check className="h-3 w-3 text-emerald-600" />
+                              ) : (
+                                <Copy className="h-3 w-3" />
+                              )}
+                              Copy
+                            </button>
+                          </div>
+                          <pre className="max-h-44 overflow-x-auto rounded-lg border border-slate-200 bg-slate-900 p-2.5 text-[10px] font-mono text-slate-200">
+                            {JSON.stringify(selectedApiLog.old_data, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                      {selectedApiLog.new_data && (
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold uppercase text-blue-600">
+                              After Change (New)
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                copyToClipboard(
+                                  JSON.stringify(selectedApiLog.new_data, null, 2),
+                                  "new"
+                                )
+                              }
+                              className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                            >
+                              {copiedSnapshot === "new" ? (
+                                <Check className="h-3 w-3 text-emerald-600" />
+                              ) : (
+                                <Copy className="h-3 w-3" />
+                              )}
+                              Copy
+                            </button>
+                          </div>
+                          <pre className="max-h-44 overflow-x-auto rounded-lg border border-blue-900/60 bg-slate-900 p-2.5 text-[10px] font-mono text-emerald-400">
+                            {JSON.stringify(selectedApiLog.new_data, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-slate-200 p-4 text-center text-slate-400 text-xs">
+                      No JSON database payload recorded for this request.
                     </div>
                   )}
-                  {selectedLog.new_data && (
-                    <div className="space-y-1">
-                      <span className="block text-[9px] font-bold uppercase text-blue-600">After Change</span>
-                      <pre className="max-h-44 overflow-x-auto rounded-md border border-blue-50 bg-blue-50/20 p-2 text-[10px] font-mono text-blue-950">
-                        {JSON.stringify(selectedLog.new_data, null, 2)}
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="hidden sticky top-6 lg:block">
+                <CardContent className="space-y-3 py-24 text-center">
+                  <ClipboardCheck className="mx-auto h-8 w-8 text-slate-300" />
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">Select an activity entry</p>
+                    <p className="mx-auto mt-1 max-w-[220px] text-xs text-slate-400 leading-relaxed">
+                      Click any row to inspect complete HTTP request details, headers, and database diffs.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB 2: LARAVEL SYSTEM LOGS ────────────────────────────────────────── */}
+      {activeTab === "laravel" && (
+        <div className="space-y-4">
+          {/* Filters Bar */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-3">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6">
+              {/* Search */}
+              <div className="lg:col-span-3">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Search Log Messages & Stack Traces
+                </label>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                  <Input
+                    className="h-8 pl-8 text-xs"
+                    onChange={(e) => {
+                      setLaravelSearch(e.target.value);
+                      setLaravelPage(1);
+                    }}
+                    placeholder="Search exceptions, query errors, classes, methods..."
+                    value={laravelSearch}
+                  />
+                </div>
+              </div>
+
+              {/* Date Filter */}
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Log Date
+                </label>
+                <Select
+                  className="h-8 text-xs"
+                  onChange={(e) => {
+                    setLaravelDate(e.target.value);
+                    setLaravelPage(1);
+                  }}
+                  value={laravelDate}
+                >
+                  <option value="">All Dates</option>
+                  {laravelAvailableDates.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              {/* Level Filter */}
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Severity Level
+                </label>
+                <Select
+                  className="h-8 text-xs"
+                  onChange={(e) => {
+                    setLaravelLevel(e.target.value);
+                    setLaravelPage(1);
+                  }}
+                  value={laravelLevel}
+                >
+                  <option value="">All Levels</option>
+                  <option value="ERROR">ERROR</option>
+                  <option value="WARNING">WARNING</option>
+                  <option value="INFO">INFO</option>
+                  <option value="DEBUG">DEBUG</option>
+                  <option value="CRITICAL">CRITICAL</option>
+                  <option value="ALERT">ALERT</option>
+                  <option value="EMERGENCY">EMERGENCY</option>
+                </Select>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="flex items-end">
+                {(laravelSearch || laravelDate || laravelLevel) && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={resetLaravelFilters}
+                    className="h-8 w-full gap-1 text-xs text-slate-600 hover:text-slate-900"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    Reset
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 text-[11px] text-slate-500">
+              <span>
+                Showing {laravelLogs.length} of {laravelPagination.total} parsed system log entries
+              </span>
+              <span>Storage location: storage/logs/laravel.log</span>
+            </div>
+          </div>
+
+          {/* Table & Stack Trace Layout */}
+          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_480px]">
+            <Card className="lg:min-h-[520px]">
+              <CardContent className="p-0">
+                {laravelLoading ? (
+                  <div className="flex flex-col items-center justify-center py-24 text-slate-400">
+                    <span className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent mb-2" />
+                    <p className="text-xs">Parsing Laravel logs...</p>
+                  </div>
+                ) : laravelLogs.length === 0 ? (
+                  <div className="px-6 py-16">
+                    <EmptyState
+                      description="No Laravel logs match your selected date or level filter."
+                      title="No logs found"
+                    />
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-100 bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                          <th className="p-3.5">Severity</th>
+                          <th className="p-3.5">Timestamp</th>
+                          <th className="p-3.5">Env</th>
+                          <th className="p-3.5">Log Message</th>
+                          <th className="p-3.5 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
+                        {laravelLogs.map((log) => {
+                          const isError = ["ERROR", "CRITICAL", "ALERT", "EMERGENCY"].includes(log.level);
+                          const isWarning = log.level === "WARNING";
+                          const isInfo = log.level === "INFO";
+
+                          return (
+                            <tr
+                              key={log.id}
+                              onClick={() => setSelectedLaravelLog(log)}
+                              className={`cursor-pointer transition hover:bg-slate-50 ${
+                                selectedLaravelLog?.id === log.id
+                                  ? "bg-blue-50/70 hover:bg-blue-50"
+                                  : ""
+                              }`}
+                            >
+                              <td className="p-3.5">
+                                <span
+                                  className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold uppercase font-sans ${
+                                    isError
+                                      ? "bg-rose-100 text-rose-700"
+                                      : isWarning
+                                      ? "bg-amber-100 text-amber-700"
+                                      : isInfo
+                                      ? "bg-blue-100 text-blue-700"
+                                      : "bg-slate-100 text-slate-600"
+                                  }`}
+                                >
+                                  {log.level}
+                                </span>
+                              </td>
+                              <td className="p-3.5 text-slate-500 whitespace-nowrap">
+                                {log.timestamp}
+                              </td>
+                              <td className="p-3.5 text-slate-400 uppercase text-[10px]">
+                                {log.environment}
+                              </td>
+                              <td className="p-3.5 font-sans">
+                                <div className="max-w-[360px]">
+                                  <p className="truncate text-xs font-medium text-slate-900" title={log.message}>
+                                    {log.message}
+                                  </p>
+                                  {log.file && (
+                                    <p className="truncate text-[10px] font-mono text-slate-400">
+                                      {log.file}
+                                    </p>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="p-3.5 text-right font-sans" onClick={(e) => e.stopPropagation()}>
+                                <Button
+                                  aria-label="View log trace"
+                                  onClick={() => setSelectedLaravelLog(log)}
+                                  size="sm"
+                                  type="button"
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0"
+                                >
+                                  <Eye className="h-3.5 w-3.5 text-slate-400 hover:text-slate-700" />
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+
+              {/* Pagination */}
+              <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
+                <span>
+                  Page {laravelPagination.page} of {laravelPagination.lastPage} · {laravelPagination.total} entries
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    disabled={laravelLoading || laravelPage <= 1}
+                    onClick={() => setLaravelPage((p) => Math.max(1, p - 1))}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    disabled={laravelLoading || laravelPage >= laravelPagination.lastPage}
+                    onClick={() => setLaravelPage((p) => p + 1)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </Card>
+
+            {/* Laravel Log Detail Drawer */}
+            {selectedLaravelLog ? (
+              <Card className="sticky top-6">
+                <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
+                        ["ERROR", "CRITICAL", "ALERT"].includes(selectedLaravelLog.level)
+                          ? "bg-rose-100 text-rose-700"
+                          : selectedLaravelLog.level === "WARNING"
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-blue-100 text-blue-700"
+                      }`}
+                    >
+                      {selectedLaravelLog.level}
+                    </span>
+                    <span className="text-xs font-mono text-slate-500">
+                      {selectedLaravelLog.timestamp}
+                    </span>
+                  </div>
+                  <Button
+                    aria-label="Close details"
+                    onClick={() => setSelectedLaravelLog(null)}
+                    size="icon"
+                    type="button"
+                    variant="ghost"
+                    className="h-7 w-7"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </CardHeader>
+                <CardContent className="max-h-[640px] space-y-3.5 overflow-y-auto p-4 text-xs">
+                  {/* Message Alert Block */}
+                  <div
+                    className={`rounded-lg border p-3.5 space-y-1.5 ${
+                      ["ERROR", "CRITICAL", "ALERT"].includes(selectedLaravelLog.level)
+                        ? "border-rose-200 bg-rose-50/70 text-rose-950"
+                        : selectedLaravelLog.level === "WARNING"
+                        ? "border-amber-200 bg-amber-50/70 text-amber-950"
+                        : "border-blue-200 bg-blue-50/70 text-blue-950"
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-xs leading-snug break-words">
+                          {selectedLaravelLog.message}
+                        </p>
+                        {selectedLaravelLog.file && (
+                          <p className="mt-1 font-mono text-[11px] opacity-80 break-all">
+                            Location: {selectedLaravelLog.file}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Metadata Row */}
+                  <div className="grid grid-cols-2 gap-2 text-[11px] rounded-lg border border-slate-200/80 bg-slate-50 p-2.5">
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">
+                        Environment
+                      </span>
+                      <span className="font-semibold text-slate-800 uppercase font-mono">
+                        {selectedLaravelLog.environment}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">
+                        Date / Time
+                      </span>
+                      <span className="font-semibold text-slate-800 font-mono">
+                        {selectedLaravelLog.date} · {selectedLaravelLog.time}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Stack Trace */}
+                  {selectedLaravelLog.stack_trace ? (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                          Stack Trace & Context
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(selectedLaravelLog.stack_trace, "trace")}
+                          className="flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:text-blue-800"
+                        >
+                          {copiedTrace ? (
+                            <>
+                              <Check className="h-3 w-3 text-emerald-600" />
+                              <span className="text-emerald-700">Copied!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="h-3 w-3" />
+                              <span>Copy Trace</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      <pre className="max-h-72 overflow-x-auto rounded-lg border border-slate-800 bg-slate-950 p-3 text-[10px] font-mono text-slate-300 leading-relaxed">
+                        {selectedLaravelLog.stack_trace}
                       </pre>
                     </div>
+                  ) : (
+                    <p className="text-center text-slate-400 text-xs py-4">
+                      No additional stack trace captured for this entry.
+                    </p>
                   )}
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="hidden sticky top-6 lg:block">
-            <CardContent className="space-y-3 py-20 text-center">
-              <ClipboardCheck className="mx-auto h-8 w-8 text-slate-300" />
-              <div>
-                <p className="text-sm font-bold text-slate-800">Select a log entry</p>
-                <p className="mx-auto mt-1 max-w-[220px] text-xs text-slate-500">
-                  Select an audit log row to view HTTP request details, user agent, and full database JSON payload changes.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="hidden sticky top-6 lg:block">
+                <CardContent className="space-y-3 py-24 text-center">
+                  <Terminal className="mx-auto h-8 w-8 text-slate-300" />
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">Select a log entry</p>
+                    <p className="mx-auto mt-1 max-w-[220px] text-xs text-slate-400 leading-relaxed">
+                      Click any system log row to inspect complete error messages, exception classes, and full stack traces.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

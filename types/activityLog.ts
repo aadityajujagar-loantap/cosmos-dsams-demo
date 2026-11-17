@@ -21,3 +21,25 @@ export interface ActivityLog {
     email: string;
   } | null;
 }
+
+export interface LaravelLogEntry {
+  id: string;
+  timestamp: string;
+  date: string;
+  time: string;
+  environment: string;
+  level: string;
+  message: string;
+  stack_trace: string;
+  file?: string | null;
+}
+
+export interface LaravelLogResponse {
+  data: LaravelLogEntry[];
+  total: number;
+  current_page: number;
+  per_page: number;
+  last_page: number;
+  available_dates: string[];
+  levels: string[];
+}

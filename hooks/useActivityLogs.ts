@@ -13,6 +13,7 @@ function errorMessage(error: unknown, fallback: string) {
 
 export function useActivityLogs() {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [groups, setGroups] = useState<string[]>([]);
   const [selectedLog, setSelectedLog] = useState<ActivityLog | null>(null);
   const [pagination, setPagination] = useState<{
     page: number;
@@ -28,6 +29,8 @@ export function useActivityLogs() {
       user_id?: number;
       action?: string;
       group?: string;
+      status_code?: number;
+      search?: string;
       date_from?: string;
       date_to?: string;
       page?: number;
@@ -55,7 +58,7 @@ export function useActivityLogs() {
           total: total,
           lastPage: Math.max(1, lastPage),
         });
-      } catch (error: unknown) {
+      } catch {
         setLogs([]);
       } finally {
         setLoading(false);
@@ -63,6 +66,17 @@ export function useActivityLogs() {
     },
     []
   );
+
+  const fetchGroups = useCallback(async () => {
+    try {
+      const res = await adminApi.getActivityLogGroups();
+      if (Array.isArray(res)) {
+        setGroups(res);
+      }
+    } catch {
+      // keep empty
+    }
+  }, []);
 
   const fetchLogDetail = useCallback(
     async (id: number) => {
@@ -87,11 +101,13 @@ export function useActivityLogs() {
 
   return {
     logs,
+    groups,
     selectedLog,
     pagination,
     loading,
     detailLoading,
     fetchLogs,
+    fetchGroups,
     fetchLogDetail,
     setSelectedLog,
   };

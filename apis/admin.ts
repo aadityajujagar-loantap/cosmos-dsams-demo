@@ -1,7 +1,7 @@
 import { request, requestBlob } from "./client";
 import type { MakerRequest, MakerRequestActionType, MakerRequestStatus } from "@/types/makerChecker";
 import type { Permission, Role, User, BranchRole } from "@/types/auth";
-import type { ActivityLog } from "@/types/activityLog";
+import type { ActivityLog, LaravelLogResponse } from "@/types/activityLog";
 import type {
   Dsa,
   DsaActivityHistory,
@@ -377,6 +377,8 @@ export const adminApi = {
     user_id?: number;
     action?: string;
     group?: string;
+    status_code?: number;
+    search?: string;
     date_from?: string;
     date_to?: string;
     page?: number;
@@ -389,12 +391,37 @@ export const adminApi = {
   },
 
   /**
+   * Fetch distinct activity log groups/modules
+   */
+  getActivityLogGroups: async (): Promise<string[]> => {
+    return request<string[]>("/admin/activity-logs/groups", { method: "GET" });
+  },
+
+  /**
    * Fetch single activity log detail
    */
   getActivityLogDetail: async (id: number): Promise<ActivityLog> => {
     return request<ActivityLog>(`/admin/activity-logs/${id}`, {
       method: "GET",
     });
+  },
+
+  /**
+   * Fetch parsed Laravel system application logs (date-wise & level filtered)
+   */
+  getLaravelLogs: async (params?: {
+    date?: string;
+    date_from?: string;
+    date_to?: string;
+    level?: string;
+    search?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<LaravelLogResponse> => {
+    return request<LaravelLogResponse>(
+      `/admin/laravel-logs${compactParams(params)}`,
+      { method: "GET" }
+    );
   },
 
   // â”€â”€ DSA Dropdowns â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
