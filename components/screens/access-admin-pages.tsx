@@ -150,6 +150,7 @@ function compactUserPayload(form: UserFormState, includePassword: boolean, isMul
     name: form.name.trim(),
     password: includePassword && form.password ? form.password : undefined,
     phone: form.phone.trim() || undefined,
+    status: form.status,
     ticket_no: form.ticket_no.trim() || undefined,
   };
 }
