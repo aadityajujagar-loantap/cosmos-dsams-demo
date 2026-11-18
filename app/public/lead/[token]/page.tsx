@@ -609,7 +609,16 @@ export default function CustomerSelfFillPage() {
                     id="branch_select"
                     required
                     value={formData.Branch_id || ''}
-                    onChange={(e) => handleChange('Branch_id', e.target.value)}
+                    onChange={(e) => {
+                      const bCode = e.target.value;
+                      const selBranch = branches.find((b) => (b.branch_code || b.id) == bCode);
+                      setFormData((prev: any) => ({
+                        ...prev,
+                        Branch_id: bCode,
+                        city: selBranch?.city || prev.city || '',
+                        state: selBranch?.state || prev.state || '',
+                      }));
+                    }}
                     placeholder="-- Select Preferred Cosmos Branch --"
                   >
                     <option value="">-- Select Preferred Cosmos Branch --</option>
@@ -621,21 +630,7 @@ export default function CustomerSelfFillPage() {
                   </Select>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="flex flex-col">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                      Pincode *
-                    </Label>
-                    <Input
-                      type="text"
-                      required
-                      maxLength={6}
-                      placeholder="e.g. 400001"
-                      value={formData.pincode || ''}
-                      onChange={(e) => handleChange('pincode', e.target.value)}
-                      className="h-10 text-sm font-mono"
-                    />
-                  </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="flex flex-col">
                     <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
                       City *
@@ -646,7 +641,7 @@ export default function CustomerSelfFillPage() {
                       placeholder="City"
                       value={formData.city || ''}
                       onChange={(e) => handleChange('city', e.target.value)}
-                      className="h-10 text-sm"
+                      className="h-10 text-sm bg-slate-50"
                     />
                   </div>
                   <div className="flex flex-col">
@@ -659,7 +654,7 @@ export default function CustomerSelfFillPage() {
                       placeholder="State"
                       value={formData.state || ''}
                       onChange={(e) => handleChange('state', e.target.value)}
-                      className="h-10 text-sm"
+                      className="h-10 text-sm bg-slate-50"
                     />
                   </div>
                 </div>
