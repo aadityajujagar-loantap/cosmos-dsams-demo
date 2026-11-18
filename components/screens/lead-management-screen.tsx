@@ -72,6 +72,40 @@ import { useToast } from "@/components/ui/toast";
 import { formatCurrency, formatDate, parseDobToIso, calculateAgeFromDob, cn, formatStatusLabel } from "@/lib/utils";
 import { getLoanPurposeOptionsFromApi } from "@/lib/loan-purpose";
 
+function getConstitutionsForOccupation(employmentType?: string): Array<{ key: string; label: string }> {
+  if (!employmentType) return [];
+  const normalized = employmentType.toLowerCase().replace(/[-_ ]/g, "");
+
+  if (normalized === "salaried") {
+    return [{ key: "Individual", label: "Individual" }];
+  }
+  if (normalized === "selfemployedprofessional") {
+    return [{ key: "Individual", label: "Individual" }];
+  }
+  if (normalized === "selfemployed") {
+    return [
+      { key: "Proprietory", label: "Proprietory" },
+      { key: "Partnership", label: "Partnership" },
+      { key: "LLP", label: "LLP" },
+      { key: "Pvt. Ltd.", label: "Pvt. Ltd." },
+      { key: "Public Ltd.", label: "Public Ltd." },
+      { key: "Trust", label: "Trust" },
+      { key: "Co-op.Society", label: "Co-op.Society" },
+    ];
+  }
+  if (normalized === "retired") {
+    return [{ key: "Retired", label: "Retired" }];
+  }
+  if (normalized === "housewife") {
+    return [{ key: "housewife", label: "housewife" }];
+  }
+  if (normalized === "other") {
+    return [{ key: "other", label: "other" }];
+  }
+
+  return [{ key: "Individual", label: "Individual" }];
+}
+
 function SearchableDsaSelect({
   dsaList,
   selectedCode,
@@ -766,7 +800,13 @@ const setFilters = (newFilters: {
 
     getMasterValues({ group: "occupation_type", employment_type: empType })
       .then((res) => {
-        const list = Array.isArray(res?.data || res) ? (res?.data || res) : [];
+        const rawList = Array.isArray(res?.data || res) ? (res?.data || res) : [];
+        const filtered = rawList.filter((item: any) => {
+          const val = (item.meta_value || item.name || "").trim();
+          const letters = val.replace(/[^a-zA-Z]/g, "");
+          return letters.length === 0 || letters !== letters.toUpperCase();
+        });
+        const list = filtered.length > 0 ? filtered : rawList;
         setActiveOccupationTypes(list);
         setCreateForm((prev) => {
           if (!prev.occupation_type) return prev;
@@ -878,8 +918,8 @@ const setFilters = (newFilters: {
       toast({ title: "Validation Error", description: "Please select a branch location", variant: "error" });
       return;
     }
-    if (!createForm.pincode || (createForm.pincode || "").length !== 6) {
-      toast({ title: "Validation Error", description: "Please enter a valid 6-digit Pincode", variant: "error" });
+    if (!createForm.city?.trim() || !createForm.state?.trim()) {
+      toast({ title: "Validation Error", description: "City and state are required for the selected branch", variant: "error" });
       return;
     }
     if (!createForm.pan_no || (createForm.pan_no || "").length !== 10) {
@@ -890,40 +930,33 @@ const setFilters = (newFilters: {
       toast({ title: "Validation Error", description: "Please enter a valid 10-digit mobile number", variant: "error" });
       return;
     }
-    if (createForm.constitution === "Individual") {
-      if (!createForm.first_name?.trim()) {
-        toast({ title: "Validation Error", description: "Please enter applicant first name", variant: "error" });
-        return;
-      }
-      if (!createForm.last_name?.trim()) {
-        toast({ title: "Validation Error", description: "Please enter applicant last name", variant: "error" });
-        return;
-      }
-      if (!createForm.dob) {
-        toast({ title: "Validation Error", description: "Please select date of birth", variant: "error" });
-        return;
-      }
-      if (!createForm.address?.trim()) {
-        toast({ title: "Validation Error", description: "Please enter residential address", variant: "error" });
-        return;
-      }
-      if (!createForm.employment_type) {
-        toast({ title: "Validation Error", description: "Please select occupation type", variant: "error" });
-        return;
-      }
-    } else {
-      if (!createForm.entity_name?.trim()) {
-        toast({ title: "Validation Error", description: "Please enter legal entity name", variant: "error" });
-        return;
-      }
-      if (!createForm.doi) {
-        toast({ title: "Validation Error", description: "Please enter date of incorporation", variant: "error" });
-        return;
-      }
-      if (!createForm.business_address?.trim()) {
-        toast({ title: "Validation Error", description: "Please enter registered business address", variant: "error" });
-        return;
-      }
+    if (!createForm.first_name?.trim()) {
+      toast({ title: "Validation Error", description: "Please enter applicant first name", variant: "error" });
+      return;
+    }
+    if (!createForm.last_name?.trim()) {
+      toast({ title: "Validation Error", description: "Please enter applicant last name", variant: "error" });
+      return;
+    }
+    if (!createForm.dob) {
+      toast({ title: "Validation Error", description: "Please select date of birth", variant: "error" });
+      return;
+    }
+    if (!createForm.address?.trim()) {
+      toast({ title: "Validation Error", description: "Please enter residential address", variant: "error" });
+      return;
+    }
+    if (!createForm.employment_type) {
+      toast({ title: "Validation Error", description: "Please select occupation type", variant: "error" });
+      return;
+    }
+    if (!createForm.constitution) {
+      toast({ title: "Validation Error", description: "Please select constitution type", variant: "error" });
+      return;
+    }
+    if (!createForm.employer_business_name?.trim()) {
+      toast({ title: "Validation Error", description: "Please enter employer / business entity name", variant: "error" });
+      return;
     }
     if (!createForm.loan_product_id || !createForm.loan_type_id) {
       toast({ title: "Validation Error", description: "Please select Loan Product & Type", variant: "error" });
@@ -942,20 +975,11 @@ const setFilters = (newFilters: {
       return;
     }
 
-    if (createForm.constitution === "Individual") {
-      const grossMonthly = Number(createForm.avg_gross_monthly_income || 0);
-      const netMonthly = Number(createForm.avg_net_monthly_income || 0);
-      if (createForm.avg_gross_monthly_income && createForm.avg_net_monthly_income && grossMonthly <= netMonthly) {
-        toast({ title: "Validation Error", description: "Gross Income should be greater than Net Income.", variant: "error" });
-        return;
-      }
-    } else {
-      const grossAnnual = Number(createForm.avg_annual_gross_income || 0);
-      const netAnnual = Number(createForm.avg_annual_net_income || 0);
-      if (createForm.avg_annual_gross_income && createForm.avg_annual_net_income && grossAnnual <= netAnnual) {
-        toast({ title: "Validation Error", description: "Annual Gross Income should be greater than Annual Net Income.", variant: "error" });
-        return;
-      }
+    const grossMonthly = Number(createForm.avg_gross_monthly_income || 0);
+    const netMonthly = Number(createForm.avg_net_monthly_income || 0);
+    if (createForm.avg_gross_monthly_income && createForm.avg_net_monthly_income && grossMonthly <= netMonthly) {
+      toast({ title: "Validation Error", description: "Gross Income should be greater than Net Income.", variant: "error" });
+      return;
     }
 
     try {
@@ -1920,7 +1944,18 @@ const setFilters = (newFilters: {
                     searchable
                     searchPlaceholder="Search branch name or code..."
                     value={createForm.Branch_id || ""}
-                    onChange={(e) => setCreateForm({ ...createForm, Branch_id: e.target.value })}
+                    onChange={(e) => {
+                      const branchCode = e.target.value;
+                      const selectedBranch = branches.find(
+                        (b) => (b.branch_code || b.id) == branchCode
+                      );
+                      setCreateForm((prev: any) => ({
+                        ...prev,
+                        Branch_id: branchCode,
+                        city: selectedBranch?.city || prev.city || "",
+                        state: selectedBranch?.state || prev.state || "",
+                      }));
+                    }}
                     className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
                   >
                     <option value="">-- Choose Branch Location --</option>
@@ -1932,24 +1967,7 @@ const setFilters = (newFilters: {
                   </Select>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
-                  <div className="flex flex-col">
-                    <div className="h-5 flex items-center">
-                      <Label className="text-xs font-bold text-slate-700 leading-none">
-                        Pincode <span className="text-rose-500 font-bold">*</span>
-                      </Label>
-                    </div>
-                    <Input
-                      type="text"
-                      required
-                      maxLength={6}
-                      placeholder="e.g. 400001"
-                      value={createForm.pincode || ""}
-                      onChange={(e) => setCreateForm({ ...createForm, pincode: e.target.value.replace(/\D/g, "") })}
-                      className="mt-1.5 font-mono text-xs sm:text-sm h-9 bg-white"
-                    />
-                  </div>
-
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
                   <div className="flex flex-col">
                     <div className="h-5 flex items-center">
                       <Label className="text-xs font-bold text-slate-700 leading-none">
@@ -1962,7 +1980,7 @@ const setFilters = (newFilters: {
                       placeholder="City"
                       value={createForm.city || ""}
                       onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })}
-                      className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                      className="mt-1.5 text-xs sm:text-sm h-9 bg-slate-50"
                     />
                   </div>
 
@@ -1978,7 +1996,7 @@ const setFilters = (newFilters: {
                       placeholder="State"
                       value={createForm.state || ""}
                       onChange={(e) => setCreateForm({ ...createForm, state: e.target.value })}
-                      className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
+                      className="mt-1.5 text-xs sm:text-sm h-9 bg-slate-50"
                     />
                   </div>
                 </div>
@@ -2129,14 +2147,13 @@ const setFilters = (newFilters: {
                     </div>
                     <div>
                       <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                        {createForm.constitution === "Individual" ? "Applicant Demographics & Financials" : "Entity Demographics & Turnover"}
+                        Applicant Demographics & Financials
                       </h4>
                     </div>
                   </div>
                 </div>
 
-                {createForm.constitution === "Individual" ? (
-                  <div className="space-y-5">
+                <div className="space-y-5">
                     {/* Individual Demographics */}
                     <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 sm:p-5 space-y-4">
                       <div className="flex items-center justify-between border-b border-slate-200/60 pb-2.5">
@@ -2287,7 +2304,7 @@ const setFilters = (newFilters: {
                         <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Employment & Financial Profile</span>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
                         <div className="flex flex-col">
                           <div className="h-5 flex items-center">
                             <Label className="text-xs font-bold text-slate-700 leading-none">
@@ -2297,7 +2314,16 @@ const setFilters = (newFilters: {
                           <Select
                             required
                             value={createForm.employment_type || ""}
-                            onChange={(e) => setCreateForm({ ...createForm, employment_type: e.target.value })}
+                            onChange={(e) => {
+                              const empType = e.target.value;
+                              const constOpts = getConstitutionsForOccupation(empType);
+                              const newConst = constOpts.length === 1 ? constOpts[0].key : (constOpts.some(c => c.key === createForm.constitution) ? createForm.constitution : "");
+                              setCreateForm((prev: any) => ({
+                                ...prev,
+                                employment_type: empType,
+                                constitution: newConst,
+                              }));
+                            }}
                             className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
                           >
                             <option value="">-- Choose Occupation Type --</option>
@@ -2306,6 +2332,29 @@ const setFilters = (newFilters: {
                             ))}
                           </Select>
                         </div>
+
+                        <div className="flex flex-col">
+                          <div className="h-5 flex items-center">
+                            <Label className="text-xs font-bold text-slate-700 leading-none">
+                              Constitution Type <span className="text-rose-500 font-bold">*</span>
+                            </Label>
+                          </div>
+                          <Select
+                            required
+                            disabled={!createForm.employment_type}
+                            value={createForm.constitution || ""}
+                            onChange={(e) => setCreateForm({ ...createForm, constitution: e.target.value })}
+                            className="mt-1.5 text-xs sm:text-sm h-9 bg-white disabled:opacity-50"
+                          >
+                            <option value="">
+                              {!createForm.employment_type ? "-- Choose Occupation Type First --" : "-- Choose Constitution Type --"}
+                            </option>
+                            {getConstitutionsForOccupation(createForm.employment_type).map((item) => (
+                              <option key={item.key} value={item.key}>{item.label}</option>
+                            ))}
+                          </Select>
+                        </div>
+
                         <div className="flex flex-col">
                           <div className="h-5 flex items-center">
                             <Label className="text-xs font-bold text-slate-700 leading-none">
@@ -2402,153 +2451,6 @@ const setFilters = (newFilters: {
                       )}
                     </div>
                   </div>
-                ) : (
-                  <div className="space-y-5">
-                    {/* Non-Individual Entity Details */}
-                    <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 sm:p-5 space-y-4">
-                      <div className="flex items-center justify-between border-b border-slate-200/60 pb-2.5">
-                        <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Entity Information</span>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
-                        <div className="flex flex-col">
-                          <div className="h-5 flex items-center">
-                            <Label className="text-xs font-bold text-slate-700 leading-none">
-                              Registered Entity Name <span className="text-rose-500 font-bold">*</span>
-                            </Label>
-                          </div>
-                          <Input
-                            type="text"
-                            required
-                            placeholder="Legal company or firm name"
-                            readOnly={panVerified && panFilledFields.has("entity_name")}
-                            value={createForm.entity_name || ""}
-                            onChange={(e) => setCreateForm({ ...createForm, entity_name: e.target.value })}
-                            className={cn("mt-1.5 text-xs sm:text-sm h-9 bg-white", panVerified && panFilledFields.has("entity_name") && "bg-slate-50 text-slate-600 cursor-not-allowed")}
-                          />
-                        </div>
-                        <div className="flex flex-col">
-                          <div className="h-5 flex items-center">
-                            <Label className="text-xs font-bold text-slate-700 leading-none">
-                              Date of Incorporation (DOI) <span className="text-rose-500 font-bold">*</span>
-                            </Label>
-                          </div>
-                          <Input
-                            type="date"
-                            required
-                            readOnly={panVerified && panFilledFields.has("doi")}
-                            value={createForm.doi || ""}
-                            onChange={(e) => setCreateForm({ ...createForm, doi: e.target.value })}
-                            className={cn("mt-1.5 text-xs sm:text-sm h-9 bg-white", panVerified && panFilledFields.has("doi") && "bg-slate-50 text-slate-600 cursor-not-allowed")}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col">
-                        <div className="h-5 flex items-center">
-                          <Label className="text-xs font-bold text-slate-700 leading-none">
-                            Registered Business Address <span className="text-rose-500 font-bold">*</span>
-                          </Label>
-                        </div>
-                        <Input
-                          type="text"
-                          required
-                          placeholder="Complete registered corporate office address..."
-                          value={createForm.business_address || ""}
-                          onChange={(e) => setCreateForm({ ...createForm, business_address: e.target.value })}
-                          className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
-                        <div className="flex flex-col">
-                          <div className="h-5 flex items-center">
-                            <Label className="text-xs font-bold text-slate-700 leading-none">
-                              Key Promoter / Director Name <span className="text-rose-500 font-bold">*</span>
-                            </Label>
-                          </div>
-                          <Input
-                            type="text"
-                            required
-                            placeholder="Managing partner / director name"
-                            value={createForm.proprietor_partner_director_name || ""}
-                            onChange={(e) => setCreateForm({ ...createForm, proprietor_partner_director_name: e.target.value })}
-                            className="mt-1.5 text-xs sm:text-sm h-9 bg-white"
-                          />
-                        </div>
-                        <div className="flex flex-col">
-                          <div className="h-5 flex items-center">
-                            <Label className="text-xs font-bold text-slate-700 leading-none">
-                              Annual Sales Turnover (₹) <span className="text-rose-500 font-bold">*</span>
-                            </Label>
-                          </div>
-                          <Input
-                            type="number"
-                            required
-                            min={0}
-                            placeholder="Annual turnover"
-                            value={createForm.annual_gross_turnover_last_fy || ""}
-                            onChange={(e) => setCreateForm({ ...createForm, annual_gross_turnover_last_fy: Number(e.target.value) })}
-                            className="mt-1.5 font-mono text-xs sm:text-sm h-9 bg-white"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
-                        <div className="flex flex-col">
-                          <div className="h-5 flex items-center">
-                            <Label className="text-xs font-bold text-slate-700 leading-none">
-                              Annual Gross Income (₹) <span className="text-rose-500 font-bold">*</span>
-                            </Label>
-                          </div>
-                          <Input
-                            type="number"
-                            required
-                            min={0}
-                            value={createForm.avg_annual_gross_income || ""}
-                            onChange={(e) => setCreateForm({ ...createForm, avg_annual_gross_income: Number(e.target.value) })}
-                            className="mt-1.5 font-mono text-xs sm:text-sm h-9 bg-white"
-                          />
-                        </div>
-                        <div className="flex flex-col">
-                          <div className="h-5 flex items-center">
-                            <Label className="text-xs font-bold text-slate-700 leading-none">
-                              Annual Net Income (₹) <span className="text-rose-500 font-bold">*</span>
-                            </Label>
-                          </div>
-                          <Input
-                            type="number"
-                            required
-                            min={0}
-                            value={createForm.avg_annual_net_income || ""}
-                            onChange={(e) => setCreateForm({ ...createForm, avg_annual_net_income: Number(e.target.value) })}
-                            className="mt-1.5 font-mono text-xs sm:text-sm h-9 bg-white"
-                          />
-                        </div>
-                        <div className="flex flex-col">
-                          <div className="h-5 flex items-center">
-                            <Label className="text-xs font-bold text-slate-700 leading-none">
-                              Monthly Obligation (₹) <span className="text-rose-500 font-bold">*</span>
-                            </Label>
-                          </div>
-                          <Input
-                            type="number"
-                            required
-                            min={0}
-                            value={createForm.existing_monthly_repayment_obligation || ""}
-                            onChange={(e) => setCreateForm({ ...createForm, existing_monthly_repayment_obligation: Number(e.target.value) })}
-                            className="mt-1.5 font-mono text-xs sm:text-sm h-9 bg-white"
-                          />
-                        </div>
-                      </div>
-                      {createForm.avg_annual_gross_income && createForm.avg_annual_net_income && Number(createForm.avg_annual_gross_income) <= Number(createForm.avg_annual_net_income) && (
-                        <p className="text-xs text-rose-600 font-semibold mt-1">
-                          ⚠️ Annual Gross Income should be greater than Annual Net Income.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* 4. Loan Facility Requirements */}
@@ -2699,9 +2601,7 @@ const setFilters = (newFilters: {
                     <div>
                       <p className="text-[11px] text-slate-500">Applicant</p>
                       <p className="font-semibold text-slate-800 truncate">
-                        {createForm.constitution === "Individual"
-                          ? `${createForm.title || "Mr."} ${createForm.first_name || ""} ${createForm.last_name || ""}`.trim() || "--"
-                          : createForm.entity_name || "--"}
+                        {`${createForm.title || "Mr."} ${createForm.first_name || ""} ${createForm.last_name || ""}`.trim() || createForm.entity_name || "--"}
                       </p>
                     </div>
                     <div>
