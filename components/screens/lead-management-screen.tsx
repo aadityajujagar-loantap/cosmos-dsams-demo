@@ -397,6 +397,7 @@ export function LeadManagementScreen() {
   const [panVerified, setPanVerified] = useState(false);
   const [panMessage, setPanMessage] = useState<string | null>(null);
   const [isMobileFromPan, setIsMobileFromPan] = useState(false);
+  const [panFilledFields, setPanFilledFields] = useState<Set<string>>(new Set());
 
   // Mobile OTP State
   const [sendingOtp, setSendingOtp] = useState(false);
@@ -684,6 +685,14 @@ const setFilters = (newFilters: {
 
         setIsMobileFromPan(Boolean(panMobile));
 
+        const filled = new Set<string>();
+        if (firstName) filled.add("first_name");
+        if (middleName) filled.add("middle_name");
+        if (lastName) filled.add("last_name");
+        if (fullName) filled.add("entity_name");
+        if (formattedDate) { filled.add("dob"); filled.add("doi"); }
+        setPanFilledFields(filled);
+
         setCreateForm((prev) => ({
           ...prev,
           pan_no: pan,
@@ -705,11 +714,13 @@ const setFilters = (newFilters: {
       } else {
         setPanVerified(false);
         setIsMobileFromPan(false);
+        setPanFilledFields(new Set());
         setPanMessage(res?.message || "PAN verification returned invalid status");
       }
     } catch (err: any) {
       setPanVerified(false);
       setIsMobileFromPan(false);
+      setPanFilledFields(new Set());
       setPanMessage(err?.response?.data?.message || err?.message || "PAN verification failed");
     } finally {
       setVerifyingPan(false);
@@ -2160,10 +2171,10 @@ const setFilters = (newFilters: {
                             type="text"
                             required
                             placeholder="First Name"
-                            readOnly={panVerified && Boolean(createForm.first_name)}
+                            readOnly={panVerified && panFilledFields.has("first_name")}
                             value={createForm.first_name || ""}
                             onChange={(e) => setCreateForm({ ...createForm, first_name: e.target.value })}
-                            className={cn("mt-1.5 text-xs sm:text-sm h-9 bg-white", panVerified && createForm.first_name && "bg-slate-50 text-slate-600 cursor-not-allowed")}
+                            className={cn("mt-1.5 text-xs sm:text-sm h-9 bg-white", panVerified && panFilledFields.has("first_name") && "bg-slate-50 text-slate-600 cursor-not-allowed")}
                           />
                         </div>
                         <div className="flex flex-col">
@@ -2175,10 +2186,10 @@ const setFilters = (newFilters: {
                           <Input
                             type="text"
                             placeholder="Middle Name"
-                            readOnly={panVerified && Boolean(createForm.middle_name)}
+                            readOnly={panVerified && panFilledFields.has("middle_name")}
                             value={createForm.middle_name || ""}
                             onChange={(e) => setCreateForm({ ...createForm, middle_name: e.target.value })}
-                            className={cn("mt-1.5 text-xs sm:text-sm h-9 bg-white", panVerified && createForm.middle_name && "bg-slate-50 text-slate-600 cursor-not-allowed")}
+                            className={cn("mt-1.5 text-xs sm:text-sm h-9 bg-white", panVerified && panFilledFields.has("middle_name") && "bg-slate-50 text-slate-600 cursor-not-allowed")}
                           />
                         </div>
                         <div className="flex flex-col">
@@ -2191,10 +2202,10 @@ const setFilters = (newFilters: {
                             type="text"
                             required
                             placeholder="Last Name"
-                            readOnly={panVerified && Boolean(createForm.last_name)}
+                            readOnly={panVerified && panFilledFields.has("last_name")}
                             value={createForm.last_name || ""}
                             onChange={(e) => setCreateForm({ ...createForm, last_name: e.target.value })}
-                            className={cn("mt-1.5 text-xs sm:text-sm h-9 bg-white", panVerified && createForm.last_name && "bg-slate-50 text-slate-600 cursor-not-allowed")}
+                            className={cn("mt-1.5 text-xs sm:text-sm h-9 bg-white", panVerified && panFilledFields.has("last_name") && "bg-slate-50 text-slate-600 cursor-not-allowed")}
                           />
                         </div>
                       </div>
@@ -2226,14 +2237,14 @@ const setFilters = (newFilters: {
                           <Input
                             type="date"
                             required
-                            readOnly={panVerified && Boolean(createForm.dob)}
+                            readOnly={panVerified && panFilledFields.has("dob")}
                             value={createForm.dob || ""}
                             onChange={(e) => {
                               const dobVal = e.target.value;
                               const ageVal = calculateAgeFromDob(dobVal);
                               setCreateForm((prev) => ({ ...prev, dob: dobVal, age: ageVal }));
                             }}
-                            className={cn("mt-1.5 text-xs sm:text-sm h-9 bg-white", panVerified && createForm.dob && "bg-slate-50 text-slate-600 cursor-not-allowed")}
+                            className={cn("mt-1.5 text-xs sm:text-sm h-9 bg-white", panVerified && panFilledFields.has("dob") && "bg-slate-50 text-slate-600 cursor-not-allowed")}
                           />
                         </div>
                         <div className="flex flex-col">
@@ -2410,10 +2421,10 @@ const setFilters = (newFilters: {
                             type="text"
                             required
                             placeholder="Legal company or firm name"
-                            readOnly={panVerified && Boolean(createForm.entity_name)}
+                            readOnly={panVerified && panFilledFields.has("entity_name")}
                             value={createForm.entity_name || ""}
                             onChange={(e) => setCreateForm({ ...createForm, entity_name: e.target.value })}
-                            className={cn("mt-1.5 text-xs sm:text-sm h-9 bg-white", panVerified && createForm.entity_name && "bg-slate-50 text-slate-600 cursor-not-allowed")}
+                            className={cn("mt-1.5 text-xs sm:text-sm h-9 bg-white", panVerified && panFilledFields.has("entity_name") && "bg-slate-50 text-slate-600 cursor-not-allowed")}
                           />
                         </div>
                         <div className="flex flex-col">
@@ -2425,10 +2436,10 @@ const setFilters = (newFilters: {
                           <Input
                             type="date"
                             required
-                            readOnly={panVerified && Boolean(createForm.doi)}
+                            readOnly={panVerified && panFilledFields.has("doi")}
                             value={createForm.doi || ""}
                             onChange={(e) => setCreateForm({ ...createForm, doi: e.target.value })}
-                            className={cn("mt-1.5 text-xs sm:text-sm h-9 bg-white", panVerified && createForm.doi && "bg-slate-50 text-slate-600 cursor-not-allowed")}
+                            className={cn("mt-1.5 text-xs sm:text-sm h-9 bg-white", panVerified && panFilledFields.has("doi") && "bg-slate-50 text-slate-600 cursor-not-allowed")}
                           />
                         </div>
                       </div>
