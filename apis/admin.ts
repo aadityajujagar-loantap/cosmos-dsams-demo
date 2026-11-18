@@ -102,6 +102,7 @@ export interface UserPayload {
   name: string;
   email: string;
   phone?: string;
+  status?: "active" | "deactivated";
   ticket_no?: string;
   password?: string;
   branch_role_id?: string;
