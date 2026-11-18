@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import {
   Plus,
   Search,
@@ -50,6 +50,7 @@ import {
   updateLead,
   generateShareableToken,
   fetchMakerQueue,
+  fetchCheckerQueue,
   forwardToChecker,
   raiseLeadQuery,
   respondLeadQuery,
@@ -285,6 +286,8 @@ function LeadSectionBlock({
   action,
   children,
   className,
+  collapsible = false,
+  defaultOpen = true,
 }: {
   icon?: any;
   iconColor?: string;
@@ -293,10 +296,21 @@ function LeadSectionBlock({
   action?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  collapsible?: boolean;
+  defaultOpen?: boolean;
 }) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
   return (
     <div className={cn("rounded-xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-xs space-y-3.5", className)}>
-      <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+      <div
+        className={cn(
+          "flex items-center justify-between",
+          isOpen ? "pb-3 border-b border-slate-100" : "",
+          collapsible && "cursor-pointer select-none hover:opacity-90"
+        )}
+        onClick={collapsible ? () => setIsOpen(!isOpen) : undefined}
+      >
         <div className="flex items-center gap-2.5">
           {Icon && (
             <div className={cn("p-1.5 rounded-lg border flex items-center justify-center shrink-0", iconBg, iconColor)}>
@@ -307,9 +321,210 @@ function LeadSectionBlock({
             {title}
           </h4>
         </div>
-        {action}
+        <div className="flex items-center gap-2" onClick={(e) => collapsible && e.stopPropagation()}>
+          {action}
+          {collapsible && (
+            <button
+              type="button"
+              className="p-1 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition flex items-center gap-1 text-[11px] font-medium"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsOpen(!isOpen);
+              }}
+              aria-label={isOpen ? "Collapse section" : "Expand section"}
+            >
+              <span className="text-slate-400 text-[10px] uppercase font-bold">{isOpen ? "Collapse" : "Expand"}</span>
+              <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", !isOpen && "-rotate-90")} />
+            </button>
+          )}
+        </div>
       </div>
-      {children}
+      {(!collapsible || isOpen) && children}
+    </div>
+  );
+}
+
+function CollapsibleQueryList({
+  queries,
+  responseText,
+  setResponseText,
+  setActiveQueryId,
+  handleRespondQuerySubmit,
+}: {
+  queries: any[];
+  responseText: string;
+  setResponseText: (val: string) => void;
+  setActiveQueryId: (id: any) => void;
+  handleRespondQuerySubmit: (e: React.FormEvent) => void;
+}) {
+  const [showAll, setShowAll] = useState(false);
+
+  const sortedQueries = useMemo(() => {
+    return [...queries].sort((a, b) => {
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : Number(a.id || 0);
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : Number(b.id || 0);
+      return timeB - timeA;
+    });
+  }, [queries]);
+
+  if (sortedQueries.length === 0) {
+    return <p className="text-xs text-slate-400 italic py-1">No queries raised on this lead.</p>;
+  }
+
+  // Show only latest row when collapsed; all rows when expanded
+  const displayedQueries = showAll ? sortedQueries : [sortedQueries[0]];
+  const olderCount = sortedQueries.length - 1;
+
+  return (
+    <div className="space-y-2">
+      <div className="rounded-lg border border-slate-200 overflow-hidden">
+        <table className="w-full text-left text-xs">
+          <thead className="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] border-b border-slate-200">
+            <tr>
+              <th className="p-2.5">Date & Time</th>
+              <th className="p-2.5">Type</th>
+              <th className="p-2.5">Query</th>
+              <th className="p-2.5">Response</th>
+              <th className="p-2.5">Status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 font-medium">
+            {displayedQueries.map((q, idx) => (
+              <tr key={q.id || idx} className={cn("hover:bg-slate-50/50", idx === 0 && !showAll && "bg-amber-50/20")}>
+                <td className="p-2.5 font-mono text-slate-600 text-[11px] whitespace-nowrap align-top">
+                  {q.created_at ? new Date(q.created_at).toLocaleString() : "—"}
+                  {idx === 0 && (
+                    <span className="ml-1.5 text-[9px] font-bold text-amber-700 bg-amber-100/80 px-1 py-0.5 rounded uppercase">
+                      Latest
+                    </span>
+                  )}
+                </td>
+                <td className="p-2.5 font-bold uppercase text-amber-700 text-[11px] align-top whitespace-nowrap">
+                  {q.query_type}
+                </td>
+                <td className="p-2.5 text-slate-800 align-top max-w-xs break-words">
+                  {q.query_text}
+                </td>
+                <td className="p-2.5 align-top max-w-sm">
+                  {q.response_text ? (
+                    <div className="text-xs text-emerald-800 bg-emerald-50/90 p-2 rounded border border-emerald-200">
+                      {q.response_text}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        placeholder="Type response..."
+                        className="flex-1 min-w-[140px] border border-slate-200 rounded px-2 py-1 text-xs bg-white focus:outline-blue-500"
+                        onChange={(e) => setResponseText(e.target.value)}
+                      />
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs px-2.5"
+                        onClick={(e) => {
+                          setActiveQueryId(q.id);
+                          handleRespondQuerySubmit(e);
+                        }}
+                      >
+                        Respond
+                      </Button>
+                    </div>
+                  )}
+                </td>
+                <td className="p-2.5 align-top whitespace-nowrap">
+                  <StatusBadge status={q.status} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {olderCount > 0 && (
+        <div className="flex justify-center pt-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowAll(!showAll)}
+            className="h-7 text-[11px] text-blue-600 hover:text-blue-800 hover:bg-blue-50 font-semibold gap-1.5 cursor-pointer"
+          >
+            <span>{showAll ? "Collapse older queries" : `Show ${olderCount} older ${olderCount === 1 ? "query" : "queries"}`}</span>
+            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", showAll && "rotate-180")} />
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CollapsibleAuditTrail({ histories }: { histories: any[] }) {
+  const [showAll, setShowAll] = useState(false);
+
+  const sortedHistories = useMemo(() => {
+    return [...histories].sort((a, b) => {
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : Number(a.id || 0);
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : Number(b.id || 0);
+      return timeB - timeA;
+    });
+  }, [histories]);
+
+  if (sortedHistories.length === 0) {
+    return <p className="text-xs text-slate-400 italic py-1">No status history recorded yet.</p>;
+  }
+
+  // Show only latest row when collapsed; all rows when expanded
+  const displayedHistories = showAll ? sortedHistories : [sortedHistories[0]];
+  const olderCount = sortedHistories.length - 1;
+
+  return (
+    <div className="space-y-2">
+      <div className="rounded-lg border border-slate-200 overflow-hidden">
+        <table className="w-full text-left text-xs">
+          <thead className="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] border-b border-slate-200">
+            <tr>
+              <th className="p-2.5">Date & Time</th>
+              <th className="p-2.5">Old Status</th>
+              <th className="p-2.5">New Status</th>
+              <th className="p-2.5">Role</th>
+              <th className="p-2.5">Remarks / Reason</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 font-medium">
+            {displayedHistories.map((sh, idx) => (
+              <tr key={idx} className={cn("hover:bg-slate-50/50", idx === 0 && !showAll && "bg-blue-50/20")}>
+                <td className="p-2.5 font-mono text-slate-600 text-[11px]">
+                  {sh.created_at ? new Date(sh.created_at).toLocaleString() : "—"}
+                  {idx === 0 && (
+                    <span className="ml-1.5 text-[9px] font-bold text-blue-700 bg-blue-100/80 px-1 py-0.5 rounded uppercase">
+                      Latest
+                    </span>
+                  )}
+                </td>
+                <td className="p-2.5"><StatusBadge status={sh.old_status || "INITIAL"} /></td>
+                <td className="p-2.5"><StatusBadge status={sh.new_status} /></td>
+                <td className="p-2.5 font-bold uppercase text-purple-700 text-[11px]">{sh.action_by_type || "SYSTEM"}</td>
+                <td className="p-2.5 text-slate-700">{sh.remarks || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {olderCount > 0 && (
+        <div className="flex justify-center pt-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowAll(!showAll)}
+            className="h-7 text-[11px] text-blue-600 hover:text-blue-800 hover:bg-blue-50 font-semibold gap-1.5 cursor-pointer"
+          >
+            <span>{showAll ? "Collapse older history" : `Show ${olderCount} older history ${olderCount === 1 ? "entry" : "entries"}`}</span>
+            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", showAll && "rotate-180")} />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -319,15 +534,40 @@ export function LeadManagementScreen() {
   const { toast } = useToast();
 
   const userRole = (currentUser?.role || (currentUser as any)?.role_name || "").toLowerCase();
-  const isDsa = userRole === "dsa" || (userRole.includes("dsa") && !userRole.includes("maker") && !userRole.includes("checker") && !userRole.includes("admin"));
-  const isBankMaker = userRole.includes("maker");
-  const isBankChecker = userRole.includes("checker") || userRole === "admin" || userRole === "super_admin" || (!isDsa && !isBankMaker);
-  const isBankUser = !isDsa;
+  const rawRoles: string[] = Array.isArray((currentUser as any)?.roles)
+    ? (currentUser as any).roles.map((r: any) => String(typeof r === "string" ? r : r.name || r.slug || "").toLowerCase())
+    : [];
 
-  const [activeTab, setActiveTab] = useState("all-leads");
+  const isDsa =
+    userRole === "dsa" ||
+    (userRole.includes("dsa") && !userRole.includes("maker") && !userRole.includes("checker") && !userRole.includes("admin")) ||
+    rawRoles.some((r) => r === "dsa" || (r.includes("dsa") && !r.includes("maker") && !r.includes("checker")));
+
+  const isBankMaker =
+    userRole.includes("maker") ||
+    userRole.includes("branch user") ||
+    rawRoles.some((r) => r.includes("maker") || r.includes("branch user"));
+
+  const isBankChecker =
+    userRole.includes("checker") ||
+    rawRoles.some((r) => r.includes("checker"));
+
+  const isBankUser = !isDsa;
+  const queueLabel = isBankChecker ? "Checker Queue" : "Maker Queue";
+  const queueTabKey = isBankChecker ? "checker-queue" : "maker-queue";
+
+  const [activeTab, setActiveTab] = useState(() => (isBankUser ? queueTabKey : "all-leads"));
+  const tabInitializedRef = useRef(false);
+
+  useEffect(() => {
+    if (!tabInitializedRef.current && isBankUser) {
+      tabInitializedRef.current = true;
+      setActiveTab(queueTabKey);
+    }
+  }, [isBankUser, queueTabKey]);
   const [loading, setLoading] = useState(true);
   const [leads, setLeads] = useState<LeadData[]>([]);
-  const [makerQueue, setMakerQueue] = useState<LeadData[]>([]);
+  const [queueItems, setQueueItems] = useState<LeadData[]>([]);
   const [reports, setReports] = useState<any>(null);
   const [search, setSearch] = useState("");
   const [applicationNoFilter, setApplicationNoFilter] = useState("");
@@ -498,6 +738,7 @@ export function LeadManagementScreen() {
   const [loanAccountError, setLoanAccountError] = useState<string | null>(null);
   const [hasDeviation, setHasDeviation] = useState<string>("No");
   const [deviationType, setDeviationType] = useState<string>("");
+  const [deviationCount, setDeviationCount] = useState<number | string>(1);
 
   // Separate static master data loading (fetches ONCE)
   const [masterLoaded, setMasterLoaded] = useState(false);
@@ -562,10 +803,19 @@ export function LeadManagementScreen() {
       if (fromDateFilter) queryParams.from_date = fromDateFilter;
       if (toDateFilter) queryParams.to_date = toDateFilter;
 
-      if (activeTab === "maker-queue" && isBankUser) {
-        const makerRes = await fetchMakerQueue(queryParams);
-        const mqItems = makerRes?.data?.items || [];
-        setMakerQueue(mqItems);
+      if (activeTab !== "all-leads" && isBankUser) {
+        const queueRes = isBankChecker
+          ? await fetchCheckerQueue(queryParams)
+          : await fetchMakerQueue(queryParams);
+        const qItems = queueRes?.data?.items || [];
+        setQueueItems(qItems);
+        if (queueRes?.data?.pagination) {
+          setTotalLeadsCount(queueRes.data.pagination.total || qItems.length);
+          setTotalPages(queueRes.data.pagination.total_pages || 1);
+        } else {
+          setTotalLeadsCount(qItems.length);
+          setTotalPages(1);
+        }
       } else {
         const leadsRes = await fetchLeads(queryParams);
         const items = leadsRes?.data?.items || [];
@@ -577,6 +827,13 @@ export function LeadManagementScreen() {
         } else {
           setTotalLeadsCount(items.length);
           setTotalPages(1);
+        }
+
+        if (isBankUser) {
+          try {
+            const queueRes = isBankChecker ? await fetchCheckerQueue() : await fetchMakerQueue();
+            setQueueItems(queueRes?.data?.items || []);
+          } catch {}
         }
       }
     } catch (err: any) {
@@ -1091,7 +1348,11 @@ const setFilters = (newFilters: {
 
   const handleRaiseQuerySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedLead || !queryText) return;
+    if (!selectedLead || !queryText.trim()) return;
+    if (queryText.trim().length > 255) {
+      toast({ title: "Validation Error", description: "Query text cannot exceed 255 characters", variant: "error" });
+      return;
+    }
     confirmAction(
       "Raise Query on Lead",
       `Do you want to perform this action? Raise ${queryType} query on application ${selectedLead.application_id || selectedLead.lead_uuid}?`,
@@ -1198,8 +1459,12 @@ const setFilters = (newFilters: {
     setLoanAccountError(null);
     setHasDeviation("No");
     setDeviationType("");
+    setDeviationCount(1);
     setIsDisburseModalOpen(true);
   };
+
+  const isAllowedFinancial = (deviationType || "").toLowerCase().trim() === "allowed financial" ||
+    ((deviationType || "").toLowerCase().includes("allowed") && !(deviationType || "").toLowerCase().includes("not-allowed"));
 
   const executeDisburseSubmit = async () => {
     if (!selectedLead) return;
@@ -1210,6 +1475,7 @@ const setFilters = (newFilters: {
         loan_account_no: loanAccountNo.trim(),
         has_deviation: hasDeviation === "Yes",
         deviation_type: hasDeviation === "Yes" ? deviationType : null,
+        deviation_count: hasDeviation === "Yes" && isAllowedFinancial ? (Number(deviationCount) || 1) : null,
       });
       if (res?.status === "success") {
         toast({ title: "Success", description: "Loan disbursed successfully", variant: "success" });
@@ -1244,6 +1510,14 @@ const setFilters = (newFilters: {
     if (hasDeviation === "Yes" && !deviationType) {
       toast({ title: "Validation Error", description: "Please select Deviation Type", variant: "error" });
       return;
+    }
+
+    if (hasDeviation === "Yes" && isAllowedFinancial) {
+      const count = Number(deviationCount);
+      if (!count || count < 1) {
+        toast({ title: "Validation Error", description: "Please enter a valid Deviation Count (at least 1)", variant: "error" });
+        return;
+      }
     }
 
     confirmAction(
@@ -1442,11 +1716,11 @@ const setFilters = (newFilters: {
             trend={reports.total_leads > 0 ? "+12% vs last month" : null}
           />
           <KpiCard
-            label={isBankUser ? "Maker Queue" : "My Leads"}
-            value={isBankUser ? makerQueue.length : reports.total_leads || 0}
+            label={isBankUser ? queueLabel : "My Leads"}
+            value={isBankUser ? queueItems.length : reports.total_leads || 0}
             icon={<FileCheck className="h-5 w-5" />}
             iconBg="bg-amber-500/10 text-amber-500"
-            trend={isBankUser && makerQueue.length > 0 ? `${makerQueue.length} pending review` : null}
+            trend={isBankUser && queueItems.length > 0 ? `${queueItems.length} pending review` : null}
           />
           <KpiCard
             label="Sanctioned"
@@ -1476,7 +1750,7 @@ const setFilters = (newFilters: {
             }}
             tabs={[
               { label: `All Leads`, value: "all-leads" },
-              { label: `Maker Queue`, value: "maker-queue", dot: makerQueue.length > 0 },
+              { label: queueLabel, value: queueTabKey, dot: queueItems.length > 0 },
             ]}
             value={activeTab}
           />
@@ -1523,7 +1797,7 @@ const setFilters = (newFilters: {
                     </div>
                   </td>
                 </tr>
-              ) : (activeTab === "all-leads" ? leads : makerQueue).length === 0 ? (
+              ) : (activeTab === "all-leads" ? leads : queueItems).length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-14 text-center">
                     <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
@@ -1551,7 +1825,7 @@ const setFilters = (newFilters: {
                   </td>
                 </tr>
               ) : (
-                (activeTab === "all-leads" ? leads : makerQueue).map((lead) => {
+                (activeTab === "all-leads" ? leads : queueItems).map((lead) => {
                   const applicantName = lead.CustName || `${lead.first_name || ""} ${lead.last_name || ""}`.trim() || lead.entity_name || "Applicant";
                   const refId = lead.application_id || lead.lead_uuid?.slice(0, 13) || "—";
 
@@ -1685,7 +1959,7 @@ const setFilters = (newFilters: {
                               <ChevronRight className="h-3.5 w-3.5" />
                             </Button>
                           )}
-                          {isBankUser && lead.status === "SANCTIONED" && (
+                          {isBankChecker && normStatus === "SANCTIONED" && (
                             <Button
                               size="sm"
                               className="h-8 px-3 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs gap-1.5 transition-all"
@@ -2733,82 +3007,6 @@ const setFilters = (newFilters: {
               </div>
             </div>
 
-            {/* Action Toolbar */}
-            {(() => {
-              const normStatus = getNormalizedStatus(selectedLead.status);
-              return (
-                <div className="">
-                  <div className="flex flex-wrap items-center gap-2">
-                    {(isBankMaker || isBankUser) && normStatus === "NEW" && (
-                      <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs" onClick={() => handleProcessLead(selectedLead.id!)}>
-                        <Check className="h-3.5 w-3.5 mr-1" />
-                        Process Lead
-                      </Button>
-                    )}
-
-                    {isBankUser && !["DISBURSED", "REJECTED", "CANCELLED"].includes(normStatus) && (
-                      <Button size="sm" variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-50 text-xs font-semibold" onClick={() => setIsQueryModalOpen(true)}>
-                        <HelpCircle className="h-3.5 w-3.5 mr-1 text-amber-600" />
-                        Raise Query
-                      </Button>
-                    )}
-
-                    {isBankChecker && normStatus === "IN_PROCESS" && (
-                      <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs" onClick={() => {
-                        const prefilledAmt = Number(selectedLead.sanction_amount || selectedLead.loan_amount_required || (selectedLead as any).loan_amount || 0);
-                        setSanctionAmount(prefilledAmt);
-                        setSanctionLetterNo(selectedLead.sanction_letter_no || "");
-                        setSanctionDate(selectedLead.sanction_date ? String(selectedLead.sanction_date).split("T")[0] : new Date().toISOString().split("T")[0]);
-                        setSanctionRemarks("");
-                        setIsSanctionModalOpen(true);
-                      }}>
-                        <FileCheck className="h-3.5 w-3.5 mr-1" />
-                        Sanction Lead
-                      </Button>
-                    )}
-
-                    {isBankChecker && normStatus === "SANCTIONED" && (
-                      <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs" onClick={() => openDisbursementModal(selectedLead)}>
-                        <Banknote className="h-3.5 w-3.5 mr-1" />
-                        Disburse Lead
-                      </Button>
-                    )}
-
-                    {isDsa && normStatus === "QUERY" && (
-                      <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-xs" onClick={() => {
-                        const el = document.getElementById("query-thread-section");
-                        if (el) el.scrollIntoView({ behavior: "smooth" });
-                      }}>
-                        <HelpCircle className="h-3.5 w-3.5 mr-1" />
-                        Respond to Query
-                      </Button>
-                    )}
-
-                    {!["DISBURSED", "REJECTED", "CANCELLED"].includes(normStatus) && (
-                      <Button size="sm" variant="outline" className="text-slate-700 border-slate-300 hover:bg-slate-100 text-xs font-medium" onClick={() => handleOpenEditModal(selectedLead)}>
-                        <Edit3 className="h-3.5 w-3.5 mr-1 text-slate-500" />
-                        Edit Lead
-                      </Button>
-                    )}
-
-                    {(isBankChecker || isDsa) && !isBankMaker && !["DISBURSED", "REJECTED", "CANCELLED"].includes(normStatus) && (
-                      <Button size="sm" variant="outline" className="border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-medium" onClick={() => setIsRejectModalOpen(true)}>
-                        <XCircle className="h-3.5 w-3.5 mr-1" />
-                        Reject
-                      </Button>
-                    )}
-
-                    {!["DISBURSED", "REJECTED", "CANCELLED"].includes(normStatus) && (
-                      <Button size="sm" variant="outline" className="border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-medium" onClick={() => setIsCancelModalOpen(true)}>
-                        <XCircle className="h-3.5 w-3.5 mr-1" />
-                        Cancel
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-
             {/* SECTION 1: Sourcing & Branch Information */}
             <LeadSectionBlock icon={Building2} title="Sourcing & Branch Information">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -3003,7 +3201,7 @@ const setFilters = (newFilters: {
                               <td className="p-2.5">
                                 {f.has_deviation ? (
                                   <span className="text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-bold text-[10px]">
-                                    {f.deviation_type || "Yes"}
+                                    {f.deviation_type || "Yes"}{f.deviation_count ? ` (${f.deviation_count})` : ""}
                                   </span>
                                 ) : (
                                   <span className="text-slate-400">None</span>
@@ -3025,38 +3223,18 @@ const setFilters = (newFilters: {
               iconColor="text-amber-600"
               iconBg="bg-amber-50 border-amber-200/80"
               title="Queries & Communication"
+              collapsible={true}
+              defaultOpen={true}
             >
-              <div id="query-thread-section" className="space-y-3">
+              <div id="query-thread-section">
                 {selectedLead.queries && selectedLead.queries.length > 0 ? (
-                  selectedLead.queries.map((q) => (
-                    <div key={q.id} className="p-3 bg-slate-50 rounded-lg border border-slate-200/70 space-y-2">
-                      <div className="flex items-center justify-between text-xs font-semibold">
-                        <span className="text-amber-700 uppercase tracking-wide text-[11px] font-bold">Type: {q.query_type}</span>
-                        <StatusBadge status={q.status} />
-                      </div>
-                      <p className="text-xs text-slate-800 font-medium">Q: {q.query_text}</p>
-                      {q.response_text ? (
-                        <p className="text-xs text-emerald-800 bg-emerald-50/80 p-2.5 rounded-md border border-emerald-200 font-medium">
-                          A: {q.response_text}
-                        </p>
-                      ) : (
-                        <div className="pt-1 flex gap-2">
-                          <input
-                            type="text"
-                            placeholder="Type query response..."
-                            className="flex-1 border border-slate-200 rounded-md px-2.5 py-1 text-xs bg-white focus:outline-blue-500"
-                            onChange={(e) => setResponseText(e.target.value)}
-                          />
-                          <Button size="sm" onClick={(e) => {
-                            setActiveQueryId(q.id);
-                            handleRespondQuerySubmit(e);
-                          }}>
-                            Respond
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  ))
+                  <CollapsibleQueryList
+                    queries={selectedLead.queries}
+                    responseText={responseText}
+                    setResponseText={setResponseText}
+                    setActiveQueryId={setActiveQueryId}
+                    handleRespondQuerySubmit={handleRespondQuerySubmit}
+                  />
                 ) : (
                   <p className="text-xs text-slate-400 italic py-1">No queries raised on this lead.</p>
                 )}
@@ -3064,36 +3242,85 @@ const setFilters = (newFilters: {
             </LeadSectionBlock>
 
             {/* SECTION 7: Status Audit Trail */}
-            <LeadSectionBlock icon={Clock} title="Status Audit Trail">
-              {selectedLead.status_histories && selectedLead.status_histories.length > 0 ? (
-                <div className="rounded-lg border border-slate-200 overflow-hidden">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] border-b border-slate-200">
-                      <tr>
-                        <th className="p-2.5">Date & Time</th>
-                        <th className="p-2.5">Old Status</th>
-                        <th className="p-2.5">New Status</th>
-                        <th className="p-2.5">Role</th>
-                        <th className="p-2.5">Remarks / Reason</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 font-medium">
-                      {selectedLead.status_histories.map((sh, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50/50">
-                          <td className="p-2.5 font-mono text-slate-600 text-[11px]">{new Date(sh.created_at).toLocaleString()}</td>
-                          <td className="p-2.5"><StatusBadge status={sh.old_status || "INITIAL"} /></td>
-                          <td className="p-2.5"><StatusBadge status={sh.new_status} /></td>
-                          <td className="p-2.5 font-bold uppercase text-purple-700 text-[11px]">{sh.action_by_type || "SYSTEM"}</td>
-                          <td className="p-2.5 text-slate-700">{sh.remarks || "—"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400 italic py-1">No status history recorded yet.</p>
-              )}
+            <LeadSectionBlock icon={Clock} title="Status Audit Trail" collapsible={true} defaultOpen={true}>
+              <CollapsibleAuditTrail histories={selectedLead.status_histories || []} />
             </LeadSectionBlock>
+
+            {/* Action Toolbar (Placed after audit trail) */}
+            {(() => {
+              const normStatus = getNormalizedStatus(selectedLead.status);
+              return (
+                <div className="pt-3 border-t border-slate-200/80">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(isBankMaker || isBankUser) && normStatus === "NEW" && (
+                      <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs" onClick={() => handleProcessLead(selectedLead.id!)}>
+                        <Check className="h-3.5 w-3.5 mr-1" />
+                        Process Lead
+                      </Button>
+                    )}
+
+                    {isBankUser && !["DISBURSED", "REJECTED", "CANCELLED"].includes(normStatus) && (
+                      <Button size="sm" variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-50 text-xs font-semibold" onClick={() => setIsQueryModalOpen(true)}>
+                        <HelpCircle className="h-3.5 w-3.5 mr-1 text-amber-600" />
+                        Raise Query
+                      </Button>
+                    )}
+
+                    {isBankChecker && normStatus === "IN_PROCESS" && (
+                      <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs" onClick={() => {
+                        const prefilledAmt = Number(selectedLead.sanction_amount || selectedLead.loan_amount_required || (selectedLead as any).loan_amount || 0);
+                        setSanctionAmount(prefilledAmt);
+                        setSanctionLetterNo(selectedLead.sanction_letter_no || "");
+                        setSanctionDate(selectedLead.sanction_date ? String(selectedLead.sanction_date).split("T")[0] : new Date().toISOString().split("T")[0]);
+                        setSanctionRemarks("");
+                        setIsSanctionModalOpen(true);
+                      }}>
+                        <FileCheck className="h-3.5 w-3.5 mr-1" />
+                        Sanction Lead
+                      </Button>
+                    )}
+
+                    {isBankChecker && normStatus === "SANCTIONED" && (
+                      <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs" onClick={() => openDisbursementModal(selectedLead)}>
+                        <Banknote className="h-3.5 w-3.5 mr-1" />
+                        Disburse Lead
+                      </Button>
+                    )}
+
+                    {isDsa && normStatus === "QUERY" && (
+                      <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-xs" onClick={() => {
+                        const el = document.getElementById("query-thread-section");
+                        if (el) el.scrollIntoView({ behavior: "smooth" });
+                      }}>
+                        <HelpCircle className="h-3.5 w-3.5 mr-1" />
+                        Respond to Query
+                      </Button>
+                    )}
+
+                    {!["DISBURSED", "REJECTED", "CANCELLED"].includes(normStatus) && (
+                      <Button size="sm" variant="outline" className="text-slate-700 border-slate-300 hover:bg-slate-100 text-xs font-medium" onClick={() => handleOpenEditModal(selectedLead)}>
+                        <Edit3 className="h-3.5 w-3.5 mr-1 text-slate-500" />
+                        Edit Lead
+                      </Button>
+                    )}
+
+                    {(isBankChecker || isDsa) && !isBankMaker && !["DISBURSED", "REJECTED", "CANCELLED"].includes(normStatus) && (
+                      <Button size="sm" variant="outline" className="border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-medium" onClick={() => setIsRejectModalOpen(true)}>
+                        <XCircle className="h-3.5 w-3.5 mr-1" />
+                        Reject
+                      </Button>
+                    )}
+
+                    {!["DISBURSED", "REJECTED", "CANCELLED"].includes(normStatus) && (
+                      <Button size="sm" variant="outline" className="border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-medium" onClick={() => setIsCancelModalOpen(true)}>
+                        <XCircle className="h-3.5 w-3.5 mr-1" />
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </Modal>
       )}
@@ -3124,16 +3351,22 @@ const setFilters = (newFilters: {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-              Query Text *
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Query Text *
+              </label>
+              <span className={cn("text-[11px] font-medium", queryText.length >= 255 ? "text-rose-600 font-bold" : "text-slate-400")}>
+                {queryText.length}/255
+              </span>
+            </div>
             <textarea
               required
               rows={3}
+              maxLength={255}
               value={queryText}
-              onChange={(e) => setQueryText(e.target.value)}
+              onChange={(e) => setQueryText(e.target.value.slice(0, 255))}
               className="w-full rounded-lg border border-slate-200 bg-white p-3.5 text-sm text-slate-900 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all resize-none min-h-[96px]"
-              placeholder="Enter detailed query description or missing document requirements..."
+              placeholder="Enter detailed query description or missing document requirements (max 255 chars)..."
             />
           </div>
 
@@ -3367,16 +3600,22 @@ const setFilters = (newFilters: {
             {loanAccountError && <p className="text-rose-600 font-semibold text-xs mt-1.5">{loanAccountError}</p>}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-amber-50/60 p-4 rounded-xl border border-amber-200/80">
+          <div className={cn(
+            "grid gap-3 bg-amber-50/60 p-4 rounded-xl border border-amber-200/80 items-start",
+            hasDeviation === "Yes" && isAllowedFinancial ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-1 sm:grid-cols-2"
+          )}>
             <div>
-              <label className="block text-xs font-bold text-amber-900 uppercase tracking-wider mb-2">
-                Sanctioned with deviation? *
+              <label className="block text-[11px] font-bold text-amber-900 uppercase tracking-wider mb-2 whitespace-nowrap h-4 flex items-center">
+                Has Deviation? *
               </label>
               <Select
                 value={hasDeviation}
                 onChange={(e) => {
                   setHasDeviation(e.target.value);
-                  if (e.target.value === "No") setDeviationType("");
+                  if (e.target.value === "No") {
+                    setDeviationType("");
+                    setDeviationCount(1);
+                  }
                 }}
                 buttonClassName="border-amber-200 focus:border-amber-500 focus:ring-amber-500/20"
               >
@@ -3387,13 +3626,18 @@ const setFilters = (newFilters: {
 
             {hasDeviation === "Yes" && (
               <div>
-                <label className="block text-xs font-bold text-amber-900 uppercase tracking-wider mb-2">
+                <label className="block text-[11px] font-bold text-amber-900 uppercase tracking-wider mb-2 whitespace-nowrap h-4 flex items-center">
                   Deviation Type *
                 </label>
                 <Select
                   value={deviationType}
                   required={hasDeviation === "Yes"}
-                  onChange={(e) => setDeviationType(e.target.value)}
+                  onChange={(e) => {
+                    setDeviationType(e.target.value);
+                    if (!e.target.value.toLowerCase().includes("allowed") || e.target.value.toLowerCase().includes("not-allowed")) {
+                      setDeviationCount(1);
+                    }
+                  }}
                   buttonClassName="border-amber-200 focus:border-amber-500 focus:ring-amber-500/20"
                 >
                   <option value="">-- Select Deviation Type --</option>
@@ -3401,6 +3645,24 @@ const setFilters = (newFilters: {
                   <option value="Allowed Financial">Allowed Financial</option>
                   <option value="Not-allowed Financial">Not-allowed Financial</option>
                 </Select>
+              </div>
+            )}
+
+            {hasDeviation === "Yes" && isAllowedFinancial && (
+              <div>
+                <label className="block text-[11px] font-bold text-amber-900 uppercase tracking-wider mb-2 whitespace-nowrap h-4 flex items-center">
+                  Deviation Count *
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  required
+                  value={deviationCount}
+                  onChange={(e) => setDeviationCount(e.target.value)}
+                  className="w-full h-10 rounded-lg border border-amber-200 bg-white px-3 text-sm text-slate-900 shadow-2xs hover:border-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all font-mono"
+                  placeholder="e.g. 1"
+                />
               </div>
             )}
           </div>
@@ -4139,7 +4401,7 @@ function LeadsTable({ leads, isLoading, onViewDetail, onEdit, onForwardToChecker
           </Button>
         );
       }
-      if (lead.status === "SANCTIONED") {
+      if (lead.status === "SANCTIONED" && (currentUser?.role || (currentUser as any)?.role_name || "").toLowerCase().includes("checker")) {
         actions.push(
           <Button key="disburse" size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => onDisburse(lead)}>
             <Banknote className="h-3.5 w-3.5 mr-1" />

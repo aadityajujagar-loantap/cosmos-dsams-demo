@@ -9,6 +9,7 @@ export interface LeadFacility {
   disbursement_date?: string;
   has_deviation?: boolean;
   deviation_type?: string;
+  deviation_count?: number;
   status?: string;
 }
 
@@ -139,6 +140,10 @@ export const fetchMakerQueue = async (params?: Record<string, any>): Promise<any
   return request(`/leads/maker-queue${toQueryString(params)}`, { method: 'GET' });
 };
 
+export const fetchCheckerQueue = async (params?: Record<string, any>): Promise<any> => {
+  return request(`/leads/maker-queue${toQueryString({ ...params, queue: 'checker' })}`, { method: 'GET' });
+};
+
 export const forwardToChecker = async (id: string | number, remarks?: string): Promise<any> => {
   return request(`/leads/${id}/forward-to-checker`, { method: 'POST', body: JSON.stringify({ remarks }) });
 };
@@ -169,6 +174,7 @@ export const disburseLead = async (id: string | number, disbursementData: {
   loan_account_no?: string | null;
   has_deviation?: boolean;
   deviation_type?: string | null;
+  deviation_count?: number | null;
   facilities?: LeadFacility[];
   remarks?: string;
 }): Promise<any> => {
