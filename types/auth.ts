@@ -84,6 +84,10 @@ export interface SessionUser {
   ticket_no?: string;
   branchId?: number;
   branchName?: string;
+  branch_code?: string;
+  branch_codes?: string[];
+  branch_mappings?: UserBranchMapping[];
+  activeBranchCode?: string;
 }
 
 export type DemoSessionUser = SessionUser;

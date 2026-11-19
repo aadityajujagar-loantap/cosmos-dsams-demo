@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { adminApi } from "@/apis/admin";
 import { authService } from "@/services/authService";
 import { getUserBranchScope, type UserBranchScope } from "@/lib/branch-scope";
@@ -286,8 +286,13 @@ export function useDsa() {
         const scope = await getUserBranchScope(demoUser);
         setUserBranchScope(scope);
 
-        const fetchQuery = scope.isBranchRestricted && scope.branchIds.length > 0
-          ? { ...params, branch_ids: scope.branchIds }
+        const effectiveBranchIds =
+          scope.isBranchRestricted && scope.activeBranchIds && scope.activeBranchIds.length > 0
+            ? scope.activeBranchIds
+            : (scope.isBranchRestricted && scope.branchIds.length > 0 ? scope.branchIds : undefined);
+
+        const fetchQuery = effectiveBranchIds
+          ? { ...params, branch_ids: effectiveBranchIds }
           : params;
 
         const response = await adminApi.getDsas(fetchQuery);
@@ -329,6 +334,19 @@ export function useDsa() {
     },
     [toast]
   );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onBranchOrUserChange = () => {
+      fetchDsas();
+    };
+    window.addEventListener("branch:change", onBranchOrUserChange);
+    window.addEventListener("user:refreshed", onBranchOrUserChange);
+    return () => {
+      window.removeEventListener("branch:change", onBranchOrUserChange);
+      window.removeEventListener("user:refreshed", onBranchOrUserChange);
+    };
+  }, [fetchDsas]);
 
   const fetchDsaDetail = useCallback(
     async (idOrCode: number | string) => {

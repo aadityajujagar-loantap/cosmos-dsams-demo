@@ -35,7 +35,9 @@ import { withBasePath } from "@/lib/base-path";
 import type { MockStore, Notification } from "@/lib/types";
 import { cn, formatDate, initials } from "@/lib/utils";
 import { isRoleAllowedOnPortal, portalDeniedMessage } from "@/lib/portal";
-import { getUserBranchScopeSync, getCachedBranches } from "@/lib/branch-scope";
+import { getUserBranchScopeSync, getCachedBranches, getActiveBranchCode, setActiveBranchCode } from "@/lib/branch-scope";
+import { authService } from "@/services/authService";
+import { authApi } from "@/apis/auth";
 import type { BranchOption } from "@/types/dsa";
 
 interface NavItem {
@@ -308,6 +310,38 @@ export function AppShell({ children }: { children: ReactNode }) {
     return getUserBranchScopeSync(currentUser, branches);
   }, [currentUser, branches]);
 
+  const isMakerOrChecker = useMemo(() => {
+    if (!currentUser) return false;
+    const r = (currentUser.role || "").toLowerCase();
+    const authRoles = authService.getRoles().map((ar) => ar.toLowerCase());
+    return (
+      r === "maker" ||
+      r === "checker" ||
+      r === "branch user" ||
+      r === "assistant manager" ||
+      authRoles.includes("maker") ||
+      authRoles.includes("checker") ||
+      authRoles.includes("branch_maker") ||
+      authRoles.includes("branch_checker") ||
+      (branchScope?.isBranchRestricted && (branchScope?.branchCodes?.length ?? 0) > 0)
+    );
+  }, [currentUser, branchScope]);
+
+  const [selectedBranchCode, setSelectedBranchCode] = useState<string>(() => {
+    return getActiveBranchCode();
+  });
+
+  useEffect(() => {
+    const handleBranchChange = (e: Event) => {
+      const customEvent = e as CustomEvent<{ branchCode: string }>;
+      if (customEvent.detail?.branchCode) {
+        setSelectedBranchCode(customEvent.detail.branchCode);
+      }
+    };
+    window.addEventListener("branch:change", handleBranchChange);
+    return () => window.removeEventListener("branch:change", handleBranchChange);
+  }, []);
+
   const branchNameDisplay = useMemo(() => {
     const code = branchScope?.primaryBranchCode || currentUser?.code || "";
     const name = branchScope?.primaryBranchName || currentUser?.branchName || "";
@@ -315,6 +349,40 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [branchScope, currentUser]);
 
   const mounted = useIsClient();
+
+  // Refresh current user & branches from backend to sync any updates made by super admin
+  useEffect(() => {
+    if (!mounted || !authService.getToken()) return;
+
+    let isMounted = true;
+    const refreshUser = () => {
+      authApi
+        .getCurrentUser()
+        .then((freshUser) => {
+          if (!isMounted || !freshUser) return;
+          const stored = authService.getUser();
+          const updated = { ...stored, ...freshUser };
+          localStorage.setItem("auth_user", JSON.stringify(updated));
+          window.dispatchEvent(new CustomEvent("user:refreshed", { detail: updated }));
+        })
+        .catch(() => {});
+
+      getCachedBranches()
+        .then((list) => {
+          if (isMounted && Array.isArray(list) && list.length > 0) {
+            setBranches(list);
+          }
+        })
+        .catch(() => {});
+    };
+
+    refreshUser();
+    window.addEventListener("focus", refreshUser);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("focus", refreshUser);
+    };
+  }, [mounted]);
 
   // Branch portal boundary (web1-agent = DSA only, web2-branch = bank staff only).
   // Runs on mount too, so a stale localStorage session from the other branch cannot
@@ -1029,12 +1097,46 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Menu className="h-5 w-5" />
             </Button>
 
-            <div className="inline-flex items-center gap-1.5 rounded-md border border-slate-200/80 bg-slate-50/80 px-2 py-1 shadow-2xs">
-              <span className="text-sm font-semibold tracking-tight text-slate-900 leading-none">
-                {branchNameDisplay.name}
-                {branchNameDisplay.code ? ` (${branchNameDisplay.code})` : ""}
-              </span>
-            </div>
+            {isMakerOrChecker && branchScope.assignedBranches.length > 0 ? (
+              <div className="relative inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 shadow-xs hover:border-slate-400 focus-within:ring-2 focus-within:ring-sky-500/20 focus-within:border-sky-500 transition-all">
+                <Building2 className="h-4 w-4 shrink-0 text-slate-500" />
+                <div className="flex flex-col">
+                  <label htmlFor="top-branch-select" className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 leading-none mb-0.5">
+                    Branch Scope
+                  </label>
+                  <div className="relative flex items-center">
+                    <select
+                      id="top-branch-select"
+                      aria-label="Select Assigned Branch"
+                      value={selectedBranchCode}
+                      onChange={(e) => {
+                        const code = e.target.value;
+                        setSelectedBranchCode(code);
+                        setActiveBranchCode(code);
+                      }}
+                      className="cursor-pointer appearance-none bg-transparent pr-6 text-xs sm:text-sm font-bold text-slate-900 focus:outline-none"
+                    >
+                      <option value="ALL">
+                        All Assigned Branches ({branchScope.assignedBranches.length})
+                      </option>
+                      {branchScope.assignedBranches.map((b) => (
+                        <option key={b.branch_code} value={b.branch_code}>
+                          {b.branch_name} ({b.branch_code})
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-0 h-3.5 w-3.5 text-slate-500" />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="inline-flex items-center gap-1.5 rounded-md border border-slate-200/80 bg-slate-50/80 px-2 py-1 shadow-2xs">
+                <span className="text-sm font-semibold tracking-tight text-slate-900 leading-none">
+                  {branchNameDisplay.name}
+                  {branchNameDisplay.code ? ` (${branchNameDisplay.code})` : ""}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Centered logo on top bar when sidebar is collapsed */}
