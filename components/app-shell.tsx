@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
   Building2,
+  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -16,6 +17,7 @@ import {
   Menu, MapPin,
   PanelLeftClose,
   PanelLeftOpen,
+  Search,
   Sparkles,
   Send,
   Settings,
@@ -23,9 +25,10 @@ import {
   UserPlus,
   Users,
   Wallet,
+  X,
   type LucideIcon,
 } from "lucide-react";
-import { ReactNode, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { Button, Modal } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
@@ -330,6 +333,71 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [selectedBranchCode, setSelectedBranchCode] = useState<string>(() => {
     return getActiveBranchCode();
   });
+  const [isBranchDropdownOpen, setIsBranchDropdownOpen] = useState(false);
+  const [branchSearch, setBranchSearch] = useState("");
+  const branchDropdownRef = useRef<HTMLDivElement>(null);
+  const branchSearchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isBranchDropdownOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (branchDropdownRef.current && !branchDropdownRef.current.contains(e.target as Node)) {
+        setIsBranchDropdownOpen(false);
+        setBranchSearch("");
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsBranchDropdownOpen(false);
+        setBranchSearch("");
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isBranchDropdownOpen]);
+
+  useEffect(() => {
+    if (isBranchDropdownOpen) {
+      const timer = setTimeout(() => {
+        branchSearchInputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isBranchDropdownOpen]);
+
+  const currentActiveBranch = useMemo(() => {
+    if (selectedBranchCode === "ALL") {
+      return {
+        code: "ALL",
+        name: `All Assigned Branches (${branchScope.assignedBranches.length})`,
+      };
+    }
+    const found = branchScope.assignedBranches.find((b) => b.branch_code === selectedBranchCode);
+    if (found) {
+      return {
+        code: found.branch_code,
+        name: `${found.branch_name} (${found.branch_code})`,
+      };
+    }
+    return {
+      code: selectedBranchCode,
+      name: selectedBranchCode,
+    };
+  }, [selectedBranchCode, branchScope.assignedBranches]);
+
+  const filteredAssignedBranches = useMemo(() => {
+    if (!branchSearch.trim()) return branchScope.assignedBranches;
+    const q = branchSearch.trim().toLowerCase();
+    return branchScope.assignedBranches.filter(
+      (b) =>
+        b.branch_code.toLowerCase().includes(q) ||
+        (b.branch_name && b.branch_name.toLowerCase().includes(q))
+    );
+  }, [branchScope.assignedBranches, branchSearch]);
 
   useEffect(() => {
     const handleBranchChange = (e: Event) => {
@@ -1098,36 +1166,190 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Button>
 
             {isMakerOrChecker && branchScope.assignedBranches.length > 0 ? (
-              <div className="relative inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 shadow-xs hover:border-slate-400 focus-within:ring-2 focus-within:ring-sky-500/20 focus-within:border-sky-500 transition-all">
-                <Building2 className="h-4 w-4 shrink-0 text-slate-500" />
-                <div className="flex flex-col">
-                  <label htmlFor="top-branch-select" className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 leading-none mb-0.5">
-                    Branch Scope
-                  </label>
-                  <div className="relative flex items-center">
-                    <select
-                      id="top-branch-select"
-                      aria-label="Select Assigned Branch"
-                      value={selectedBranchCode}
-                      onChange={(e) => {
-                        const code = e.target.value;
-                        setSelectedBranchCode(code);
-                        setActiveBranchCode(code);
-                      }}
-                      className="cursor-pointer appearance-none bg-transparent pr-6 text-xs sm:text-sm font-bold text-slate-900 focus:outline-none"
-                    >
-                      <option value="ALL">
-                        All Assigned Branches ({branchScope.assignedBranches.length})
-                      </option>
-                      {branchScope.assignedBranches.map((b) => (
-                        <option key={b.branch_code} value={b.branch_code}>
-                          {b.branch_name} ({b.branch_code})
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="pointer-events-none absolute right-0 h-3.5 w-3.5 text-slate-500" />
+              <div className="relative" ref={branchDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsBranchDropdownOpen((prev) => !prev)}
+                  className={cn(
+                    "group flex items-center gap-2.5 rounded-xl border border-slate-300 bg-white px-3 py-1.5 shadow-2xs hover:border-slate-400 hover:bg-slate-50/60 transition-all cursor-pointer text-left focus:outline-none focus:ring-2 focus:ring-sky-500/20",
+                    isBranchDropdownOpen && "border-sky-500 ring-2 ring-sky-500/20 shadow-sm bg-white"
+                  )}
+                  aria-expanded={isBranchDropdownOpen}
+                  aria-haspopup="listbox"
+                  aria-label="Select Assigned Branch"
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-50 border border-sky-100 text-sky-700 shrink-0 group-hover:bg-sky-100/80 transition-colors">
+                    <Building2 className="h-4 w-4" />
                   </div>
-                </div>
+
+                  <div className="flex flex-col min-w-0 pr-1">
+                    <div className="flex items-center gap-1.5 leading-none mb-0.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Branch Scope
+                      </span>
+                      <span className="inline-flex items-center rounded-full bg-slate-100 px-1.5 py-0.2 text-[9px] font-semibold text-slate-600">
+                        {branchScope.assignedBranches.length}
+                      </span>
+                    </div>
+                    <span className="text-xs sm:text-sm font-bold text-slate-900 truncate max-w-[180px] sm:max-w-[260px] leading-tight">
+                      {currentActiveBranch.name}
+                    </span>
+                  </div>
+
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 text-slate-400 shrink-0 transition-transform duration-200 group-hover:text-slate-600 ml-0.5",
+                      isBranchDropdownOpen && "rotate-180 text-sky-600"
+                    )}
+                  />
+                </button>
+
+                {isBranchDropdownOpen && (
+                  <div
+                    className="absolute left-0 top-full mt-2 z-50 w-72 sm:w-84 rounded-2xl border border-slate-200/90 bg-white shadow-2xl ring-1 ring-black/5 overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+                    role="listbox"
+                  >
+                    {/* Search if multiple branches exist */}
+                    {branchScope.assignedBranches.length > 4 ? (
+                      <div className="p-2 border-b border-slate-100 bg-slate-50/70">
+                        <div className="relative">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                          <input
+                            ref={branchSearchInputRef}
+                            type="text"
+                            placeholder="Search branches..."
+                            value={branchSearch}
+                            onChange={(e) => setBranchSearch(e.target.value)}
+                            className="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-8 pr-7 text-xs text-slate-900 placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                          />
+                          {branchSearch && (
+                            <button
+                              type="button"
+                              onClick={() => setBranchSearch("")}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="px-3 py-2 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                          Assigned Branches
+                        </span>
+                        <span className="text-[11px] font-semibold text-slate-400">
+                          {branchScope.assignedBranches.length} Total
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Scrollable branch options */}
+                    <div className="p-1 max-h-64 overflow-y-auto space-y-0.5">
+                      {/* All Assigned Branches option */}
+                      {!branchSearch && (
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={selectedBranchCode === "ALL"}
+                          onClick={() => {
+                            setSelectedBranchCode("ALL");
+                            setActiveBranchCode("ALL");
+                            setIsBranchDropdownOpen(false);
+                            setBranchSearch("");
+                          }}
+                          className={cn(
+                            "flex w-full items-center justify-between px-2.5 py-2 rounded-xl text-left transition-colors cursor-pointer group text-xs",
+                            selectedBranchCode === "ALL"
+                              ? "bg-sky-50/90 text-sky-950 font-bold border border-sky-100"
+                              : "hover:bg-slate-50/80 text-slate-700"
+                          )}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="inline-flex items-center rounded-md bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-sky-800 shrink-0">
+                              ALL
+                            </span>
+                            <span className="truncate font-semibold text-slate-900">
+                              All Assigned Branches
+                            </span>
+                            <span className="text-[11px] text-slate-400 shrink-0">
+                              ({branchScope.assignedBranches.length})
+                            </span>
+                          </div>
+                          {selectedBranchCode === "ALL" && (
+                            <Check className="h-4 w-4 text-sky-600 shrink-0 ml-2" />
+                          )}
+                        </button>
+                      )}
+
+                      {!branchSearch && branchScope.assignedBranches.length > 0 && (
+                        <div className="my-1 border-t border-slate-100" />
+                      )}
+
+                      {filteredAssignedBranches.length === 0 ? (
+                        <div className="py-6 text-center">
+                          <p className="text-xs text-slate-500">No branches match &quot;{branchSearch}&quot;</p>
+                          <button
+                            type="button"
+                            onClick={() => setBranchSearch("")}
+                            className="mt-1 text-xs text-sky-600 hover:underline font-medium cursor-pointer"
+                          >
+                            Clear search filter
+                          </button>
+                        </div>
+                      ) : (
+                        filteredAssignedBranches.map((b) => {
+                          const isSelected = selectedBranchCode === b.branch_code;
+                          return (
+                            <button
+                              key={b.branch_code}
+                              type="button"
+                              role="option"
+                              aria-selected={isSelected}
+                              onClick={() => {
+                                setSelectedBranchCode(b.branch_code);
+                                setActiveBranchCode(b.branch_code);
+                                setIsBranchDropdownOpen(false);
+                                setBranchSearch("");
+                              }}
+                              className={cn(
+                                "flex w-full items-center justify-between px-2.5 py-2 rounded-xl text-left transition-colors cursor-pointer group text-xs",
+                                isSelected
+                                  ? "bg-sky-50/90 text-sky-950 font-bold border border-sky-100"
+                                  : "hover:bg-slate-50/80 text-slate-700"
+                              )}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span
+                                  className={cn(
+                                    "font-mono text-[11px] font-bold px-1.5 py-0.5 rounded border shrink-0",
+                                    isSelected
+                                      ? "bg-sky-100 text-sky-900 border-sky-200"
+                                      : "bg-slate-100 text-slate-700 border-slate-200/80 group-hover:bg-white"
+                                  )}
+                                >
+                                  {b.branch_code}
+                                </span>
+                                <span className="truncate text-slate-800 font-medium">
+                                  {b.branch_name || b.branch_code}
+                                </span>
+                              </div>
+                              {isSelected && (
+                                <Check className="h-4 w-4 text-sky-600 shrink-0 ml-2" />
+                              )}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Footer info */}
+                    <div className="px-3 py-1.5 border-t border-slate-100 bg-slate-50/40 text-[10px] text-slate-400 flex items-center justify-between">
+                      <span>Active View Scope</span>
+                      <span className="font-mono font-medium text-slate-600">{selectedBranchCode === "ALL" ? "All Branches" : selectedBranchCode}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="inline-flex items-center gap-1.5 rounded-md border border-slate-200/80 bg-slate-50/80 px-2 py-1 shadow-2xs">
