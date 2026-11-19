@@ -2,13 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Building2,
   Edit,
   Plus,
   Power,
   RefreshCw,
   RotateCcw,
+  Search,
   Trash2,
   UserPlus,
+  X,
 } from "lucide-react";
 
 import { adminApi, type MakerCheckerActionResponse, type UserPayload } from "@/apis/admin";
@@ -80,10 +83,12 @@ function userToRow(user: User): AdminUserRow {
   const mappedCodes = Array.isArray(user.branch_mappings)
     ? user.branch_mappings.map((m) => m.branch_code).filter(Boolean)
     : (user.branch_codes ?? []);
-  const allCodes = Array.from(new Set([user.branch_code, ...mappedCodes].filter(Boolean))) as string[];
+  const allCodes = mappedCodes.length > 0
+    ? Array.from(new Set(mappedCodes))
+    : (user.branch_code ? [user.branch_code] : []);
 
   return {
-    branchCode: user.branch_code ?? "",
+    branchCode: user.branch_code ?? (allCodes[0] || ""),
     branchCodes: allCodes,
     subregionId: user.subregion_id ?? "",
     email: user.email,
@@ -115,6 +120,21 @@ function rowToForm(row: AdminUserRow, branches: BranchOption[], subRegions: SubR
     }
   }
 
+  if ((!sub_region_code || !region_code) && row.branchCodes?.length) {
+    for (const bCode of row.branchCodes) {
+      const br = branches.find((b) => b.branch_code === bCode);
+      if (br) {
+        if (br.sub_region_code && !sub_region_code) {
+          sub_region_code = br.sub_region_code;
+        }
+        if (br.region_code && !region_code) {
+          region_code = br.region_code;
+        }
+      }
+      if (sub_region_code && region_code) break;
+    }
+  }
+
   if (sub_region_code && !region_code) {
     const sr = subRegions.find((s) => s.sub_region_code === sub_region_code);
     if (sr?.region_code) {
@@ -137,14 +157,15 @@ function rowToForm(row: AdminUserRow, branches: BranchOption[], subRegions: SubR
 }
 
 function compactUserPayload(form: UserFormState, includePassword: boolean, isMultiBranchRole: boolean): UserPayload {
-  const branchCodes = isMultiBranchRole ? form.branch_codes : (form.branch_code ? [form.branch_code] : []);
-  const primaryBranch = isMultiBranchRole
+  const shouldSendMulti = isMultiBranchRole || form.branch_codes.length > 0;
+  const branchCodes = shouldSendMulti ? form.branch_codes : (form.branch_code ? [form.branch_code] : []);
+  const primaryBranch = shouldSendMulti
     ? (form.branch_codes[0] || form.branch_code || undefined)
     : (form.branch_code.trim() || undefined);
 
   return {
     branch_code: primaryBranch,
-    branch_codes: isMultiBranchRole ? branchCodes : undefined,
+    branch_codes: shouldSendMulti ? branchCodes : undefined,
     subregion_id: form.sub_region_code.trim() || undefined,
     email: form.email.trim(),
     name: form.name.trim(),
@@ -198,6 +219,7 @@ export function UsersPage() {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<UserFormState>(() => emptyUserForm());
   const [selectedRole, setSelectedRole] = useState<string>("");
+  const [branchSearchQuery, setBranchSearchQuery] = useState<string>("");
 
   const roleOptions = useMemo(() => {
     return [...roles].sort((a, b) => a.name.localeCompare(b.name));
@@ -247,19 +269,23 @@ export function UsersPage() {
   function openCreate() {
     setForm(emptyUserForm());
     setSelectedRole("");
+    setBranchSearchQuery("");
     setCreating(true);
   }
 
   function openEdit(row: AdminUserRow) {
     setEditing(row);
     setForm(rowToForm(row, branches, subRegions));
-    setSelectedRole(row.roles[0] || "");
+    const makerCheckerRole = row.roles.find((r) => /checker|maker/i.test(r));
+    setSelectedRole(makerCheckerRole || row.roles[0] || "");
+    setBranchSearchQuery("");
   }
 
   function closeForm() {
     setCreating(false);
     setEditing(null);
     setSaving(false);
+    setBranchSearchQuery("");
   }
 
   function updateForm(name: keyof UserFormState, value: string) {
@@ -326,6 +352,7 @@ export function UsersPage() {
       branch_code: defaultBranchCodes[0] || "",
       branch_codes: defaultBranchCodes,
     }));
+    setBranchSearchQuery("");
   }
 
   function handleBranchChange(newBranchCode: string) {
@@ -351,6 +378,16 @@ export function UsersPage() {
     );
   }, [branches, form.sub_region_code]);
 
+  const filteredBranches = useMemo(() => {
+    if (!branchSearchQuery.trim()) return availableBranches;
+    const q = branchSearchQuery.trim().toLowerCase();
+    return availableBranches.filter(
+      (b) =>
+        b.branch_code.toLowerCase().includes(q) ||
+        (b.branch_name && b.branch_name.toLowerCase().includes(q))
+    );
+  }, [availableBranches, branchSearchQuery]);
+
   async function syncRoles(userId: number, previousNames: string[], nextNames: string[]) {
     const roleByName = new Map(roles.map((role) => [role.name, role]));
     const additions = nextNames.filter((name) => !previousNames.includes(name));
@@ -371,7 +408,9 @@ export function UsersPage() {
   async function saveUser() {
     setSaving(true);
     try {
-      const isMultiBranchRole = /checker|maker/i.test(selectedRole);
+      const isMultiBranchRole =
+        /checker|maker/i.test(selectedRole) ||
+        (editing?.roles.some((r) => /checker|maker/i.test(r)) ?? false);
       const targetRoles = selectedRole ? [selectedRole] : [];
 
       if (editing) {
@@ -614,7 +653,7 @@ export function UsersPage() {
         onClose={closeForm}
         open={formOpen}
         title={editing ? "Edit user" : "Create user"}
-        width="max-w-lg"
+        width="max-w-xl"
       >
         <form
           className="space-y-6"
@@ -714,15 +753,23 @@ export function UsersPage() {
             </Field>
 
             {/* Branch Selection: Multi-select for Checker & Maker, Single select otherwise */}
-            {/checker|maker/i.test(selectedRole) ? (
-              <Field className="sm:col-span-2">
-                <div className="flex items-center justify-between mb-1">
-                  <Label>Assigned Branches (Multiple selection for {/checker/i.test(selectedRole) ? "Checker" : "Maker"})</Label>
-                  {form.sub_region_code && (
-                    <div className="flex items-center gap-2">
+            {/checker|maker/i.test(selectedRole) || (editing?.roles.some((r) => /checker|maker/i.test(r)) ?? false) ? (
+              <div className="sm:col-span-2 space-y-2">
+                {/* Header row: Label + Role badge + Quick actions */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 pb-1 border-b border-slate-100">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold uppercase tracking-wide text-slate-700">
+                      Assigned Branches
+                    </span>
+                    <span className="inline-flex items-center rounded-md bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700 ring-1 ring-inset ring-sky-600/20">
+                      {/checker/i.test(selectedRole) ? "Checker" : "Maker"} • Multi-Select
+                    </span>
+                  </div>
+                  {form.sub_region_code && availableBranches.length > 0 && (
+                    <div className="flex items-center gap-2 self-start sm:self-auto text-xs shrink-0">
                       <button
                         type="button"
-                        className="text-xs text-sky-600 hover:text-sky-700 underline font-medium"
+                        className="font-semibold text-sky-600 hover:text-sky-700 hover:underline cursor-pointer transition-colors"
                         onClick={() => {
                           const allCodes = availableBranches.map((b) => b.branch_code).filter(Boolean);
                           setForm((prev) => ({
@@ -734,10 +781,10 @@ export function UsersPage() {
                       >
                         Select all
                       </button>
-                      <span className="text-slate-300">|</span>
+                      <span className="text-slate-300">•</span>
                       <button
                         type="button"
-                        className="text-xs text-slate-500 hover:text-slate-700 underline"
+                        className="font-medium text-slate-500 hover:text-slate-700 hover:underline cursor-pointer transition-colors"
                         onClick={() => {
                           setForm((prev) => ({
                             ...prev,
@@ -748,42 +795,169 @@ export function UsersPage() {
                       >
                         Clear
                       </button>
-                      <span className="text-xs text-slate-500 font-medium ml-1">
-                        ({form.branch_codes.length} selected)
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 whitespace-nowrap">
+                        {form.branch_codes.length} of {availableBranches.length} selected
                       </span>
                     </div>
                   )}
                 </div>
+
                 {!form.region_code ? (
-                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-4 text-center">
-                    <p className="text-xs text-slate-500">Please select a Region and Sub-Region first to view and assign branches.</p>
+                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/60 p-4 text-center">
+                    <Building2 className="mx-auto h-5 w-5 text-slate-400 mb-1" />
+                    <p className="text-xs font-medium text-slate-600">No Region Selected</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Please select a Region and Sub-Region first to view and assign branches.</p>
                   </div>
                 ) : !form.sub_region_code ? (
-                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-4 text-center">
-                    <p className="text-xs text-slate-500">Please select a Sub-Region to view and assign branches.</p>
+                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/60 p-4 text-center">
+                    <Building2 className="mx-auto h-5 w-5 text-slate-400 mb-1" />
+                    <p className="text-xs font-medium text-slate-600">No Sub-Region Selected</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Please select a Sub-Region to view and assign branches.</p>
                   </div>
                 ) : (
-                  <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2.5 space-y-1.5">
-                    {availableBranches.length === 0 ? (
-                      <p className="text-xs text-slate-400 py-2 text-center">No branches found under this Sub-Region.</p>
-                    ) : (
-                      availableBranches.map((b) => {
-                        const isChecked = form.branch_codes.includes(b.branch_code);
-                        return (
-                          <label
-                            key={b.branch_code}
-                            className="flex items-center gap-2.5 px-2 py-1.5 rounded hover:bg-slate-50 cursor-pointer text-xs text-slate-800"
+                  <div className="rounded-lg border border-slate-200 bg-white shadow-xs overflow-hidden">
+                    {/* Search filter when multiple branches exist */}
+                    {availableBranches.length > 4 && (
+                      <div className="p-2 border-b border-slate-100 bg-slate-50/50">
+                        <div className="relative">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                          <input
+                            type="text"
+                            placeholder="Filter branches by code or name..."
+                            value={branchSearchQuery}
+                            onChange={(e) => setBranchSearchQuery(e.target.value)}
+                            className="w-full rounded-md border border-slate-200 bg-white py-1.5 pl-8 pr-7 text-xs text-slate-900 placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                          />
+                          {branchSearchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => setBranchSearchQuery("")}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs px-1"
+                              title="Clear search"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Scrollable Branch Checkbox List */}
+                    <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 p-1">
+                      {availableBranches.length === 0 ? (
+                        <div className="py-6 text-center">
+                          <p className="text-xs text-slate-400">No branches found under sub-region {form.sub_region_code}.</p>
+                        </div>
+                      ) : filteredBranches.length === 0 ? (
+                        <div className="py-6 text-center">
+                          <p className="text-xs text-slate-500">No branches match &quot;{branchSearchQuery}&quot;</p>
+                          <button
+                            type="button"
+                            onClick={() => setBranchSearchQuery("")}
+                            className="mt-1 text-xs text-sky-600 hover:underline font-medium cursor-pointer"
                           >
-                            <input
-                              type="checkbox"
-                              className="rounded border-slate-300 text-sky-600 focus:ring-sky-500 h-4 w-4"
-                              checked={isChecked}
-                              onChange={(e) => {
-                                const checked = e.target.checked;
+                            Clear search filter
+                          </button>
+                        </div>
+                      ) : (
+                        filteredBranches.map((b) => {
+                          const isChecked = form.branch_codes.includes(b.branch_code);
+                          const isPrimary = form.branch_code === b.branch_code;
+                          return (
+                            <label
+                              key={b.branch_code}
+                              className={`flex items-center justify-between gap-2.5 px-2.5 py-2 rounded-md cursor-pointer transition-colors text-xs ${
+                                isChecked
+                                  ? "bg-sky-50/70 text-sky-950 font-medium"
+                                  : "hover:bg-slate-50 text-slate-700"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <input
+                                  type="checkbox"
+                                  className="rounded border-slate-300 text-sky-600 focus:ring-sky-500 h-4 w-4 shrink-0 cursor-pointer"
+                                  checked={isChecked}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    setForm((prev) => {
+                                      const next = checked
+                                        ? [...prev.branch_codes, b.branch_code]
+                                        : prev.branch_codes.filter((c) => c !== b.branch_code);
+                                      return {
+                                        ...prev,
+                                        branch_codes: next,
+                                        branch_code: next[0] || "",
+                                      };
+                                    });
+                                  }}
+                                />
+                                <span
+                                  className={`font-mono text-xs font-semibold px-1.5 py-0.5 rounded border shrink-0 ${
+                                    isChecked
+                                      ? "bg-sky-100/80 border-sky-300 text-sky-900"
+                                      : "bg-slate-100 border-slate-200 text-slate-700"
+                                  }`}
+                                >
+                                  {b.branch_code}
+                                </span>
+                                <span className="truncate text-slate-700">{b.branch_name || "—"}</span>
+                              </div>
+                              {isChecked && isPrimary && (
+                                <span className="shrink-0 text-[10px] font-semibold tracking-wide uppercase px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 border border-sky-200">
+                                  Primary
+                                </span>
+                              )}
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Selected Branches Chips */}
+                {form.branch_codes.length > 0 && (
+                  <div className="rounded-lg border border-slate-200/80 bg-slate-50/50 p-2.5 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                        Selected Branches ({form.branch_codes.length})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setForm((prev) => ({
+                            ...prev,
+                            branch_codes: [],
+                            branch_code: "",
+                          }));
+                        }}
+                        className="text-[11px] text-slate-400 hover:text-rose-600 transition-colors font-medium cursor-pointer"
+                      >
+                        Clear all
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                      {form.branch_codes.map((code, idx) => {
+                        const branchInfo = branches.find((b) => b.branch_code === code);
+                        const isPrimary = idx === 0;
+                        return (
+                          <span
+                            key={code}
+                            className="inline-flex items-center gap-1 rounded-md bg-white border border-slate-200 px-2 py-0.5 text-xs text-slate-800 font-mono shadow-2xs group"
+                            title={branchInfo?.branch_name ? `${branchInfo.branch_name} (${code})` : code}
+                          >
+                            <span className="font-semibold text-slate-900">{code}</span>
+                            {isPrimary && (
+                              <span className="text-[10px] font-sans text-sky-600 font-semibold" title="Primary branch">
+                                ★
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              className="text-slate-400 hover:text-rose-600 ml-0.5 p-0.5 rounded transition-colors cursor-pointer"
+                              onClick={() => {
                                 setForm((prev) => {
-                                  const next = checked
-                                    ? [...prev.branch_codes, b.branch_code]
-                                    : prev.branch_codes.filter((c) => c !== b.branch_code);
+                                  const next = prev.branch_codes.filter((c) => c !== code);
                                   return {
                                     ...prev,
                                     branch_codes: next,
@@ -791,44 +965,17 @@ export function UsersPage() {
                                   };
                                 });
                               }}
-                            />
-                            <span className="font-mono font-medium text-slate-900">{b.branch_code}</span>
-                            <span className="text-slate-500 truncate">{b.branch_name || "—"}</span>
-                          </label>
+                              title="Remove branch"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
                         );
-                      })
-                    )}
+                      })}
+                    </div>
                   </div>
                 )}
-                {form.branch_codes.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {form.branch_codes.map((code) => (
-                      <span
-                        key={code}
-                        className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700 font-mono"
-                      >
-                        {code}
-                        <button
-                          type="button"
-                          className="text-slate-400 hover:text-slate-600 ml-0.5"
-                          onClick={() => {
-                            setForm((prev) => {
-                              const next = prev.branch_codes.filter((c) => c !== code);
-                              return {
-                                ...prev,
-                                branch_codes: next,
-                                branch_code: next[0] || "",
-                              };
-                            });
-                          }}
-                        >
-                          &times;
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </Field>
+              </div>
             ) : (
               <Field className="sm:col-span-1">
                 <Label>Branch</Label>

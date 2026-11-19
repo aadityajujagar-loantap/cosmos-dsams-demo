@@ -2912,7 +2912,9 @@ export function DsaManagementPage() {
       <PageHeader
         description={
           userBranchScope?.isBranchRestricted
-            ? `Displaying partner applications assigned strictly to ${userBranchScope.primaryBranchName || userBranchScope.primaryBranchCode || "your branch"}.`
+            ? userBranchScope.selectedBranchCode && userBranchScope.selectedBranchCode !== "ALL"
+              ? `Displaying partner applications assigned strictly to branch ${userBranchScope.assignedBranches?.find((b) => b.branch_code === userBranchScope.selectedBranchCode)?.branch_name || userBranchScope.selectedBranchCode}.`
+              : `Displaying partner applications across all assigned branches (${userBranchScope.branchCodes.join(", ")}).`
             : "Manage registered partner entities, verify bank details, and execute agreement signing workflows."
         }
         eyebrow="Administration"
@@ -5472,7 +5474,7 @@ export function DsaProfilePage({ id }: { id: string }) {
   // Branch Access Gate: Check if user is restricted to a branch other than this DSA's assigned branch
   if (
     userBranchScope?.isBranchRestricted &&
-    !isDsaInBranchScope(dsa, userBranchScope)
+    !isDsaInBranchScope(dsa, userBranchScope, true)
   ) {
     return (
       <div className="mx-auto max-w-2xl py-12 px-4">

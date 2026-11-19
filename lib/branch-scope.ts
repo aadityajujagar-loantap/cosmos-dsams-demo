@@ -10,6 +10,22 @@ export interface UserBranchScope {
   branchNames: string[];
   primaryBranchCode?: string;
   primaryBranchName?: string;
+  selectedBranchCode?: string;
+  activeBranchIds: number[];
+  assignedBranches: Array<{ branch_code: string; branch_name: string; id?: number }>;
+}
+
+const ACTIVE_BRANCH_STORAGE_KEY = "cosmos_active_branch_code";
+
+export function getActiveBranchCode(): string {
+  if (typeof window === "undefined") return "ALL";
+  return localStorage.getItem(ACTIVE_BRANCH_STORAGE_KEY) || "ALL";
+}
+
+export function setActiveBranchCode(code: string): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(ACTIVE_BRANCH_STORAGE_KEY, code);
+  window.dispatchEvent(new CustomEvent("branch:change", { detail: { branchCode: code } }));
 }
 
 let cachedBranches: BranchOption[] | null = null;
@@ -60,13 +76,31 @@ export function getUserBranchScopeSync(
   const isBranchRestricted = !isSuperAdmin && (isMaker || isChecker);
 
   const codeSet = new Set<string>();
-  const primaryCode = (user?.branch_code || currentUser?.code || "").trim().toUpperCase();
+  const primaryCode = (user?.branch_code || currentUser?.branch_code || currentUser?.code || "").trim().toUpperCase();
   if (primaryCode) {
     codeSet.add(primaryCode);
   }
   if (Array.isArray(user?.branch_codes)) {
     for (const c of user.branch_codes) {
       const normalized = String(c || "").trim().toUpperCase();
+      if (normalized) codeSet.add(normalized);
+    }
+  }
+  if (Array.isArray((user as any)?.branch_mappings)) {
+    for (const m of (user as any).branch_mappings) {
+      const normalized = String(m?.branch_code || "").trim().toUpperCase();
+      if (normalized) codeSet.add(normalized);
+    }
+  }
+  if (Array.isArray(currentUser?.branch_codes)) {
+    for (const c of currentUser.branch_codes) {
+      const normalized = String(c || "").trim().toUpperCase();
+      if (normalized) codeSet.add(normalized);
+    }
+  }
+  if (Array.isArray(currentUser?.branch_mappings)) {
+    for (const m of currentUser.branch_mappings) {
+      const normalized = String(m?.branch_code || "").trim().toUpperCase();
       if (normalized) codeSet.add(normalized);
     }
   }
@@ -80,8 +114,12 @@ export function getUserBranchScopeSync(
       branchCodes: [],
       branchIds: [],
       branchNames: [],
+      selectedBranchCode: "ALL",
+      activeBranchIds: [],
+      assignedBranches: [],
     };
   }
+
   const branchIds: number[] = [];
   const branchNames: string[] = [];
   let primaryBranchName: string | undefined = undefined;
@@ -99,6 +137,33 @@ export function getUserBranchScopeSync(
     }
   }
 
+  const assignedBranches: Array<{ branch_code: string; branch_name: string; id?: number }> = [];
+  for (const bCode of branchCodes) {
+    const matched = branches.find((b) => (b.branch_code || "").trim().toUpperCase() === bCode);
+    assignedBranches.push({
+      branch_code: bCode,
+      branch_name: matched?.branch_name || bCode,
+      id: matched?.id != null ? Number(matched.id) : undefined,
+    });
+  }
+
+  const storedSelected = getActiveBranchCode();
+  const selectedBranchCode =
+    storedSelected === "ALL" || codeSet.has(storedSelected.toUpperCase())
+      ? storedSelected
+      : "ALL";
+
+  const activeBranchIds: number[] = [];
+  if (selectedBranchCode && selectedBranchCode !== "ALL") {
+    const selUpper = selectedBranchCode.toUpperCase();
+    const matched = assignedBranches.find((b) => b.branch_code.toUpperCase() === selUpper);
+    if (matched?.id != null) {
+      activeBranchIds.push(matched.id);
+    }
+  } else {
+    activeBranchIds.push(...branchIds);
+  }
+
   return {
     isBranchRestricted: true,
     branchCodes,
@@ -106,6 +171,9 @@ export function getUserBranchScopeSync(
     branchNames,
     primaryBranchCode: primaryCode || undefined,
     primaryBranchName,
+    selectedBranchCode,
+    activeBranchIds,
+    assignedBranches,
   };
 }
 
@@ -116,9 +184,30 @@ export async function getUserBranchScope(
   return getUserBranchScopeSync(currentUser, branches);
 }
 
-export function isDsaInBranchScope(dsa: any, scope: UserBranchScope): boolean {
+export function isDsaInBranchScope(
+  dsa: any,
+  scope: UserBranchScope,
+  checkAssignedOnly = false
+): boolean {
   if (!scope.isBranchRestricted) return true;
   if (!dsa) return false;
+
+  // If a specific branch is selected (not "ALL") and we are filtering for views:
+  if (!checkAssignedOnly && scope.selectedBranchCode && scope.selectedBranchCode !== "ALL") {
+    const targetCode = scope.selectedBranchCode.trim().toUpperCase();
+    const dsaBranchCode = (dsa.branch?.branch_code || dsa.branch_code || "").trim().toUpperCase();
+    if (dsaBranchCode && dsaBranchCode === targetCode) {
+      return true;
+    }
+    const targetBranch = scope.assignedBranches?.find(
+      (b) => b.branch_code.toUpperCase() === targetCode
+    );
+    const dsaBranchId = dsa.branch_id ?? dsa.branchId ?? dsa.branch?.id;
+    if (targetBranch?.id != null && dsaBranchId != null && Number(dsaBranchId) === Number(targetBranch.id)) {
+      return true;
+    }
+    return false;
+  }
 
   // 1. Match by branch_id
   const dsaBranchId = dsa.branch_id ?? dsa.branchId ?? dsa.branch?.id;

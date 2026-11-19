@@ -14,7 +14,7 @@ import { ToastProvider, useToast } from "@/components/ui/toast";
 import { authService } from "@/services/authService";
 import { authApi } from "@/apis/auth";
 import { adminApi } from "@/apis/admin";
-import type { AuthSession, DemoSessionUser } from "@/types/auth";
+import type { AuthSession, DemoSessionUser, User as AuthUser } from "@/types/auth";
 import { generateDsaCredentials, makeDsaCredentials } from "@/lib/dsa-credentials";
 export function createEmptyStore(): MockStore {
   return {
@@ -152,6 +152,9 @@ function sessionUserFromAuthSession(session: AuthSession): DemoSessionUser {
     mobile: session.user.phone ?? "",
     name: session.user.name,
     role: sessionRoleFromBackendRoles(roleNames, session.user),
+    branch_code: session.user.branch_code ?? undefined,
+    branch_codes: session.user.branch_codes ?? (Array.isArray(session.user.branch_mappings) ? session.user.branch_mappings.map((m) => m.branch_code) : undefined),
+    branch_mappings: session.user.branch_mappings,
   };
 }
 
@@ -171,6 +174,9 @@ function sessionUserFromStoredAuth(): DemoSessionUser | null {
     mobile: user.phone ?? "",
     name: user.name,
     role: sessionRoleFromBackendRoles(authService.getRoles(), user),
+    branch_code: user.branch_code ?? undefined,
+    branch_codes: user.branch_codes ?? (Array.isArray(user.branch_mappings) ? user.branch_mappings.map((m) => m.branch_code) : undefined),
+    branch_mappings: user.branch_mappings,
   };
 }
 
@@ -1482,6 +1488,25 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
         console.warn("Failed to fetch roles-permissions:", err);
       });
 
+    authApi
+      .getCurrentUser()
+      .then((freshUser) => {
+        if (!isMounted || !freshUser) return;
+        const stored = authService.getUser();
+        const updated = { ...stored, ...freshUser };
+        localStorage.setItem("auth_user", JSON.stringify(updated));
+        setCurrentUser((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            branch_code: freshUser.branch_code ?? prev.branch_code,
+            branch_codes: freshUser.branch_codes ?? prev.branch_codes,
+            branch_mappings: freshUser.branch_mappings ?? prev.branch_mappings,
+          };
+        });
+      })
+      .catch(() => {});
+
     return () => {
       isMounted = false;
     };
@@ -1494,7 +1519,28 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       setUserPermissions([]);
     };
     window.addEventListener("auth:unauthorized", handleUnauthorized);
-    return () => window.removeEventListener("auth:unauthorized", handleUnauthorized);
+
+    const handleUserRefreshed = (e: Event) => {
+      const customEvent = e as CustomEvent<AuthUser>;
+      const freshUser = customEvent.detail;
+      if (freshUser) {
+        setCurrentUser((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            branch_code: freshUser.branch_code ?? prev.branch_code,
+            branch_codes: freshUser.branch_codes ?? prev.branch_codes,
+            branch_mappings: freshUser.branch_mappings ?? prev.branch_mappings,
+          };
+        });
+      }
+    };
+    window.addEventListener("user:refreshed", handleUserRefreshed);
+
+    return () => {
+      window.removeEventListener("auth:unauthorized", handleUnauthorized);
+      window.removeEventListener("user:refreshed", handleUserRefreshed);
+    };
   }, []);
 
   useEffect(() => {
