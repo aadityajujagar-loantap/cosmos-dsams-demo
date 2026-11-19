@@ -113,6 +113,15 @@ function rowToForm(row: AdminUserRow, branches: BranchOption[], subRegions: SubR
     : [];
   let region_code = "";
 
+  // Sanitize: verify branch_code actually exists in loaded branches
+  if (branch_code && branches.length > 0 && !branches.some((b) => b.branch_code === branch_code)) {
+    branch_code = "";
+  }
+
+  const validBranchCodes = (row.branchCodes || []).filter((bCode) =>
+    branches.length === 0 || branches.some((b) => b.branch_code === bCode)
+  );
+
   if (branch_code) {
     const br = branches.find((b) => b.branch_code === branch_code);
     if (br) {
@@ -126,8 +135,8 @@ function rowToForm(row: AdminUserRow, branches: BranchOption[], subRegions: SubR
     }
   }
 
-  if ((!sub_region_code || !region_code) && row.branchCodes?.length) {
-    for (const bCode of row.branchCodes) {
+  if ((!sub_region_code || !region_code) && validBranchCodes.length) {
+    for (const bCode of validBranchCodes) {
       const br = branches.find((b) => b.branch_code === bCode);
       if (br) {
         if (br.sub_region_code && !sub_region_code) {
@@ -157,7 +166,7 @@ function rowToForm(row: AdminUserRow, branches: BranchOption[], subRegions: SubR
 
   return {
     branch_code,
-    branch_codes: row.branchCodes?.length ? row.branchCodes : (branch_code ? [branch_code] : []),
+    branch_codes: validBranchCodes.length ? validBranchCodes : (branch_code ? [branch_code] : []),
     sub_region_code,
     sub_region_codes,
     region_code,
@@ -171,11 +180,20 @@ function rowToForm(row: AdminUserRow, branches: BranchOption[], subRegions: SubR
 }
 
 function compactUserPayload(form: UserFormState, includePassword: boolean, isMultiBranchRole: boolean, isDgmRole: boolean = false): UserPayload {
-  const shouldSendMulti = isMultiBranchRole || form.branch_codes.length > 0;
-  const branchCodes = shouldSendMulti ? form.branch_codes : (form.branch_code ? [form.branch_code] : []);
-  const primaryBranch = shouldSendMulti
-    ? (form.branch_codes[0] || form.branch_code || undefined)
-    : (form.branch_code.trim() || undefined);
+  let branchCodes: string[] | undefined = undefined;
+  let primaryBranch: string | undefined = undefined;
+
+  if (isMultiBranchRole) {
+    const validCodes = (form.branch_codes || []).filter(Boolean);
+    branchCodes = validCodes;
+    primaryBranch = validCodes[0] || form.branch_code?.trim() || undefined;
+  } else {
+    // Roles with single branch or none (DGM, Sub-Region Head, Region Head, HO):
+    const bCode = form.branch_code?.trim();
+    primaryBranch = bCode || undefined;
+    // Pass empty array to clear any stale/invalid branch mappings
+    branchCodes = bCode ? [bCode] : [];
+  }
 
   let subregionId: string | undefined = undefined;
   if (isDgmRole && form.sub_region_codes && form.sub_region_codes.length > 0) {
@@ -186,7 +204,7 @@ function compactUserPayload(form: UserFormState, includePassword: boolean, isMul
 
   return {
     branch_code: primaryBranch,
-    branch_codes: shouldSendMulti ? branchCodes : undefined,
+    branch_codes: branchCodes,
     subregion_id: subregionId,
     email: form.email.trim(),
     name: form.name.trim(),
