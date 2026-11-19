@@ -1549,7 +1549,7 @@ export const adminApi = {
   },
 
   getSubRegionDetail: async (subRegionCode: string): Promise<import("@/types/auth").SubRegionItem> => {
-    const response = await request<ApiEnvelope<import("@/types/auth").SubRegionItem>>(`/admin/sub-regions/${subRegionCode}`, {
+    const response = await request<ApiEnvelope<import("@/types/auth").SubRegionItem>>(`/admin/sub-regions/${encodeURIComponent(subRegionCode)}`, {
       method: "GET",
     });
     return response.data;
@@ -1564,7 +1564,7 @@ export const adminApi = {
   },
 
   updateSubRegion: async (subRegionCode: string, payload: Partial<{ sub_region_code: string; sub_region_name: string; region_code: string }>): Promise<import("@/types/auth").SubRegionItem | MakerCheckerActionResponse> => {
-    const response = await request<ApiEnvelope<import("@/types/auth").SubRegionItem> | MakerCheckerActionResponse>(`/admin/sub-regions/${subRegionCode}`, {
+    const response = await request<ApiEnvelope<import("@/types/auth").SubRegionItem> | MakerCheckerActionResponse>(`/admin/sub-regions/${encodeURIComponent(subRegionCode)}`, {
       method: "PUT",
       body: JSON.stringify(payload),
     });
@@ -1572,7 +1572,7 @@ export const adminApi = {
   },
 
   deleteSubRegion: async (subRegionCode: string): Promise<{ message?: string } | MakerCheckerActionResponse> => {
-    const response = await request<{ message?: string } | MakerCheckerActionResponse>(`/admin/sub-regions/${subRegionCode}`, {
+    const response = await request<{ message?: string } | MakerCheckerActionResponse>(`/admin/sub-regions/${encodeURIComponent(subRegionCode)}`, {
       method: "DELETE",
     });
     return response;
