@@ -10,7 +10,7 @@ import { Badge, Button, Card, CardContent, Field, Input, Label, Modal, Select } 
 import { useToast } from "@/components/ui/toast";
 import { formatDate } from "@/lib/utils";
 import type { BranchItem, BranchSyncResult, DistrictItem, RegionItem, StateItem, SubRegionItem } from "@/types/auth";
-import type { DistrictOption, RegionOption, StateOption } from "@/types/dsa";
+import type { DistrictOption, RegionOption, StateOption, SubRegionOption } from "@/types/dsa";
 
 function isMakerResponse(res: any): res is MakerCheckerActionResponse {
   return res && typeof res === "object" && res.status === "pending" && typeof res.reference === "string";
@@ -23,15 +23,21 @@ export function LocationHierarchyPage() {
   const [activeTab, setActiveTab] = useState<TabType>("regions");
   const [regionOptions, setRegionOptions] = useState<RegionOption[]>([]);
   const [stateOptions, setStateOptions] = useState<StateOption[]>([]);
+  const [subRegionOptions, setSubRegionOptions] = useState<SubRegionOption[]>([]);
+  const [districtOptions, setDistrictOptions] = useState<DistrictOption[]>([]);
 
   const loadParentOptions = useCallback(async () => {
     try {
-      const [rRes, sRes] = await Promise.all([
-        adminApi.getAdminRegionsDropdown().catch(() => ({ data: [] })),
-        adminApi.getAdminStatesDropdown().catch(() => ({ data: [] })),
+      const [rRes, sRes, srRes, dRes] = await Promise.all([
+        adminApi.getAdminRegionsDropdown().catch(() => adminApi.getRegionsDropdown()).catch(() => ({ data: [] })),
+        adminApi.getAdminStatesDropdown().catch(() => adminApi.getStatesDropdown()).catch(() => ({ data: [] })),
+        adminApi.getAdminSubRegionsDropdown().catch(() => adminApi.getSubRegionsDropdown()).catch(() => ({ data: [] })),
+        adminApi.getAdminDistrictsDropdown().catch(() => ({ data: [] })),
       ]);
       setRegionOptions(rRes.data || []);
       setStateOptions(sRes.data || []);
+      setSubRegionOptions(srRes.data || []);
+      setDistrictOptions(dRes.data || []);
     } catch (e) { console.error("Failed to load parent options", e); }
   }, []);
 
@@ -58,10 +64,18 @@ export function LocationHierarchyPage() {
         })}
       </div>
       {activeTab === "regions" && <RegionsTab toast={toast} />}
-      {activeTab === "sub-regions" && <SubRegionsTab toast={toast} regionOptions={regionOptions} />}
+      {activeTab === "sub-regions" && <SubRegionsTab toast={toast} regionOptions={regionOptions} onSaved={loadParentOptions} />}
       {activeTab === "states" && <StatesTab toast={toast} />}
       {activeTab === "districts" && <DistrictsTab toast={toast} stateOptions={stateOptions} />}
-      {activeTab === "branches" && <BranchesTab toast={toast} regionOptions={regionOptions} stateOptions={stateOptions} />}
+      {activeTab === "branches" && (
+        <BranchesTab
+          toast={toast}
+          regionOptions={regionOptions}
+          stateOptions={stateOptions}
+          subRegionOptions={subRegionOptions}
+          districtOptions={districtOptions}
+        />
+      )}
     </div>
   );
 }
@@ -157,7 +171,7 @@ function RegionsTab({ toast }: { toast: any }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. SUB-REGIONS TAB
 // ─────────────────────────────────────────────────────────────────────────────
-function SubRegionsTab({ toast, regionOptions }: { toast: any; regionOptions: RegionOption[] }) {
+function SubRegionsTab({ toast, regionOptions, onSaved }: { toast: any; regionOptions: RegionOption[]; onSaved?: () => void }) {
   const [items, setItems] = useState<SubRegionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -182,13 +196,19 @@ function SubRegionsTab({ toast, regionOptions }: { toast: any; regionOptions: Re
     e.preventDefault();
     setSaving(true);
     try {
+      const payload = {
+        sub_region_code: form.sub_region_code.trim(),
+        sub_region_name: form.sub_region_name.trim(),
+        region_code: form.region_code,
+      };
       const res = editing
-        ? await adminApi.updateSubRegion(editing.sub_region_code, { sub_region_name: form.sub_region_name.trim(), region_code: form.region_code })
-        : await adminApi.createSubRegion({ sub_region_code: form.sub_region_code.trim(), sub_region_name: form.sub_region_name.trim(), region_code: form.region_code });
+        ? await adminApi.updateSubRegion(editing.sub_region_code, payload)
+        : await adminApi.createSubRegion(payload);
       if (isMakerResponse(res)) { toast({ title: "Submitted for Approval", description: `Reference: ${res.reference}`, variant: "success" }); }
       else { toast({ title: editing ? "Sub-Region Updated" : "Sub-Region Created", variant: "success" }); }
       setModalOpen(false);
       loadData(search, regionFilter);
+      onSaved?.();
     } catch (e: any) { toast({ title: "Save Failed", description: e.message, variant: "warning" }); }
     finally { setSaving(false); }
   };
@@ -200,6 +220,7 @@ function SubRegionsTab({ toast, regionOptions }: { toast: any; regionOptions: Re
       if (isMakerResponse(res)) { toast({ title: "Delete Submitted", description: `Reference: ${res.reference}`, variant: "success" }); }
       else { toast({ title: "Sub-Region Deleted", variant: "success" }); }
       loadData(search, regionFilter);
+      onSaved?.();
     } catch (e: any) { toast({ title: "Delete Failed", description: e.message, variant: "warning" }); }
   };
 
@@ -236,12 +257,15 @@ function SubRegionsTab({ toast, regionOptions }: { toast: any; regionOptions: Re
             )}
           />}
       </CardContent></Card>
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? "Edit Sub-Region" : "Add Sub-Region"}>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? `Edit Sub-Region (${editing.sub_region_code})` : "Add Sub-Region"}>
         <form onSubmit={handleSave} className="space-y-4">
-          <Field><Label>Sub-Region Code</Label><Input required disabled={Boolean(editing)} value={form.sub_region_code} onChange={(e) => setForm((f) => ({ ...f, sub_region_code: e.target.value }))} placeholder="e.g. SR001" maxLength={20} /></Field>
+          <Field><Label>Sub-Region Code</Label><Input required value={form.sub_region_code} onChange={(e) => setForm((f) => ({ ...f, sub_region_code: e.target.value }))} placeholder="e.g. SR001" maxLength={20} /></Field>
           <Field><Label>Sub-Region Name</Label><Input required value={form.sub_region_name} onChange={(e) => setForm((f) => ({ ...f, sub_region_name: e.target.value }))} placeholder="e.g. Pune Urban" maxLength={255} /></Field>
           <Field><Label>Parent Region</Label><Select required value={form.region_code} onChange={(e) => setForm((f) => ({ ...f, region_code: e.target.value }))}>
             <option value="">Select Region</option>
+            {form.region_code && !regionOptions.some((r) => r.region_code === form.region_code) && (
+              <option value={form.region_code}>{form.region_code}</option>
+            )}
             {regionOptions.map((r) => <option key={r.region_code} value={r.region_code}>{r.region_name} ({r.region_code})</option>)}
           </Select></Field>
           <div className="flex justify-end gap-2 pt-3 border-t"><Button variant="secondary" type="button" onClick={() => setModalOpen(false)}>Cancel</Button><Button disabled={saving} type="submit">{saving ? "Saving…" : "Save Sub-Region"}</Button></div>
@@ -436,7 +460,19 @@ function DistrictsTab({ toast, stateOptions }: { toast: any; stateOptions: State
 // ─────────────────────────────────────────────────────────────────────────────
 // 5. BRANCHES TAB (WITH CBS SYNC & DISTRICT ASSIGNMENT)
 // ─────────────────────────────────────────────────────────────────────────────
-function BranchesTab({ toast, regionOptions, stateOptions }: { toast: any; regionOptions: RegionOption[]; stateOptions: StateOption[] }) {
+function BranchesTab({
+  toast,
+  regionOptions,
+  stateOptions,
+  subRegionOptions: initialSubRegionOptions = [],
+  districtOptions: initialDistrictOptions = [],
+}: {
+  toast: any;
+  regionOptions: RegionOption[];
+  stateOptions: StateOption[];
+  subRegionOptions?: SubRegionOption[];
+  districtOptions?: DistrictOption[];
+}) {
   const [items, setItems] = useState<BranchItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -448,6 +484,39 @@ function BranchesTab({ toast, regionOptions, stateOptions }: { toast: any; regio
   const [editing, setEditing] = useState<BranchItem | null>(null);
   const [form, setForm] = useState({ branch_code: "", branch_name: "", branch_number: "", region_code: "", sub_region_code: "", district_code: "" });
   const [saving, setSaving] = useState(false);
+  const [subRegions, setSubRegions] = useState<SubRegionOption[]>(initialSubRegionOptions);
+  const [districts, setDistricts] = useState<DistrictOption[]>(initialDistrictOptions);
+
+  useEffect(() => {
+    if (initialSubRegionOptions.length > 0) setSubRegions(initialSubRegionOptions);
+  }, [initialSubRegionOptions]);
+
+  useEffect(() => {
+    if (initialDistrictOptions.length > 0) setDistricts(initialDistrictOptions);
+  }, [initialDistrictOptions]);
+
+  const loadDropdownOptions = useCallback(async () => {
+    try {
+      const [srRes, dRes] = await Promise.all([
+        adminApi.getAdminSubRegionsDropdown().catch(() => adminApi.getSubRegionsDropdown()).catch(() => ({ data: [] })),
+        adminApi.getAdminDistrictsDropdown().catch(() => ({ data: [] })),
+      ]);
+      if (srRes?.data?.length) setSubRegions(srRes.data);
+      if (dRes?.data?.length) setDistricts(dRes.data);
+    } catch (e) {
+      console.error("Failed to load branch dropdown options", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDropdownOptions();
+  }, [loadDropdownOptions]);
+
+  const filteredSubRegions = useMemo(() => {
+    if (!form.region_code) return subRegions;
+    const matched = subRegions.filter((sr) => !sr.region_code || sr.region_code === form.region_code);
+    return matched.length > 0 ? matched : subRegions;
+  }, [subRegions, form.region_code]);
 
   const loadData = useCallback(async (s = "", r = "") => {
     setLoading(true);
@@ -477,15 +546,18 @@ function BranchesTab({ toast, regionOptions, stateOptions }: { toast: any; regio
     e.preventDefault();
     setSaving(true);
     try {
+      const payload = {
+        branch_name: form.branch_name.trim(),
+        branch_number: form.branch_number.trim() || undefined,
+        region_code: form.region_code,
+        sub_region_code: form.sub_region_code,
+        district_code: form.district_code || undefined,
+      };
       const res = editing
-        ? await adminApi.updateBranch(editing.branch_code, { district_code: form.district_code })
+        ? await adminApi.updateBranch(editing.branch_code, payload)
         : await adminApi.createBranch({
             branch_code: form.branch_code.trim(),
-            branch_name: form.branch_name.trim(),
-            branch_number: form.branch_number.trim() || undefined,
-            region_code: form.region_code,
-            sub_region_code: form.sub_region_code,
-            district_code: form.district_code || undefined,
+            ...payload,
           });
       if (isMakerResponse(res)) { toast({ title: "Submitted for Approval", description: `Reference: ${res.reference}`, variant: "success" }); }
       else { toast({ title: editing ? "Branch Updated" : "Branch Created", variant: "success" }); }
@@ -547,27 +619,83 @@ function BranchesTab({ toast, regionOptions, stateOptions }: { toast: any; regio
       </CardContent></Card>
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? `Edit Branch (${editing.branch_code})` : "Add Branch"}>
         <form onSubmit={handleSave} className="space-y-4">
-          {editing ? (
-            <>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-1 text-xs text-slate-700">
-                <p><strong>Branch Code:</strong> {editing.branch_code}</p>
-                <p><strong>Branch Name:</strong> {editing.branch_name}</p>
-                <p><strong>Region:</strong> {editing.region_code} | <strong>Sub-Region:</strong> {editing.sub_region_code}</p>
-                <p className="text-slate-500 italic mt-1">* Note: CBS controls Branch Name, Region, and Sub-Region via automated sync. Only District Code is managed locally.</p>
-              </div>
-              <Field><Label>District Code</Label><Input required value={form.district_code} onChange={(e) => setForm((f) => ({ ...f, district_code: e.target.value }))} placeholder="e.g. DIST01" maxLength={20} /></Field>
-            </>
-          ) : (
-            <>
-              <Field><Label>Branch Code</Label><Input required value={form.branch_code} onChange={(e) => setForm((f) => ({ ...f, branch_code: e.target.value }))} placeholder="e.g. 001" maxLength={20} /></Field>
-              <Field><Label>Branch Name</Label><Input required value={form.branch_name} onChange={(e) => setForm((f) => ({ ...f, branch_name: e.target.value }))} placeholder="e.g. PARVATI BRANCH" maxLength={255} /></Field>
-              <Field><Label>Branch Number (Optional)</Label><Input value={form.branch_number} onChange={(e) => setForm((f) => ({ ...f, branch_number: e.target.value }))} placeholder="e.g. BR-101" maxLength={50} /></Field>
-              <Field><Label>Region Code</Label><Input required value={form.region_code} onChange={(e) => setForm((f) => ({ ...f, region_code: e.target.value }))} placeholder="e.g. PRO" maxLength={20} /></Field>
-              <Field><Label>Sub-Region Code</Label><Input required value={form.sub_region_code} onChange={(e) => setForm((f) => ({ ...f, sub_region_code: e.target.value }))} placeholder="e.g. PRO-RO1" maxLength={20} /></Field>
-              <Field><Label>District Code (Optional)</Label><Input value={form.district_code} onChange={(e) => setForm((f) => ({ ...f, district_code: e.target.value }))} placeholder="e.g. DIST01" maxLength={20} /></Field>
-            </>
-          )}
-          <div className="flex justify-end gap-2 pt-3 border-t"><Button variant="secondary" type="button" onClick={() => setModalOpen(false)}>Cancel</Button><Button disabled={saving} type="submit">{saving ? "Saving…" : "Save Branch"}</Button></div>
+          <Field>
+            <Label>Branch Code</Label>
+            {editing ? (
+              <Input disabled value={form.branch_code} className="bg-slate-100 cursor-not-allowed font-mono text-slate-700" />
+            ) : (
+              <Input required value={form.branch_code} onChange={(e) => setForm((f) => ({ ...f, branch_code: e.target.value }))} placeholder="e.g. 001" maxLength={20} />
+            )}
+          </Field>
+          <Field>
+            <Label>Branch Name</Label>
+            <Input required value={form.branch_name} onChange={(e) => setForm((f) => ({ ...f, branch_name: e.target.value }))} placeholder="e.g. PARVATI BRANCH" maxLength={255} />
+          </Field>
+          <Field>
+            <Label>Branch Number (Optional)</Label>
+            <Input value={form.branch_number} onChange={(e) => setForm((f) => ({ ...f, branch_number: e.target.value }))} placeholder="e.g. BR-101" maxLength={50} />
+          </Field>
+          <Field>
+            <Label>Region</Label>
+            <Select
+              required
+              value={form.region_code}
+              onChange={(e) => {
+                const nextRegion = e.target.value;
+                setForm((f) => ({ ...f, region_code: nextRegion, sub_region_code: "" }));
+              }}
+            >
+              <option value="">Select Region</option>
+              {form.region_code && !regionOptions.some((r) => r.region_code === form.region_code) && (
+                <option value={form.region_code}>{form.region_code}</option>
+              )}
+              {regionOptions.map((r) => (
+                <option key={r.region_code} value={r.region_code}>
+                  {r.region_name} ({r.region_code})
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field>
+            <Label>Sub-Region</Label>
+            <Select
+              required
+              value={form.sub_region_code}
+              onChange={(e) => setForm((f) => ({ ...f, sub_region_code: e.target.value }))}
+            >
+              <option value="">Select Sub-Region</option>
+              {form.sub_region_code && !filteredSubRegions.some((sr) => sr.sub_region_code === form.sub_region_code) && (
+                <option value={form.sub_region_code}>{form.sub_region_code}</option>
+              )}
+              {filteredSubRegions.map((sr) => (
+                <option key={sr.sub_region_code} value={sr.sub_region_code}>
+                  {sr.sub_region_name} ({sr.sub_region_code})
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field>
+            <Label>District</Label>
+            <Select
+              required
+              value={form.district_code}
+              onChange={(e) => setForm((f) => ({ ...f, district_code: e.target.value }))}
+            >
+              <option value="">Select District</option>
+              {form.district_code && !districts.some((d) => d.district_code === form.district_code) && (
+                <option value={form.district_code}>{form.district_code}</option>
+              )}
+              {districts.map((d) => (
+                <option key={d.district_code} value={d.district_code}>
+                  {d.district_name} ({d.district_code})
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <div className="flex justify-end gap-2 pt-3 border-t">
+            <Button variant="secondary" type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button disabled={saving} type="submit">{saving ? "Saving…" : "Save Branch"}</Button>
+          </div>
         </form>
       </Modal>
       <Modal open={syncModalOpen} onClose={() => setSyncModalOpen(false)} title="CBS Branch Sync Summary">
