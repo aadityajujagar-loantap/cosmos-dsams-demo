@@ -40,6 +40,7 @@ interface AdminUserRow {
   branchCode: string;
   branchCodes: string[];
   subregionId: string;
+  zoneCode?: string;
   email: string;
   id: string;
   lastUpdated: string;
@@ -93,6 +94,7 @@ function userToRow(user: User): AdminUserRow {
     branchCode: user.branch_code ?? (allCodes[0] || ""),
     branchCodes: allCodes,
     subregionId: user.subregion_id ?? "",
+    zoneCode: user.zone_code ?? "",
     email: user.email,
     id: String(user.id),
     lastUpdated: user.updated_at ?? user.created_at ?? "",
@@ -111,7 +113,7 @@ function rowToForm(row: AdminUserRow, branches: BranchOption[], subRegions: SubR
   let sub_region_codes = sub_region_code
     ? sub_region_code.split(",").map((s) => s.trim()).filter(Boolean)
     : [];
-  let region_code = "";
+  let region_code = row.zoneCode || "";
 
   // Sanitize: verify branch_code actually exists in loaded branches
   if (branch_code && branches.length > 0 && !branches.some((b) => b.branch_code === branch_code)) {
@@ -179,7 +181,7 @@ function rowToForm(row: AdminUserRow, branches: BranchOption[], subRegions: SubR
   };
 }
 
-function compactUserPayload(form: UserFormState, includePassword: boolean, isMultiBranchRole: boolean, isDgmRole: boolean = false): UserPayload {
+function compactUserPayload(form: UserFormState, includePassword: boolean, isMultiBranchRole: boolean, isMultiSubRegionRole: boolean = false): UserPayload {
   let branchCodes: string[] | undefined = undefined;
   let primaryBranch: string | undefined = undefined;
 
@@ -196,7 +198,7 @@ function compactUserPayload(form: UserFormState, includePassword: boolean, isMul
   }
 
   let subregionId: string | undefined = undefined;
-  if (isDgmRole && form.sub_region_codes && form.sub_region_codes.length > 0) {
+  if (isMultiSubRegionRole && form.sub_region_codes && form.sub_region_codes.length > 0) {
     subregionId = form.sub_region_codes.join(",");
   } else if (form.sub_region_code && form.sub_region_code.trim()) {
     subregionId = form.sub_region_code.trim();
@@ -206,6 +208,7 @@ function compactUserPayload(form: UserFormState, includePassword: boolean, isMul
     branch_code: primaryBranch,
     branch_codes: branchCodes,
     subregion_id: subregionId,
+    zone_code: form.region_code || undefined,
     email: form.email.trim(),
     name: form.name.trim(),
     password: includePassword && form.password ? form.password : undefined,
@@ -453,13 +456,13 @@ export function UsersPage() {
       const isMultiBranchRole =
         /checker|maker/i.test(selectedRole) ||
         (editing?.roles.some((r) => /checker|maker/i.test(r)) ?? false);
-      const isDgmRole = /dgm/i.test(selectedRole);
+      const isMultiSubRegionRole = /dgm|region.*head|regional.*head/i.test(selectedRole);
       const targetRoles = selectedRole ? [selectedRole] : [];
 
       if (editing) {
         const response = await adminApi.updateUser(
           editing.userId,
-          compactUserPayload(form, Boolean(form.password), isMultiBranchRole, isDgmRole),
+          compactUserPayload(form, Boolean(form.password), isMultiBranchRole, isMultiSubRegionRole),
         );
 
         if (isMakerResponse(response)) {
@@ -483,7 +486,7 @@ export function UsersPage() {
 
         toast({ title: "User saved", description: `${form.name} was updated.`, variant: "success" });
       } else {
-        const response = await adminApi.createUser(compactUserPayload(form, Boolean(form.password), isMultiBranchRole, isDgmRole));
+        const response = await adminApi.createUser(compactUserPayload(form, Boolean(form.password), isMultiBranchRole, isMultiSubRegionRole));
 
         if (isMakerResponse(response)) {
           toast({
@@ -751,7 +754,7 @@ export function UsersPage() {
                 ) : /dgm/i.test(selectedRole) ? (
                   <span>DGM Authority — Scope covers all branches across all selected Sub-Regions.</span>
                 ) : /region/i.test(selectedRole) ? (
-                  <span>Regional Authority — Scope covers all sub-regions and branches in selected Region.</span>
+                  <span>Regional Authority — Scope covers all branches across all selected Sub-Regions in Region.</span>
                 ) : (
                   <span>Head Office / Administrative — Global scope across all regions and branches.</span>
                 )}
@@ -776,10 +779,12 @@ export function UsersPage() {
               </Select>
             </Field>
 
-            {/dgm/i.test(selectedRole) ? (
+            {/dgm|region.*head|regional.*head/i.test(selectedRole) ? (
               <Field className="sm:col-span-2">
                 <div className="flex items-center justify-between mb-1">
-                  <Label>Assigned Sub-Regions (Multiple selection for DGM)</Label>
+                  <Label>
+                    Assigned Sub-Regions (Multiple selection for {/dgm/i.test(selectedRole) ? "DGM" : "Region Head"})
+                  </Label>
                   {form.region_code && availableSubRegions.length > 0 && (
                     <div className="flex items-center gap-2">
                       <button
@@ -1136,7 +1141,7 @@ export function UsersPage() {
               </div>
             ) : (
               <Field className="sm:col-span-1">
-                <Label>{/dgm/i.test(selectedRole) ? "Home Branch (Optional)" : "Branch"}</Label>
+                <Label>{/dgm|region.*head|regional.*head/i.test(selectedRole) ? "Home Branch (Optional)" : "Branch"}</Label>
                 <Select
                   disabled={!form.sub_region_code && (!form.sub_region_codes || form.sub_region_codes.length === 0)}
                   onChange={(event) => handleBranchChange(event.target.value)}
