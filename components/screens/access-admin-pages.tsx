@@ -52,6 +52,7 @@ interface UserFormState {
   branch_code: string;
   branch_codes: string[];
   sub_region_code: string;
+  sub_region_codes: string[];
   region_code: string;
   email: string;
   name: string;
@@ -66,6 +67,7 @@ function emptyUserForm(): UserFormState {
     branch_code: "",
     branch_codes: [],
     sub_region_code: "",
+    sub_region_codes: [],
     region_code: "",
     email: "",
     name: "",
@@ -100,7 +102,10 @@ function userToRow(user: User): AdminUserRow {
 
 function rowToForm(row: AdminUserRow, branches: BranchOption[], subRegions: SubRegionOption[]): UserFormState {
   let branch_code = row.branchCode;
-  let sub_region_code = row.subregionId;
+  let sub_region_code = row.subregionId || "";
+  let sub_region_codes = sub_region_code
+    ? sub_region_code.split(",").map((s) => s.trim()).filter(Boolean)
+    : [];
   let region_code = "";
 
   if (branch_code) {
@@ -108,6 +113,7 @@ function rowToForm(row: AdminUserRow, branches: BranchOption[], subRegions: SubR
     if (br) {
       if (br.sub_region_code && !sub_region_code) {
         sub_region_code = br.sub_region_code;
+        sub_region_codes = [br.sub_region_code];
       }
       if (br.region_code) {
         region_code = br.region_code;
@@ -115,8 +121,9 @@ function rowToForm(row: AdminUserRow, branches: BranchOption[], subRegions: SubR
     }
   }
 
-  if (sub_region_code && !region_code) {
-    const sr = subRegions.find((s) => s.sub_region_code === sub_region_code);
+  if (sub_region_codes.length > 0 && !region_code) {
+    const firstCode = sub_region_codes[0].toUpperCase();
+    const sr = subRegions.find((s) => s.sub_region_code.toUpperCase() === firstCode);
     if (sr?.region_code) {
       region_code = sr.region_code;
     }
@@ -126,6 +133,7 @@ function rowToForm(row: AdminUserRow, branches: BranchOption[], subRegions: SubR
     branch_code,
     branch_codes: row.branchCodes?.length ? row.branchCodes : (branch_code ? [branch_code] : []),
     sub_region_code,
+    sub_region_codes,
     region_code,
     email: row.email,
     name: row.name,
@@ -136,16 +144,23 @@ function rowToForm(row: AdminUserRow, branches: BranchOption[], subRegions: SubR
   };
 }
 
-function compactUserPayload(form: UserFormState, includePassword: boolean, isMultiBranchRole: boolean): UserPayload {
+function compactUserPayload(form: UserFormState, includePassword: boolean, isMultiBranchRole: boolean, isDgmRole: boolean = false): UserPayload {
   const branchCodes = isMultiBranchRole ? form.branch_codes : (form.branch_code ? [form.branch_code] : []);
   const primaryBranch = isMultiBranchRole
     ? (form.branch_codes[0] || form.branch_code || undefined)
     : (form.branch_code.trim() || undefined);
 
+  let subregionId: string | undefined = undefined;
+  if (isDgmRole && form.sub_region_codes && form.sub_region_codes.length > 0) {
+    subregionId = form.sub_region_codes.join(",");
+  } else if (form.sub_region_code && form.sub_region_code.trim()) {
+    subregionId = form.sub_region_code.trim();
+  }
+
   return {
     branch_code: primaryBranch,
     branch_codes: isMultiBranchRole ? branchCodes : undefined,
-    subregion_id: form.sub_region_code.trim() || undefined,
+    subregion_id: subregionId,
     email: form.email.trim(),
     name: form.name.trim(),
     password: includePassword && form.password ? form.password : undefined,
@@ -271,6 +286,7 @@ export function UsersPage() {
       ...current,
       region_code: newRegionCode,
       sub_region_code: "",
+      sub_region_codes: [],
       branch_code: "",
       branch_codes: [],
     }));
@@ -344,12 +360,14 @@ export function UsersPage() {
   }, [subRegions, form.region_code]);
 
   const availableBranches = useMemo(() => {
-    if (!form.sub_region_code) return [];
-    const srCode = form.sub_region_code.trim().toUpperCase();
-    return branches.filter(
-      (b) => (b.sub_region_code || "").trim().toUpperCase() === srCode
+    if (!form.sub_region_code && (!form.sub_region_codes || form.sub_region_codes.length === 0)) return [];
+    const srCodes = form.sub_region_codes?.length
+      ? form.sub_region_codes.map((s) => s.trim().toUpperCase())
+      : [form.sub_region_code.trim().toUpperCase()];
+    return branches.filter((b) =>
+      srCodes.includes((b.sub_region_code || "").trim().toUpperCase())
     );
-  }, [branches, form.sub_region_code]);
+  }, [branches, form.sub_region_code, form.sub_region_codes]);
 
   async function syncRoles(userId: number, previousNames: string[], nextNames: string[]) {
     const roleByName = new Map(roles.map((role) => [role.name, role]));
@@ -372,12 +390,13 @@ export function UsersPage() {
     setSaving(true);
     try {
       const isMultiBranchRole = /checker|maker/i.test(selectedRole);
+      const isDgmRole = /dgm/i.test(selectedRole);
       const targetRoles = selectedRole ? [selectedRole] : [];
 
       if (editing) {
         const response = await adminApi.updateUser(
           editing.userId,
-          compactUserPayload(form, Boolean(form.password), isMultiBranchRole),
+          compactUserPayload(form, Boolean(form.password), isMultiBranchRole, isDgmRole),
         );
 
         if (isMakerResponse(response)) {
@@ -401,7 +420,7 @@ export function UsersPage() {
 
         toast({ title: "User saved", description: `${form.name} was updated.`, variant: "success" });
       } else {
-        const response = await adminApi.createUser(compactUserPayload(form, Boolean(form.password), isMultiBranchRole));
+        const response = await adminApi.createUser(compactUserPayload(form, Boolean(form.password), isMultiBranchRole, isDgmRole));
 
         if (isMakerResponse(response)) {
           toast({
@@ -666,7 +685,9 @@ export function UsersPage() {
                   <span>Branch User — Please ensure an assigned Branch is selected.</span>
                 ) : /sub_region|sub-region/i.test(selectedRole) ? (
                   <span>Sub-Region Authority — Scope covers all branches in selected Sub-Region.</span>
-                ) : /region|dgm/i.test(selectedRole) ? (
+                ) : /dgm/i.test(selectedRole) ? (
+                  <span>DGM Authority — Scope covers all branches across all selected Sub-Regions.</span>
+                ) : /region/i.test(selectedRole) ? (
                   <span>Regional Authority — Scope covers all sub-regions and branches in selected Region.</span>
                 ) : (
                   <span>Head Office / Administrative — Global scope across all regions and branches.</span>
@@ -692,26 +713,139 @@ export function UsersPage() {
               </Select>
             </Field>
 
-            <Field className="sm:col-span-1">
-              <Label>Sub-Region</Label>
-              <Select
-                disabled={!form.region_code}
-                onChange={(event) => handleSubRegionChange(event.target.value)}
-                value={form.sub_region_code}
-              >
-                <option value="">
-                  {form.region_code ? "Select Sub-Region (or None)" : "Select Region first"}
-                </option>
-                {availableSubRegions.map((sr) => (
-                  <option key={sr.sub_region_code} value={sr.sub_region_code}>
-                    {sr.sub_region_name} ({sr.sub_region_code})
-                  </option>
-                ))}
-                {form.sub_region_code && !availableSubRegions.some((sr) => sr.sub_region_code === form.sub_region_code) && (
-                  <option value={form.sub_region_code}>{form.sub_region_code} (Current)</option>
+            {/dgm/i.test(selectedRole) ? (
+              <Field className="sm:col-span-2">
+                <div className="flex items-center justify-between mb-1">
+                  <Label>Assigned Sub-Regions (Multiple selection for DGM)</Label>
+                  {form.region_code && availableSubRegions.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="text-xs text-sky-600 hover:text-sky-700 underline font-medium"
+                        onClick={() => {
+                          const allCodes = availableSubRegions.map((sr) => sr.sub_region_code).filter(Boolean);
+                          setForm((prev) => ({
+                            ...prev,
+                            sub_region_codes: allCodes,
+                            sub_region_code: allCodes.join(","),
+                          }));
+                        }}
+                      >
+                        Select all
+                      </button>
+                      <span className="text-slate-300">|</span>
+                      <button
+                        type="button"
+                        className="text-xs text-slate-500 hover:text-slate-700 underline"
+                        onClick={() => {
+                          setForm((prev) => ({
+                            ...prev,
+                            sub_region_codes: [],
+                            sub_region_code: "",
+                          }));
+                        }}
+                      >
+                        Clear
+                      </button>
+                      <span className="text-xs text-slate-500 font-medium ml-1">
+                        ({form.sub_region_codes.length} selected)
+                      </span>
+                    </div>
+                  )}
+                </div>
+                {!form.region_code ? (
+                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-4 text-center">
+                    <p className="text-xs text-slate-500">Please select a Region first to view and select Sub-Regions.</p>
+                  </div>
+                ) : availableSubRegions.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-4 text-center">
+                    <p className="text-xs text-slate-500">No sub-regions found under this Region.</p>
+                  </div>
+                ) : (
+                  <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2.5 space-y-1.5">
+                    {availableSubRegions.map((sr) => {
+                      const isChecked = form.sub_region_codes.includes(sr.sub_region_code);
+                      return (
+                        <label
+                          key={sr.sub_region_code}
+                          className="flex items-center gap-2.5 px-2 py-1.5 rounded hover:bg-slate-50 cursor-pointer text-xs text-slate-800"
+                        >
+                          <input
+                            type="checkbox"
+                            className="rounded border-slate-300 text-sky-600 focus:ring-sky-500 h-4 w-4"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setForm((prev) => {
+                                const next = checked
+                                  ? [...prev.sub_region_codes, sr.sub_region_code]
+                                  : prev.sub_region_codes.filter((c) => c !== sr.sub_region_code);
+                                return {
+                                  ...prev,
+                                  sub_region_codes: next,
+                                  sub_region_code: next.join(","),
+                                };
+                              });
+                            }}
+                          />
+                          <span className="font-mono font-medium text-slate-900">{sr.sub_region_code}</span>
+                          <span className="text-slate-500 truncate">{sr.sub_region_name || "—"}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 )}
-              </Select>
-            </Field>
+                {form.sub_region_codes.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {form.sub_region_codes.map((code) => (
+                      <span
+                        key={code}
+                        className="inline-flex items-center gap-1 rounded bg-sky-50 border border-sky-200 px-2 py-0.5 text-xs text-sky-700 font-mono"
+                      >
+                        {code}
+                        <button
+                          type="button"
+                          className="text-sky-400 hover:text-sky-600 ml-0.5 font-bold"
+                          onClick={() => {
+                            setForm((prev) => {
+                              const next = prev.sub_region_codes.filter((c) => c !== code);
+                              return {
+                                ...prev,
+                                sub_region_codes: next,
+                                sub_region_code: next.join(","),
+                              };
+                            });
+                          }}
+                        >
+                          &times;
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </Field>
+            ) : (
+              <Field className="sm:col-span-1">
+                <Label>Sub-Region</Label>
+                <Select
+                  disabled={!form.region_code}
+                  onChange={(event) => handleSubRegionChange(event.target.value)}
+                  value={form.sub_region_code}
+                >
+                  <option value="">
+                    {form.region_code ? "Select Sub-Region (or None)" : "Select Region first"}
+                  </option>
+                  {availableSubRegions.map((sr) => (
+                    <option key={sr.sub_region_code} value={sr.sub_region_code}>
+                      {sr.sub_region_name} ({sr.sub_region_code})
+                    </option>
+                  ))}
+                  {form.sub_region_code && !availableSubRegions.some((sr) => sr.sub_region_code === form.sub_region_code) && (
+                    <option value={form.sub_region_code}>{form.sub_region_code} (Current)</option>
+                  )}
+                </Select>
+              </Field>
+            )}
 
             {/* Branch Selection: Multi-select for Checker & Maker, Single select otherwise */}
             {/checker|maker/i.test(selectedRole) ? (
@@ -831,14 +965,14 @@ export function UsersPage() {
               </Field>
             ) : (
               <Field className="sm:col-span-1">
-                <Label>Branch</Label>
+                <Label>{/dgm/i.test(selectedRole) ? "Home Branch (Optional)" : "Branch"}</Label>
                 <Select
-                  disabled={!form.sub_region_code}
+                  disabled={!form.sub_region_code && (!form.sub_region_codes || form.sub_region_codes.length === 0)}
                   onChange={(event) => handleBranchChange(event.target.value)}
                   value={form.branch_code}
                 >
                   <option value="">
-                    {form.sub_region_code ? "Select Branch (or None)" : "Select Sub-Region first"}
+                    {form.sub_region_code || (form.sub_region_codes && form.sub_region_codes.length > 0) ? "Select Branch (or None)" : "Select Sub-Region first"}
                   </option>
                   {availableBranches.map((b) => (
                     <option key={b.branch_code} value={b.branch_code}>
