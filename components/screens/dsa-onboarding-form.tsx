@@ -38,6 +38,7 @@ import {
 import { adminApi } from "@/apis/admin";
 import { authService } from "@/services/authService";
 import { useMockStore } from "@/lib/store";
+import { getActiveBranchCode, getUserBranchScopeSync } from "@/lib/branch-scope";
 import { useToast } from "@/components/ui/toast";
 import { Button, Card, CardContent, DatePicker, Input, Label, Select } from "@/components/ui/primitives";
 import { cn, formatDate, generateDsaId } from "@/lib/utils";
@@ -455,6 +456,15 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
   const [dsaType, setDsaType] = useState<DsaType>("INDIVIDUAL");
   const [branches, setBranches] = useState<any[]>([]);
   const [loadingBranches, setLoadingBranches] = useState<boolean>(true);
+
+  // For makers/checkers, only show their assigned branches in the form dropdown
+  const visibleBranches = useMemo(() => {
+    const scope = getUserBranchScopeSync(currentUser, branches);
+    if (!scope.isBranchRestricted || scope.branchCodes.length === 0) return branches;
+    return branches.filter((b: any) =>
+      scope.branchCodes.includes(String(b.branch_code || "").trim().toUpperCase())
+    );
+  }, [branches, currentUser]);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submittedDsa, setSubmittedDsa] = useState<any | null>(null);
   const [createdDsaId, setCreatedDsaId] = useState<number | string | null>(null);
@@ -707,6 +717,15 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
             if (curr && list.some((b: any) => String(b.id ?? b.branch_id) === String(curr))) {
               return curr;
             }
+            // Prefer the branch selected in the top dropdown (if not "ALL")
+            const activeBranchCode = getActiveBranchCode();
+            if (activeBranchCode && activeBranchCode !== "ALL") {
+              const activeMatch = list.find(
+                (b: any) => String(b.branch_code || "").trim().toUpperCase() === activeBranchCode.trim().toUpperCase()
+              );
+              if (activeMatch) return String(activeMatch.id ?? activeMatch.branch_id ?? "");
+            }
+            // Fall back to user's primary assigned branch
             const userBranchCode = (authService.getUser()?.branch_code || authService.getUser()?.branch_codes?.[0] || "").trim().toUpperCase();
             const assignedBranch = userBranchCode
               ? list.find((b: any) => String(b.branch_code || "").trim().toUpperCase() === userBranchCode)
@@ -731,6 +750,23 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
     return () => {
       mounted = false;
     };
+  }, []);
+
+  // Sync branchId when maker changes top-bar branch dropdown
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const code = (e as CustomEvent<{ branchCode: string }>).detail?.branchCode;
+      if (!code || code === "ALL") return;
+      setBranches((list) => {
+        const match = list.find(
+          (b: any) => String(b.branch_code || "").trim().toUpperCase() === code.trim().toUpperCase()
+        );
+        if (match) setBranchId(String(match.id ?? match.branch_id ?? ""));
+        return list;
+      });
+    };
+    window.addEventListener("branch:change", handler);
+    return () => window.removeEventListener("branch:change", handler);
   }, []);
 
   // Fetch title options from master values API
@@ -3447,7 +3483,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         ) : (
                           <>
                             <option value="">Select Home Branch</option>
-                            {branches.map((b, idx) => {
+                            {visibleBranches.map((b, idx) => {
                               const val = String(b.id ?? b.branch_id ?? idx + 1);
                               return (
                                 <option key={val} value={val}>
