@@ -216,9 +216,19 @@ export function DsaKycDataModal({
         cachedVerif?.details ||
         cachedVerif?.response_payload ||
         cachedVerif?.raw_response ||
+        cachedVerif?.normalized_data ||
         (cachedVerif as any)?.data?.details;
       if (cachedDetails) {
-        setApiData({ data: { details: cachedDetails } });
+        setApiData({
+          data: {
+            details: cachedDetails,
+            normalized_data: cachedVerif?.normalized_data,
+            raw_response: cachedVerif?.raw_response,
+          },
+          raw_response: cachedVerif?.raw_response,
+          normalized_data: cachedVerif?.normalized_data,
+          cachedVerif,
+        });
         setError(null);
       } else {
         setError(err?.message || "Failed to query verification API.");
@@ -262,6 +272,7 @@ export function DsaKycDataModal({
           },
           raw_response: cachedVerif?.raw_response,
           normalized_data: cachedVerif?.normalized_data,
+          cachedVerif,
         });
       } else {
         fetchKycData();
@@ -907,48 +918,293 @@ function BankOnboardingTable({ dsa }: { dsa: any }) {
   );
 }
 
+function parseJsonSafeCandidate(candidate: any): any {
+  if (!candidate) return null;
+  if (typeof candidate === "string") {
+    const trimmed = candidate.trim();
+    if (
+      (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+      (trimmed.startsWith("[") && trimmed.endsWith("]"))
+    ) {
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+  return typeof candidate === "object" ? candidate : null;
+}
+
+function resolveBankDetails(apiData: any, dsa?: any): Record<string, any> {
+  const merged: Record<string, any> = {};
+  const visited = new Set<any>();
+  const queue: any[] = [];
+
+  const add = (item: any) => {
+    if (!item) return;
+    const parsed = parseJsonSafeCandidate(item) ?? (typeof item === "object" ? item : null);
+    if (parsed && typeof parsed === "object" && !visited.has(parsed)) {
+      visited.add(parsed);
+      queue.push(parsed);
+    }
+  };
+
+  // 1. Candidate containers from apiData
+  add(apiData);
+  add(apiData?.data);
+  add(apiData?.data?.details);
+  add(apiData?.data?.details?.data);
+  add(apiData?.data?.details?.result);
+  add(apiData?.data?.normalized_data);
+  add(apiData?.data?.raw_response);
+  add(apiData?.raw_response);
+  add(apiData?.normalized_data);
+  add(apiData?.details);
+  add(apiData?.result);
+  add(apiData?.cachedVerif);
+  add(apiData?.cachedVerif?.raw_response);
+  add(apiData?.cachedVerif?.normalized_data);
+  add(apiData?.cachedVerif?.details);
+
+  // 2. Fallback to DSA verifications list if present
+  if (dsa && Array.isArray((dsa as any)?.verifications)) {
+    const bankVerifs = (dsa as any).verifications.filter((v: any) => {
+      const vc = String(v?.verification_code || "").toUpperCase();
+      return vc === "BANK" || vc.includes("BANK") || vc.includes("BAV");
+    });
+    for (const bv of bankVerifs) {
+      add(bv);
+      add(bv?.normalized_data);
+      add(bv?.raw_response);
+      add(bv?.details);
+      add(bv?.response_payload);
+      add(bv?.response_json);
+    }
+  }
+
+  // 3. Breadth-first traversal unwrapping nested JSON / objects
+  while (queue.length > 0) {
+    const curr = queue.shift();
+    if (!curr || typeof curr !== "object") continue;
+
+    if (Array.isArray(curr)) {
+      for (const el of curr) {
+        add(el);
+      }
+      continue;
+    }
+
+    for (const [key, val] of Object.entries(curr)) {
+      if (val === null || val === undefined || val === "") continue;
+
+      if (typeof val === "string") {
+        const parsedNested = parseJsonSafeCandidate(val);
+        if (parsedNested) {
+          add(parsedNested);
+        } else {
+          if (merged[key] === undefined || merged[key] === null || merged[key] === "") {
+            merged[key] = val;
+          }
+        }
+      } else if (typeof val === "number" || typeof val === "boolean") {
+        if (merged[key] === undefined || merged[key] === null || merged[key] === "") {
+          merged[key] = val;
+        }
+      } else if (typeof val === "object") {
+        add(val);
+      }
+    }
+  }
+
+  return merged;
+}
+
 // 3. Bank Account Verification Table (Single combined table in comparison mode)
 function BankDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiData: any; isComparison?: boolean }) {
-  const details =
-    apiData?.data?.details?.data ||
-    apiData?.data?.details?.result ||
-    apiData?.data?.details ||
-    apiData?.data?.normalized_data ||
-    apiData?.data ||
-    apiData?.result ||
-    {};
+  const details = resolveBankDetails(apiData, dsa);
+
+  const beneficiaryName =
+    details.beneficiary_name ||
+    details.beneficiaryName ||
+    details.account_name ||
+    details.accountName ||
+    details.account_holder_name ||
+    details.accountHolderName ||
+    details.name ||
+    details.fullName ||
+    details.full_name ||
+    details.holder_name ||
+    details.holderName ||
+    details.customer_name ||
+    details.customerName ||
+    "";
+
+  const accNo =
+    details.account_number ||
+    details.accountNumber ||
+    details.account_no ||
+    details.accountNo ||
+    details.acc_no ||
+    details.accNo ||
+    details.bank_account_number ||
+    details.bankAccountNumber ||
+    "";
+
+  const bankName =
+    details.bank_name ||
+    details.bankName ||
+    details.bank ||
+    details.beneficiary_bank_name ||
+    details.beneficiaryBankName ||
+    "";
+
+  const ifsc =
+    details.ifsc ||
+    details.ifsc_code ||
+    details.ifscCode ||
+    details.ifs_code ||
+    details.ifsCode ||
+    "";
+
+  const branch =
+    details.branch ||
+    details.branch_name ||
+    details.branchName ||
+    details.bank_branch ||
+    details.bankBranch ||
+    "";
+
+  const city =
+    details.city ||
+    details.bank_city ||
+    details.bankCity ||
+    "";
+
+  const state =
+    details.state ||
+    details.bank_state ||
+    details.bankState ||
+    "";
+
+  const district =
+    details.district ||
+    details.bank_district ||
+    details.bankDistrict ||
+    "";
+
+  const utr =
+    details.utr ||
+    details.utr_number ||
+    details.utrNumber ||
+    details.transaction_id ||
+    details.transactionId ||
+    details.txn_id ||
+    details.txnId ||
+    details.reference_id ||
+    details.referenceId ||
+    details.rrn ||
+    details.bank_ref_no ||
+    details.bankRefNo ||
+    "";
+
+  const micr =
+    details.micr ||
+    details.micr_code ||
+    details.micrCode ||
+    "";
+
+  const accountType =
+    details.account_type ||
+    details.accountType ||
+    details.account_category ||
+    details.accountCategory ||
+    (dsa?.account_type || "");
+
+  const bankAddress =
+    details.address ||
+    details.bank_address ||
+    details.bankAddress ||
+    details.branch_address ||
+    details.registered_address ||
+    [branch, city, state].filter(Boolean).join(", ");
+
+  const bankLocation =
+    details.location ||
+    details.bank_location ||
+    [city, state].filter(Boolean).join(", ");
 
   const hasApiData = Boolean(
-    apiData?.data?.details ||
-    apiData?.data?.normalized_data ||
-    apiData?.details ||
-    apiData?.normalized_data ||
-    (details && Object.keys(details).length > 0 && (details.accountNumber || details.account_number || details.beneficiaryName || details.beneficiary_name || details.name || details.utr))
+    beneficiaryName ||
+    accNo ||
+    bankName ||
+    ifsc ||
+    utr ||
+    details.status ||
+    details.account_exists ||
+    details.accountExists ||
+    details.responseCode ||
+    details.response_code
   );
 
-  const beneficiaryName = details.name || details.beneficiaryName || details.beneficiary_name || details.accountName || "";
-  const accNo = details.accountNumber || details.account_number || "";
-  const bankName = details.bankName || details.bank_name || "";
-  const ifsc = details.ifsc || "";
-  const branch = details.branch || details.branchName || "";
-  const city = details.city || "";
-  const state = details.state || "";
-  const district = details.district || "";
-  const utr = details.utr || details.transaction_id || details.utrNumber || "";
-  const micr = details.micr || details.micrCode || "";
-  const accountType = details.accountType || details.account_type || "";
-  const bankAddress = details.address || [branch, city, state].filter(Boolean).join(", ");
-  const bankLocation = [city, state].filter(Boolean).join(", ");
+  let nameMatchStatus =
+    details.name_match_status ||
+    details.nameMatchStatus ||
+    details.name_match ||
+    details.nameMatch ||
+    "";
 
-  const nameMatchStatus = hasApiData
-    ? (details.name_match_status || details.nameMatchStatus || (beneficiaryName ? "100% Name Match Confirmed" : ""))
-    : "";
-  const accountValidationStatus = hasApiData
-    ? (details.account_validation_status || details.status || (accNo ? "Active & Operative Account" : ""))
-    : "";
-  const pennyDropStatus = hasApiData
-    ? (details.penny_drop_status || (utr ? "Account Confirmed" : ""))
-    : "";
+  if (!nameMatchStatus && hasApiData) {
+    if (details.name_match_score || details.nameMatchScore) {
+      nameMatchStatus = `${details.name_match_score || details.nameMatchScore}% Name Match`;
+    } else if (beneficiaryName) {
+      nameMatchStatus = "100% Name Match Confirmed";
+    }
+  }
+
+  let accountValidationStatus =
+    details.account_validation_status ||
+    details.accountValidationStatus ||
+    details.validation_status ||
+    details.validationStatus ||
+    details.bank_account_status ||
+    details.bankAccountStatus ||
+    details.account_status ||
+    details.accountStatus ||
+    "";
+
+  if (!accountValidationStatus && hasApiData) {
+    if (
+      details.account_exists === "YES" ||
+      details.accountExists === "YES" ||
+      details.account_exists === true ||
+      details.accountExists === true ||
+      details.validBankAccount === "true" ||
+      details.validBankAccount === true
+    ) {
+      accountValidationStatus = "Active & Operative Account";
+    } else if (details.status === "VERIFIED" || details.status === "SUCCESS" || details.status === "COMPLETED") {
+      accountValidationStatus = "Active & Operative Account";
+    } else if (accNo) {
+      accountValidationStatus = "Active & Operative Account";
+    }
+  }
+
+  let pennyDropStatus =
+    details.penny_drop_status ||
+    details.pennyDropStatus ||
+    details.penny_drop ||
+    details.pennyDrop ||
+    "";
+
+  if (!pennyDropStatus && hasApiData) {
+    if (details.verification_type === "PENNY_DROP" || utr) {
+      pennyDropStatus = "Account Confirmed (Penny Drop)";
+    } else if (details.status === "VERIFIED" || details.status === "SUCCESS") {
+      pennyDropStatus = "Account Confirmed";
+    }
+  }
 
   if (isComparison) {
     return (
@@ -958,8 +1214,8 @@ function BankDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiDa
         paramHeader="Attribute / Parameter"
         valueHeader="Verified Response Data"
       >
-        <TableRow label="Beneficiary Account Name" value={beneficiaryName} badge="success" />
-        <TableRow label="Name Match Status" value={nameMatchStatus} badge="success" />
+        <TableRow label="Beneficiary Account Name" value={beneficiaryName} badge={beneficiaryName ? "success" : undefined} />
+        <TableRow label="Name Match Status" value={nameMatchStatus} badge={nameMatchStatus ? "success" : undefined} />
         <TableRow label="Account Number" value={accNo} isMono />
         <TableRow label="Account Type" value={accountType} />
         <TableRow label="Bank Name" value={bankName} />
@@ -997,8 +1253,8 @@ function BankDataTable({ dsa, apiData, isComparison = false }: { dsa: any; apiDa
     <div className="space-y-3">
       {/* Table 1: Basic Account & Holder Details */}
       <TableWrapper title="1. Basic Account & Holder Details" subtitle="Beneficiary & Core Banking Information">
-        <TableRow label="Beneficiary Account Name" value={beneficiaryName} badge="success" />
-        <TableRow label="Name Match Status" value={nameMatchStatus} badge="success" />
+        <TableRow label="Beneficiary Account Name" value={beneficiaryName} badge={beneficiaryName ? "success" : undefined} />
+        <TableRow label="Name Match Status" value={nameMatchStatus} badge={nameMatchStatus ? "success" : undefined} />
         <TableRow label="Account Number" value={accNo} isMono />
         <TableRow label="Account Type" value={accountType} />
         <TableRow label="Bank Name" value={bankName} />
