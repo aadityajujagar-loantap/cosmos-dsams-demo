@@ -266,6 +266,9 @@ export function DsaDetailEditModal({
         }
       } else {
         if (!formData.entity_name?.trim()) errs.entity_name = "Entity name is required";
+        if (!normalizeConstitution(formData.constitution || dsa?.constitution || dsa?.business_type)?.trim()) {
+          errs.constitution = "Constitution of business is required";
+        }
       }
     }
 
@@ -647,7 +650,9 @@ export function DsaDetailEditModal({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="constitution">Constitution</Label>
+                <Label htmlFor="constitution">
+                  Constitution <span className="text-red-500">*</span>
+                </Label>
                 <Select
                   id="constitution"
                   value={normalizeConstitution(formData.constitution || dsa?.constitution || dsa?.business_type || "")}
@@ -672,6 +677,7 @@ export function DsaDetailEditModal({
                       <option value={formData.constitution}>{formData.constitution}</option>
                     )}
                 </Select>
+                {errors.constitution && <p className="text-red-500 text-xs mt-1">{errors.constitution}</p>}
               </div>
               <div>
                 <Label htmlFor="business_type">Business Type / Category</Label>

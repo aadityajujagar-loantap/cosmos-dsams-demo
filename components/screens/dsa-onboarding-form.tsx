@@ -1896,6 +1896,15 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
 
     setIsVerifyingPan(true);
     const isEntity = dsaType === "ENTITY";
+    if (isEntity && !constitution.trim()) {
+      setIsVerifyingPan(false);
+      toast({
+        title: "Constitution Required",
+        description: "Please select constitution of business before verifying PAN.",
+        variant: "warning",
+      });
+      return;
+    }
     const resolvedContactMobile = mobile.trim() || undefined;
     const resolvedContactEmail = (selfEmail.trim() || email.trim()) || undefined;
 
@@ -2404,12 +2413,12 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           return false;
         }
       } else {
-        if (!entityName.trim()) {
-          toast({ title: "Entity Name Required", description: "Please enter registered entity name.", variant: "warning" });
+        if (!constitution.trim()) {
+          toast({ title: "Constitution Required", description: "Constitution of business is mandatory for Entity.", variant: "warning" });
           return false;
         }
-        if (!constitution.trim()) {
-          toast({ title: "Constitution Required", description: "Please select constitution of business.", variant: "warning" });
+        if (!entityName.trim()) {
+          toast({ title: "Entity Name Required", description: "Please enter registered entity name.", variant: "warning" });
           return false;
         }
         if (!natureOfBusiness.trim()) {
@@ -3363,12 +3372,13 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <Label htmlFor="constitution" className="text-sm font-bold text-slate-800 uppercase tracking-wider block">
-                        Constitution of Business *
+                        Constitution of Business <span className="text-rose-500">*</span>
                       </Label>
                     </div>
                     <Select
                       id="constitution"
                       value={constitution}
+                      required
                       onChange={(e) => {
                         const val = e.target.value;
                         setConstitution(val);

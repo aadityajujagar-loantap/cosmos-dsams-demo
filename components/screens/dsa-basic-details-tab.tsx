@@ -751,6 +751,9 @@ export function DsaBasicDetailsTab({
       if (isEntity) {
         if (!formData.entity_name?.trim() && !dsa.entity_name) errs.entity_name = "Entity Name is required";
         if (!formData.contact_person?.trim()) errs.contact_person = "Contact Person is required";
+        if (!normalizeConstitution(formData.constitution || dsa.constitution || dsa.business_type)?.trim()) {
+          errs.constitution = "Constitution of Business is required for Entity";
+        }
       } else {
         if (!formData.first_name?.trim() && !dsa.first_name) errs.first_name = "First Name is required";
         if (!formData.last_name?.trim() && !dsa.last_name) errs.last_name = "Last Name is required";
@@ -1245,7 +1248,9 @@ export function DsaBasicDetailsTab({
                 </div>
 
                 <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
-                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">Constitution</Label>
+                  <Label className="text-xs font-semibold uppercase text-slate-500 mb-1.5 block">
+                    Constitution <span className="text-red-500">*</span>
+                  </Label>
                   <Select
                     value={normalizeConstitution(formData.constitution || dsa?.constitution || dsa?.business_type || "")}
                     onChange={(e) => {
@@ -1268,6 +1273,7 @@ export function DsaBasicDetailsTab({
                         <option value={formData.constitution}>{formData.constitution}</option>
                       )}
                   </Select>
+                  {errors.constitution && <p className="text-red-500 text-xs mt-1">{errors.constitution}</p>}
                 </div>
 
                 <div className="rounded-md border border-slate-200 bg-white p-3 shadow-2xs">
