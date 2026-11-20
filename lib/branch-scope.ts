@@ -46,15 +46,14 @@ export function getUserBranchScopeSync(
 
   // Makers and Checkers are strictly restricted to their assigned branch
   const isMaker =
-    roles.includes("maker") ||
-    roles.includes("assistant_manager") ||
+    roles.some((r) => r.includes("maker") || r.includes("assistant_manager") || r.includes("branch_user") || r === "branch user") ||
+    sessionRole.includes("maker") ||
     sessionRole === "branch user" ||
-    sessionRole === "maker" ||
     sessionRole === "assistant manager";
 
   const isChecker =
-    roles.includes("checker") ||
-    sessionRole === "checker" ||
+    roles.some((r) => r.includes("checker") || r.includes("sub_region") || r.includes("sub-region")) ||
+    sessionRole.includes("checker") ||
     (sessionRole === "manager" && !isSuperAdmin);
 
   const isBranchRestricted = !isSuperAdmin && (isMaker || isChecker);
