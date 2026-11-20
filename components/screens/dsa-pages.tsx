@@ -6725,6 +6725,7 @@ export function DsaProfilePage({ id }: { id: string }) {
       case 3:
       case 4:
       case 5:
+      case 6:
       case 7:
         return {
           targetLevel: 1,
@@ -6742,21 +6743,20 @@ export function DsaProfilePage({ id }: { id: string }) {
   );
 
   // Revert is permitted for the reviewer whose role maps to the
-  // CURRENTLY PENDING step (L3 Sub-Region Head, L4 DGM, L5 Region Head, L7 HO Credit Head).
-  // L1 Maker, L2 Checker, and L6 HO Credit Officer are prohibited.
+  // CURRENTLY PENDING step (L3 Sub-Region Head, L4 DGM, L5 Region Head, L6 HO Credit Officer, L7 HO Credit Head).
+  // L1 Maker and L2 Checker are prohibited.
   // We use the user's own role flags, not the DSA's current level, so a
   // Checker viewing an L3 case never sees the button.
   const canRevert = Boolean(
     currentRevertTarget &&
-    workflowLevelInfo.currentLevel !== 6 &&
     workflowLevelInfo.currentLevel >= 3 &&
     workflowLevelInfo.currentLevel <= 7 &&
     !isMakerUser &&
     ((!isCheckerRole &&
-      !isHoOfficerRole &&
       (isSubRegionRole ||
         isDgmRole ||
         isRegionHeadRole ||
+        isHoOfficerRole ||
         isHoHeadRole ||
         isL7User)) ||
       isAdminOrSuperAdmin),
@@ -14139,7 +14139,7 @@ export function DsaProfilePage({ id }: { id: string }) {
         </div>
       </Modal>
 
-      {/* Revert Application Modal (Levels 3, 4, 5, 7; L1, L2, L6 prohibited) */}
+      {/* Revert Application Modal (Levels 3 to 7; L1, L2 prohibited) */}
       <Modal
         onClose={closeDecisionModals}
         open={Boolean(revertingDsa) && canRevert}
