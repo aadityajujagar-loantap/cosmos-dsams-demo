@@ -65,6 +65,51 @@ import type { Dsa as LiveDsa } from "@/types/dsa";
 import { useToast } from "@/components/ui/toast";
 import { canShowCallBackAction } from "@/lib/dsa-workflow-actions";
 
+const WORKFLOW_STAGE_MAP: Record<number, { label: string; badgeClass: string }> = {
+  1: { label: "L1: Maker", badgeClass: "bg-blue-50 text-blue-700 border-blue-200" },
+  2: { label: "L2: Checker", badgeClass: "bg-indigo-50 text-indigo-700 border-indigo-200" },
+  3: { label: "L3: Sub-Region Head", badgeClass: "bg-amber-50 text-amber-700 border-amber-200" },
+  4: { label: "L4: DGM", badgeClass: "bg-purple-50 text-purple-700 border-purple-200" },
+  5: { label: "L5: Region Head", badgeClass: "bg-violet-50 text-violet-700 border-violet-200" },
+  6: { label: "L6: HO Credit Officer", badgeClass: "bg-cyan-50 text-cyan-700 border-cyan-200" },
+  7: { label: "L7: HO Credit Head", badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+};
+
+function resolveWorkflowStageDisplay(dsa: any) {
+  const level = Number(dsa.current_approval_level || 1);
+  const stageInfo = WORKFLOW_STAGE_MAP[level] || {
+    label: `Level ${level}`,
+    badgeClass: "bg-slate-50 text-slate-700 border-slate-200",
+  };
+  const roleName = dsa.assigned_role || (dsa.approvals?.find((a: any) => a.status === "PENDING")?.assigned_role);
+  return {
+    label: roleName && !stageInfo.label.includes(roleName) ? `${stageInfo.label} (${roleName})` : stageInfo.label,
+    badgeClass: stageInfo.badgeClass,
+  };
+}
+
+function resolveAssignedDeskDisplay(dsa: any) {
+  const userName = dsa.assigned_user?.name || (dsa as any).assigned_user_name;
+  const branchName = dsa.branch?.branch_name || dsa.branch_name || (dsa.branch?.branch_code ? `Branch ${dsa.branch.branch_code}` : null);
+  const isLocked = Boolean(dsa.lock_status === "LOCKED" || dsa.is_locked);
+
+  if (userName) {
+    return {
+      title: userName,
+      subtitle: branchName || "Assigned Officer",
+      isPooled: false,
+      isLocked,
+    };
+  }
+
+  return {
+    title: "Unassigned (Pool)",
+    subtitle: branchName ? `${branchName} Queue` : "Pending Claim",
+    isPooled: true,
+    isLocked: false,
+  };
+}
+
 const CUSTOMER_DSA_DISPLAY_NAME = "Assigned DSA";
 
 export function DashboardPage() {
@@ -1075,6 +1120,8 @@ export function DashboardPage() {
                         <th className="p-4 pl-6">Partner</th>
                         <th className="p-4">Contact</th>
                         <th className="p-4">City</th>
+                        <th className="p-4">Workflow Stage</th>
+                        <th className="p-4">Assigned User / Desk</th>
                         <th className="p-4">Status</th>
                         <th className="p-4 text-right pr-6">Profile Review</th>
                       </tr>
@@ -1087,6 +1134,8 @@ export function DashboardPage() {
                           access.reason,
                           dsa.current_approval_level,
                         );
+                        const stageDisplay = resolveWorkflowStageDisplay(dsa);
+                        const deskDisplay = resolveAssignedDeskDisplay(dsa);
                         return (
                         <tr
                           className={cn(
@@ -1107,13 +1156,30 @@ export function DashboardPage() {
                             </div>
                             <div className="text-xs text-slate-500">{dsa.business_type}</div>
                           </td>
-                          <td className="p-4 font-mono text-xs text-slate-600">{dsa.code}</td>
                           <td className="p-4 text-xs text-slate-600">
-                            <div>{dsa.email}</div>
-                            <div>{dsa.mobile}</div>
+                            <div className="font-mono text-slate-700 font-semibold">{dsa.code}</div>
+                            <div>{dsa.mobile || dsa.email}</div>
                           </td>
                           <td className="p-4 text-slate-700 font-medium">{dsa.city}</td>
-                          <td className="p-4">
+                          <td className="p-4 whitespace-nowrap">
+                            <span className={cn("inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold border", stageDisplay.badgeClass)}>
+                              {stageDisplay.label}
+                            </span>
+                          </td>
+                          <td className="p-4 whitespace-nowrap">
+                            <div className="flex flex-col">
+                              <span className={cn("text-xs font-semibold", deskDisplay.isPooled ? "text-slate-500 italic" : "text-slate-800")}>
+                                {deskDisplay.title}
+                              </span>
+                              <span className="text-[11px] text-slate-500">
+                                {deskDisplay.subtitle}
+                                {deskDisplay.isLocked && (
+                                  <span className="ml-1 text-amber-600 font-medium">(Locked)</span>
+                                )}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="p-4 whitespace-nowrap">
                             <StatusBadge status={dsa.onboarding_status} />
                           </td>
                           <td className="p-4 text-right pr-6">
@@ -1199,9 +1265,10 @@ export function DashboardPage() {
                     <thead>
                       <tr className="bg-slate-50/75 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                         <th className="p-4 pl-6">Partner</th>
-                        <th className="p-4">Code</th>
                         <th className="p-4">Contact</th>
                         <th className="p-4">City</th>
+                        <th className="p-4">Workflow Stage</th>
+                        <th className="p-4">Assigned User / Desk</th>
                         <th className="p-4">Status</th>
                         <th className="p-4 text-right pr-6">Profile Review</th>
                       </tr>
@@ -1214,6 +1281,8 @@ export function DashboardPage() {
                           access.reason,
                           dsa.current_approval_level,
                         );
+                        const stageDisplay = resolveWorkflowStageDisplay(dsa);
+                        const deskDisplay = resolveAssignedDeskDisplay(dsa);
                         return (
                         <tr
                           className={cn(
@@ -1234,13 +1303,30 @@ export function DashboardPage() {
                             </div>
                             <div className="text-xs text-slate-500">{dsa.business_type}</div>
                           </td>
-                          <td className="p-4 font-mono text-xs text-slate-600">{dsa.code}</td>
                           <td className="p-4 text-xs text-slate-600">
-                            <div>{dsa.email}</div>
-                            <div>{dsa.mobile}</div>
+                            <div className="font-mono text-slate-700 font-semibold">{dsa.code}</div>
+                            <div>{dsa.mobile || dsa.email}</div>
                           </td>
                           <td className="p-4 text-slate-700 font-medium">{dsa.city}</td>
-                          <td className="p-4">
+                          <td className="p-4 whitespace-nowrap">
+                            <span className={cn("inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold border", stageDisplay.badgeClass)}>
+                              {stageDisplay.label}
+                            </span>
+                          </td>
+                          <td className="p-4 whitespace-nowrap">
+                            <div className="flex flex-col">
+                              <span className={cn("text-xs font-semibold", deskDisplay.isPooled ? "text-slate-500 italic" : "text-slate-800")}>
+                                {deskDisplay.title}
+                              </span>
+                              <span className="text-[11px] text-slate-500">
+                                {deskDisplay.subtitle}
+                                {deskDisplay.isLocked && (
+                                  <span className="ml-1 text-amber-600 font-medium">(Locked)</span>
+                                )}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="p-4 whitespace-nowrap">
                             <StatusBadge status={dsa.onboarding_status} />
                           </td>
                           <td className="p-4 text-right pr-6">
