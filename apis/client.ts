@@ -1,5 +1,10 @@
 import { authService } from "@/services/authService";
 import { withBasePath } from "@/lib/base-path";
+import {
+  encryptPayload,
+  decryptPayload,
+  isEncryptionEnabled,
+} from "@/lib/payload-crypto";
 
 export const getBaseUrl = (): string => {
   const envUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -76,16 +81,48 @@ export async function request<T = unknown>(
     delete headers["Content-Type"];
   }
 
+  if (isEncryptionEnabled()) {
+    headers["X-Payload-Encrypted"] = "true";
+  }
+
+  let finalBody = options.body;
+  if (
+    isEncryptionEnabled() &&
+    !isFormData &&
+    typeof options.body === "string" &&
+    options.body.length > 0
+  ) {
+    try {
+      const parsed = JSON.parse(options.body);
+      const encryptedEnvelope = await encryptPayload(parsed);
+      finalBody = JSON.stringify(encryptedEnvelope);
+    } catch {
+      // If not JSON or encryption fails, send raw body
+    }
+  }
+
   const baseUrl = getBaseUrl();
   const response = await fetch(`${baseUrl}/${endpoint.replace(/^\//, "")}`, {
     ...options,
+    body: finalBody,
     headers,
   });
 
   if (!response.ok) {
     let errorData: Record<string, unknown> = {};
     try {
-      errorData = (await response.json()) as Record<string, unknown>;
+      const rawJson = (await response.json()) as Record<string, unknown>;
+      if (
+        isEncryptionEnabled() &&
+        rawJson &&
+        typeof rawJson.payload === "string" &&
+        typeof rawJson.iv === "string" &&
+        typeof rawJson.tag === "string"
+      ) {
+        errorData = await decryptPayload<Record<string, unknown>>(rawJson as any);
+      } else {
+        errorData = rawJson;
+      }
     } catch {
       errorData = { error: response.statusText };
     }
@@ -131,7 +168,18 @@ export async function request<T = unknown>(
     throw error;
   }
 
-  return response.json() as Promise<T>;
+  const rawResult = await response.json();
+  if (
+    isEncryptionEnabled() &&
+    rawResult &&
+    typeof rawResult.payload === "string" &&
+    typeof rawResult.iv === "string" &&
+    typeof rawResult.tag === "string"
+  ) {
+    return (await decryptPayload<T>(rawResult as any)) as T;
+  }
+
+  return rawResult as T;
 }
 
 export async function requestBlob(
