@@ -539,7 +539,10 @@ export function LeadManagementScreen() {
     : [];
 
   const isDsa =
+    Boolean((currentUser as any)?.dsa_code || (currentUser as any)?.dsa || (currentUser as any)?.role_in_dsa) ||
     userRole === "dsa" ||
+    userRole === "dsa partner" ||
+    userRole === "dsa agent" ||
     (userRole.includes("dsa") && !userRole.includes("maker") && !userRole.includes("checker") && !userRole.includes("admin")) ||
     rawRoles.some((r) => r === "dsa" || (r.includes("dsa") && !r.includes("maker") && !r.includes("checker")));
 
@@ -552,7 +555,7 @@ export function LeadManagementScreen() {
     userRole.includes("checker") ||
     rawRoles.some((r) => r.includes("checker"));
 
-  const isBankUser = !isDsa;
+  const isBankUser = !isDsa && (isBankMaker || isBankChecker || Boolean((currentUser as any)?.branch_code));
   const queueLabel = isBankChecker ? "Checker Queue" : "Maker Queue";
   const queueTabKey = isBankChecker ? "checker-queue" : "maker-queue";
 
