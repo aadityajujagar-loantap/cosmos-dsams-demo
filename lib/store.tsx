@@ -151,7 +151,7 @@ function sessionUserFromAuthSession(session: AuthSession): DemoSessionUser {
     id: String(session.user.id),
     mobile: session.user.phone ?? "",
     name: session.user.name,
-    role: sessionRoleFromBackendRoles(roleNames, session.user),
+    role: (dsaInfo || (session.user as any)?.role_in_dsa) ? "DSA Partner" : sessionRoleFromBackendRoles(roleNames, session.user),
     must_change_password: Boolean(session.user.must_change_password ?? session.must_change_password),
   };
 }

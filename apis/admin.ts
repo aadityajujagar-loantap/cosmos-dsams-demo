@@ -1775,7 +1775,6 @@ export const adminApi = {
       method: "POST",
       headers: {
         "X-Tenant-ID": "cosmos-bank",
-        "X-API-Token": "ijkyWTMMuVWqDaGJFiEWQd2jogOuvO8QdkDBMWUG882HXQPvqg2StcydbAUiNH4J",
       },
       body: JSON.stringify({
         step_key: stepKey,
@@ -1790,7 +1789,6 @@ export const adminApi = {
       method: "GET",
       headers: {
         "X-Tenant-ID": "cosmos-bank",
-        "X-API-Token": "ijkyWTMMuVWqDaGJFiEWQd2jogOuvO8QdkDBMWUG882HXQPvqg2StcydbAUiNH4J",
       },
     });
   },
@@ -1800,7 +1798,6 @@ export const adminApi = {
       method: "POST",
       headers: {
         "X-Tenant-ID": "cosmos-bank",
-        "X-API-Token": "ijkyWTMMuVWqDaGJFiEWQd2jogOuvO8QdkDBMWUG882HXQPvqg2StcydbAUiNH4J",
       },
       body: JSON.stringify({
         step_key: currentStep,
@@ -1821,7 +1818,6 @@ export const adminApi = {
       method: "GET",
       headers: {
         "X-Tenant-ID": "cosmos-bank",
-        "X-API-Token": "ijkyWTMMuVWqDaGJFiEWQd2jogOuvO8QdkDBMWUG882HXQPvqg2StcydbAUiNH4J",
       },
     });
   },
@@ -1835,7 +1831,6 @@ export const adminApi = {
       method: "POST",
       headers: {
         "X-Tenant-ID": "cosmos-bank",
-        "X-API-Token": "ijkyWTMMuVWqDaGJFiEWQd2jogOuvO8QdkDBMWUG882HXQPvqg2StcydbAUiNH4J",
       },
       body: JSON.stringify({
         application_id: applicationId,

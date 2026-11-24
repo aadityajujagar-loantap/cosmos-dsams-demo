@@ -33,12 +33,13 @@ export async function GET(request: NextRequest) {
 
   try {
     const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+    const apiToken = process.env.LOAN_JOURNEY_API_TOKEN || process.env.NEXT_PUBLIC_LOAN_JOURNEY_API_TOKEN || "";
     const res = await fetch(`${backendUrl}/v1/loan/verify-email?token=${encodeURIComponent(token)}`, {
       method: "GET",
       headers: {
         "Accept": "application/json",
         "X-Tenant-ID": "cosmos-bank",
-        "X-API-Token": process.env.NEXT_PUBLIC_LOAN_JOURNEY_API_TOKEN || "ijkyWTMMuVWqDaGJFiEWQd2jogOuvO8QdkDBMWUG882HXQPvqg2StcydbAUiNH4J",
+        ...(apiToken ? { "X-API-Token": apiToken } : {}),
       },
     });
 
