@@ -171,28 +171,20 @@ export default function LoginPage() {
         //   - `dsa` present -> onboarded DSA. The backend only sets it after passing the
         //     DsaUserMapping + ACTIVE gate, so it is the authority on DSA-ness. An onboarded
         //     DSA holds no Spatie role (only role_in_dsa on its mapping).
-        //   - `dsa` absent  -> not a DSA partner, so fall back to the user's real roles.
-        //     Bank staff carry Spatie roles, so a staff account that somehow reached this
-        //     endpoint resolves to a bank role and the portal gate refuses it.
-        const isDsaPartner = Boolean(response.dsa);
-        const roles = isDsaPartner
-          ? [{ id: 0, name: "DSA Partner", permissions: [] }]
-          : (response.roles ?? []);
-
-        if (!isDsaPartner && roles.length === 0) {
-          // Refresh first: refreshCaptcha() clears `error` on success.
+        //   - `dsa` absent  -> not a DSA partner. Reject immediately on the DSA login handler.
+        if (!response.dsa) {
           await refreshCaptcha();
-          setError(
-            "Unable to determine your account type. Contact your administrator.",
-          );
+          const msg = "Access denied: This account is not a registered DSA partner. Bank staff and administrators must use the Bank Staff portal.";
+          setError(msg);
           toast({
-            title: "Login Failed",
-            description:
-              "Unable to determine your account type. Contact your administrator.",
+            title: "Access Denied",
+            description: msg,
             variant: "warning",
           });
           return;
         }
+
+        const roles = [{ id: 0, name: "DSA Partner", permissions: [] }];
 
         const session: AuthSession = {
           token: response.token,

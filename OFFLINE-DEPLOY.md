@@ -98,7 +98,7 @@ NEXT_PUBLIC_API_URL=http://<backend-lan-ip>:8000/api
 # Leave empty for a root deployment, or set e.g. /dsa if served under a sub-path.
 NEXT_PUBLIC_BASE_PATH=
 
-NEXT_PUBLIC_LOAN_JOURNEY_API_TOKEN=<token>
+LOAN_JOURNEY_API_TOKEN=<token>
 ```
 
 If the server has no DNS, use the raw IP: `NEXT_PUBLIC_API_URL=http://10.0.0.25:8000/api`.
