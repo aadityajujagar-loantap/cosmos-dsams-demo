@@ -145,6 +145,17 @@ export default function LoginPage() {
       return;
     }
 
+    if (identifier.trim().length > 191) {
+      const msg = "Email address cannot exceed 191 characters.";
+      setError(msg);
+      toast({
+        title: "Validation Error",
+        description: msg,
+        variant: "warning",
+      });
+      return;
+    }
+
     setVerifying(true);
     try {
       const response = await authApi.dsaLogin({
@@ -229,6 +240,17 @@ export default function LoginPage() {
     }
     if (!identifier.trim() || !password || !captcha.trim()) {
       const msg = "Username, password, and CAPTCHA are required.";
+      setError(msg);
+      toast({
+        title: "Validation Error",
+        description: msg,
+        variant: "warning",
+      });
+      return;
+    }
+
+    if (identifier.trim().length > 100) {
+      const msg = "Username / Customer ID cannot exceed 100 characters.";
       setError(msg);
       toast({
         title: "Validation Error",
@@ -447,6 +469,7 @@ export default function LoginPage() {
                   <input
                     id="identifier"
                     type={loginPortal === "dsa" ? "email" : "text"}
+                    maxLength={loginPortal === "dsa" ? 191 : 100}
                     placeholder={loginPortal === "dsa" ? "partner@example.com" : "Enter username"}
                     value={identifier}
                     onChange={(e) => {

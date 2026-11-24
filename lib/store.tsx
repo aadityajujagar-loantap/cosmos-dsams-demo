@@ -1546,6 +1546,13 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    // Do not dump live backend customer/DSA records into persistent localStorage in authenticated mode
+    const token = localStorage.getItem("auth_token");
+    if (token) {
+      localStorage.removeItem(STORE_STORAGE_KEY);
+      return;
+    }
+
     const serializedStore = JSON.stringify(store);
     if (localStorage.getItem(STORE_STORAGE_KEY) !== serializedStore) {
       localStorage.setItem(STORE_SCHEMA_VERSION_KEY, STORE_SCHEMA_VERSION);

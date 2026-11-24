@@ -417,7 +417,24 @@ export default function CustomerSelfFillPage() {
       }
     }
 
+    if (formData.email && formData.email.length > 191) {
+      setError('Email address cannot exceed 191 characters.');
+      return;
+    }
+    if (formData.address && formData.address.length > 500) {
+      setError('Residential address cannot exceed 500 characters.');
+      return;
+    }
+    if (formData.business_address && formData.business_address.length > 500) {
+      setError('Business address cannot exceed 500 characters.');
+      return;
+    }
+
     const loanAmount = Number(formData.loan_amount_required || 0);
+    if (loanAmount <= 0) {
+      setError('Loan amount required must be greater than zero.');
+      return;
+    }
     if (loanAmount > 30000000) {
       setError('The loan amount should not exceed ₹3 Crore.');
       return;
@@ -778,6 +795,7 @@ export default function CustomerSelfFillPage() {
                     <Input
                       type="email"
                       required
+                      maxLength={191}
                       placeholder="email@domain.com"
                       value={formData.email || ''}
                       onChange={(e) => handleChange('email', e.target.value)}
@@ -933,6 +951,7 @@ export default function CustomerSelfFillPage() {
                     <Textarea
                       rows={2}
                       required
+                      maxLength={500}
                       value={formData.address || ''}
                       onChange={(e) => handleChange('address', e.target.value)}
                       className="text-sm"
@@ -1094,6 +1113,7 @@ export default function CustomerSelfFillPage() {
                     <Textarea
                       rows={2}
                       required
+                      maxLength={500}
                       placeholder="Full office address..."
                       value={formData.business_address || ''}
                       onChange={(e) => handleChange('business_address', e.target.value)}

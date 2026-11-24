@@ -1345,7 +1345,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       const key = getDraftKey(mode);
   if (submittedDsa) {
         const payload = JSON.stringify({ submittedDsa });
-        localStorage.setItem(key, payload);
+        localStorage.removeItem(key);
         sessionStorage.setItem(key, payload);
       } else {
         const serializedDocs: Record<string, { base64: string; name: string; size: string }> = {};
@@ -1426,14 +1426,15 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         const payload = JSON.stringify(draft);
         try {
           sessionStorage.setItem(key, payload);
-          localStorage.setItem(key, payload);
+          // Do not write raw unencrypted Aadhaar/PAN/Bank draft to permanent localStorage on internet portal
+          localStorage.removeItem(key);
         } catch (storageErr) {
           // Fallback if base64 causes storage quota exceeded
           try {
             const trimmed = { ...draft, uploadedDocs: {} };
             const fallback = JSON.stringify(trimmed);
             sessionStorage.setItem(key, fallback);
-            localStorage.setItem(key, fallback);
+            localStorage.removeItem(key);
           } catch {
             // Ignore if storage is completely full
           }
@@ -2424,6 +2425,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         toast({ title: "Valid Email Required", description: "Valid email address is mandatory.", variant: "warning" });
         return false;
       }
+      if (resolvedEmail.length > 191) {
+        toast({ title: "Email Too Long", description: "Email address cannot exceed 191 characters.", variant: "warning" });
+        return false;
+      }
       if (!mobile || mobile.replace(/\D/g, "").length !== 10) {
         toast({ title: "Valid Mobile Required", description: "10-digit mobile number is mandatory.", variant: "warning" });
         return false;
@@ -2508,6 +2513,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
           toast({ title: "Residence Address Required", description: "Complete residence address, city, state, and pincode are mandatory.", variant: "warning" });
           return false;
         }
+        if (address.trim().length > 500) {
+          toast({ title: "Address Too Long", description: "Residence address cannot exceed 500 characters.", variant: "warning" });
+          return false;
+        }
         if (pincode.trim().length !== 6 || !/^\d{6}$/.test(pincode.trim())) {
           toast({ title: "Residence Pincode Invalid", description: "Residence pincode must be exactly 6 digits.", variant: "warning" });
           return false;
@@ -2515,6 +2524,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         if (!isOfficeSameAsResidence) {
           if (!officeAddress.trim() || !officeCity.trim() || !officeStateName.trim() || !officePincode.trim()) {
             toast({ title: "Office Address Required", description: "Complete office address, city, state, and pincode are mandatory when distinct.", variant: "warning" });
+            return false;
+          }
+          if (officeAddress.trim().length > 500) {
+            toast({ title: "Office Address Too Long", description: "Office address cannot exceed 500 characters.", variant: "warning" });
             return false;
           }
           if (officePincode.trim().length !== 6 || !/^\d{6}$/.test(officePincode.trim())) {
@@ -2525,6 +2538,10 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       } else {
         if (!officeAddress.trim() || !officeCity.trim() || !officeStateName.trim() || !officePincode.trim()) {
           toast({ title: "Office Address Required", description: "Complete office address, city, state, and pincode are mandatory.", variant: "warning" });
+          return false;
+        }
+        if (officeAddress.trim().length > 500) {
+          toast({ title: "Office Address Too Long", description: "Office address cannot exceed 500 characters.", variant: "warning" });
           return false;
         }
         if (officePincode.trim().length !== 6 || !/^\d{6}$/.test(officePincode.trim())) {
@@ -3540,6 +3557,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         id="self_email"
                         disabled={false}
                         type="email"
+                        maxLength={191}
                         value={selfEmail}
                         onChange={(e) => {
                           setSelfEmail(e.target.value);
@@ -3949,6 +3967,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         <Input
                           id="email"
                           type="email"
+                          maxLength={191}
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           placeholder="ramesh.sharma@example.com"
@@ -3988,6 +4007,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         <Input
                           id="email"
                           type="email"
+                          maxLength={191}
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           placeholder="ramesh.sharma@example.com"
@@ -4258,6 +4278,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         <Input
                           id="entity_email"
                           type="email"
+                          maxLength={191}
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           placeholder="info@apexfin.com"
@@ -4452,6 +4473,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         <textarea
                           id="address"
                           rows={3}
+                          maxLength={500}
                           value={address}
                           onChange={(e) => {
                             const val = e.target.value;
@@ -4608,6 +4630,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
                         <textarea
                           id="office_address"
                           rows={3}
+                          maxLength={500}
                           value={officeAddress}
                           onChange={(e) => {
                             const val = e.target.value;
