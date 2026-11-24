@@ -1300,7 +1300,7 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
       const key = getDraftKey(mode);
       if (submittedDsa) {
         const payload = JSON.stringify({ submittedDsa });
-        localStorage.setItem(key, payload);
+        localStorage.removeItem(key);
         sessionStorage.setItem(key, payload);
       } else {
         const serializedDocs: Record<string, { base64: string; name: string; size: string }> = {};
@@ -1381,14 +1381,15 @@ export function DsaOnboardingForm({ mode, onSuccess }: DsaOnboardingFormProps) {
         const payload = JSON.stringify(draft);
         try {
           sessionStorage.setItem(key, payload);
-          localStorage.setItem(key, payload);
+          // Do not write raw unencrypted Aadhaar/PAN/Bank draft to permanent localStorage on internet portal
+          localStorage.removeItem(key);
         } catch (storageErr) {
           // Fallback if base64 causes storage quota exceeded
           try {
             const trimmed = { ...draft, uploadedDocs: {} };
             const fallback = JSON.stringify(trimmed);
             sessionStorage.setItem(key, fallback);
-            localStorage.setItem(key, fallback);
+            localStorage.removeItem(key);
           } catch {
             // Ignore if storage is completely full
           }

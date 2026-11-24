@@ -62,6 +62,44 @@ export const authService = {
     localStorage.removeItem(PERMISSIONS_KEY);
     localStorage.removeItem(DSA_KEY);
     localStorage.removeItem("cosmos_dsa_user");
+
+    // Purge cached store, drafts, and customer journey keys to prevent SPII leakage
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (
+          k &&
+          (k.startsWith("cosmos_") ||
+            k.startsWith("auth_") ||
+            k.startsWith("email_verified_") ||
+            k.startsWith("checker_kyc_") ||
+            k.startsWith("sell_now_") ||
+            k.startsWith("borrower_draft_") ||
+            k === "active_locked_dsa_case_id" ||
+            k === "last_submitted_dsa_code")
+        ) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+
+      const sessionKeysToRemove: string[] = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const k = sessionStorage.key(i);
+        if (
+          k &&
+          (k.startsWith("cosmos_dsa_onboarding_") ||
+            k.startsWith("email_verified_") ||
+            k.startsWith("checker_kyc_"))
+        ) {
+          sessionKeysToRemove.push(k);
+        }
+      }
+      sessionKeysToRemove.forEach((k) => sessionStorage.removeItem(k));
+    } catch {
+      // Ignore storage errors in restricted contexts
+    }
   },
 
   isLoggedIn(): boolean {

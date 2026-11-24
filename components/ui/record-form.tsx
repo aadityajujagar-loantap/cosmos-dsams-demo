@@ -12,6 +12,9 @@ export interface FieldConfig<T> {
   required?: boolean;
   renderAfter?: ReactNode;
   type?: "text" | "email" | "number" | "date" | "textarea" | "select";
+  maxLength?: number;
+  max?: number;
+  min?: number;
 }
 
 export function RecordForm<T extends object>({
@@ -68,6 +71,7 @@ export function RecordForm<T extends object>({
                   onChange={(event) => update(field.name, event.target.value)}
                   placeholder={field.placeholder}
                   required={field.required}
+                  maxLength={field.maxLength ?? (String(field.name).toLowerCase().includes("address") ? 500 : undefined)}
                   value={fieldValue}
                 />
               ) : field.type === "date" ? (
@@ -85,6 +89,9 @@ export function RecordForm<T extends object>({
                   placeholder={field.placeholder}
                   required={field.required}
                   type={field.type ?? "text"}
+                  maxLength={field.maxLength ?? (field.type === "email" ? 191 : String(field.name).toLowerCase().includes("customer") ? 100 : undefined)}
+                  max={field.max ?? (field.type === "number" && String(field.name).toLowerCase().includes("amount") ? 30000000 : undefined)}
+                  min={field.min ?? (field.type === "number" && String(field.name).toLowerCase().includes("amount") ? 1 : undefined)}
                   value={fieldValue}
                 />
               )}
