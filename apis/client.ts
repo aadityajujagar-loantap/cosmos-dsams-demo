@@ -203,7 +203,16 @@ export async function requestBlob(
   if (!response.ok) {
     let errorMsg = `HTTP error ${response.status}`;
     try {
-      const errJson = await response.json();
+      let errJson = await response.json();
+      if (
+        isEncryptionEnabled() &&
+        errJson &&
+        typeof errJson.payload === "string" &&
+        typeof errJson.iv === "string" &&
+        typeof errJson.tag === "string"
+      ) {
+        errJson = await decryptPayload<Record<string, unknown>>(errJson);
+      }
       errorMsg = errJson.message || errJson.error || errorMsg;
     } catch {}
     const error = new Error(errorMsg) as RequestError;

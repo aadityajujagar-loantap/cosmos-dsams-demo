@@ -87,6 +87,8 @@ export interface SessionUser {
   branch_code?: string;
   branch_codes?: string[];
   branch_mappings?: UserBranchMapping[];
+  subregion_id?: string | null;
+  zone_code?: string | null;
   activeBranchCode?: string;
 }
 

@@ -5506,7 +5506,10 @@ export function DsaProfilePage({ id }: { id: string }) {
                 Your account is scoped to{" "}
                 <span className="font-semibold text-blue-700">
                   {userBranchScope.primaryBranchName ||
-                    userBranchScope.primaryBranchCode}
+                    userBranchScope.primaryBranchCode ||
+                    userBranchScope.branchNames.join(", ") ||
+                    userBranchScope.branchCodes.join(", ") ||
+                    "your assigned scope"}
                 </span>
                 . Branch staff may only view and process DSAs assigned to their
                 branch.

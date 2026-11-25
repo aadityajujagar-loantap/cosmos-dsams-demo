@@ -54,11 +54,25 @@ export function getUserBranchScopeSync(
   const roles = authService.getRoles().map((r) => r.toLowerCase());
   const sessionRole = (currentUser?.role || "").toLowerCase();
 
-  // Super admin / Admin / DSA Manager are NOT branch restricted
+  // Super admin / Admin / HO Credit authorities are NOT branch restricted
   const isSuperAdmin =
-    roles.includes("super_admin") ||
-    roles.includes("admin") ||
-    sessionRole === "dsa manager";
+    roles.some((r) =>
+      [
+        "super_admin",
+        "super admin",
+        "admin",
+        "ho_credit_officer",
+        "ho credit officer",
+        "ho_credit_head",
+        "ho credit head",
+        "level_6_ho_committee",
+        "level_7_credit_head",
+        "level_7_ho_credit_head",
+      ].includes(r)
+    ) ||
+    sessionRole === "dsa manager" ||
+    sessionRole === "ho credit officer" ||
+    sessionRole === "ho credit head";
 
   // Makers and Checkers are strictly restricted to their assigned branch
   const isMaker =
@@ -68,14 +82,33 @@ export function getUserBranchScopeSync(
     sessionRole === "assistant manager";
 
   const isChecker =
-    roles.some((r) => r.includes("checker") || r.includes("sub_region") || r.includes("sub-region")) ||
+    roles.some(
+      (r) =>
+        r.includes("checker") ||
+        r.includes("sub_region") ||
+        r.includes("sub-region") ||
+        r === "agm" ||
+        r === "dgm" ||
+        r.includes("region_head") ||
+        r.includes("region head") ||
+        r === "regional head"
+    ) ||
     sessionRole.includes("checker") ||
+    sessionRole.includes("sub-region") ||
+    sessionRole.includes("region head") ||
+    sessionRole === "branch regional head" ||
+    sessionRole === "agm" ||
+    sessionRole === "dgm" ||
     (sessionRole === "manager" && !isSuperAdmin);
 
   const isBranchRestricted = !isSuperAdmin && (isMaker || isChecker);
 
   const codeSet = new Set<string>();
-  const primaryCode = (user?.branch_code || currentUser?.branch_code || currentUser?.code || "").trim().toUpperCase();
+  const fallbackCode =
+    !user && currentUser?.code && currentUser.code !== currentUser.ticket_no
+      ? currentUser.code
+      : "";
+  const primaryCode = (user?.branch_code || currentUser?.branch_code || fallbackCode).trim().toUpperCase();
   if (primaryCode) {
     codeSet.add(primaryCode);
   }
@@ -101,6 +134,45 @@ export function getUserBranchScopeSync(
     for (const m of currentUser.branch_mappings) {
       const normalized = String(m?.branch_code || "").trim().toUpperCase();
       if (normalized) codeSet.add(normalized);
+    }
+  }
+
+  // Sub-Region / DGM / Region Head scoping via assigned subregion_id / zone_code
+  const rawSubRegion = String(user?.subregion_id ?? currentUser?.subregion_id ?? "").trim();
+  if (rawSubRegion && branches.length > 0) {
+    const subTokens = new Set(
+      rawSubRegion
+        .split(",")
+        .map((t) => t.trim().toUpperCase())
+        .filter(Boolean)
+    );
+    for (const b of branches) {
+      const bSub = (b.sub_region_code || "").trim().toUpperCase();
+      const bCode = (b.branch_code || "").trim().toUpperCase();
+      if (bSub && bCode && subTokens.has(bSub)) {
+        codeSet.add(bCode);
+      }
+    }
+  }
+
+  const isRegionHead =
+    roles.some((r) => (r.includes("region_head") || r.includes("region head") || r === "regional head" || r === "level_5_region_head") && !r.includes("sub")) ||
+    sessionRole === "region head" ||
+    sessionRole === "branch regional head";
+  const rawZone = String(user?.zone_code ?? currentUser?.zone_code ?? "").trim();
+  if (isRegionHead && !rawSubRegion && rawZone && branches.length > 0) {
+    const regionTokens = new Set(
+      rawZone
+        .split(",")
+        .map((t) => t.trim().toUpperCase())
+        .filter(Boolean)
+    );
+    for (const b of branches) {
+      const bReg = (b.region_code || "").trim().toUpperCase();
+      const bCode = (b.branch_code || "").trim().toUpperCase();
+      if (bReg && bCode && regionTokens.has(bReg)) {
+        codeSet.add(bCode);
+      }
     }
   }
 
@@ -168,8 +240,8 @@ export function getUserBranchScopeSync(
     branchCodes,
     branchIds,
     branchNames,
-    primaryBranchCode: primaryCode || undefined,
-    primaryBranchName,
+    primaryBranchCode: primaryCode || (assignedBranches.length === 1 ? assignedBranches[0].branch_code : undefined),
+    primaryBranchName: primaryBranchName || (assignedBranches.length === 1 ? assignedBranches[0].branch_name : undefined),
     selectedBranchCode,
     activeBranchIds,
     assignedBranches,

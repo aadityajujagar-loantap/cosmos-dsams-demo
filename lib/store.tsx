@@ -155,6 +155,8 @@ function sessionUserFromAuthSession(session: AuthSession): DemoSessionUser {
     branch_code: session.user.branch_code ?? undefined,
     branch_codes: session.user.branch_codes ?? (Array.isArray(session.user.branch_mappings) ? session.user.branch_mappings.map((m) => m.branch_code) : undefined),
     branch_mappings: session.user.branch_mappings,
+    subregion_id: session.user.subregion_id ?? undefined,
+    zone_code: session.user.zone_code ?? undefined,
   };
 }
 
@@ -177,6 +179,8 @@ function sessionUserFromStoredAuth(): DemoSessionUser | null {
     branch_code: user.branch_code ?? undefined,
     branch_codes: user.branch_codes ?? (Array.isArray(user.branch_mappings) ? user.branch_mappings.map((m) => m.branch_code) : undefined),
     branch_mappings: user.branch_mappings,
+    subregion_id: user.subregion_id ?? undefined,
+    zone_code: user.zone_code ?? undefined,
   };
 }
 
@@ -1502,6 +1506,8 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
             branch_code: freshUser.branch_code ?? prev.branch_code,
             branch_codes: freshUser.branch_codes ?? prev.branch_codes,
             branch_mappings: freshUser.branch_mappings ?? prev.branch_mappings,
+            subregion_id: freshUser.subregion_id ?? prev.subregion_id,
+            zone_code: freshUser.zone_code ?? prev.zone_code,
           };
         });
       })
@@ -1531,6 +1537,8 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
             branch_code: freshUser.branch_code ?? prev.branch_code,
             branch_codes: freshUser.branch_codes ?? prev.branch_codes,
             branch_mappings: freshUser.branch_mappings ?? prev.branch_mappings,
+            subregion_id: freshUser.subregion_id ?? prev.subregion_id,
+            zone_code: freshUser.zone_code ?? prev.zone_code,
           };
         });
       }

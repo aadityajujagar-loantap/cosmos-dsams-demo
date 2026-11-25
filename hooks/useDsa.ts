@@ -352,7 +352,13 @@ export function useDsa() {
     async (idOrCode: number | string) => {
       setLoading(true);
       try {
-        const response = await adminApi.getDsaDetail(idOrCode);
+        const user = authService.getUser();
+        const demoUser = user ? { id: String(user.id), name: user.name, email: user.email, mobile: user.phone ?? "", code: user.branch_code ?? undefined, role: "" as any } : null;
+        const [scope, response] = await Promise.all([
+          getUserBranchScope(demoUser).catch(() => null),
+          adminApi.getDsaDetail(idOrCode),
+        ]);
+        if (scope) setUserBranchScope(scope);
         const normalized = normalizeDsaData(response.data);
         setCurrentDsa(normalized);
         return normalized;
