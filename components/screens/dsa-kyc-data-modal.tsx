@@ -493,7 +493,7 @@ function PanDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
     ? "100% Name & DOB Verified via NSDL Database"
     : "";
   const verificationSource = hasApiData
-    ? "Income Tax Department / NSDL via ScoreMe Gateway"
+    ? "Income Tax Department ScoreMe Gateway"
     : "";
 
   return (
