@@ -128,12 +128,29 @@ export async function request<T = unknown>(
     }
 
     const dataField = errorData.data && typeof errorData.data === "object" ? (errorData.data as Record<string, unknown>) : null;
-    const errorsField = (dataField?.errors || errorData.errors) as Record<string, unknown> | null;
-    const errorsMsg = errorsField && typeof errorsField === "object" ? Object.values(errorsField).flat().join(" ") : null;
+    const errorsField = (
+      dataField?.errors ||
+      errorData.errors ||
+      (errorData.error && typeof errorData.error === "object" ? errorData.error : null)
+    ) as Record<string, unknown> | null;
+    const errorsMsg =
+      errorsField && typeof errorsField === "object"
+        ? Object.values(errorsField)
+            .flat()
+            .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+            .join(" ")
+        : null;
+
+    const rawMsg =
+      (typeof errorData.message === "string" ? errorData.message : null) ||
+      (typeof dataField?.message === "string" ? dataField.message : null);
+    const isGenericValidationMsg =
+      !rawMsg ||
+      rawMsg === "The given data was invalid." ||
+      rawMsg === "Validation failed.";
 
     const serverMsg =
-      (typeof errorData.message === "string" ? errorData.message : null) ||
-      (typeof dataField?.message === "string" ? dataField.message : null) ||
+      (isGenericValidationMsg && errorsMsg ? errorsMsg : rawMsg) ||
       errorsMsg ||
       (typeof errorData.error === "string" ? errorData.error : null) ||
       `HTTP error ${response.status}`;
