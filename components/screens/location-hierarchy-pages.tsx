@@ -63,10 +63,10 @@ export function LocationHierarchyPage() {
           );
         })}
       </div>
-      {activeTab === "regions" && <RegionsTab toast={toast} />}
+      {activeTab === "regions" && <RegionsTab toast={toast} onSaved={loadParentOptions} />}
       {activeTab === "sub-regions" && <SubRegionsTab toast={toast} regionOptions={regionOptions} onSaved={loadParentOptions} />}
-      {activeTab === "states" && <StatesTab toast={toast} />}
-      {activeTab === "districts" && <DistrictsTab toast={toast} stateOptions={stateOptions} />}
+      {activeTab === "states" && <StatesTab toast={toast} onSaved={loadParentOptions} />}
+      {activeTab === "districts" && <DistrictsTab toast={toast} stateOptions={stateOptions} onSaved={loadParentOptions} />}
       {activeTab === "branches" && (
         <BranchesTab
           toast={toast}
@@ -74,6 +74,7 @@ export function LocationHierarchyPage() {
           stateOptions={stateOptions}
           subRegionOptions={subRegionOptions}
           districtOptions={districtOptions}
+          onSaved={loadParentOptions}
         />
       )}
     </div>
@@ -83,7 +84,7 @@ export function LocationHierarchyPage() {
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. REGIONS TAB
 // ─────────────────────────────────────────────────────────────────────────────
-function RegionsTab({ toast }: { toast: any }) {
+function RegionsTab({ toast, onSaved }: { toast: any; onSaved?: () => void }) {
   const [items, setItems] = useState<RegionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -95,7 +96,7 @@ function RegionsTab({ toast }: { toast: any }) {
   const loadData = useCallback(async (s = "") => {
     setLoading(true);
     try {
-      const res = await adminApi.getRegions({ page: 1, per_page: 50, search: s.trim() || undefined });
+      const res = await adminApi.getRegions({ page: 1, per_page: 250, search: s.trim() || undefined });
       setItems(res.data || []);
     } catch (e: any) { toast({ title: "Failed to load regions", description: e.message, variant: "warning" }); }
     finally { setLoading(false); }
@@ -117,6 +118,7 @@ function RegionsTab({ toast }: { toast: any }) {
       }
       setModalOpen(false);
       loadData(search);
+      onSaved?.();
     } catch (e: any) { toast({ title: "Save Failed", description: e.message, variant: "warning" }); }
     finally { setSaving(false); }
   };
@@ -128,6 +130,7 @@ function RegionsTab({ toast }: { toast: any }) {
       if (isMakerResponse(res)) { toast({ title: "Delete Submitted", description: `Reference: ${res.reference}`, variant: "success" }); }
       else { toast({ title: "Region Deleted", variant: "success" }); }
       loadData(search);
+      onSaved?.();
     } catch (e: any) { toast({ title: "Delete Failed", description: e.message, variant: "warning" }); }
   };
 
@@ -184,7 +187,7 @@ function SubRegionsTab({ toast, regionOptions, onSaved }: { toast: any; regionOp
   const loadData = useCallback(async (s = "", r = "") => {
     setLoading(true);
     try {
-      const res = await adminApi.getSubRegions({ page: 1, per_page: 50, search: s.trim() || undefined, region_code: r || undefined });
+      const res = await adminApi.getSubRegions({ page: 1, per_page: 250, search: s.trim() || undefined, region_code: r || undefined });
       setItems(res.data || []);
     } catch (e: any) { toast({ title: "Failed to load sub-regions", description: e.message, variant: "warning" }); }
     finally { setLoading(false); }
@@ -278,7 +281,7 @@ function SubRegionsTab({ toast, regionOptions, onSaved }: { toast: any; regionOp
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. STATES TAB
 // ─────────────────────────────────────────────────────────────────────────────
-function StatesTab({ toast }: { toast: any }) {
+function StatesTab({ toast, onSaved }: { toast: any; onSaved?: () => void }) {
   const [items, setItems] = useState<StateItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -290,7 +293,7 @@ function StatesTab({ toast }: { toast: any }) {
   const loadData = useCallback(async (s = "") => {
     setLoading(true);
     try {
-      const res = await adminApi.getStates({ page: 1, per_page: 50, search: s.trim() || undefined });
+      const res = await adminApi.getStates({ page: 1, per_page: 250, search: s.trim() || undefined });
       setItems(res.data || []);
     } catch (e: any) { toast({ title: "Failed to load states", description: e.message, variant: "warning" }); }
     finally { setLoading(false); }
@@ -309,6 +312,7 @@ function StatesTab({ toast }: { toast: any }) {
       else { toast({ title: editing ? "State Updated" : "State Created", variant: "success" }); }
       setModalOpen(false);
       loadData(search);
+      onSaved?.();
     } catch (e: any) { toast({ title: "Save Failed", description: e.message, variant: "warning" }); }
     finally { setSaving(false); }
   };
@@ -320,6 +324,7 @@ function StatesTab({ toast }: { toast: any }) {
       if (isMakerResponse(res)) { toast({ title: "Delete Submitted", description: `Reference: ${res.reference}`, variant: "success" }); }
       else { toast({ title: "State Deleted", variant: "success" }); }
       loadData(search);
+      onSaved?.();
     } catch (e: any) { toast({ title: "Delete Failed", description: e.message, variant: "warning" }); }
   };
 
@@ -363,7 +368,7 @@ function StatesTab({ toast }: { toast: any }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 4. DISTRICTS TAB
 // ─────────────────────────────────────────────────────────────────────────────
-function DistrictsTab({ toast, stateOptions }: { toast: any; stateOptions: StateOption[] }) {
+function DistrictsTab({ toast, stateOptions, onSaved }: { toast: any; stateOptions: StateOption[]; onSaved?: () => void }) {
   const [items, setItems] = useState<DistrictItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -376,7 +381,7 @@ function DistrictsTab({ toast, stateOptions }: { toast: any; stateOptions: State
   const loadData = useCallback(async (s = "", st = "") => {
     setLoading(true);
     try {
-      const res = await adminApi.getDistricts({ page: 1, per_page: 50, search: s.trim() || undefined, state_code: st || undefined });
+      const res = await adminApi.getDistricts({ page: 1, per_page: 250, search: s.trim() || undefined, state_code: st || undefined });
       setItems(res.data || []);
     } catch (e: any) { toast({ title: "Failed to load districts", description: e.message, variant: "warning" }); }
     finally { setLoading(false); }
@@ -395,6 +400,7 @@ function DistrictsTab({ toast, stateOptions }: { toast: any; stateOptions: State
       else { toast({ title: editing ? "District Updated" : "District Created", variant: "success" }); }
       setModalOpen(false);
       loadData(search, stateFilter);
+      onSaved?.();
     } catch (e: any) { toast({ title: "Save Failed", description: e.message, variant: "warning" }); }
     finally { setSaving(false); }
   };
@@ -406,6 +412,7 @@ function DistrictsTab({ toast, stateOptions }: { toast: any; stateOptions: State
       if (isMakerResponse(res)) { toast({ title: "Delete Submitted", description: `Reference: ${res.reference}`, variant: "success" }); }
       else { toast({ title: "District Deleted", variant: "success" }); }
       loadData(search, stateFilter);
+      onSaved?.();
     } catch (e: any) { toast({ title: "Delete Failed", description: e.message, variant: "warning" }); }
   };
 
@@ -466,12 +473,14 @@ function BranchesTab({
   stateOptions,
   subRegionOptions: initialSubRegionOptions = [],
   districtOptions: initialDistrictOptions = [],
+  onSaved,
 }: {
   toast: any;
   regionOptions: RegionOption[];
   stateOptions: StateOption[];
   subRegionOptions?: SubRegionOption[];
   districtOptions?: DistrictOption[];
+  onSaved?: () => void;
 }) {
   const [items, setItems] = useState<BranchItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -521,7 +530,7 @@ function BranchesTab({
   const loadData = useCallback(async (s = "", r = "") => {
     setLoading(true);
     try {
-      const res = await adminApi.getBranches({ page: 1, per_page: 100, search: s.trim() || undefined, region_code: r || undefined });
+      const res = await adminApi.getBranches({ page: 1, per_page: 500, search: s.trim() || undefined, region_code: r || undefined });
       setItems(res.data || []);
     } catch (e: any) { toast({ title: "Failed to load branches", description: e.message, variant: "warning" }); }
     finally { setLoading(false); }
@@ -538,6 +547,8 @@ function BranchesTab({
       setSyncModalOpen(true);
       toast({ title: "CBS Branch Sync Complete", variant: "success" });
       loadData(search, regionFilter);
+      loadDropdownOptions();
+      onSaved?.();
     } catch (e: any) { toast({ title: "Sync Failed", description: e.message, variant: "warning" }); }
     finally { setSyncing(false); }
   };
