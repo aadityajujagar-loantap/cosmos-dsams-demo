@@ -588,8 +588,8 @@ function PanDataTable({ dsa, apiData }: { dsa: any; apiData: any }) {
     ? "100% Entity Name & DOI Verified via ITD Database"
     : "100% Name & DOB Verified via NSDL Database";
   const verificationSource = isEntity
-    ? "Income Tax Department / Karza Gateway"
-    : "Income Tax Department / NSDL via ScoreMe Gateway";
+    ? "Income Tax Department Gateway"
+    : "Income Tax Department via ScoreMe Gateway";
 
   return (
     <div className="space-y-3">

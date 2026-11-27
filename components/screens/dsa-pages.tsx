@@ -8956,7 +8956,7 @@ export function DsaProfilePage({ id }: { id: string }) {
                 {deviationRules.length > 0 ? `(${deviationRules.length})` : ""}
               </Button>
             )}
-            {(hasCheckerGeneratedReport || isBankUser || isTourOpen) && (
+            {((!isMakerUser || hasCheckerGeneratedReport) || isTourOpen) && (
               <>
                 <Button
                   size="sm"
